@@ -75,12 +75,12 @@ private fun MissingProfileCard() {
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                text = "Perfil no creado",
+                text = "Todavia no tenes perfil",
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
             Text(
-                text = "GET /api/me/profile devolvio 404. La pantalla de creacion de perfil queda para el siguiente milestone.",
+                text = "Tu cuenta ya esta autenticada y provisionada. El proximo paso es crear el perfil para completar el onboarding.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
