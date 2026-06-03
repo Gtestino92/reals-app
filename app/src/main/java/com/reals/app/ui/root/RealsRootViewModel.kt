@@ -11,13 +11,19 @@ import com.reals.app.di.AppContainer
 import com.reals.app.domain.model.CreateProfileInput
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfileActivationResult
+import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProvisionedSession
+import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.UpdateProfileInput
 import com.reals.app.domain.usecase.ActivateProfileUseCase
 import com.reals.app.domain.usecase.AddMockProfilePhotoUseCase
 import com.reals.app.domain.usecase.CreateProfileUseCase
+import com.reals.app.domain.usecase.DeleteProfilePhotoUseCase
+import com.reals.app.domain.usecase.GetProfilePhotosUseCase
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
+import com.reals.app.domain.usecase.ReplaceMockProfilePhotoUseCase
+import com.reals.app.domain.usecase.UpdateMatchFiltersUseCase
 import com.reals.app.domain.usecase.UpdateProfileUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -36,6 +42,12 @@ sealed interface RealsRootUiState {
         val updatingProfile: Boolean = false,
         val profileUpdateError: ApiError? = null,
         val profileUpdateMessage: String? = null,
+        val updatingMatchFilters: Boolean = false,
+        val matchFiltersError: ApiError? = null,
+        val matchFiltersMessage: String? = null,
+        val loadingPhotos: Boolean = false,
+        val profilePhotos: List<ProfilePhoto> = emptyList(),
+        val profilePhotosError: ApiError? = null,
         val addingPhoto: Boolean = false,
         val photoActionError: ApiError? = null,
         val photoActionMessage: String? = null,
@@ -54,7 +66,11 @@ class RealsRootViewModel(
     private val provisionAndLoadProfile: ProvisionAndLoadProfileUseCase,
     private val createProfileUseCase: CreateProfileUseCase,
     private val updateProfileUseCase: UpdateProfileUseCase,
+    private val updateMatchFiltersUseCase: UpdateMatchFiltersUseCase,
+    private val getProfilePhotosUseCase: GetProfilePhotosUseCase,
     private val addMockProfilePhotoUseCase: AddMockProfilePhotoUseCase,
+    private val replaceMockProfilePhotoUseCase: ReplaceMockProfilePhotoUseCase,
+    private val deleteProfilePhotoUseCase: DeleteProfilePhotoUseCase,
     private val activateProfileUseCase: ActivateProfileUseCase,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<RealsRootUiState>(RealsRootUiState.Checking)
@@ -148,6 +164,56 @@ class RealsRootViewModel(
         }
     }
 
+    fun updateMatchFilters(input: UpdateMatchFiltersInput) {
+        val current = _uiState.value as? RealsRootUiState.Ready ?: return
+        viewModelScope.launch {
+            _uiState.value = current.copy(
+                updatingMatchFilters = true,
+                matchFiltersError = null,
+                matchFiltersMessage = null,
+            )
+            when (val result = updateMatchFiltersUseCase.invoke(input)) {
+                is ApiResult.Success -> {
+                    _uiState.value = current.copy(
+                        session = current.session.copy(
+                            profileSnapshot = ProfileSnapshot.Found(result.value),
+                        ),
+                        updatingMatchFilters = false,
+                        matchFiltersError = null,
+                        matchFiltersMessage = "Filtros actualizados.",
+                    )
+                }
+
+                is ApiResult.Failure -> {
+                    _uiState.value = current.copy(
+                        updatingMatchFilters = false,
+                        matchFiltersError = result.error,
+                    )
+                }
+            }
+        }
+    }
+
+    fun loadProfilePhotos() {
+        val current = _uiState.value as? RealsRootUiState.Ready ?: return
+        if (current.session.profileSnapshot !is ProfileSnapshot.Found) return
+        viewModelScope.launch {
+            _uiState.value = current.copy(loadingPhotos = true, profilePhotosError = null)
+            when (val result = getProfilePhotosUseCase.invoke()) {
+                is ApiResult.Success -> _uiState.value = current.copy(
+                    loadingPhotos = false,
+                    profilePhotos = result.value.sortedBy { it.position },
+                    profilePhotosError = null,
+                )
+
+                is ApiResult.Failure -> _uiState.value = current.copy(
+                    loadingPhotos = false,
+                    profilePhotosError = result.error,
+                )
+            }
+        }
+    }
+
     fun addMockProfilePhoto(
         profile: Profile,
         position: Int,
@@ -171,19 +237,111 @@ class RealsRootViewModel(
                 )
             ) {
                 is ApiResult.Success -> {
-                    val refreshedSession = provisionAndLoadProfile()
-                    when (refreshedSession) {
-                        is ApiResult.Success -> _uiState.value = RealsRootUiState.Ready(
-                            session = refreshedSession.value,
-                            addingPhoto = false,
-                            photoActionMessage = "Foto ${result.value.position} agregada.",
-                        )
+                    when (val refreshedSession = provisionAndLoadProfile()) {
+                        is ApiResult.Success -> {
+                            val refreshedPhotos = getProfilePhotosUseCase.invoke()
+                            _uiState.value = RealsRootUiState.Ready(
+                                session = refreshedSession.value,
+                                profilePhotos = (refreshedPhotos as? ApiResult.Success)?.value.orEmpty()
+                                    .sortedBy { it.position },
+                                profilePhotosError = (refreshedPhotos as? ApiResult.Failure)?.error,
+                                addingPhoto = false,
+                                photoActionMessage = "Foto ${result.value.position} agregada.",
+                            )
+                        }
 
                         is ApiResult.Failure -> _uiState.value = current.copy(
                             addingPhoto = false,
                             photoActionError = refreshedSession.error,
                         )
                     }
+                }
+
+                is ApiResult.Failure -> {
+                    _uiState.value = current.copy(
+                        addingPhoto = false,
+                        photoActionError = result.error,
+                    )
+                }
+            }
+        }
+    }
+
+    fun replaceMockProfilePhoto(
+        profile: Profile,
+        position: Int,
+        isPersonPhoto: Boolean,
+        isFullBody: Boolean,
+    ) {
+        val current = _uiState.value as? RealsRootUiState.Ready ?: return
+        viewModelScope.launch {
+            _uiState.value = current.copy(
+                addingPhoto = true,
+                photoActionError = null,
+                photoActionMessage = null,
+                profileActivationError = null,
+            )
+            when (
+                val result = replaceMockProfilePhotoUseCase.invoke(
+                    profile = profile,
+                    position = position,
+                    isPersonPhoto = isPersonPhoto,
+                    isFullBody = isFullBody,
+                )
+            ) {
+                is ApiResult.Success -> {
+                    when (val refreshedSession = provisionAndLoadProfile()) {
+                        is ApiResult.Success -> {
+                            val refreshedPhotos = getProfilePhotosUseCase.invoke()
+                            _uiState.value = RealsRootUiState.Ready(
+                                session = refreshedSession.value,
+                                profilePhotos = (refreshedPhotos as? ApiResult.Success)?.value.orEmpty()
+                                    .sortedBy { it.position },
+                                profilePhotosError = (refreshedPhotos as? ApiResult.Failure)?.error,
+                                addingPhoto = false,
+                                photoActionMessage = "Foto ${result.value.position} reemplazada.",
+                            )
+                        }
+
+                        is ApiResult.Failure -> _uiState.value = current.copy(
+                            addingPhoto = false,
+                            photoActionError = refreshedSession.error,
+                        )
+                    }
+                }
+
+                is ApiResult.Failure -> {
+                    _uiState.value = current.copy(
+                        addingPhoto = false,
+                        photoActionError = result.error,
+                    )
+                }
+            }
+        }
+    }
+
+    fun deleteProfilePhoto(position: Int) {
+        val current = _uiState.value as? RealsRootUiState.Ready ?: return
+        viewModelScope.launch {
+            _uiState.value = current.copy(
+                addingPhoto = true,
+                photoActionError = null,
+                photoActionMessage = null,
+                profileActivationError = null,
+            )
+            when (val result = deleteProfilePhotoUseCase.invoke(position)) {
+                is ApiResult.Success -> {
+                    val refreshedPhotos = getProfilePhotosUseCase.invoke()
+                    _uiState.value = current.copy(
+                        session = current.session.copy(
+                            profileSnapshot = ProfileSnapshot.Found(result.value),
+                        ),
+                        profilePhotos = (refreshedPhotos as? ApiResult.Success)?.value.orEmpty()
+                            .sortedBy { it.position },
+                        profilePhotosError = (refreshedPhotos as? ApiResult.Failure)?.error,
+                        addingPhoto = false,
+                        photoActionMessage = "Foto $position eliminada.",
+                    )
                 }
 
                 is ApiResult.Failure -> {
@@ -244,7 +402,28 @@ class RealsRootViewModel(
         viewModelScope.launch {
             _uiState.value = RealsRootUiState.LoadingSession(authRepository.currentUserEmail())
             when (val result = provisionAndLoadProfile()) {
-                is ApiResult.Success -> _uiState.value = RealsRootUiState.Ready(result.value)
+                is ApiResult.Success -> {
+                    val snapshot = result.value.profileSnapshot
+                    if (snapshot is ProfileSnapshot.Found) {
+                        _uiState.value = RealsRootUiState.Ready(result.value, loadingPhotos = true)
+                        when (val photos = getProfilePhotosUseCase.invoke()) {
+                            is ApiResult.Success -> _uiState.value = RealsRootUiState.Ready(
+                                session = result.value,
+                                loadingPhotos = false,
+                                profilePhotos = photos.value.sortedBy { it.position },
+                            )
+
+                            is ApiResult.Failure -> _uiState.value = RealsRootUiState.Ready(
+                                session = result.value,
+                                loadingPhotos = false,
+                                profilePhotosError = photos.error,
+                            )
+                        }
+                    } else {
+                        _uiState.value = RealsRootUiState.Ready(result.value)
+                    }
+                }
+
                 is ApiResult.Failure -> _uiState.value = RealsRootUiState.Failure(result.error)
             }
         }
@@ -262,7 +441,11 @@ class RealsRootViewModelFactory(
                 provisionAndLoadProfile = appContainer.provisionAndLoadProfileUseCase,
                 createProfileUseCase = appContainer.createProfileUseCase,
                 updateProfileUseCase = appContainer.updateProfileUseCase,
+                updateMatchFiltersUseCase = appContainer.updateMatchFiltersUseCase,
+                getProfilePhotosUseCase = appContainer.getProfilePhotosUseCase,
                 addMockProfilePhotoUseCase = appContainer.addMockProfilePhotoUseCase,
+                replaceMockProfilePhotoUseCase = appContainer.replaceMockProfilePhotoUseCase,
+                deleteProfilePhotoUseCase = appContainer.deleteProfilePhotoUseCase,
                 activateProfileUseCase = appContainer.activateProfileUseCase,
             ) as T
         }

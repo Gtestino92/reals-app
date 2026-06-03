@@ -11,7 +11,11 @@ import com.reals.app.data.repository.ProfileRepository
 import com.reals.app.domain.usecase.ActivateProfileUseCase
 import com.reals.app.domain.usecase.AddMockProfilePhotoUseCase
 import com.reals.app.domain.usecase.CreateProfileUseCase
+import com.reals.app.domain.usecase.DeleteProfilePhotoUseCase
+import com.reals.app.domain.usecase.GetProfilePhotosUseCase
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
+import com.reals.app.domain.usecase.ReplaceMockProfilePhotoUseCase
+import com.reals.app.domain.usecase.UpdateMatchFiltersUseCase
 import com.reals.app.domain.usecase.UpdateProfileUseCase
 import kotlinx.serialization.json.Json
 
@@ -34,6 +38,10 @@ class AppContainer(context: Context) {
     )
     val createProfileUseCase = CreateProfileUseCase(profileRepository)
     val updateProfileUseCase = UpdateProfileUseCase(profileRepository)
+    val updateMatchFiltersUseCase = UpdateMatchFiltersUseCase(profileRepository)
+    val getProfilePhotosUseCase = GetProfilePhotosUseCase(profileRepository)
     val addMockProfilePhotoUseCase = AddMockProfilePhotoUseCase(profileRepository)
+    val replaceMockProfilePhotoUseCase = ReplaceMockProfilePhotoUseCase(profileRepository)
+    val deleteProfilePhotoUseCase = DeleteProfilePhotoUseCase(profileRepository)
     val activateProfileUseCase = ActivateProfileUseCase(profileRepository)
 }

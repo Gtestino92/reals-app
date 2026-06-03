@@ -11,6 +11,13 @@ data class AddPhotoRequestDto(
 )
 
 @Serializable
+data class ReplacePhotoRequestDto(
+    val url: String,
+    val isPersonPhoto: Boolean? = null,
+    val isFullBody: Boolean? = null,
+)
+
+@Serializable
 data class PhotoResponseDto(
     val id: String,
     val profileId: String,
