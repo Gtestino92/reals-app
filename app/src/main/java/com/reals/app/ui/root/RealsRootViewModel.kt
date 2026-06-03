@@ -1,0 +1,111 @@
+﻿package com.reals.app.ui.root
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import com.reals.app.core.network.ApiError
+import com.reals.app.core.network.ApiResult
+import com.reals.app.data.repository.AuthOperationResult
+import com.reals.app.data.repository.FirebaseAuthRepository
+import com.reals.app.di.AppContainer
+import com.reals.app.domain.model.ProvisionedSession
+import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+sealed interface RealsRootUiState {
+    data object Checking : RealsRootUiState
+    data class MissingFirebase(val message: String) : RealsRootUiState
+    data class Login(val loading: Boolean = false, val error: String? = null) : RealsRootUiState
+    data class LoadingSession(val email: String?) : RealsRootUiState
+    data class Ready(val session: ProvisionedSession) : RealsRootUiState
+    data class Failure(val error: ApiError) : RealsRootUiState
+}
+
+class RealsRootViewModel(
+    private val authRepository: FirebaseAuthRepository,
+    private val provisionAndLoadProfile: ProvisionAndLoadProfileUseCase,
+) : ViewModel() {
+    private val _uiState = MutableStateFlow<RealsRootUiState>(RealsRootUiState.Checking)
+    val uiState: StateFlow<RealsRootUiState> = _uiState.asStateFlow()
+
+    init {
+        refreshSession()
+    }
+
+    fun refreshSession() {
+        if (!authRepository.isConfigured()) {
+            _uiState.value = RealsRootUiState.MissingFirebase(FirebaseAuthRepository.firebaseMissingMessage)
+            return
+        }
+        if (!authRepository.hasSignedInUser()) {
+            _uiState.value = RealsRootUiState.Login()
+            return
+        }
+        loadBackendSession()
+    }
+
+    fun signIn(email: String, password: String) {
+        authenticate(email, password) { cleanEmail, cleanPassword ->
+            authRepository.signIn(cleanEmail, cleanPassword)
+        }
+    }
+
+    fun signUp(email: String, password: String) {
+        authenticate(email, password) { cleanEmail, cleanPassword ->
+            authRepository.signUp(cleanEmail, cleanPassword)
+        }
+    }
+
+    fun signOut() {
+        authRepository.signOut()
+        _uiState.value = RealsRootUiState.Login()
+    }
+
+    private fun authenticate(
+        email: String,
+        password: String,
+        action: suspend (email: String, password: String) -> AuthOperationResult,
+    ) {
+        val cleanEmail = email.trim()
+        if (cleanEmail.isBlank() || password.isBlank()) {
+            _uiState.value = RealsRootUiState.Login(error = "Email y password son requeridos.")
+            return
+        }
+        viewModelScope.launch {
+            _uiState.value = RealsRootUiState.Login(loading = true)
+            when (val result = action(cleanEmail, password)) {
+                AuthOperationResult.Success -> loadBackendSession()
+                is AuthOperationResult.Failure -> _uiState.value = RealsRootUiState.Login(error = result.message)
+            }
+        }
+    }
+
+    private fun loadBackendSession() {
+        viewModelScope.launch {
+            _uiState.value = RealsRootUiState.LoadingSession(authRepository.currentUserEmail())
+            when (val result = provisionAndLoadProfile()) {
+                is ApiResult.Success -> _uiState.value = RealsRootUiState.Ready(result.value)
+                is ApiResult.Failure -> _uiState.value = RealsRootUiState.Failure(result.error)
+            }
+        }
+    }
+}
+
+class RealsRootViewModelFactory(
+    private val appContainer: AppContainer,
+) : ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(RealsRootViewModel::class.java)) {
+            return RealsRootViewModel(
+                authRepository = appContainer.authRepository,
+                provisionAndLoadProfile = appContainer.provisionAndLoadProfileUseCase,
+            ) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class ${modelClass.name}")
+    }
+}
