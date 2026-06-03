@@ -15,6 +15,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -34,15 +36,20 @@ import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.ProvisionedSession
+import com.reals.app.domain.model.UpdateProfileInput
 
 @Composable
 fun ProfileStatusScreen(
     session: ProvisionedSession,
+    profileUpdateLoading: Boolean,
+    profileUpdateError: ApiError?,
+    profileUpdateMessage: String?,
     photoActionLoading: Boolean,
     photoActionError: ApiError?,
     photoActionMessage: String?,
     activationLoading: Boolean,
     activationError: ApiError?,
+    onUpdateProfile: (UpdateProfileInput) -> Unit,
     onAddMockPhoto: (profile: Profile, position: Int, isPersonPhoto: Boolean, isFullBody: Boolean) -> Unit,
     onActivateProfile: (Profile) -> Unit,
     onRefresh: () -> Unit,
@@ -71,11 +78,15 @@ fun ProfileStatusScreen(
             ProfileSnapshot.Missing -> MissingProfileCard()
             is ProfileSnapshot.Found -> ProfileCard(
                 profile = snapshot.profile,
+                profileUpdateLoading = profileUpdateLoading,
+                profileUpdateError = profileUpdateError,
+                profileUpdateMessage = profileUpdateMessage,
                 photoActionLoading = photoActionLoading,
                 photoActionError = photoActionError,
                 photoActionMessage = photoActionMessage,
                 activationLoading = activationLoading,
                 activationError = activationError,
+                onUpdateProfile = onUpdateProfile,
                 onAddMockPhoto = onAddMockPhoto,
                 onActivateProfile = onActivateProfile,
             )
@@ -121,11 +132,15 @@ private fun MissingProfileCard() {
 @Composable
 private fun ProfileCard(
     profile: Profile,
+    profileUpdateLoading: Boolean,
+    profileUpdateError: ApiError?,
+    profileUpdateMessage: String?,
     photoActionLoading: Boolean,
     photoActionError: ApiError?,
     photoActionMessage: String?,
     activationLoading: Boolean,
     activationError: ApiError?,
+    onUpdateProfile: (UpdateProfileInput) -> Unit,
     onAddMockPhoto: (profile: Profile, position: Int, isPersonPhoto: Boolean, isFullBody: Boolean) -> Unit,
     onActivateProfile: (Profile) -> Unit,
 ) {
@@ -150,6 +165,13 @@ private fun ProfileCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
+            ProfileEditActions(
+                profile = profile,
+                loading = profileUpdateLoading,
+                error = profileUpdateError,
+                message = profileUpdateMessage,
+                onUpdateProfile = onUpdateProfile,
+            )
             if (profile.status == ProfileStatus.Draft) {
                 DraftPhotoActions(
                     profile = profile,
@@ -161,6 +183,134 @@ private fun ProfileCard(
                     onAddMockPhoto = onAddMockPhoto,
                     onActivateProfile = onActivateProfile,
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileEditActions(
+    profile: Profile,
+    loading: Boolean,
+    error: ApiError?,
+    message: String?,
+    onUpdateProfile: (UpdateProfileInput) -> Unit,
+) {
+    var expanded by rememberSaveable(profile.id) { mutableStateOf(false) }
+    var displayName by rememberSaveable(profile.id) { mutableStateOf(profile.displayName) }
+    var bio by rememberSaveable(profile.id) { mutableStateOf(profile.bio.orEmpty()) }
+    var city by rememberSaveable(profile.id) { mutableStateOf(profile.city) }
+    var country by rememberSaveable(profile.id) { mutableStateOf(profile.country) }
+    var intention by rememberSaveable(profile.id) { mutableStateOf(profile.intention) }
+    var lookingForGender by rememberSaveable(profile.id) { mutableStateOf(profile.lookingForGender) }
+    var localError by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
+
+    Column(
+        modifier = Modifier.padding(top = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        OutlinedButton(
+            onClick = { expanded = !expanded },
+            enabled = !loading,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(if (expanded) "Ocultar edicion de perfil" else "Editar perfil")
+        }
+
+        if (expanded) {
+            Text(
+                text = "Campos editables: nombre, bio, ciudad, pais, intencion y busqueda.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            OutlinedTextField(
+                value = displayName,
+                onValueChange = { displayName = it },
+                label = { Text("Nombre visible") },
+                enabled = !loading,
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = bio,
+                onValueChange = { bio = it },
+                label = { Text("Bio") },
+                enabled = !loading,
+                minLines = 3,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = city,
+                onValueChange = { city = it },
+                label = { Text("Ciudad") },
+                enabled = !loading,
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = country,
+                onValueChange = { country = it },
+                label = { Text("Pais") },
+                enabled = !loading,
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            EnumDropdown(
+                label = "Intencion",
+                value = intention,
+                options = listOf("DATE", "FRIENDSHIP", "CASUAL"),
+                enabled = !loading,
+                onValueChange = { intention = it },
+            )
+            EnumDropdown(
+                label = "Busco",
+                value = lookingForGender,
+                options = listOf("MEN", "WOMEN", "EVERYONE", "OTHER"),
+                enabled = !loading,
+                onValueChange = { lookingForGender = it },
+            )
+            localError?.let { errorMessage ->
+                Text(
+                    text = errorMessage,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            error?.let { apiError ->
+                Text(
+                    text = apiError.toDisplayMessage(),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            message?.let { successMessage ->
+                Text(
+                    text = successMessage,
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            Button(
+                onClick = {
+                    val input = validateUpdateProfileInput(
+                        displayName = displayName,
+                        bio = bio,
+                        city = city,
+                        country = country,
+                        intention = intention,
+                        lookingForGender = lookingForGender,
+                    )
+                    if (input == null) {
+                        localError = "Revisa nombre, ciudad, pais y bio. Nombre minimo 2 caracteres; bio maximo 1000."
+                    } else {
+                        localError = null
+                        onUpdateProfile(input)
+                    }
+                },
+                enabled = !loading,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (loading) "Guardando..." else "Guardar cambios")
             }
         }
     }
@@ -298,6 +448,70 @@ private fun previewGeneratedPhotoUrl(profile: Profile, position: Int?): String {
     val userId = profile.userId.replace("-", "")
     val profileId = profile.id.replace("-", "")
     return "https://static.reals.local/mock-profiles/$userId/$profileId/photo-$position.jpg"
+}
+
+@Composable
+private fun EnumDropdown(
+    label: String,
+    value: String,
+    options: List<String>,
+    enabled: Boolean,
+    onValueChange: (String) -> Unit,
+) {
+    var expanded by rememberSaveable(label, value) { mutableStateOf(false) }
+    Column {
+        OutlinedButton(
+            onClick = { expanded = true },
+            enabled = enabled,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("$label: $value")
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option) },
+                    onClick = {
+                        onValueChange(option)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+private fun validateUpdateProfileInput(
+    displayName: String,
+    bio: String,
+    city: String,
+    country: String,
+    intention: String,
+    lookingForGender: String,
+): UpdateProfileInput? {
+    val cleanDisplayName = displayName.trim()
+    val cleanBio = bio.trim()
+    val cleanCity = city.trim()
+    val cleanCountry = country.trim()
+
+    if (cleanDisplayName.length !in 2..100) return null
+    if (cleanBio.length > 1000) return null
+    if (cleanCity.isBlank() || cleanCity.length > 100) return null
+    if (cleanCountry.isBlank() || cleanCountry.length > 100) return null
+    if (intention !in listOf("DATE", "FRIENDSHIP", "CASUAL")) return null
+    if (lookingForGender !in listOf("MEN", "WOMEN", "EVERYONE", "OTHER")) return null
+
+    return UpdateProfileInput(
+        displayName = cleanDisplayName,
+        bio = cleanBio.ifBlank { null },
+        city = cleanCity,
+        country = cleanCountry,
+        intention = intention,
+        lookingForGender = lookingForGender,
+    )
 }
 
 private fun yesNo(value: Boolean): String = if (value) "si" else "no"

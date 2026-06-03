@@ -60,11 +60,15 @@ fun RealsApp(appContainer: AppContainer) {
 
                 is ProfileSnapshot.Found -> ProfileStatusScreen(
                     session = current.session,
+                    profileUpdateLoading = current.updatingProfile,
+                    profileUpdateError = current.profileUpdateError,
+                    profileUpdateMessage = current.profileUpdateMessage,
                     photoActionLoading = current.addingPhoto,
                     photoActionError = current.photoActionError,
                     photoActionMessage = current.photoActionMessage,
                     activationLoading = current.activatingProfile,
                     activationError = current.profileActivationError,
+                    onUpdateProfile = viewModel::updateProfile,
                     onAddMockPhoto = viewModel::addMockProfilePhoto,
                     onActivateProfile = { viewModel.activateProfile() },
                     onRefresh = viewModel::refreshSession,

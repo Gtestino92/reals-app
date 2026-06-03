@@ -13,6 +13,7 @@ import com.reals.app.domain.model.CreateProfileInput
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.ProfileSnapshot
+import com.reals.app.domain.model.UpdateProfileInput
 
 class ProfileRepository(
     private val api: RealsApi,
@@ -35,6 +36,10 @@ class ProfileRepository(
 
     suspend fun createMyProfile(input: CreateProfileInput): ApiResult<Profile> =
         authorizedCall { authorization -> api.createMyProfile(authorization, input.toDto()) }
+            .map { it.toDomain() }
+
+    suspend fun updateMyProfile(input: UpdateProfileInput): ApiResult<Profile> =
+        authorizedCall { authorization -> api.updateMyProfile(authorization, input.toDto()) }
             .map { it.toDomain() }
 
     suspend fun getMyProfilePhotos(): ApiResult<List<ProfilePhoto>> =

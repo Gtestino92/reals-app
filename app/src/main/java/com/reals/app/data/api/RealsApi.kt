@@ -5,11 +5,13 @@ import com.reals.app.data.dto.CreateProfileRequestDto
 import com.reals.app.data.dto.PhotoResponseDto
 import com.reals.app.data.dto.PingResponseDto
 import com.reals.app.data.dto.ProfileResponseDto
+import com.reals.app.data.dto.UpdateProfileRequestDto
 import com.reals.app.data.dto.UserResponseDto
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.Header
+import retrofit2.http.PATCH
 import retrofit2.http.POST
 
 interface RealsApi {
@@ -30,6 +32,12 @@ interface RealsApi {
     suspend fun createMyProfile(
         @Header("Authorization") authorization: String,
         @Body body: CreateProfileRequestDto,
+    ): Response<ProfileResponseDto>
+
+    @PATCH("api/me/profile")
+    suspend fun updateMyProfile(
+        @Header("Authorization") authorization: String,
+        @Body body: UpdateProfileRequestDto,
     ): Response<ProfileResponseDto>
 
     @GET("api/me/profile/photos")

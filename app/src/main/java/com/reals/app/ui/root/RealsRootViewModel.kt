@@ -13,10 +13,12 @@ import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfileActivationResult
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProvisionedSession
+import com.reals.app.domain.model.UpdateProfileInput
 import com.reals.app.domain.usecase.ActivateProfileUseCase
 import com.reals.app.domain.usecase.AddMockProfilePhotoUseCase
 import com.reals.app.domain.usecase.CreateProfileUseCase
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
+import com.reals.app.domain.usecase.UpdateProfileUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,6 +33,9 @@ sealed interface RealsRootUiState {
         val session: ProvisionedSession,
         val creatingProfile: Boolean = false,
         val profileCreateError: ApiError? = null,
+        val updatingProfile: Boolean = false,
+        val profileUpdateError: ApiError? = null,
+        val profileUpdateMessage: String? = null,
         val addingPhoto: Boolean = false,
         val photoActionError: ApiError? = null,
         val photoActionMessage: String? = null,
@@ -48,6 +53,7 @@ class RealsRootViewModel(
     private val authRepository: FirebaseAuthRepository,
     private val provisionAndLoadProfile: ProvisionAndLoadProfileUseCase,
     private val createProfileUseCase: CreateProfileUseCase,
+    private val updateProfileUseCase: UpdateProfileUseCase,
     private val addMockProfilePhotoUseCase: AddMockProfilePhotoUseCase,
     private val activateProfileUseCase: ActivateProfileUseCase,
 ) : ViewModel() {
@@ -106,6 +112,36 @@ class RealsRootViewModel(
                     _uiState.value = current.copy(
                         creatingProfile = false,
                         profileCreateError = result.error,
+                    )
+                }
+            }
+        }
+    }
+
+    fun updateProfile(input: UpdateProfileInput) {
+        val current = _uiState.value as? RealsRootUiState.Ready ?: return
+        viewModelScope.launch {
+            _uiState.value = current.copy(
+                updatingProfile = true,
+                profileUpdateError = null,
+                profileUpdateMessage = null,
+            )
+            when (val result = updateProfileUseCase.invoke(input)) {
+                is ApiResult.Success -> {
+                    _uiState.value = current.copy(
+                        session = current.session.copy(
+                            profileSnapshot = ProfileSnapshot.Found(result.value),
+                        ),
+                        updatingProfile = false,
+                        profileUpdateError = null,
+                        profileUpdateMessage = "Perfil actualizado.",
+                    )
+                }
+
+                is ApiResult.Failure -> {
+                    _uiState.value = current.copy(
+                        updatingProfile = false,
+                        profileUpdateError = result.error,
                     )
                 }
             }
@@ -225,6 +261,7 @@ class RealsRootViewModelFactory(
                 authRepository = appContainer.authRepository,
                 provisionAndLoadProfile = appContainer.provisionAndLoadProfileUseCase,
                 createProfileUseCase = appContainer.createProfileUseCase,
+                updateProfileUseCase = appContainer.updateProfileUseCase,
                 addMockProfilePhotoUseCase = appContainer.addMockProfilePhotoUseCase,
                 activateProfileUseCase = appContainer.activateProfileUseCase,
             ) as T
