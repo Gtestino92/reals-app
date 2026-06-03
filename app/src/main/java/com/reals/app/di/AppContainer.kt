@@ -8,7 +8,8 @@ import com.reals.app.data.api.RealsApiClient
 import com.reals.app.data.repository.FirebaseAuthRepository
 import com.reals.app.data.repository.MeRepository
 import com.reals.app.data.repository.ProfileRepository
-import com.reals.app.domain.usecase.CompleteAndActivateProfileUseCase
+import com.reals.app.domain.usecase.ActivateProfileUseCase
+import com.reals.app.domain.usecase.AddMockProfilePhotoUseCase
 import com.reals.app.domain.usecase.CreateProfileUseCase
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
 import kotlinx.serialization.json.Json
@@ -31,5 +32,6 @@ class AppContainer(context: Context) {
         profileRepository = profileRepository,
     )
     val createProfileUseCase = CreateProfileUseCase(profileRepository)
-    val completeAndActivateProfileUseCase = CompleteAndActivateProfileUseCase(profileRepository)
+    val addMockProfilePhotoUseCase = AddMockProfilePhotoUseCase(profileRepository)
+    val activateProfileUseCase = ActivateProfileUseCase(profileRepository)
 }

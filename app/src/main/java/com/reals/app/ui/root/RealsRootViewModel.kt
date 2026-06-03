@@ -8,12 +8,13 @@ import com.reals.app.core.network.ApiResult
 import com.reals.app.data.repository.AuthOperationResult
 import com.reals.app.data.repository.FirebaseAuthRepository
 import com.reals.app.di.AppContainer
+import com.reals.app.domain.model.CreateProfileInput
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfileActivationResult
-import com.reals.app.domain.model.CreateProfileInput
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProvisionedSession
-import com.reals.app.domain.usecase.CompleteAndActivateProfileUseCase
+import com.reals.app.domain.usecase.ActivateProfileUseCase
+import com.reals.app.domain.usecase.AddMockProfilePhotoUseCase
 import com.reals.app.domain.usecase.CreateProfileUseCase
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,6 +31,9 @@ sealed interface RealsRootUiState {
         val session: ProvisionedSession,
         val creatingProfile: Boolean = false,
         val profileCreateError: ApiError? = null,
+        val addingPhoto: Boolean = false,
+        val photoActionError: ApiError? = null,
+        val photoActionMessage: String? = null,
         val activatingProfile: Boolean = false,
         val profileActivationError: ApiError? = null,
     ) : RealsRootUiState
@@ -44,7 +48,8 @@ class RealsRootViewModel(
     private val authRepository: FirebaseAuthRepository,
     private val provisionAndLoadProfile: ProvisionAndLoadProfileUseCase,
     private val createProfileUseCase: CreateProfileUseCase,
-    private val completeAndActivateProfileUseCase: CompleteAndActivateProfileUseCase,
+    private val addMockProfilePhotoUseCase: AddMockProfilePhotoUseCase,
+    private val activateProfileUseCase: ActivateProfileUseCase,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<RealsRootUiState>(RealsRootUiState.Checking)
     val uiState: StateFlow<RealsRootUiState> = _uiState.asStateFlow()
@@ -107,11 +112,59 @@ class RealsRootViewModel(
         }
     }
 
-    fun completeAndActivateProfile(profile: Profile) {
+    fun addMockProfilePhoto(
+        profile: Profile,
+        position: Int,
+        isPersonPhoto: Boolean,
+        isFullBody: Boolean,
+    ) {
+        val current = _uiState.value as? RealsRootUiState.Ready ?: return
+        viewModelScope.launch {
+            _uiState.value = current.copy(
+                addingPhoto = true,
+                photoActionError = null,
+                photoActionMessage = null,
+                profileActivationError = null,
+            )
+            when (
+                val result = addMockProfilePhotoUseCase.invoke(
+                    profile = profile,
+                    position = position,
+                    isPersonPhoto = isPersonPhoto,
+                    isFullBody = isFullBody,
+                )
+            ) {
+                is ApiResult.Success -> {
+                    val refreshedSession = provisionAndLoadProfile()
+                    when (refreshedSession) {
+                        is ApiResult.Success -> _uiState.value = RealsRootUiState.Ready(
+                            session = refreshedSession.value,
+                            addingPhoto = false,
+                            photoActionMessage = "Foto ${result.value.position} agregada.",
+                        )
+
+                        is ApiResult.Failure -> _uiState.value = current.copy(
+                            addingPhoto = false,
+                            photoActionError = refreshedSession.error,
+                        )
+                    }
+                }
+
+                is ApiResult.Failure -> {
+                    _uiState.value = current.copy(
+                        addingPhoto = false,
+                        photoActionError = result.error,
+                    )
+                }
+            }
+        }
+    }
+
+    fun activateProfile() {
         val current = _uiState.value as? RealsRootUiState.Ready ?: return
         viewModelScope.launch {
             _uiState.value = current.copy(activatingProfile = true, profileActivationError = null)
-            when (val result = completeAndActivateProfileUseCase.invoke(profile)) {
+            when (val result = activateProfileUseCase.invoke()) {
                 is ApiResult.Success -> {
                     val updatedSession = current.session.copy(
                         profileSnapshot = ProfileSnapshot.Found(result.value.profile),
@@ -172,7 +225,8 @@ class RealsRootViewModelFactory(
                 authRepository = appContainer.authRepository,
                 provisionAndLoadProfile = appContainer.provisionAndLoadProfileUseCase,
                 createProfileUseCase = appContainer.createProfileUseCase,
-                completeAndActivateProfileUseCase = appContainer.completeAndActivateProfileUseCase,
+                addMockProfilePhotoUseCase = appContainer.addMockProfilePhotoUseCase,
+                activateProfileUseCase = appContainer.activateProfileUseCase,
             ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class ${modelClass.name}")

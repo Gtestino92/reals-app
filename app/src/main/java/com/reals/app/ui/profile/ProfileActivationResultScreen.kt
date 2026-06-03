@@ -59,8 +59,8 @@ fun ProfileActivationResultScreen(
                 Text("Usuario backend: ${session.user.id}")
                 Text("Perfil: ${result.profile.id}")
                 Text("Status: ${result.profile.status.rawValue} (${result.profile.status.label})")
-                Text("Fotos agregadas en esta accion: ${result.addedPhotoCount}")
                 Text("Fotos totales: ${result.totalPhotoCount}")
+                Text("Las fotos se agregaron manualmente antes de activar.")
                 result.generatedUrls.firstOrNull()?.let { firstUrl ->
                     Text(
                         text = "Primera URL generada: $firstUrl",
