@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -17,6 +19,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.reals.app.core.network.ApiError
+import com.reals.app.core.network.toDisplayMessage
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProfileStatus
@@ -25,12 +29,16 @@ import com.reals.app.domain.model.ProvisionedSession
 @Composable
 fun ProfileStatusScreen(
     session: ProvisionedSession,
+    activationLoading: Boolean,
+    activationError: ApiError?,
+    onCompleteAndActivate: (Profile) -> Unit,
     onRefresh: () -> Unit,
     onSignOut: () -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(24.dp),
         verticalArrangement = Arrangement.Center,
     ) {
@@ -48,7 +56,12 @@ fun ProfileStatusScreen(
         Spacer(modifier = Modifier.height(20.dp))
         when (val snapshot = session.profileSnapshot) {
             ProfileSnapshot.Missing -> MissingProfileCard()
-            is ProfileSnapshot.Found -> ProfileCard(snapshot.profile)
+            is ProfileSnapshot.Found -> ProfileCard(
+                profile = snapshot.profile,
+                activationLoading = activationLoading,
+                activationError = activationError,
+                onCompleteAndActivate = onCompleteAndActivate,
+            )
         }
         Row(
             modifier = Modifier.padding(top = 24.dp),
@@ -89,7 +102,12 @@ private fun MissingProfileCard() {
 }
 
 @Composable
-private fun ProfileCard(profile: Profile) {
+private fun ProfileCard(
+    profile: Profile,
+    activationLoading: Boolean,
+    activationError: ApiError?,
+    onCompleteAndActivate: (Profile) -> Unit,
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
@@ -111,6 +129,22 @@ private fun ProfileCard(profile: Profile) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
+            if (activationError != null) {
+                Text(
+                    text = activationError.toDisplayMessage(),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            if (profile.status == ProfileStatus.Draft) {
+                Button(
+                    onClick = { onCompleteAndActivate(profile) },
+                    enabled = !activationLoading,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (activationLoading) "Completando perfil..." else "Generar fotos mock y activar")
+                }
+            }
         }
     }
 }
