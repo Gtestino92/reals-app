@@ -8,12 +8,14 @@ import com.reals.app.core.network.ApiResult
 import com.reals.app.data.repository.AuthOperationResult
 import com.reals.app.data.repository.FirebaseAuthRepository
 import com.reals.app.di.AppContainer
+import com.reals.app.domain.model.CreateProfileInput
+import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProvisionedSession
+import com.reals.app.domain.usecase.CreateProfileUseCase
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 sealed interface RealsRootUiState {
@@ -21,13 +23,18 @@ sealed interface RealsRootUiState {
     data class MissingFirebase(val message: String) : RealsRootUiState
     data class Login(val loading: Boolean = false, val error: String? = null) : RealsRootUiState
     data class LoadingSession(val email: String?) : RealsRootUiState
-    data class Ready(val session: ProvisionedSession) : RealsRootUiState
+    data class Ready(
+        val session: ProvisionedSession,
+        val creatingProfile: Boolean = false,
+        val profileCreateError: ApiError? = null,
+    ) : RealsRootUiState
     data class Failure(val error: ApiError) : RealsRootUiState
 }
 
 class RealsRootViewModel(
     private val authRepository: FirebaseAuthRepository,
     private val provisionAndLoadProfile: ProvisionAndLoadProfileUseCase,
+    private val createProfileUseCase: CreateProfileUseCase,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<RealsRootUiState>(RealsRootUiState.Checking)
     val uiState: StateFlow<RealsRootUiState> = _uiState.asStateFlow()
@@ -63,6 +70,31 @@ class RealsRootViewModel(
     fun signOut() {
         authRepository.signOut()
         _uiState.value = RealsRootUiState.Login()
+    }
+
+    fun createProfile(input: CreateProfileInput) {
+        val current = _uiState.value as? RealsRootUiState.Ready ?: return
+        viewModelScope.launch {
+            _uiState.value = current.copy(creatingProfile = true, profileCreateError = null)
+            when (val result = createProfileUseCase.invoke(input)) {
+                is ApiResult.Success -> {
+                    _uiState.value = current.copy(
+                        session = current.session.copy(
+                            profileSnapshot = ProfileSnapshot.Found(result.value),
+                        ),
+                        creatingProfile = false,
+                        profileCreateError = null,
+                    )
+                }
+
+                is ApiResult.Failure -> {
+                    _uiState.value = current.copy(
+                        creatingProfile = false,
+                        profileCreateError = result.error,
+                    )
+                }
+            }
+        }
     }
 
     private fun authenticate(
@@ -104,6 +136,7 @@ class RealsRootViewModelFactory(
             return RealsRootViewModel(
                 authRepository = appContainer.authRepository,
                 provisionAndLoadProfile = appContainer.provisionAndLoadProfileUseCase,
+                createProfileUseCase = appContainer.createProfileUseCase,
             ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class ${modelClass.name}")
