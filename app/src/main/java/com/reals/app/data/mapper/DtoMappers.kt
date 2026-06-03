@@ -1,8 +1,10 @@
 ﻿package com.reals.app.data.mapper
 
+import com.reals.app.data.dto.CreateProfileRequestDto
 import com.reals.app.data.dto.ProfileResponseDto
 import com.reals.app.data.dto.UserResponseDto
 import com.reals.app.domain.model.BackendUser
+import com.reals.app.domain.model.CreateProfileInput
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfileStatus
 
@@ -32,4 +34,18 @@ fun ProfileResponseDto.toDomain(): Profile = Profile(
     photoCount = photoCount,
     createdAt = createdAt,
     updatedAt = updatedAt,
+)
+
+fun CreateProfileInput.toDto(): CreateProfileRequestDto = CreateProfileRequestDto(
+    displayName = displayName,
+    birthDate = birthDate,
+    gender = gender,
+    lookingForGender = lookingForGender,
+    intention = intention,
+    city = city,
+    country = country,
+    bio = bio,
+    preferredMinAge = preferredMinAge,
+    preferredMaxAge = preferredMaxAge,
+    maxDistanceKm = maxDistanceKm,
 )

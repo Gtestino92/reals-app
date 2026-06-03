@@ -2,8 +2,10 @@
 
 import com.reals.app.data.dto.PingResponseDto
 import com.reals.app.data.dto.ProfileResponseDto
+import com.reals.app.data.dto.CreateProfileRequestDto
 import com.reals.app.data.dto.UserResponseDto
 import retrofit2.Response
+import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.POST
@@ -20,5 +22,11 @@ interface RealsApi {
     @GET("api/me/profile")
     suspend fun getMyProfile(
         @Header("Authorization") authorization: String,
+    ): Response<ProfileResponseDto>
+
+    @POST("api/me/profile")
+    suspend fun createMyProfile(
+        @Header("Authorization") authorization: String,
+        @Body body: CreateProfileRequestDto,
     ): Response<ProfileResponseDto>
 }

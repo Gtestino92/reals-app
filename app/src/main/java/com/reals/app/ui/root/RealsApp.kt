@@ -9,8 +9,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.reals.app.core.network.toDisplayMessage
 import com.reals.app.di.AppContainer
+import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.ui.auth.LoginScreen
 import com.reals.app.ui.common.FullScreenMessage
+import com.reals.app.ui.profile.CreateProfileScreen
 import com.reals.app.ui.profile.ProfileStatusScreen
 
 @Composable
@@ -46,11 +48,21 @@ fun RealsApp(appContainer: AppContainer) {
                 body = "Provisionando usuario${current.email?.let { " $it" } ?: ""} y cargando perfil.",
             )
 
-            is RealsRootUiState.Ready -> ProfileStatusScreen(
-                session = current.session,
-                onRefresh = viewModel::refreshSession,
-                onSignOut = viewModel::signOut,
-            )
+            is RealsRootUiState.Ready -> when (current.session.profileSnapshot) {
+                ProfileSnapshot.Missing -> CreateProfileScreen(
+                    loading = current.creatingProfile,
+                    error = current.profileCreateError,
+                    onSubmit = viewModel::createProfile,
+                    onRefresh = viewModel::refreshSession,
+                    onSignOut = viewModel::signOut,
+                )
+
+                is ProfileSnapshot.Found -> ProfileStatusScreen(
+                    session = current.session,
+                    onRefresh = viewModel::refreshSession,
+                    onSignOut = viewModel::signOut,
+                )
+            }
 
             is RealsRootUiState.Failure -> FullScreenMessage(
                 title = "No se pudo cargar Reals",

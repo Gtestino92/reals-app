@@ -3,9 +3,13 @@
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ApiExecutor
 import com.reals.app.core.network.ApiResult
+import com.reals.app.core.network.map
 import com.reals.app.data.api.AuthTokenProvider
 import com.reals.app.data.api.RealsApi
+import com.reals.app.data.mapper.toDto
 import com.reals.app.data.mapper.toDomain
+import com.reals.app.domain.model.CreateProfileInput
+import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfileSnapshot
 
 class ProfileRepository(
@@ -26,4 +30,8 @@ class ProfileRepository(
             }
         }
     }
+
+    suspend fun createMyProfile(input: CreateProfileInput): ApiResult<Profile> =
+        authorizedCall { authorization -> api.createMyProfile(authorization, input.toDto()) }
+            .map { it.toDomain() }
 }
