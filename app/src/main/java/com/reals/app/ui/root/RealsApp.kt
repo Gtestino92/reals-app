@@ -13,6 +13,7 @@ import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.ui.auth.LoginScreen
 import com.reals.app.ui.common.FullScreenMessage
 import com.reals.app.ui.profile.CreateProfileScreen
+import com.reals.app.ui.profile.ProfileActivationResultScreen
 import com.reals.app.ui.profile.ProfileStatusScreen
 
 @Composable
@@ -59,10 +60,38 @@ fun RealsApp(appContainer: AppContainer) {
 
                 is ProfileSnapshot.Found -> ProfileStatusScreen(
                     session = current.session,
+                    profileUpdateLoading = current.updatingProfile,
+                    profileUpdateError = current.profileUpdateError,
+                    profileUpdateMessage = current.profileUpdateMessage,
+                    matchFiltersLoading = current.updatingMatchFilters,
+                    matchFiltersError = current.matchFiltersError,
+                    matchFiltersMessage = current.matchFiltersMessage,
+                    photosLoading = current.loadingPhotos,
+                    photos = current.profilePhotos,
+                    photosError = current.profilePhotosError,
+                    photoActionLoading = current.addingPhoto,
+                    photoActionError = current.photoActionError,
+                    photoActionMessage = current.photoActionMessage,
+                    activationLoading = current.activatingProfile,
+                    activationError = current.profileActivationError,
+                    onUpdateProfile = viewModel::updateProfile,
+                    onUpdateMatchFilters = viewModel::updateMatchFilters,
+                    onLoadPhotos = viewModel::loadProfilePhotos,
+                    onAddMockPhoto = viewModel::addMockProfilePhoto,
+                    onReplaceMockPhoto = viewModel::replaceMockProfilePhoto,
+                    onDeletePhoto = viewModel::deleteProfilePhoto,
+                    onActivateProfile = { viewModel.activateProfile() },
                     onRefresh = viewModel::refreshSession,
                     onSignOut = viewModel::signOut,
                 )
             }
+
+            is RealsRootUiState.ActivationComplete -> ProfileActivationResultScreen(
+                session = current.session,
+                result = current.result,
+                onRefresh = viewModel::refreshSession,
+                onSignOut = viewModel::signOut,
+            )
 
             is RealsRootUiState.Failure -> FullScreenMessage(
                 title = "No se pudo cargar Reals",
