@@ -57,6 +57,8 @@ fun ProfileStatusScreen(
     photoActionMessage: String?,
     activationLoading: Boolean,
     activationError: ApiError?,
+    accountDeleteLoading: Boolean,
+    accountDeleteError: ApiError?,
     onUpdateProfile: (UpdateProfileInput) -> Unit,
     onUpdateMatchFilters: (UpdateMatchFiltersInput) -> Unit,
     onLoadPhotos: () -> Unit,
@@ -66,6 +68,7 @@ fun ProfileStatusScreen(
     onActivateProfile: (Profile) -> Unit,
     onRefresh: () -> Unit,
     onSignOut: () -> Unit,
+    onDeleteAccount: () -> Unit,
 ) {
     val busy = profileUpdateLoading || matchFiltersLoading || photoActionLoading || activationLoading
     Column(
@@ -123,6 +126,48 @@ fun ProfileStatusScreen(
             }
             OutlinedButton(onClick = onSignOut, enabled = !busy) {
                 Text("Cerrar sesion")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.errorContainer,
+            ),
+        ) {
+            Column(
+                modifier = Modifier.padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(
+                    text = "Cuenta",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+
+                Text(
+                    text = "Eliminar la cuenta borra tu usuario y cierra la sesion.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+
+                accountDeleteError?.let {
+                    Text(
+                        text = it.toDisplayMessage(),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = onDeleteAccount,
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (accountDeleteLoading) "Eliminando cuenta..." else "Eliminar cuenta")
+                }
             }
         }
     }

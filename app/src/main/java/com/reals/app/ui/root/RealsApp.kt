@@ -83,6 +83,9 @@ fun RealsApp(appContainer: AppContainer) {
                     onActivateProfile = { viewModel.activateProfile() },
                     onRefresh = viewModel::refreshSession,
                     onSignOut = viewModel::signOut,
+                    accountDeleteLoading = current.deletingAccount,
+                    accountDeleteError = current.accountDeleteError,
+                    onDeleteAccount = viewModel::deleteAccount,
                 )
             }
 

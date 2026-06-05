@@ -1,6 +1,7 @@
 ﻿package com.reals.app.core.network
 
 sealed interface ApiError {
+
     data class Backend(
         val statusCode: Int,
         val code: String?,
@@ -16,6 +17,11 @@ sealed interface ApiError {
     ) : ApiError
 
     data class Unexpected(val message: String) : ApiError
+
+}
+
+fun ApiError.isAccountDeleted(): Boolean {
+    return this is ApiError.Backend && code == "ACCOUNT_DELETED"
 }
 
 enum class AuthFailureReason {
@@ -23,6 +29,7 @@ enum class AuthFailureReason {
     NOT_SIGNED_IN,
     TOKEN_MISSING,
     TOKEN_UNAVAILABLE,
+    FIREBASE_DELETE_FAILED,
 }
 
 fun ApiError.toDisplayMessage(): String = when (this) {
