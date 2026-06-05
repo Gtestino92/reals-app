@@ -11,6 +11,7 @@ import com.reals.app.data.repository.ProfileRepository
 import com.reals.app.domain.usecase.ActivateProfileUseCase
 import com.reals.app.domain.usecase.AddMockProfilePhotoUseCase
 import com.reals.app.domain.usecase.CreateProfileUseCase
+import com.reals.app.domain.usecase.DeleteAccountUseCase
 import com.reals.app.domain.usecase.DeleteProfilePhotoUseCase
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
@@ -44,4 +45,5 @@ class AppContainer(context: Context) {
     val replaceMockProfilePhotoUseCase = ReplaceMockProfilePhotoUseCase(profileRepository)
     val deleteProfilePhotoUseCase = DeleteProfilePhotoUseCase(profileRepository)
     val activateProfileUseCase = ActivateProfileUseCase(profileRepository)
+    val deleteAccountUseCase = DeleteAccountUseCase(meRepository, authRepository)
 }

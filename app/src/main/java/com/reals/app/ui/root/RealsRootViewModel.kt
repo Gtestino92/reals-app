@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ApiResult
+import com.reals.app.core.network.isAccountDeleted
 import com.reals.app.data.repository.AuthOperationResult
 import com.reals.app.data.repository.FirebaseAuthRepository
 import com.reals.app.di.AppContainer
@@ -19,6 +20,7 @@ import com.reals.app.domain.model.UpdateProfileInput
 import com.reals.app.domain.usecase.ActivateProfileUseCase
 import com.reals.app.domain.usecase.AddMockProfilePhotoUseCase
 import com.reals.app.domain.usecase.CreateProfileUseCase
+import com.reals.app.domain.usecase.DeleteAccountUseCase
 import com.reals.app.domain.usecase.DeleteProfilePhotoUseCase
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
@@ -53,6 +55,8 @@ sealed interface RealsRootUiState {
         val photoActionMessage: String? = null,
         val activatingProfile: Boolean = false,
         val profileActivationError: ApiError? = null,
+        val deletingAccount: Boolean = false,
+        val accountDeleteError: ApiError? = null,
     ) : RealsRootUiState
     data class ActivationComplete(
         val session: ProvisionedSession,
@@ -72,6 +76,7 @@ class RealsRootViewModel(
     private val replaceMockProfilePhotoUseCase: ReplaceMockProfilePhotoUseCase,
     private val deleteProfilePhotoUseCase: DeleteProfilePhotoUseCase,
     private val activateProfileUseCase: ActivateProfileUseCase,
+    private val deleteAccountUseCase: DeleteAccountUseCase,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<RealsRootUiState>(RealsRootUiState.Checking)
     val uiState: StateFlow<RealsRootUiState> = _uiState.asStateFlow()
@@ -107,6 +112,30 @@ class RealsRootViewModel(
     fun signOut() {
         authRepository.signOut()
         _uiState.value = RealsRootUiState.Login()
+    }
+
+    fun deleteAccount() {
+        val current = _uiState.value as? RealsRootUiState.Ready ?: return
+
+        viewModelScope.launch {
+            _uiState.value = current.copy(
+                deletingAccount = true,
+                accountDeleteError = null,
+            )
+
+            when (val result = deleteAccountUseCase()) {
+                is ApiResult.Success -> {
+                    _uiState.value = RealsRootUiState.Login()
+                }
+
+                is ApiResult.Failure -> {
+                    _uiState.value = current.copy(
+                        deletingAccount = false,
+                        accountDeleteError = result.error,
+                    )
+                }
+            }
+        }
     }
 
     fun createProfile(input: CreateProfileInput) {
@@ -424,9 +453,33 @@ class RealsRootViewModel(
                     }
                 }
 
-                is ApiResult.Failure -> _uiState.value = RealsRootUiState.Failure(result.error)
+                is ApiResult.Failure -> {
+                    handleSessionLoadFailure(result.error)
+                }
             }
         }
+    }
+
+    private suspend fun handleSessionLoadFailure(error: ApiError) {
+        if (error.isAccountDeleted()) {
+            when (authRepository.deleteFirebaseUser()) {
+                AuthOperationResult.Success -> {
+                    _uiState.value = RealsRootUiState.Login(
+                        error = "La cuenta fue eliminada."
+                    )
+                }
+
+                is AuthOperationResult.Failure -> {
+                    authRepository.signOut()
+                    _uiState.value = RealsRootUiState.Login(
+                        error = "La cuenta fue eliminada localmente, pero no se pudo eliminar de Firebase. Se cerró la sesión."
+                    )
+                }
+            }
+            return
+        }
+
+        _uiState.value = RealsRootUiState.Failure(error)
     }
 }
 
@@ -447,6 +500,7 @@ class RealsRootViewModelFactory(
                 replaceMockProfilePhotoUseCase = appContainer.replaceMockProfilePhotoUseCase,
                 deleteProfilePhotoUseCase = appContainer.deleteProfilePhotoUseCase,
                 activateProfileUseCase = appContainer.activateProfileUseCase,
+                deleteAccountUseCase = appContainer.deleteAccountUseCase
             ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class ${modelClass.name}")
