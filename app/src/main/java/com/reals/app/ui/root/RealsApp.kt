@@ -11,6 +11,7 @@ import com.reals.app.core.network.toDisplayMessage
 import com.reals.app.di.AppContainer
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.ui.account.AccountDeletionRecoveryScreen
+import com.reals.app.ui.account.formatBackendDate
 import com.reals.app.ui.auth.LoginScreen
 import com.reals.app.ui.common.FullScreenMessage
 import com.reals.app.ui.profile.CreateProfileScreen
@@ -53,7 +54,10 @@ fun RealsApp(appContainer: AppContainer) {
             is RealsRootUiState.AccountDeletionScheduled -> FullScreenMessage(
                 title = "Cuenta programada para eliminacion",
                 body = "Tu cuenta fue programada para eliminacion. " +
-                    "Podes recuperarla${current.deletionFinalizesAt?.let { " hasta el $it" } ?: " durante la ventana configurada"}.",
+                    "Podes recuperarla${
+                        current.deletionFinalizesAt?.let { " hasta el ${formatBackendDate(it)}" }
+                            ?: " durante 30 dias"
+                    }.",
                 primaryActionLabel = "Entendido",
                 onPrimaryAction = viewModel::signOut,
             )

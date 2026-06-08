@@ -49,7 +49,6 @@ This file lists known pending or intentionally unimplemented behavior. Do not im
 
 ## Observability And Error Handling
 
-- Frontend signup recovery: a Firebase user can be created successfully while backend provisioning fails or is blocked before reaching `/api/me/provision`. The Android app currently treats `GET /api/me` `403/404` as a signal to provision, but we still need an explicit UX/backoffice cleanup path for orphan Firebase users that never link to a backend user.
 - Add metrics export before production. Actuator health/info is available, but metrics are intentionally disabled for now. Later track HTTP latency/statuses, auth failures by reason, scheduled job runs, processed/skipped/failed item counts and key state transitions.
 - Continue hardening scheduled jobs so one failing record does not abort an entire run. Scheduler jobs now log final processed/succeeded/skipped/failed summaries; future work should add metrics export once the backend chooses an observability stack.
 - Include exception stacktraces in job failure logs. Avoid logging only `ex.message` for unexpected scheduler failures.
