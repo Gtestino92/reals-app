@@ -6,5 +6,8 @@ import kotlinx.serialization.Serializable
 data class UserResponseDto(
     val id: String,
     val email: String? = null,
+    val status: String,
+    val deletedAt: String? = null,
+    val deletionFinalizesAt: String? = null,
     val createdAt: String,
 )

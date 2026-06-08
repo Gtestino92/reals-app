@@ -50,28 +50,6 @@ class FirebaseAuthRepository(private val context: Context) {
         authOrNull()?.signOut()
     }
 
-    suspend fun deleteFirebaseUser(): AuthOperationResult {
-        val auth = authOrNull()
-            ?: return AuthOperationResult.Failure(firebaseMissingMessage)
-
-        val user = auth.currentUser
-            ?: return AuthOperationResult.Failure("No hay usuario autenticado en Firebase.")
-
-        return runCatching {
-            user.delete().await()
-            auth.signOut()
-        }.fold(
-            onSuccess = {
-                AuthOperationResult.Success
-            },
-            onFailure = {
-                AuthOperationResult.Failure(
-                    it.localizedMessage ?: "No se pudo eliminar el usuario en Firebase."
-                )
-            },
-        )
-    }
-
     private fun Throwable.toSignInMessage(): String {
         return when (this) {
             is FirebaseAuthInvalidCredentialsException,

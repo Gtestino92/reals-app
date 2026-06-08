@@ -29,6 +29,21 @@ abstract class AuthenticatedRepository(
         return first
     }
 
+    protected suspend fun authorizedUnitCall(
+        call: suspend (authorization: String) -> Response<Unit>,
+    ): ApiResult<Unit> {
+        val firstHeader = authorizationHeader(forceRefresh = false)
+        if (firstHeader is ApiResult.Failure) return firstHeader
+
+        val first = apiExecutor.executeUnit { call((firstHeader as ApiResult.Success).value) }
+        if (first.shouldRefreshToken()) {
+            val refreshedHeader = authorizationHeader(forceRefresh = true)
+            if (refreshedHeader is ApiResult.Failure) return refreshedHeader
+            return apiExecutor.executeUnit { call((refreshedHeader as ApiResult.Success).value) }
+        }
+        return first
+    }
+
     private suspend fun authorizationHeader(forceRefresh: Boolean): ApiResult<String> {
         return try {
             ApiResult.Success("Bearer ${tokenProvider.getIdToken(forceRefresh)}")

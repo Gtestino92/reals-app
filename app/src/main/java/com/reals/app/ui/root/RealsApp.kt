@@ -10,6 +10,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.reals.app.core.network.toDisplayMessage
 import com.reals.app.di.AppContainer
 import com.reals.app.domain.model.ProfileSnapshot
+import com.reals.app.ui.account.AccountDeletionRecoveryScreen
 import com.reals.app.ui.auth.LoginScreen
 import com.reals.app.ui.common.FullScreenMessage
 import com.reals.app.ui.profile.CreateProfileScreen
@@ -46,7 +47,23 @@ fun RealsApp(appContainer: AppContainer) {
 
             is RealsRootUiState.LoadingSession -> FullScreenMessage(
                 title = "Conectando con backend local",
-                body = "Provisionando usuario${current.email?.let { " $it" } ?: ""} y cargando perfil.",
+                body = "Cargando usuario${current.email?.let { " $it" } ?: ""} y perfil.",
+            )
+
+            is RealsRootUiState.AccountDeletionScheduled -> FullScreenMessage(
+                title = "Cuenta programada para eliminacion",
+                body = "Tu cuenta fue programada para eliminacion. " +
+                    "Podes recuperarla${current.deletionFinalizesAt?.let { " hasta el $it" } ?: " durante la ventana configurada"}.",
+                primaryActionLabel = "Entendido",
+                onPrimaryAction = viewModel::signOut,
+            )
+
+            is RealsRootUiState.AccountDeletionPending -> AccountDeletionRecoveryScreen(
+                user = current.user,
+                reactivating = current.reactivating,
+                error = current.error,
+                onReactivate = viewModel::reactivateAccount,
+                onKeepDeletion = viewModel::signOut,
             )
 
             is RealsRootUiState.Ready -> when (current.session.profileSnapshot) {

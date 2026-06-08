@@ -9,10 +9,10 @@ The formal OpenAPI contract lives in `docs/openapi.yaml`.
 
 ## Users
 
-- `POST /api/users`: create a user from request body email.
 - `POST /api/me/provision`: create or link the authenticated Firebase identity to a local backend user. This is the only Firebase flow endpoint that provisions a missing local user.
 - `GET /api/me`: fetch the authenticated user.
-- `GET /api/users/{userId}`: fetch a user by id.
+- `DELETE /api/me`: schedule soft deletion for the authenticated user account. The account remains recoverable during `account.deletion.recovery-window-days`.
+- `POST /api/me/reactivation`: reactivate an account that is still inside the deletion recovery window.
 
 Most current-user flows should prefer `@CurrentUserId` instead of accepting arbitrary user ids.
 
@@ -112,6 +112,8 @@ Selected stable frontend-facing domain codes:
 - `PROFILE_PERSON_PHOTO_REQUIRED`: activation requires more person photos.
 - `PROFILE_FULL_BODY_PHOTO_REQUIRED`: activation requires a full-body photo.
 - `PROFILE_PHOTO_LIMIT_REACHED`: profile already has the maximum number of photos.
+- `ACCOUNT_PENDING_DELETION`: account/email is still inside the deletion recovery window.
+- `ACCOUNT_DELETION_FINALIZED`: account deletion can no longer be recovered.
 - `INVALID_PROFILE_BIRTH_DATE`: birth date is invalid for profile creation.
 - `INVALID_MATCH_FILTERS`: dynamic match filters are internally inconsistent or out of range.
 - `PHOTO_POSITION_INVALID`: requested photo position is outside the configured range.

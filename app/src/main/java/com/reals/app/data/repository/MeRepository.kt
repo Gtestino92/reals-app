@@ -17,6 +17,14 @@ class MeRepository(
         authorizedCall { authorization -> api.provisionMe(authorization) }
             .map { it.toDomain() }
 
+    suspend fun getMe(): ApiResult<BackendUser> =
+        authorizedCall { authorization -> api.getMe(authorization) }
+            .map { it.toDomain() }
+
     suspend fun deleteMe(): ApiResult<Unit> =
-        authorizedCall { authorization -> api.deleteMe(authorization) }
+        authorizedUnitCall { authorization -> api.deleteMe(authorization) }
+
+    suspend fun reactivateMe(): ApiResult<BackendUser> =
+        authorizedCall { authorization -> api.reactivateMe(authorization) }
+            .map { it.toDomain() }
 }

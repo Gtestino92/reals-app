@@ -28,10 +28,20 @@ interface RealsApi {
         @Header("Authorization") authorization: String,
     ): Response<UserResponseDto>
 
+    @GET("api/me")
+    suspend fun getMe(
+        @Header("Authorization") authorization: String,
+    ): Response<UserResponseDto>
+
     @DELETE("api/me")
     suspend fun deleteMe(
         @Header("Authorization") authorization: String,
     ): Response<Unit>
+
+    @POST("api/me/reactivation")
+    suspend fun reactivateMe(
+        @Header("Authorization") authorization: String,
+    ): Response<UserResponseDto>
 
     @GET("api/me/profile")
     suspend fun getMyProfile(

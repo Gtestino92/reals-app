@@ -7,6 +7,7 @@ import com.reals.app.data.dto.UpdateMatchFiltersRequestDto
 import com.reals.app.data.dto.UpdateProfileRequestDto
 import com.reals.app.data.dto.UserResponseDto
 import com.reals.app.domain.model.BackendUser
+import com.reals.app.domain.model.BackendUserStatus
 import com.reals.app.domain.model.CreateProfileInput
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfilePhoto
@@ -17,6 +18,9 @@ import com.reals.app.domain.model.UpdateProfileInput
 fun UserResponseDto.toDomain(): BackendUser = BackendUser(
     id = id,
     email = email,
+    status = BackendUserStatus.fromBackend(status),
+    deletedAt = deletedAt,
+    deletionFinalizesAt = deletionFinalizesAt,
     createdAt = createdAt,
 )
 
