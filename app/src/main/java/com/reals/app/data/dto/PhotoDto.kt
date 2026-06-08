@@ -20,11 +20,9 @@ data class ReplacePhotoRequestDto(
 @Serializable
 data class PhotoResponseDto(
     val id: String,
-    val profileId: String,
     val url: String,
-    val storageProvider: String,
     val position: Int,
     val isPersonPhoto: Boolean,
     val isFullBody: Boolean,
-    val createdAt: String,
+    val validationStatus: String,
 )

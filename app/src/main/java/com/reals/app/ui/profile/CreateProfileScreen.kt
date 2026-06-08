@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -22,7 +21,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,39 +56,7 @@ fun CreateProfileScreen(
     var preferredMaxAge by rememberSaveable { mutableStateOf("45") }
     var maxDistanceKm by rememberSaveable { mutableStateOf("50") }
     var localError by rememberSaveable { mutableStateOf<String?>(null) }
-    var confirmingDeleteAccount by rememberSaveable { mutableStateOf(false) }
     val busy = loading || accountDeleteLoading
-
-    if (confirmingDeleteAccount) {
-        AlertDialog(
-            onDismissRequest = {
-                if (!accountDeleteLoading) confirmingDeleteAccount = false
-            },
-            title = { Text("Eliminar cuenta") },
-            text = {
-                Text("Tu cuenta quedara pendiente de eliminacion y podras recuperarla durante la ventana configurada.")
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = !accountDeleteLoading,
-                    onClick = {
-                        confirmingDeleteAccount = false
-                        onDeleteAccount()
-                    },
-                ) {
-                    Text("Programar eliminacion")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    enabled = !accountDeleteLoading,
-                    onClick = { confirmingDeleteAccount = false },
-                ) {
-                    Text("Cancelar")
-                }
-            },
-        )
-    }
 
     Column(
         modifier = Modifier
@@ -252,43 +218,12 @@ fun CreateProfileScreen(
                 Text("Cerrar sesion")
             }
         }
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.errorContainer,
-            ),
-        ) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Text(
-                    text = "Cuenta",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                )
-                Text(
-                    text = "Eliminar la cuenta programa una eliminacion recuperable y cierra la sesion.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                )
-                accountDeleteError?.let {
-                    Text(
-                        text = it.toDisplayMessage(),
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-                OutlinedButton(
-                    onClick = { confirmingDeleteAccount = true },
-                    enabled = !busy,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(if (accountDeleteLoading) "Programando eliminacion..." else "Eliminar cuenta")
-                }
-            }
-        }
+        DeleteAccountSection(
+            busy = busy,
+            loading = accountDeleteLoading,
+            error = accountDeleteError,
+            onDeleteAccount = onDeleteAccount,
+        )
         Spacer(modifier = Modifier.height(16.dp))
     }
 }

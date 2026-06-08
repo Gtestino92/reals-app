@@ -1,5 +1,8 @@
-﻿package com.reals.app.ui.profile
+package com.reals.app.ui.profile
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,7 +15,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -22,7 +24,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -65,51 +66,20 @@ fun ProfileStatusScreen(
     onUpdateMatchFilters: (UpdateMatchFiltersInput) -> Unit,
     onLoadPhotos: () -> Unit,
     onAddMockPhoto: (profile: Profile, position: Int, isPersonPhoto: Boolean, isFullBody: Boolean) -> Unit,
+    onAddPhotoFile: (position: Int, fileUri: Uri) -> Unit,
     onReplaceMockPhoto: (profile: Profile, position: Int, isPersonPhoto: Boolean, isFullBody: Boolean) -> Unit,
-    onDeletePhoto: (position: Int) -> Unit,
+    onReplacePhotoFile: (photoId: String, position: Int, fileUri: Uri) -> Unit,
+    onDeletePhoto: (photoId: String, position: Int) -> Unit,
     onActivateProfile: (Profile) -> Unit,
     onRefresh: () -> Unit,
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit,
 ) {
-    var confirmingDeleteAccount by rememberSaveable { mutableStateOf(false) }
     val busy = profileUpdateLoading ||
         matchFiltersLoading ||
         photoActionLoading ||
         activationLoading ||
         accountDeleteLoading
-
-    if (confirmingDeleteAccount) {
-        AlertDialog(
-            onDismissRequest = {
-                if (!accountDeleteLoading) confirmingDeleteAccount = false
-            },
-            title = { Text("Eliminar cuenta") },
-            text = {
-                Text("Tu cuenta quedara pendiente de eliminacion y podras recuperarla durante la ventana configurada.")
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = !accountDeleteLoading,
-                    onClick = {
-                        confirmingDeleteAccount = false
-                        onDeleteAccount()
-                    },
-                ) {
-                    Text("Programar eliminacion")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    enabled = !accountDeleteLoading,
-                    onClick = { confirmingDeleteAccount = false },
-                ) {
-                    Text("Cancelar")
-                }
-            },
-        )
-    }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -151,7 +121,9 @@ fun ProfileStatusScreen(
                 onUpdateMatchFilters = onUpdateMatchFilters,
                 onLoadPhotos = onLoadPhotos,
                 onAddMockPhoto = onAddMockPhoto,
+                onAddPhotoFile = onAddPhotoFile,
                 onReplaceMockPhoto = onReplaceMockPhoto,
+                onReplacePhotoFile = onReplacePhotoFile,
                 onDeletePhoto = onDeletePhoto,
                 onActivateProfile = onActivateProfile,
             )
@@ -170,45 +142,12 @@ fun ProfileStatusScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.errorContainer,
-            ),
-        ) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Text(
-                    text = "Cuenta",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                )
-
-                Text(
-                    text = "Eliminar la cuenta programa una eliminacion recuperable y cierra la sesion.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                )
-
-                accountDeleteError?.let {
-                    Text(
-                        text = it.toDisplayMessage(),
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-
-                OutlinedButton(
-                    onClick = { confirmingDeleteAccount = true },
-                    enabled = !busy,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(if (accountDeleteLoading) "Programando eliminacion..." else "Eliminar cuenta")
-                }
-            }
-        }
+        DeleteAccountSection(
+            busy = busy,
+            loading = accountDeleteLoading,
+            error = accountDeleteError,
+            onDeleteAccount = onDeleteAccount,
+        )
     }
 }
 
@@ -257,8 +196,10 @@ private fun ProfileCard(
     onUpdateMatchFilters: (UpdateMatchFiltersInput) -> Unit,
     onLoadPhotos: () -> Unit,
     onAddMockPhoto: (profile: Profile, position: Int, isPersonPhoto: Boolean, isFullBody: Boolean) -> Unit,
+    onAddPhotoFile: (position: Int, fileUri: Uri) -> Unit,
     onReplaceMockPhoto: (profile: Profile, position: Int, isPersonPhoto: Boolean, isFullBody: Boolean) -> Unit,
-    onDeletePhoto: (position: Int) -> Unit,
+    onReplacePhotoFile: (photoId: String, position: Int, fileUri: Uri) -> Unit,
+    onDeletePhoto: (photoId: String, position: Int) -> Unit,
     onActivateProfile: (Profile) -> Unit,
 ) {
     Card(
@@ -305,7 +246,9 @@ private fun ProfileCard(
                 activationError = activationError,
                 onLoadPhotos = onLoadPhotos,
                 onAddMockPhoto = onAddMockPhoto,
+                onAddPhotoFile = onAddPhotoFile,
                 onReplaceMockPhoto = onReplaceMockPhoto,
+                onReplacePhotoFile = onReplacePhotoFile,
                 onDeletePhoto = onDeletePhoto,
                 onActivateProfile = onActivateProfile,
             )
@@ -432,8 +375,10 @@ private fun PhotoManagerActions(
     activationError: ApiError?,
     onLoadPhotos: () -> Unit,
     onAddMockPhoto: (profile: Profile, position: Int, isPersonPhoto: Boolean, isFullBody: Boolean) -> Unit,
+    onAddPhotoFile: (position: Int, fileUri: Uri) -> Unit,
     onReplaceMockPhoto: (profile: Profile, position: Int, isPersonPhoto: Boolean, isFullBody: Boolean) -> Unit,
-    onDeletePhoto: (position: Int) -> Unit,
+    onReplacePhotoFile: (photoId: String, position: Int, fileUri: Uri) -> Unit,
+    onDeletePhoto: (photoId: String, position: Int) -> Unit,
     onActivateProfile: (Profile) -> Unit,
 ) {
     var expanded by rememberSaveable(profile.id) { mutableStateOf(profile.status == ProfileStatus.Draft) }
@@ -441,6 +386,29 @@ private fun PhotoManagerActions(
     var isPersonPhoto by rememberSaveable(profile.id) { mutableStateOf(false) }
     var isFullBody by rememberSaveable(profile.id) { mutableStateOf(false) }
     var localError by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
+    var replacePhotoId by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
+    var replacePosition by rememberSaveable(profile.id) { mutableStateOf<Int?>(null) }
+    val addFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            val position = positionText.toIntOrNull()
+            if (position == null || position !in 1..9) {
+                localError = "La posicion debe estar entre 1 y 9."
+            } else {
+                localError = null
+                onAddPhotoFile(position, uri)
+            }
+        }
+    }
+    val replaceFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        val photoId = replacePhotoId
+        val position = replacePosition
+        replacePhotoId = null
+        replacePosition = null
+        if (uri != null && photoId != null && position != null) {
+            localError = null
+            onReplacePhotoFile(photoId, position, uri)
+        }
+    }
     val busy = photosLoading || photoActionLoading || activationLoading
 
     Column(modifier = Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -449,7 +417,7 @@ private fun PhotoManagerActions(
         }
         if (expanded) {
             Text(
-                text = "Lista, agrega, reemplaza o borra fotos mock. Borrar fotos requeridas puede volver un perfil activo a DRAFT.",
+                text = "Lista, sube archivos, reemplaza o borra fotos. Mutar fotos puede volver un perfil activo a DRAFT.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -461,7 +429,16 @@ private fun PhotoManagerActions(
                 Text("No hay fotos cargadas.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
                 photos.forEach { photo ->
-                    PhotoRow(photo = photo, busy = busy, onDeletePhoto = onDeletePhoto)
+                    PhotoRow(
+                        photo = photo,
+                        busy = busy,
+                        onPickReplacementFile = { photoId, position ->
+                            replacePhotoId = photoId
+                            replacePosition = position
+                            replaceFileLauncher.launch("image/*")
+                        },
+                        onDeletePhoto = onDeletePhoto,
+                    )
                 }
             }
             OutlinedTextField(
@@ -472,6 +449,26 @@ private fun PhotoManagerActions(
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth(),
+            )
+            Button(
+                onClick = {
+                    val position = positionText.toIntOrNull()
+                    if (position == null || position !in 1..9) {
+                        localError = "La posicion debe estar entre 1 y 9."
+                    } else {
+                        localError = null
+                        addFileLauncher.launch("image/*")
+                    }
+                },
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (photoActionLoading) "Subiendo archivo..." else "Subir archivo a posicion")
+            }
+            Text(
+                text = "Las marcas isPersonPhoto/isFullBody solo aplican al flujo mock por URL; el backend valida archivos por separado.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
             )
             CheckboxRow("isPersonPhoto", isPersonPhoto, !busy) { isPersonPhoto = it }
             CheckboxRow("isFullBody", isFullBody, !busy) { isFullBody = it }
@@ -529,17 +526,26 @@ private fun PhotoManagerActions(
 private fun PhotoRow(
     photo: ProfilePhoto,
     busy: Boolean,
-    onDeletePhoto: (position: Int) -> Unit,
+    onPickReplacementFile: (photoId: String, position: Int) -> Unit,
+    onDeletePhoto: (photoId: String, position: Int) -> Unit,
 ) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Posicion ${photo.position} - person=${photo.isPersonPhoto}, fullBody=${photo.isFullBody}")
             Text(
+                text = "Validacion: ${photo.validationStatus}",
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text(
                 text = photo.url,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                 style = MaterialTheme.typography.bodySmall,
             )
-            OutlinedButton(onClick = { onDeletePhoto(photo.position) }, enabled = !busy) {
+            OutlinedButton(onClick = { onPickReplacementFile(photo.id, photo.position) }, enabled = !busy) {
+                Text("Reemplazar archivo")
+            }
+            OutlinedButton(onClick = { onDeletePhoto(photo.id, photo.position) }, enabled = !busy) {
                 Text("Borrar posicion ${photo.position}")
             }
         }
