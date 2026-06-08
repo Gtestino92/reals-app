@@ -24,12 +24,15 @@ fun ApiError.isAccountDeleted(): Boolean {
     return this is ApiError.Backend && code == "ACCOUNT_DELETED"
 }
 
+fun ApiError.isAccountDeletionFinalized(): Boolean {
+    return this is ApiError.Backend && code == "ACCOUNT_DELETION_FINALIZED"
+}
+
 enum class AuthFailureReason {
     FIREBASE_NOT_CONFIGURED,
     NOT_SIGNED_IN,
     TOKEN_MISSING,
     TOKEN_UNAVAILABLE,
-    FIREBASE_DELETE_FAILED,
 }
 
 fun ApiError.toDisplayMessage(): String = when (this) {

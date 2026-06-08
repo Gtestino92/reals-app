@@ -29,6 +29,23 @@ class ApiExecutor(private val json: Json) {
         }
     }
 
+    suspend fun executeUnit(call: suspend () -> Response<Unit>): ApiResult<Unit> {
+        return try {
+            val response = call()
+            if (response.isSuccessful) {
+                ApiResult.Success(Unit)
+            } else {
+                ApiResult.Failure(parseBackendError(response))
+            }
+        } catch (exception: IOException) {
+            ApiResult.Failure(ApiError.Network(exception.message ?: "Fallo de red."))
+        } catch (exception: SerializationException) {
+            ApiResult.Failure(ApiError.Unexpected(exception.message ?: "No se pudo parsear la respuesta."))
+        } catch (exception: Exception) {
+            ApiResult.Failure(ApiError.Unexpected(exception.message ?: exception::class.java.simpleName))
+        }
+    }
+
     private fun parseBackendError(response: Response<*>): ApiError.Backend {
         val rawBody = response.errorBody()?.string()
         val parsed = rawBody?.let { body ->

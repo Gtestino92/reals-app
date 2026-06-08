@@ -12,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -21,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -70,7 +72,44 @@ fun ProfileStatusScreen(
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit,
 ) {
-    val busy = profileUpdateLoading || matchFiltersLoading || photoActionLoading || activationLoading
+    var confirmingDeleteAccount by rememberSaveable { mutableStateOf(false) }
+    val busy = profileUpdateLoading ||
+        matchFiltersLoading ||
+        photoActionLoading ||
+        activationLoading ||
+        accountDeleteLoading
+
+    if (confirmingDeleteAccount) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!accountDeleteLoading) confirmingDeleteAccount = false
+            },
+            title = { Text("Eliminar cuenta") },
+            text = {
+                Text("Tu cuenta quedara pendiente de eliminacion y podras recuperarla durante la ventana configurada.")
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !accountDeleteLoading,
+                    onClick = {
+                        confirmingDeleteAccount = false
+                        onDeleteAccount()
+                    },
+                ) {
+                    Text("Programar eliminacion")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !accountDeleteLoading,
+                    onClick = { confirmingDeleteAccount = false },
+                ) {
+                    Text("Cancelar")
+                }
+            },
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -148,7 +187,7 @@ fun ProfileStatusScreen(
                 )
 
                 Text(
-                    text = "Eliminar la cuenta borra tu usuario y cierra la sesion.",
+                    text = "Eliminar la cuenta programa una eliminacion recuperable y cierra la sesion.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onErrorContainer,
                 )
@@ -162,11 +201,11 @@ fun ProfileStatusScreen(
                 }
 
                 OutlinedButton(
-                    onClick = onDeleteAccount,
+                    onClick = { confirmingDeleteAccount = true },
                     enabled = !busy,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(if (accountDeleteLoading) "Eliminando cuenta..." else "Eliminar cuenta")
+                    Text(if (accountDeleteLoading) "Programando eliminacion..." else "Eliminar cuenta")
                 }
             }
         }

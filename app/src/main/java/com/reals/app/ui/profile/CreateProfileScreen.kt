@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -21,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,9 +39,12 @@ import com.reals.app.domain.model.CreateProfileInput
 fun CreateProfileScreen(
     loading: Boolean,
     error: ApiError?,
+    accountDeleteLoading: Boolean,
+    accountDeleteError: ApiError?,
     onSubmit: (CreateProfileInput) -> Unit,
     onRefresh: () -> Unit,
     onSignOut: () -> Unit,
+    onDeleteAccount: () -> Unit,
 ) {
     var displayName by rememberSaveable { mutableStateOf("") }
     var birthDate by rememberSaveable { mutableStateOf("1995-01-01") }
@@ -53,6 +58,39 @@ fun CreateProfileScreen(
     var preferredMaxAge by rememberSaveable { mutableStateOf("45") }
     var maxDistanceKm by rememberSaveable { mutableStateOf("50") }
     var localError by rememberSaveable { mutableStateOf<String?>(null) }
+    var confirmingDeleteAccount by rememberSaveable { mutableStateOf(false) }
+    val busy = loading || accountDeleteLoading
+
+    if (confirmingDeleteAccount) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!accountDeleteLoading) confirmingDeleteAccount = false
+            },
+            title = { Text("Eliminar cuenta") },
+            text = {
+                Text("Tu cuenta quedara pendiente de eliminacion y podras recuperarla durante la ventana configurada.")
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !accountDeleteLoading,
+                    onClick = {
+                        confirmingDeleteAccount = false
+                        onDeleteAccount()
+                    },
+                ) {
+                    Text("Programar eliminacion")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !accountDeleteLoading,
+                    onClick = { confirmingDeleteAccount = false },
+                ) {
+                    Text("Cancelar")
+                }
+            },
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -83,7 +121,7 @@ fun CreateProfileScreen(
                     value = displayName,
                     onValueChange = { displayName = it },
                     label = { Text("Nombre visible") },
-                    enabled = !loading,
+                    enabled = !busy,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -92,7 +130,7 @@ fun CreateProfileScreen(
                     onValueChange = { birthDate = it },
                     label = { Text("Fecha de nacimiento") },
                     supportingText = { Text("Formato YYYY-MM-DD") },
-                    enabled = !loading,
+                    enabled = !busy,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -100,21 +138,21 @@ fun CreateProfileScreen(
                     label = "Genero",
                     value = gender,
                     options = listOf("MALE", "FEMALE", "NON_BINARY", "OTHER"),
-                    enabled = !loading,
+                    enabled = !busy,
                     onValueChange = { gender = it },
                 )
                 EnumDropdown(
                     label = "Busco",
                     value = lookingForGender,
                     options = listOf("MEN", "WOMEN", "EVERYONE", "OTHER"),
-                    enabled = !loading,
+                    enabled = !busy,
                     onValueChange = { lookingForGender = it },
                 )
                 EnumDropdown(
                     label = "Intencion",
                     value = intention,
                     options = listOf("DATE", "FRIENDSHIP", "CASUAL"),
-                    enabled = !loading,
+                    enabled = !busy,
                     onValueChange = { intention = it },
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -122,7 +160,7 @@ fun CreateProfileScreen(
                         value = city,
                         onValueChange = { city = it },
                         label = { Text("Ciudad") },
-                        enabled = !loading,
+                        enabled = !busy,
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                     )
@@ -130,7 +168,7 @@ fun CreateProfileScreen(
                         value = country,
                         onValueChange = { country = it },
                         label = { Text("Pais") },
-                        enabled = !loading,
+                        enabled = !busy,
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                     )
@@ -139,7 +177,7 @@ fun CreateProfileScreen(
                     value = bio,
                     onValueChange = { bio = it },
                     label = { Text("Bio opcional") },
-                    enabled = !loading,
+                    enabled = !busy,
                     minLines = 3,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -148,14 +186,14 @@ fun CreateProfileScreen(
                         value = preferredMinAge,
                         onValueChange = { preferredMinAge = it },
                         label = "Edad min",
-                        enabled = !loading,
+                        enabled = !busy,
                         modifier = Modifier.weight(1f),
                     )
                     NumberField(
                         value = preferredMaxAge,
                         onValueChange = { preferredMaxAge = it },
                         label = "Edad max",
-                        enabled = !loading,
+                        enabled = !busy,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -163,7 +201,7 @@ fun CreateProfileScreen(
                     value = maxDistanceKm,
                     onValueChange = { maxDistanceKm = it },
                     label = "Distancia maxima km",
-                    enabled = !loading,
+                    enabled = !busy,
                     modifier = Modifier.fillMaxWidth(),
                 )
 
@@ -177,7 +215,7 @@ fun CreateProfileScreen(
                 }
 
                 Button(
-                    enabled = !loading,
+                    enabled = !busy,
                     modifier = Modifier.fillMaxWidth(),
                     onClick = {
                         val input = validateProfileInput(
@@ -207,11 +245,48 @@ fun CreateProfileScreen(
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(onClick = onRefresh, enabled = !loading) {
+            OutlinedButton(onClick = onRefresh, enabled = !busy) {
                 Text("Refrescar")
             }
-            OutlinedButton(onClick = onSignOut, enabled = !loading) {
+            OutlinedButton(onClick = onSignOut, enabled = !busy) {
                 Text("Cerrar sesion")
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.errorContainer,
+            ),
+        ) {
+            Column(
+                modifier = Modifier.padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(
+                    text = "Cuenta",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+                Text(
+                    text = "Eliminar la cuenta programa una eliminacion recuperable y cierra la sesion.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+                accountDeleteError?.let {
+                    Text(
+                        text = it.toDisplayMessage(),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                OutlinedButton(
+                    onClick = { confirmingDeleteAccount = true },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (accountDeleteLoading) "Programando eliminacion..." else "Eliminar cuenta")
+                }
             }
         }
         Spacer(modifier = Modifier.height(16.dp))

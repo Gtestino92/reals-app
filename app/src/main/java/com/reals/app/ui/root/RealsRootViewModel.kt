@@ -9,6 +9,8 @@ import com.reals.app.core.network.isAccountDeleted
 import com.reals.app.data.repository.AuthOperationResult
 import com.reals.app.data.repository.FirebaseAuthRepository
 import com.reals.app.di.AppContainer
+import com.reals.app.domain.model.BackendUser
+import com.reals.app.domain.model.BackendUserStatus
 import com.reals.app.domain.model.CreateProfileInput
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfileActivationResult
@@ -22,8 +24,10 @@ import com.reals.app.domain.usecase.AddMockProfilePhotoUseCase
 import com.reals.app.domain.usecase.CreateProfileUseCase
 import com.reals.app.domain.usecase.DeleteAccountUseCase
 import com.reals.app.domain.usecase.DeleteProfilePhotoUseCase
+import com.reals.app.domain.usecase.GetMeUseCase
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
+import com.reals.app.domain.usecase.ReactivateAccountUseCase
 import com.reals.app.domain.usecase.ReplaceMockProfilePhotoUseCase
 import com.reals.app.domain.usecase.UpdateMatchFiltersUseCase
 import com.reals.app.domain.usecase.UpdateProfileUseCase
@@ -37,6 +41,14 @@ sealed interface RealsRootUiState {
     data class MissingFirebase(val message: String) : RealsRootUiState
     data class Login(val loading: Boolean = false, val error: String? = null) : RealsRootUiState
     data class LoadingSession(val email: String?) : RealsRootUiState
+    data class AccountDeletionScheduled(
+        val deletionFinalizesAt: String?,
+    ) : RealsRootUiState
+    data class AccountDeletionPending(
+        val user: BackendUser,
+        val reactivating: Boolean = false,
+        val error: ApiError? = null,
+    ) : RealsRootUiState
     data class Ready(
         val session: ProvisionedSession,
         val creatingProfile: Boolean = false,
@@ -71,11 +83,13 @@ class RealsRootViewModel(
     private val createProfileUseCase: CreateProfileUseCase,
     private val updateProfileUseCase: UpdateProfileUseCase,
     private val updateMatchFiltersUseCase: UpdateMatchFiltersUseCase,
+    private val getMeUseCase: GetMeUseCase,
     private val getProfilePhotosUseCase: GetProfilePhotosUseCase,
     private val addMockProfilePhotoUseCase: AddMockProfilePhotoUseCase,
     private val replaceMockProfilePhotoUseCase: ReplaceMockProfilePhotoUseCase,
     private val deleteProfilePhotoUseCase: DeleteProfilePhotoUseCase,
     private val activateProfileUseCase: ActivateProfileUseCase,
+    private val reactivateAccountUseCase: ReactivateAccountUseCase,
     private val deleteAccountUseCase: DeleteAccountUseCase,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<RealsRootUiState>(RealsRootUiState.Checking)
@@ -125,7 +139,9 @@ class RealsRootViewModel(
 
             when (val result = deleteAccountUseCase()) {
                 is ApiResult.Success -> {
-                    _uiState.value = RealsRootUiState.Login()
+                    _uiState.value = RealsRootUiState.AccountDeletionScheduled(
+                        deletionFinalizesAt = result.value.deletionFinalizesAt,
+                    )
                 }
 
                 is ApiResult.Failure -> {
@@ -134,6 +150,21 @@ class RealsRootViewModel(
                         accountDeleteError = result.error,
                     )
                 }
+            }
+        }
+    }
+
+    fun reactivateAccount() {
+        val current = _uiState.value as? RealsRootUiState.AccountDeletionPending ?: return
+
+        viewModelScope.launch {
+            _uiState.value = current.copy(reactivating = true, error = null)
+            when (val result = reactivateAccountUseCase()) {
+                is ApiResult.Success -> loadBackendSessionForActiveUser(result.value)
+                is ApiResult.Failure -> _uiState.value = current.copy(
+                    reactivating = false,
+                    error = result.error,
+                )
             }
         }
     }
@@ -430,56 +461,103 @@ class RealsRootViewModel(
     private fun loadBackendSession() {
         viewModelScope.launch {
             _uiState.value = RealsRootUiState.LoadingSession(authRepository.currentUserEmail())
-            when (val result = provisionAndLoadProfile()) {
-                is ApiResult.Success -> {
-                    val snapshot = result.value.profileSnapshot
-                    if (snapshot is ProfileSnapshot.Found) {
-                        _uiState.value = RealsRootUiState.Ready(result.value, loadingPhotos = true)
-                        when (val photos = getProfilePhotosUseCase.invoke()) {
-                            is ApiResult.Success -> _uiState.value = RealsRootUiState.Ready(
-                                session = result.value,
-                                loadingPhotos = false,
-                                profilePhotos = photos.value.sortedBy { it.position },
-                            )
+            when (val userResult = getMeUseCase()) {
+                is ApiResult.Success -> when (userResult.value.status) {
+                    BackendUserStatus.Active -> loadBackendSessionForActiveUser(userResult.value)
+                    BackendUserStatus.Deleted -> _uiState.value = RealsRootUiState.AccountDeletionPending(
+                        user = userResult.value,
+                    )
 
-                            is ApiResult.Failure -> _uiState.value = RealsRootUiState.Ready(
-                                session = result.value,
-                                loadingPhotos = false,
-                                profilePhotosError = photos.error,
-                            )
-                        }
-                    } else {
-                        _uiState.value = RealsRootUiState.Ready(result.value)
-                    }
+                    is BackendUserStatus.Unknown -> _uiState.value = RealsRootUiState.Failure(
+                        ApiError.Unexpected("Estado de usuario no reconocido: ${userResult.value.status.rawValue}")
+                    )
                 }
 
                 is ApiResult.Failure -> {
-                    handleSessionLoadFailure(result.error)
+                    val backend = userResult.error as? ApiError.Backend
+                    if (backend.shouldProvisionAfterGetMeFailure()) {
+                        provisionAndLoadBackendSession()
+                    } else {
+                        handleSessionLoadFailure(userResult.error)
+                    }
                 }
             }
         }
     }
 
-    private suspend fun handleSessionLoadFailure(error: ApiError) {
-        if (error.isAccountDeleted()) {
-            when (authRepository.deleteFirebaseUser()) {
-                AuthOperationResult.Success -> {
-                    _uiState.value = RealsRootUiState.Login(
-                        error = "La cuenta fue eliminada."
-                    )
-                }
+    private suspend fun provisionAndLoadBackendSession() {
+        when (val result = provisionAndLoadProfile()) {
+            is ApiResult.Success -> showReadySession(result.value)
+            is ApiResult.Failure -> handleSessionLoadFailure(result.error)
+        }
+    }
 
-                is AuthOperationResult.Failure -> {
-                    authRepository.signOut()
-                    _uiState.value = RealsRootUiState.Login(
-                        error = "La cuenta fue eliminada localmente, pero no se pudo eliminar de Firebase. Se cerró la sesión."
-                    )
+    private suspend fun loadBackendSessionForActiveUser(user: BackendUser) {
+        when (val result = provisionAndLoadProfile.loadProfileFor(user)) {
+            is ApiResult.Success -> showReadySession(result.value)
+            is ApiResult.Failure -> handleSessionLoadFailure(result.error)
+        }
+    }
+
+    private suspend fun showReadySession(session: ProvisionedSession) {
+        val snapshot = session.profileSnapshot
+        if (snapshot is ProfileSnapshot.Found) {
+            _uiState.value = RealsRootUiState.Ready(session, loadingPhotos = true)
+            when (val photos = getProfilePhotosUseCase.invoke()) {
+                is ApiResult.Success -> _uiState.value = RealsRootUiState.Ready(
+                    session = session,
+                    loadingPhotos = false,
+                    profilePhotos = photos.value.sortedBy { it.position },
+                )
+
+                is ApiResult.Failure -> {
+                    if (photos.error.isAccountDeleted()) {
+                        showAccountDeletionPendingFromBackend()
+                    } else {
+                        _uiState.value = RealsRootUiState.Ready(
+                            session = session,
+                            loadingPhotos = false,
+                            profilePhotosError = photos.error,
+                        )
+                    }
                 }
             }
+        } else {
+            _uiState.value = RealsRootUiState.Ready(session)
+        }
+    }
+
+    private suspend fun handleSessionLoadFailure(error: ApiError) {
+        if (error.isAccountDeleted()) {
+            showAccountDeletionPendingFromBackend()
             return
         }
 
         _uiState.value = RealsRootUiState.Failure(error)
+    }
+
+    private suspend fun showAccountDeletionPendingFromBackend() {
+        when (val userResult = getMeUseCase()) {
+            is ApiResult.Success -> when (userResult.value.status) {
+                BackendUserStatus.Deleted -> _uiState.value = RealsRootUiState.AccountDeletionPending(userResult.value)
+                BackendUserStatus.Active -> loadBackendSessionForActiveUser(userResult.value)
+                is BackendUserStatus.Unknown -> _uiState.value = RealsRootUiState.Failure(
+                    ApiError.Unexpected("Estado de usuario no reconocido: ${userResult.value.status.rawValue}")
+                )
+            }
+
+            is ApiResult.Failure -> {
+                authRepository.signOut()
+                _uiState.value = RealsRootUiState.Login(
+                    error = "La cuenta esta pendiente de eliminacion. Volve a iniciar sesion para recuperarla."
+                )
+            }
+        }
+    }
+
+    private fun ApiError.Backend?.shouldProvisionAfterGetMeFailure(): Boolean {
+        if (this == null) return false
+        return statusCode == 404 || statusCode == 403
     }
 }
 
@@ -495,11 +573,13 @@ class RealsRootViewModelFactory(
                 createProfileUseCase = appContainer.createProfileUseCase,
                 updateProfileUseCase = appContainer.updateProfileUseCase,
                 updateMatchFiltersUseCase = appContainer.updateMatchFiltersUseCase,
+                getMeUseCase = appContainer.getMeUseCase,
                 getProfilePhotosUseCase = appContainer.getProfilePhotosUseCase,
                 addMockProfilePhotoUseCase = appContainer.addMockProfilePhotoUseCase,
                 replaceMockProfilePhotoUseCase = appContainer.replaceMockProfilePhotoUseCase,
                 deleteProfilePhotoUseCase = appContainer.deleteProfilePhotoUseCase,
                 activateProfileUseCase = appContainer.activateProfileUseCase,
+                reactivateAccountUseCase = appContainer.reactivateAccountUseCase,
                 deleteAccountUseCase = appContainer.deleteAccountUseCase
             ) as T
         }
