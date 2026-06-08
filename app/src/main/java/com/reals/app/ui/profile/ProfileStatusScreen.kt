@@ -1,5 +1,8 @@
-﻿package com.reals.app.ui.profile
+package com.reals.app.ui.profile
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -63,7 +66,9 @@ fun ProfileStatusScreen(
     onUpdateMatchFilters: (UpdateMatchFiltersInput) -> Unit,
     onLoadPhotos: () -> Unit,
     onAddMockPhoto: (profile: Profile, position: Int, isPersonPhoto: Boolean, isFullBody: Boolean) -> Unit,
+    onAddPhotoFile: (position: Int, fileUri: Uri) -> Unit,
     onReplaceMockPhoto: (profile: Profile, position: Int, isPersonPhoto: Boolean, isFullBody: Boolean) -> Unit,
+    onReplacePhotoFile: (photoId: String, position: Int, fileUri: Uri) -> Unit,
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
     onActivateProfile: (Profile) -> Unit,
     onRefresh: () -> Unit,
@@ -116,7 +121,9 @@ fun ProfileStatusScreen(
                 onUpdateMatchFilters = onUpdateMatchFilters,
                 onLoadPhotos = onLoadPhotos,
                 onAddMockPhoto = onAddMockPhoto,
+                onAddPhotoFile = onAddPhotoFile,
                 onReplaceMockPhoto = onReplaceMockPhoto,
+                onReplacePhotoFile = onReplacePhotoFile,
                 onDeletePhoto = onDeletePhoto,
                 onActivateProfile = onActivateProfile,
             )
@@ -189,7 +196,9 @@ private fun ProfileCard(
     onUpdateMatchFilters: (UpdateMatchFiltersInput) -> Unit,
     onLoadPhotos: () -> Unit,
     onAddMockPhoto: (profile: Profile, position: Int, isPersonPhoto: Boolean, isFullBody: Boolean) -> Unit,
+    onAddPhotoFile: (position: Int, fileUri: Uri) -> Unit,
     onReplaceMockPhoto: (profile: Profile, position: Int, isPersonPhoto: Boolean, isFullBody: Boolean) -> Unit,
+    onReplacePhotoFile: (photoId: String, position: Int, fileUri: Uri) -> Unit,
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
     onActivateProfile: (Profile) -> Unit,
 ) {
@@ -237,7 +246,9 @@ private fun ProfileCard(
                 activationError = activationError,
                 onLoadPhotos = onLoadPhotos,
                 onAddMockPhoto = onAddMockPhoto,
+                onAddPhotoFile = onAddPhotoFile,
                 onReplaceMockPhoto = onReplaceMockPhoto,
+                onReplacePhotoFile = onReplacePhotoFile,
                 onDeletePhoto = onDeletePhoto,
                 onActivateProfile = onActivateProfile,
             )
@@ -364,7 +375,9 @@ private fun PhotoManagerActions(
     activationError: ApiError?,
     onLoadPhotos: () -> Unit,
     onAddMockPhoto: (profile: Profile, position: Int, isPersonPhoto: Boolean, isFullBody: Boolean) -> Unit,
+    onAddPhotoFile: (position: Int, fileUri: Uri) -> Unit,
     onReplaceMockPhoto: (profile: Profile, position: Int, isPersonPhoto: Boolean, isFullBody: Boolean) -> Unit,
+    onReplacePhotoFile: (photoId: String, position: Int, fileUri: Uri) -> Unit,
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
     onActivateProfile: (Profile) -> Unit,
 ) {
@@ -373,6 +386,29 @@ private fun PhotoManagerActions(
     var isPersonPhoto by rememberSaveable(profile.id) { mutableStateOf(false) }
     var isFullBody by rememberSaveable(profile.id) { mutableStateOf(false) }
     var localError by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
+    var replacePhotoId by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
+    var replacePosition by rememberSaveable(profile.id) { mutableStateOf<Int?>(null) }
+    val addFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            val position = positionText.toIntOrNull()
+            if (position == null || position !in 1..9) {
+                localError = "La posicion debe estar entre 1 y 9."
+            } else {
+                localError = null
+                onAddPhotoFile(position, uri)
+            }
+        }
+    }
+    val replaceFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        val photoId = replacePhotoId
+        val position = replacePosition
+        replacePhotoId = null
+        replacePosition = null
+        if (uri != null && photoId != null && position != null) {
+            localError = null
+            onReplacePhotoFile(photoId, position, uri)
+        }
+    }
     val busy = photosLoading || photoActionLoading || activationLoading
 
     Column(modifier = Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -381,7 +417,7 @@ private fun PhotoManagerActions(
         }
         if (expanded) {
             Text(
-                text = "Lista, agrega, reemplaza o borra fotos mock. Borrar fotos requeridas puede volver un perfil activo a DRAFT.",
+                text = "Lista, sube archivos, reemplaza o borra fotos. Mutar fotos puede volver un perfil activo a DRAFT.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -393,7 +429,16 @@ private fun PhotoManagerActions(
                 Text("No hay fotos cargadas.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
                 photos.forEach { photo ->
-                    PhotoRow(photo = photo, busy = busy, onDeletePhoto = onDeletePhoto)
+                    PhotoRow(
+                        photo = photo,
+                        busy = busy,
+                        onPickReplacementFile = { photoId, position ->
+                            replacePhotoId = photoId
+                            replacePosition = position
+                            replaceFileLauncher.launch("image/*")
+                        },
+                        onDeletePhoto = onDeletePhoto,
+                    )
                 }
             }
             OutlinedTextField(
@@ -404,6 +449,26 @@ private fun PhotoManagerActions(
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth(),
+            )
+            Button(
+                onClick = {
+                    val position = positionText.toIntOrNull()
+                    if (position == null || position !in 1..9) {
+                        localError = "La posicion debe estar entre 1 y 9."
+                    } else {
+                        localError = null
+                        addFileLauncher.launch("image/*")
+                    }
+                },
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (photoActionLoading) "Subiendo archivo..." else "Subir archivo a posicion")
+            }
+            Text(
+                text = "Las marcas isPersonPhoto/isFullBody solo aplican al flujo mock por URL; el backend valida archivos por separado.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
             )
             CheckboxRow("isPersonPhoto", isPersonPhoto, !busy) { isPersonPhoto = it }
             CheckboxRow("isFullBody", isFullBody, !busy) { isFullBody = it }
@@ -461,6 +526,7 @@ private fun PhotoManagerActions(
 private fun PhotoRow(
     photo: ProfilePhoto,
     busy: Boolean,
+    onPickReplacementFile: (photoId: String, position: Int) -> Unit,
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
 ) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
@@ -476,6 +542,9 @@ private fun PhotoRow(
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                 style = MaterialTheme.typography.bodySmall,
             )
+            OutlinedButton(onClick = { onPickReplacementFile(photo.id, photo.position) }, enabled = !busy) {
+                Text("Reemplazar archivo")
+            }
             OutlinedButton(onClick = { onDeletePhoto(photo.id, photo.position) }, enabled = !busy) {
                 Text("Borrar posicion ${photo.position}")
             }
@@ -615,3 +684,4 @@ private fun validateMatchFiltersInput(
 }
 
 private fun yesNo(value: Boolean): String = if (value) "si" else "no"
+

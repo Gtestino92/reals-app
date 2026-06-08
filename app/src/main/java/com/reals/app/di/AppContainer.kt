@@ -10,12 +10,14 @@ import com.reals.app.data.repository.MeRepository
 import com.reals.app.data.repository.ProfileRepository
 import com.reals.app.domain.usecase.ActivateProfileUseCase
 import com.reals.app.domain.usecase.AddMockProfilePhotoUseCase
+import com.reals.app.domain.usecase.AddProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.CreateProfileUseCase
 import com.reals.app.domain.usecase.DeleteAccountUseCase
 import com.reals.app.domain.usecase.DeleteProfilePhotoUseCase
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
 import com.reals.app.domain.usecase.ReplaceMockProfilePhotoUseCase
+import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.UpdateMatchFiltersUseCase
 import com.reals.app.domain.usecase.UpdateProfileUseCase
 import kotlinx.serialization.json.Json
@@ -32,7 +34,7 @@ class AppContainer(context: Context) {
 
     val authRepository = FirebaseAuthRepository(appContext)
     private val meRepository = MeRepository(api, tokenProvider, apiExecutor)
-    private val profileRepository = ProfileRepository(api, tokenProvider, apiExecutor)
+    private val profileRepository = ProfileRepository(appContext, api, tokenProvider, apiExecutor)
     val provisionAndLoadProfileUseCase = ProvisionAndLoadProfileUseCase(
         meRepository = meRepository,
         profileRepository = profileRepository,
@@ -42,7 +44,9 @@ class AppContainer(context: Context) {
     val updateMatchFiltersUseCase = UpdateMatchFiltersUseCase(profileRepository)
     val getProfilePhotosUseCase = GetProfilePhotosUseCase(profileRepository)
     val addMockProfilePhotoUseCase = AddMockProfilePhotoUseCase(profileRepository)
+    val addProfilePhotoFileUseCase = AddProfilePhotoFileUseCase(profileRepository)
     val replaceMockProfilePhotoUseCase = ReplaceMockProfilePhotoUseCase(profileRepository)
+    val replaceProfilePhotoFileUseCase = ReplaceProfilePhotoFileUseCase(profileRepository)
     val deleteProfilePhotoUseCase = DeleteProfilePhotoUseCase(profileRepository)
     val activateProfileUseCase = ActivateProfileUseCase(profileRepository)
     val deleteAccountUseCase = DeleteAccountUseCase(meRepository, authRepository)

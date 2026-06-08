@@ -1,5 +1,6 @@
-﻿package com.reals.app.ui.root
+package com.reals.app.ui.root
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -19,12 +20,14 @@ import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.UpdateProfileInput
 import com.reals.app.domain.usecase.ActivateProfileUseCase
 import com.reals.app.domain.usecase.AddMockProfilePhotoUseCase
+import com.reals.app.domain.usecase.AddProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.CreateProfileUseCase
 import com.reals.app.domain.usecase.DeleteAccountUseCase
 import com.reals.app.domain.usecase.DeleteProfilePhotoUseCase
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
 import com.reals.app.domain.usecase.ReplaceMockProfilePhotoUseCase
+import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.UpdateMatchFiltersUseCase
 import com.reals.app.domain.usecase.UpdateProfileUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -73,7 +76,9 @@ class RealsRootViewModel(
     private val updateMatchFiltersUseCase: UpdateMatchFiltersUseCase,
     private val getProfilePhotosUseCase: GetProfilePhotosUseCase,
     private val addMockProfilePhotoUseCase: AddMockProfilePhotoUseCase,
+    private val addProfilePhotoFileUseCase: AddProfilePhotoFileUseCase,
     private val replaceMockProfilePhotoUseCase: ReplaceMockProfilePhotoUseCase,
+    private val replaceProfilePhotoFileUseCase: ReplaceProfilePhotoFileUseCase,
     private val deleteProfilePhotoUseCase: DeleteProfilePhotoUseCase,
     private val activateProfileUseCase: ActivateProfileUseCase,
     private val deleteAccountUseCase: DeleteAccountUseCase,
@@ -296,6 +301,31 @@ class RealsRootViewModel(
         }
     }
 
+    fun addProfilePhotoFile(position: Int, fileUri: Uri) {
+        val current = _uiState.value as? RealsRootUiState.Ready ?: return
+        viewModelScope.launch {
+            _uiState.value = current.copy(
+                addingPhoto = true,
+                photoActionError = null,
+                photoActionMessage = null,
+                profileActivationError = null,
+            )
+            when (val result = addProfilePhotoFileUseCase.invoke(fileUri = fileUri, position = position)) {
+                is ApiResult.Success -> refreshAfterPhotoMutation(
+                    previous = current,
+                    successMessage = "Foto ${result.value.position} subida (${result.value.validationStatus}).",
+                )
+
+                is ApiResult.Failure -> {
+                    _uiState.value = current.copy(
+                        addingPhoto = false,
+                        photoActionError = result.error,
+                    )
+                }
+            }
+        }
+    }
+
     fun replaceMockProfilePhoto(
         profile: Profile,
         position: Int,
@@ -338,6 +368,31 @@ class RealsRootViewModel(
                         )
                     }
                 }
+
+                is ApiResult.Failure -> {
+                    _uiState.value = current.copy(
+                        addingPhoto = false,
+                        photoActionError = result.error,
+                    )
+                }
+            }
+        }
+    }
+
+    fun replaceProfilePhotoFile(photoId: String, position: Int, fileUri: Uri) {
+        val current = _uiState.value as? RealsRootUiState.Ready ?: return
+        viewModelScope.launch {
+            _uiState.value = current.copy(
+                addingPhoto = true,
+                photoActionError = null,
+                photoActionMessage = null,
+                profileActivationError = null,
+            )
+            when (val result = replaceProfilePhotoFileUseCase.invoke(photoId = photoId, fileUri = fileUri)) {
+                is ApiResult.Success -> refreshAfterPhotoMutation(
+                    previous = current,
+                    successMessage = "Foto $position reemplazada (${result.value.validationStatus}).",
+                )
 
                 is ApiResult.Failure -> {
                     _uiState.value = current.copy(
@@ -405,6 +460,30 @@ class RealsRootViewModel(
                     )
                 }
             }
+        }
+    }
+
+    private suspend fun refreshAfterPhotoMutation(
+        previous: RealsRootUiState.Ready,
+        successMessage: String,
+    ) {
+        when (val refreshedSession = provisionAndLoadProfile()) {
+            is ApiResult.Success -> {
+                val refreshedPhotos = getProfilePhotosUseCase.invoke()
+                _uiState.value = RealsRootUiState.Ready(
+                    session = refreshedSession.value,
+                    profilePhotos = (refreshedPhotos as? ApiResult.Success)?.value.orEmpty()
+                        .sortedBy { it.position },
+                    profilePhotosError = (refreshedPhotos as? ApiResult.Failure)?.error,
+                    addingPhoto = false,
+                    photoActionMessage = successMessage,
+                )
+            }
+
+            is ApiResult.Failure -> _uiState.value = previous.copy(
+                addingPhoto = false,
+                photoActionError = refreshedSession.error,
+            )
         }
     }
 
@@ -487,7 +566,9 @@ class RealsRootViewModelFactory(
                 updateMatchFiltersUseCase = appContainer.updateMatchFiltersUseCase,
                 getProfilePhotosUseCase = appContainer.getProfilePhotosUseCase,
                 addMockProfilePhotoUseCase = appContainer.addMockProfilePhotoUseCase,
+                addProfilePhotoFileUseCase = appContainer.addProfilePhotoFileUseCase,
                 replaceMockProfilePhotoUseCase = appContainer.replaceMockProfilePhotoUseCase,
+                replaceProfilePhotoFileUseCase = appContainer.replaceProfilePhotoFileUseCase,
                 deleteProfilePhotoUseCase = appContainer.deleteProfilePhotoUseCase,
                 activateProfileUseCase = appContainer.activateProfileUseCase,
                 deleteAccountUseCase = appContainer.deleteAccountUseCase
@@ -496,3 +577,4 @@ class RealsRootViewModelFactory(
         throw IllegalArgumentException("Unknown ViewModel class ${modelClass.name}")
     }
 }
+
