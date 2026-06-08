@@ -475,7 +475,7 @@ class RealsRootViewModel(
 
                 is ApiResult.Failure -> {
                     val backend = userResult.error as? ApiError.Backend
-                    if (backend?.statusCode == 404) {
+                    if (backend.shouldProvisionAfterGetMeFailure()) {
                         provisionAndLoadBackendSession()
                     } else {
                         handleSessionLoadFailure(userResult.error)
@@ -553,6 +553,11 @@ class RealsRootViewModel(
                 )
             }
         }
+    }
+
+    private fun ApiError.Backend?.shouldProvisionAfterGetMeFailure(): Boolean {
+        if (this == null) return false
+        return statusCode == 404 || statusCode == 403
     }
 }
 
