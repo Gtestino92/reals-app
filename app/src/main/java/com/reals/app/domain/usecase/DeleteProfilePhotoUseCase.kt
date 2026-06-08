@@ -7,6 +7,6 @@ import com.reals.app.domain.model.Profile
 class DeleteProfilePhotoUseCase(
     private val profileRepository: ProfileRepository,
 ) {
-    suspend operator fun invoke(position: Int): ApiResult<Profile> =
-        profileRepository.deleteMyProfilePhoto(position)
+    suspend operator fun invoke(photoId: String): ApiResult<Profile> =
+        profileRepository.deleteMyProfilePhoto(photoId)
 }

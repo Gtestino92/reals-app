@@ -70,8 +70,8 @@ class ProfileRepository(
             )
         }.map { it.toDomain() }
 
-    suspend fun deleteMyProfilePhoto(position: Int): ApiResult<Profile> =
-        authorizedCall { authorization -> api.deleteMyProfilePhoto(authorization, position) }
+    suspend fun deleteMyProfilePhoto(photoId: String): ApiResult<Profile> =
+        authorizedCall { authorization -> api.deleteMyProfilePhoto(authorization, photoId) }
             .map { it.toDomain() }
 
     suspend fun replaceMyProfilePhoto(

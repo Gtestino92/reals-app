@@ -53,9 +53,12 @@ fun RealsApp(appContainer: AppContainer) {
                 ProfileSnapshot.Missing -> CreateProfileScreen(
                     loading = current.creatingProfile,
                     error = current.profileCreateError,
+                    accountDeleteLoading = current.deletingAccount,
+                    accountDeleteError = current.accountDeleteError,
                     onSubmit = viewModel::createProfile,
                     onRefresh = viewModel::refreshSession,
                     onSignOut = viewModel::signOut,
+                    onDeleteAccount = viewModel::deleteAccount,
                 )
 
                 is ProfileSnapshot.Found -> ProfileStatusScreen(
@@ -79,7 +82,7 @@ fun RealsApp(appContainer: AppContainer) {
                     onLoadPhotos = viewModel::loadProfilePhotos,
                     onAddMockPhoto = viewModel::addMockProfilePhoto,
                     onReplaceMockPhoto = viewModel::replaceMockProfilePhoto,
-                    onDeletePhoto = viewModel::deleteProfilePhoto,
+                    onDeletePhoto = { photoId, position -> viewModel.deleteProfilePhoto(photoId, position) },
                     onActivateProfile = { viewModel.activateProfile() },
                     onRefresh = viewModel::refreshSession,
                     onSignOut = viewModel::signOut,

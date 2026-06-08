@@ -67,13 +67,13 @@ interface RealsApi {
         @Body body: AddPhotoRequestDto,
     ): Response<PhotoResponseDto>
 
-    @DELETE("api/me/profile/photos/{position}")
+    @DELETE("api/me/profile/photos/{photoId}")
     suspend fun deleteMyProfilePhoto(
         @Header("Authorization") authorization: String,
-        @Path("position") position: Int,
+        @Path("photoId") photoId: String,
     ): Response<ProfileResponseDto>
 
-    @PUT("api/me/profile/photos/{position}")
+    @PUT("api/me/profile/photos/position/{position}")
     suspend fun replaceMyProfilePhoto(
         @Header("Authorization") authorization: String,
         @Path("position") position: Int,

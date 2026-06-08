@@ -349,7 +349,7 @@ class RealsRootViewModel(
         }
     }
 
-    fun deleteProfilePhoto(position: Int) {
+    fun deleteProfilePhoto(photoId: String, position: Int) {
         val current = _uiState.value as? RealsRootUiState.Ready ?: return
         viewModelScope.launch {
             _uiState.value = current.copy(
@@ -358,7 +358,7 @@ class RealsRootViewModel(
                 photoActionMessage = null,
                 profileActivationError = null,
             )
-            when (val result = deleteProfilePhotoUseCase.invoke(position)) {
+            when (val result = deleteProfilePhotoUseCase.invoke(photoId)) {
                 is ApiResult.Success -> {
                     val refreshedPhotos = getProfilePhotosUseCase.invoke()
                     _uiState.value = current.copy(
@@ -460,22 +460,12 @@ class RealsRootViewModel(
         }
     }
 
-    private suspend fun handleSessionLoadFailure(error: ApiError) {
+    private fun handleSessionLoadFailure(error: ApiError) {
         if (error.isAccountDeleted()) {
-            when (authRepository.deleteFirebaseUser()) {
-                AuthOperationResult.Success -> {
-                    _uiState.value = RealsRootUiState.Login(
-                        error = "La cuenta fue eliminada."
-                    )
-                }
-
-                is AuthOperationResult.Failure -> {
-                    authRepository.signOut()
-                    _uiState.value = RealsRootUiState.Login(
-                        error = "La cuenta fue eliminada localmente, pero no se pudo eliminar de Firebase. Se cerró la sesión."
-                    )
-                }
-            }
+            authRepository.signOut()
+            _uiState.value = RealsRootUiState.Login(
+                error = "La cuenta fue eliminada."
+            )
             return
         }
 

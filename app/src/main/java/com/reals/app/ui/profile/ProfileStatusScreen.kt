@@ -64,13 +64,17 @@ fun ProfileStatusScreen(
     onLoadPhotos: () -> Unit,
     onAddMockPhoto: (profile: Profile, position: Int, isPersonPhoto: Boolean, isFullBody: Boolean) -> Unit,
     onReplaceMockPhoto: (profile: Profile, position: Int, isPersonPhoto: Boolean, isFullBody: Boolean) -> Unit,
-    onDeletePhoto: (position: Int) -> Unit,
+    onDeletePhoto: (photoId: String, position: Int) -> Unit,
     onActivateProfile: (Profile) -> Unit,
     onRefresh: () -> Unit,
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit,
 ) {
-    val busy = profileUpdateLoading || matchFiltersLoading || photoActionLoading || activationLoading
+    val busy = profileUpdateLoading ||
+        matchFiltersLoading ||
+        photoActionLoading ||
+        activationLoading ||
+        accountDeleteLoading
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -131,45 +135,12 @@ fun ProfileStatusScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.errorContainer,
-            ),
-        ) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Text(
-                    text = "Cuenta",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                )
-
-                Text(
-                    text = "Eliminar la cuenta borra tu usuario y cierra la sesion.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                )
-
-                accountDeleteError?.let {
-                    Text(
-                        text = it.toDisplayMessage(),
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-
-                OutlinedButton(
-                    onClick = onDeleteAccount,
-                    enabled = !busy,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(if (accountDeleteLoading) "Eliminando cuenta..." else "Eliminar cuenta")
-                }
-            }
-        }
+        DeleteAccountSection(
+            busy = busy,
+            loading = accountDeleteLoading,
+            error = accountDeleteError,
+            onDeleteAccount = onDeleteAccount,
+        )
     }
 }
 
@@ -219,7 +190,7 @@ private fun ProfileCard(
     onLoadPhotos: () -> Unit,
     onAddMockPhoto: (profile: Profile, position: Int, isPersonPhoto: Boolean, isFullBody: Boolean) -> Unit,
     onReplaceMockPhoto: (profile: Profile, position: Int, isPersonPhoto: Boolean, isFullBody: Boolean) -> Unit,
-    onDeletePhoto: (position: Int) -> Unit,
+    onDeletePhoto: (photoId: String, position: Int) -> Unit,
     onActivateProfile: (Profile) -> Unit,
 ) {
     Card(
@@ -394,7 +365,7 @@ private fun PhotoManagerActions(
     onLoadPhotos: () -> Unit,
     onAddMockPhoto: (profile: Profile, position: Int, isPersonPhoto: Boolean, isFullBody: Boolean) -> Unit,
     onReplaceMockPhoto: (profile: Profile, position: Int, isPersonPhoto: Boolean, isFullBody: Boolean) -> Unit,
-    onDeletePhoto: (position: Int) -> Unit,
+    onDeletePhoto: (photoId: String, position: Int) -> Unit,
     onActivateProfile: (Profile) -> Unit,
 ) {
     var expanded by rememberSaveable(profile.id) { mutableStateOf(profile.status == ProfileStatus.Draft) }
@@ -490,17 +461,22 @@ private fun PhotoManagerActions(
 private fun PhotoRow(
     photo: ProfilePhoto,
     busy: Boolean,
-    onDeletePhoto: (position: Int) -> Unit,
+    onDeletePhoto: (photoId: String, position: Int) -> Unit,
 ) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Posicion ${photo.position} - person=${photo.isPersonPhoto}, fullBody=${photo.isFullBody}")
             Text(
+                text = "Validacion: ${photo.validationStatus}",
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text(
                 text = photo.url,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                 style = MaterialTheme.typography.bodySmall,
             )
-            OutlinedButton(onClick = { onDeletePhoto(photo.position) }, enabled = !busy) {
+            OutlinedButton(onClick = { onDeletePhoto(photo.id, photo.position) }, enabled = !busy) {
                 Text("Borrar posicion ${photo.position}")
             }
         }

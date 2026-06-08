@@ -73,11 +73,9 @@ fun UpdateMatchFiltersInput.toDto(): UpdateMatchFiltersRequestDto = UpdateMatchF
 
 fun PhotoResponseDto.toDomain(): ProfilePhoto = ProfilePhoto(
     id = id,
-    profileId = profileId,
     url = url,
-    storageProvider = storageProvider,
     position = position,
     isPersonPhoto = isPersonPhoto,
     isFullBody = isFullBody,
-    createdAt = createdAt,
+    validationStatus = validationStatus,
 )

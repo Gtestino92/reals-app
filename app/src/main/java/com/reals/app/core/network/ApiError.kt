@@ -29,7 +29,6 @@ enum class AuthFailureReason {
     NOT_SIGNED_IN,
     TOKEN_MISSING,
     TOKEN_UNAVAILABLE,
-    FIREBASE_DELETE_FAILED,
 }
 
 fun ApiError.toDisplayMessage(): String = when (this) {

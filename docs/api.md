@@ -9,10 +9,9 @@ The formal OpenAPI contract lives in `docs/openapi.yaml`.
 
 ## Users
 
-- `POST /api/users`: create a user from request body email.
 - `POST /api/me/provision`: create or link the authenticated Firebase identity to a local backend user. This is the only Firebase flow endpoint that provisions a missing local user.
 - `GET /api/me`: fetch the authenticated user.
-- `GET /api/users/{userId}`: fetch a user by id.
+- `DELETE /api/me`: soft-delete the authenticated user account.
 
 Most current-user flows should prefer `@CurrentUserId` instead of accepting arbitrary user ids.
 
@@ -24,10 +23,11 @@ Most current-user flows should prefer `@CurrentUserId` instead of accepting arbi
 - `POST /api/me/profile/activation`: activate authenticated user's profile.
 - `PUT /api/me/profile/match-filters`: replace dynamic matchmaking filters. Body: `preferredMinAge`, `preferredMaxAge`, `maxDistanceKm`.
 - `POST /api/me/profile/identity-verification`: optionally run identity verification for the authenticated user's profile. Current provider `none` keeps `identityVerified=false`.
-- `POST /api/me/profile/photos`: add a profile photo.
+- `POST /api/me/profile/photos`: add a profile photo. Supports legacy JSON URL bodies and multipart file upload with `file` and `position`.
 - `GET /api/me/profile/photos`: list profile photos.
-- `DELETE /api/me/profile/photos/{position}`: delete photo at position.
-- `PUT /api/me/profile/photos/{position}`: replace photo at position.
+- `DELETE /api/me/profile/photos/{photoId}`: delete photo by id.
+- `PUT /api/me/profile/photos/position/{position}`: replace a photo URL by position. Legacy JSON URL flow.
+- `PUT /api/me/profile/photos/{photoId}/file`: replace an existing photo file by id.
 
 ## Matchmaking
 
@@ -117,4 +117,6 @@ Selected stable frontend-facing domain codes:
 - `PHOTO_POSITION_INVALID`: requested photo position is outside the configured range.
 - `PHOTO_POSITION_OCCUPIED`: requested photo position is already used.
 - `PHOTO_URL_INVALID`: profile photo URL is not a valid HTTPS URL.
+- `INVALID_PROFILE_PHOTO`: uploaded profile photo file is invalid.
+- `PROFILE_PHOTO_NOT_FOUND`: requested profile photo does not belong to the current profile.
 - `USER_NOT_FOUND`: authenticated user id could not be locked for a state-changing operation.

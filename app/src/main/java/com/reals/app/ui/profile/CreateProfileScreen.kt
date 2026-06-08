@@ -37,9 +37,12 @@ import com.reals.app.domain.model.CreateProfileInput
 fun CreateProfileScreen(
     loading: Boolean,
     error: ApiError?,
+    accountDeleteLoading: Boolean,
+    accountDeleteError: ApiError?,
     onSubmit: (CreateProfileInput) -> Unit,
     onRefresh: () -> Unit,
     onSignOut: () -> Unit,
+    onDeleteAccount: () -> Unit,
 ) {
     var displayName by rememberSaveable { mutableStateOf("") }
     var birthDate by rememberSaveable { mutableStateOf("1995-01-01") }
@@ -53,6 +56,7 @@ fun CreateProfileScreen(
     var preferredMaxAge by rememberSaveable { mutableStateOf("45") }
     var maxDistanceKm by rememberSaveable { mutableStateOf("50") }
     var localError by rememberSaveable { mutableStateOf<String?>(null) }
+    val busy = loading || accountDeleteLoading
 
     Column(
         modifier = Modifier
@@ -83,7 +87,7 @@ fun CreateProfileScreen(
                     value = displayName,
                     onValueChange = { displayName = it },
                     label = { Text("Nombre visible") },
-                    enabled = !loading,
+                    enabled = !busy,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -92,7 +96,7 @@ fun CreateProfileScreen(
                     onValueChange = { birthDate = it },
                     label = { Text("Fecha de nacimiento") },
                     supportingText = { Text("Formato YYYY-MM-DD") },
-                    enabled = !loading,
+                    enabled = !busy,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -100,21 +104,21 @@ fun CreateProfileScreen(
                     label = "Genero",
                     value = gender,
                     options = listOf("MALE", "FEMALE", "NON_BINARY", "OTHER"),
-                    enabled = !loading,
+                    enabled = !busy,
                     onValueChange = { gender = it },
                 )
                 EnumDropdown(
                     label = "Busco",
                     value = lookingForGender,
                     options = listOf("MEN", "WOMEN", "EVERYONE", "OTHER"),
-                    enabled = !loading,
+                    enabled = !busy,
                     onValueChange = { lookingForGender = it },
                 )
                 EnumDropdown(
                     label = "Intencion",
                     value = intention,
                     options = listOf("DATE", "FRIENDSHIP", "CASUAL"),
-                    enabled = !loading,
+                    enabled = !busy,
                     onValueChange = { intention = it },
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -122,7 +126,7 @@ fun CreateProfileScreen(
                         value = city,
                         onValueChange = { city = it },
                         label = { Text("Ciudad") },
-                        enabled = !loading,
+                        enabled = !busy,
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                     )
@@ -130,7 +134,7 @@ fun CreateProfileScreen(
                         value = country,
                         onValueChange = { country = it },
                         label = { Text("Pais") },
-                        enabled = !loading,
+                        enabled = !busy,
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                     )
@@ -139,7 +143,7 @@ fun CreateProfileScreen(
                     value = bio,
                     onValueChange = { bio = it },
                     label = { Text("Bio opcional") },
-                    enabled = !loading,
+                    enabled = !busy,
                     minLines = 3,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -148,14 +152,14 @@ fun CreateProfileScreen(
                         value = preferredMinAge,
                         onValueChange = { preferredMinAge = it },
                         label = "Edad min",
-                        enabled = !loading,
+                        enabled = !busy,
                         modifier = Modifier.weight(1f),
                     )
                     NumberField(
                         value = preferredMaxAge,
                         onValueChange = { preferredMaxAge = it },
                         label = "Edad max",
-                        enabled = !loading,
+                        enabled = !busy,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -163,7 +167,7 @@ fun CreateProfileScreen(
                     value = maxDistanceKm,
                     onValueChange = { maxDistanceKm = it },
                     label = "Distancia maxima km",
-                    enabled = !loading,
+                    enabled = !busy,
                     modifier = Modifier.fillMaxWidth(),
                 )
 
@@ -177,7 +181,7 @@ fun CreateProfileScreen(
                 }
 
                 Button(
-                    enabled = !loading,
+                    enabled = !busy,
                     modifier = Modifier.fillMaxWidth(),
                     onClick = {
                         val input = validateProfileInput(
@@ -207,13 +211,19 @@ fun CreateProfileScreen(
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(onClick = onRefresh, enabled = !loading) {
+            OutlinedButton(onClick = onRefresh, enabled = !busy) {
                 Text("Refrescar")
             }
-            OutlinedButton(onClick = onSignOut, enabled = !loading) {
+            OutlinedButton(onClick = onSignOut, enabled = !busy) {
                 Text("Cerrar sesion")
             }
         }
+        DeleteAccountSection(
+            busy = busy,
+            loading = accountDeleteLoading,
+            error = accountDeleteError,
+            onDeleteAccount = onDeleteAccount,
+        )
         Spacer(modifier = Modifier.height(16.dp))
     }
 }
