@@ -12,26 +12,54 @@ import com.reals.app.data.repository.FirebaseAuthRepository
 import com.reals.app.di.AppContainer
 import com.reals.app.domain.model.BackendUser
 import com.reals.app.domain.model.BackendUserStatus
+import com.reals.app.domain.model.Chat
+import com.reals.app.domain.model.ChatContinueDecision
+import com.reals.app.domain.model.ChatExitReason
+import com.reals.app.domain.model.ChatExitRequest
+import com.reals.app.domain.model.ChatExitRequestStatus
+import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.ConnectionState
+import com.reals.app.domain.model.Match
 import com.reals.app.domain.model.CreateProfileInput
+import com.reals.app.domain.model.HomeConnection
+import com.reals.app.domain.model.HomeState
+import com.reals.app.domain.model.MatchState
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfileActivationResult
 import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.ProfileSnapshot
+import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.ProvisionedSession
+import com.reals.app.domain.model.SearchLocationInput
 import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.UpdateProfileInput
+import com.reals.app.domain.usecase.AcceptChatExitRequestUseCase
 import com.reals.app.domain.usecase.ActivateProfileUseCase
 import com.reals.app.domain.usecase.AddMockProfilePhotoUseCase
 import com.reals.app.domain.usecase.AddProfilePhotoFileUseCase
+import com.reals.app.domain.usecase.CancelChatUseCase
 import com.reals.app.domain.usecase.CreateProfileUseCase
 import com.reals.app.domain.usecase.DeleteAccountUseCase
 import com.reals.app.domain.usecase.DeleteProfilePhotoUseCase
+import com.reals.app.domain.usecase.EnqueueMatchmakingUseCase
+import com.reals.app.domain.usecase.GetChatExitRequestsUseCase
+import com.reals.app.domain.usecase.GetChatMessagesUseCase
+import com.reals.app.domain.usecase.GetChatUseCase
+import com.reals.app.domain.usecase.GetFirstChatForMatchUseCase
+import com.reals.app.domain.usecase.GetHomeUseCase
+import com.reals.app.domain.usecase.GetMatchUseCase
 import com.reals.app.domain.usecase.GetMeUseCase
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
+import com.reals.app.domain.usecase.LeaveQueueUseCase
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
 import com.reals.app.domain.usecase.ReactivateAccountUseCase
+import com.reals.app.domain.usecase.RejectChatExitRequestUseCase
 import com.reals.app.domain.usecase.ReplaceMockProfilePhotoUseCase
 import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
+import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
+import com.reals.app.domain.usecase.SafetyCancelChatUseCase
+import com.reals.app.domain.usecase.SendChatMessageUseCase
+import com.reals.app.domain.usecase.SubmitChatDecisionUseCase
 import com.reals.app.domain.usecase.UpdateMatchFiltersUseCase
 import com.reals.app.domain.usecase.UpdateProfileUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -72,6 +100,30 @@ sealed interface RealsRootUiState {
         val profileActivationError: ApiError? = null,
         val deletingAccount: Boolean = false,
         val accountDeleteError: ApiError? = null,
+        val homeState: HomeState? = null,
+        val homeLoading: Boolean = false,
+        val homeError: ApiError? = null,
+        val homeMessage: String? = null,
+    ) : RealsRootUiState
+    data class FirstChat(
+        val session: ProvisionedSession,
+        val matchId: String,
+        val chatId: String? = null,
+        val match: Match? = null,
+        val chat: Chat? = null,
+        val messages: List<ChatMessage> = emptyList(),
+        val exitRequests: List<ChatExitRequest> = emptyList(),
+        val loading: Boolean = false,
+        val refreshing: Boolean = false,
+        val sending: Boolean = false,
+        val actionLoading: Boolean = false,
+        val error: ApiError? = null,
+        val message: String? = null,
+    ) : RealsRootUiState
+    data class PendingEngagement(
+        val session: ProvisionedSession,
+        val title: String,
+        val body: String,
     ) : RealsRootUiState
     data class ActivationComplete(
         val session: ProvisionedSession,
@@ -96,6 +148,21 @@ class RealsRootViewModel(
     private val activateProfileUseCase: ActivateProfileUseCase,
     private val reactivateAccountUseCase: ReactivateAccountUseCase,
     private val deleteAccountUseCase: DeleteAccountUseCase,
+    private val enqueueMatchmakingUseCase: EnqueueMatchmakingUseCase,
+    private val getHomeUseCase: GetHomeUseCase,
+    private val leaveQueueUseCase: LeaveQueueUseCase,
+    private val getMatchUseCase: GetMatchUseCase,
+    private val getFirstChatForMatchUseCase: GetFirstChatForMatchUseCase,
+    private val submitChatDecisionUseCase: SubmitChatDecisionUseCase,
+    private val getChatUseCase: GetChatUseCase,
+    private val getChatMessagesUseCase: GetChatMessagesUseCase,
+    private val sendChatMessageUseCase: SendChatMessageUseCase,
+    private val getChatExitRequestsUseCase: GetChatExitRequestsUseCase,
+    private val requestMutualChatExitUseCase: RequestMutualChatExitUseCase,
+    private val acceptChatExitRequestUseCase: AcceptChatExitRequestUseCase,
+    private val rejectChatExitRequestUseCase: RejectChatExitRequestUseCase,
+    private val cancelChatUseCase: CancelChatUseCase,
+    private val safetyCancelChatUseCase: SafetyCancelChatUseCase,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<RealsRootUiState>(RealsRootUiState.Checking)
     val uiState: StateFlow<RealsRootUiState> = _uiState.asStateFlow()
@@ -171,6 +238,245 @@ class RealsRootViewModel(
                     error = result.error,
                 )
             }
+        }
+    }
+
+    fun refreshHomeState() {
+        val current = _uiState.value as? RealsRootUiState.Ready ?: return
+
+        viewModelScope.launch {
+            loadHomeForReady(current.copy(homeLoading = true, homeError = null, homeMessage = null))
+        }
+    }
+
+    fun enqueueMatchmaking(location: SearchLocationInput) {
+        val current = _uiState.value as? RealsRootUiState.Ready ?: return
+
+        viewModelScope.launch {
+            _uiState.value = current.copy(homeLoading = true, homeError = null, homeMessage = null)
+            when (val result = enqueueMatchmakingUseCase(location)) {
+                is ApiResult.Success -> loadHomeForReady(
+                    current.copy(
+                        homeLoading = true,
+                        homeError = null,
+                        homeMessage = if (result.value.inQueue) {
+                            "Estas en cola. Consultando Home para detectar match/chat activo."
+                        } else {
+                            "El backend respondio fuera de cola. Consultando Home para estado actual."
+                        },
+                    )
+                )
+
+                is ApiResult.Failure -> _uiState.value = current.copy(
+                    homeLoading = false,
+                    homeError = result.error,
+                )
+            }
+        }
+    }
+
+    fun leaveMatchmakingQueue() {
+        val current = _uiState.value as? RealsRootUiState.Ready ?: return
+
+        viewModelScope.launch {
+            _uiState.value = current.copy(homeLoading = true, homeError = null, homeMessage = null)
+            when (val result = leaveQueueUseCase()) {
+                is ApiResult.Success -> loadHomeForReady(
+                    current.copy(
+                        homeLoading = true,
+                        homeError = null,
+                        homeMessage = "Saliste de la cola.",
+                    )
+                )
+
+                is ApiResult.Failure -> _uiState.value = current.copy(
+                    homeLoading = false,
+                    homeError = result.error,
+                )
+            }
+        }
+    }
+
+    fun openFirstChat(matchId: String, chatId: String? = null) {
+        val session = when (val current = _uiState.value) {
+            is RealsRootUiState.Ready -> current.session
+            is RealsRootUiState.FirstChat -> current.session
+            else -> return
+        }
+        val cleanMatchId = matchId.trim()
+        if (cleanMatchId.isBlank()) return
+
+        viewModelScope.launch {
+            _uiState.value = RealsRootUiState.FirstChat(
+                session = session,
+                matchId = cleanMatchId,
+                chatId = chatId,
+                loading = true,
+            )
+            val matchResult = getMatchUseCase(cleanMatchId)
+            if (matchResult is ApiResult.Failure) {
+                _uiState.value = RealsRootUiState.FirstChat(
+                    session = session,
+                    matchId = cleanMatchId,
+                    chatId = chatId,
+                    loading = false,
+                    error = matchResult.error,
+                )
+                return@launch
+            }
+            val match = (matchResult as ApiResult.Success).value
+            val chatResult = if (chatId == null) {
+                getFirstChatForMatchUseCase(cleanMatchId)
+            } else {
+                getChatUseCase(chatId)
+            }
+            if (chatResult is ApiResult.Failure) {
+                _uiState.value = RealsRootUiState.FirstChat(
+                    session = session,
+                    matchId = cleanMatchId,
+                    chatId = chatId,
+                    match = match,
+                    loading = false,
+                    error = chatResult.error,
+                )
+                return@launch
+            }
+            val chat = (chatResult as ApiResult.Success).value
+            val messagesResult = getChatMessagesUseCase(chat.id)
+            val exitsResult = getChatExitRequestsUseCase(chat.id)
+            _uiState.value = RealsRootUiState.FirstChat(
+                session = session,
+                matchId = cleanMatchId,
+                chatId = chat.id,
+                match = match,
+                chat = chat,
+                messages = (messagesResult as? ApiResult.Success)?.value.orEmpty(),
+                exitRequests = (exitsResult as? ApiResult.Success)?.value.orEmpty(),
+                loading = false,
+                error = (messagesResult as? ApiResult.Failure)?.error ?: (exitsResult as? ApiResult.Failure)?.error,
+            )
+        }
+    }
+
+    fun closeFirstChat() {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        _uiState.value = RealsRootUiState.Ready(current.session, homeLoading = true)
+        refreshHomeState()
+    }
+
+    fun refreshFirstChat() {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        val chat = current.chat ?: return openFirstChat(current.matchId, current.chatId)
+
+        viewModelScope.launch {
+            _uiState.value = current.copy(refreshing = true, error = null, message = null)
+            val chatResult = getChatUseCase(chat.id)
+            val matchResult = getMatchUseCase(current.matchId)
+            val messagesResult = getChatMessagesUseCase(chat.id)
+            val exitsResult = getChatExitRequestsUseCase(chat.id)
+            _uiState.value = current.copy(
+                match = (matchResult as? ApiResult.Success)?.value ?: current.match,
+                chat = (chatResult as? ApiResult.Success)?.value ?: current.chat,
+                messages = (messagesResult as? ApiResult.Success)?.value ?: current.messages,
+                exitRequests = (exitsResult as? ApiResult.Success)?.value ?: current.exitRequests,
+                refreshing = false,
+                error = (chatResult as? ApiResult.Failure)?.error
+                    ?: (matchResult as? ApiResult.Failure)?.error
+                    ?: (messagesResult as? ApiResult.Failure)?.error
+                    ?: (exitsResult as? ApiResult.Failure)?.error,
+            )
+        }
+    }
+
+    fun returnToHomeFromPendingEngagement() {
+        val current = _uiState.value as? RealsRootUiState.PendingEngagement ?: return
+        _uiState.value = RealsRootUiState.Ready(current.session, homeLoading = true)
+        refreshHomeState()
+    }
+
+    fun sendFirstChatMessage(content: String) {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        val chat = current.chat ?: return
+        val cleanContent = content.trim()
+        if (cleanContent.isBlank()) {
+            _uiState.value = current.copy(error = ApiError.Unexpected("El mensaje no puede estar vacio."))
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.value = current.copy(sending = true, error = null, message = null)
+            when (val result = sendChatMessageUseCase(chat.id, cleanContent)) {
+                is ApiResult.Success -> {
+                    val messagesResult = getChatMessagesUseCase(chat.id)
+                    val chatResult = getChatUseCase(chat.id)
+                    _uiState.value = current.copy(
+                        chat = (chatResult as? ApiResult.Success)?.value ?: current.chat,
+                        messages = (messagesResult as? ApiResult.Success)?.value ?: (current.messages + result.value),
+                        sending = false,
+                        error = (messagesResult as? ApiResult.Failure)?.error ?: (chatResult as? ApiResult.Failure)?.error,
+                    )
+                }
+
+                is ApiResult.Failure -> _uiState.value = current.copy(
+                    sending = false,
+                    error = result.error,
+                )
+            }
+        }
+    }
+
+    fun submitFirstChatDecision(decision: ChatContinueDecision) {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        viewModelScope.launch {
+            _uiState.value = current.copy(actionLoading = true, error = null, message = null)
+            when (val result = submitChatDecisionUseCase(current.matchId, decision)) {
+                is ApiResult.Success -> _uiState.value = current.copy(
+                    match = result.value,
+                    actionLoading = false,
+                    message = "Decision enviada: ${decision.backendValue}.",
+                )
+
+                is ApiResult.Failure -> _uiState.value = current.copy(
+                    actionLoading = false,
+                    error = result.error,
+                )
+            }
+        }
+    }
+
+    fun requestMutualChatExit() {
+        runChatExitAction { chatId ->
+            requestMutualChatExitUseCase(chatId, ChatExitReason.NoLongerInterested, null)
+        }
+    }
+
+    fun cancelChatUnilaterally() {
+        runChatExitAction { chatId ->
+            cancelChatUseCase(chatId, ChatExitReason.NoLongerInterested, null)
+        }
+    }
+
+    fun safetyCancelChat(details: String) {
+        val cleanDetails = details.trim()
+        if (cleanDetails.isBlank()) {
+            val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+            _uiState.value = current.copy(error = ApiError.Unexpected("El reporte de seguridad requiere detalle."))
+            return
+        }
+        runChatExitAction { chatId ->
+            safetyCancelChatUseCase(chatId, ChatExitReason.InappropriateBehavior, cleanDetails)
+        }
+    }
+
+    fun acceptChatExitRequest(exitRequestId: String) {
+        runChatExitAction { chatId ->
+            acceptChatExitRequestUseCase(chatId, exitRequestId)
+        }
+    }
+
+    fun rejectChatExitRequest(exitRequestId: String) {
+        runChatExitAction { chatId ->
+            rejectChatExitRequestUseCase(chatId, exitRequestId)
         }
     }
 
@@ -518,6 +824,124 @@ class RealsRootViewModel(
         }
     }
 
+    private suspend fun loadHomeForReady(ready: RealsRootUiState.Ready) {
+        _uiState.value = ready.copy(homeLoading = true, homeError = null)
+        when (val homeResult = getHomeUseCase()) {
+            is ApiResult.Success -> routeFromHomeState(
+                ready.copy(
+                    homeState = homeResult.value,
+                    homeLoading = false,
+                    homeError = null,
+                )
+            )
+
+            is ApiResult.Failure -> _uiState.value = ready.copy(
+                homeLoading = false,
+                homeError = homeResult.error,
+            )
+        }
+    }
+
+    private suspend fun routeFromHomeState(ready: RealsRootUiState.Ready) {
+        val home = ready.homeState ?: run {
+            _uiState.value = ready
+            return
+        }
+
+        if (home.profileStatus != ProfileStatus.Active) {
+            loadBackendSessionForActiveUser(ready.session.user)
+            return
+        }
+
+        val firstChatMatch = home.activeMatches.firstOrNull { it.firstChat != null }
+        if (firstChatMatch?.firstChat != null) {
+            _uiState.value = ready
+            openFirstChat(firstChatMatch.matchId, firstChatMatch.firstChat.chatId)
+            return
+        }
+
+        val visualMatch = home.activeMatches.firstOrNull { it.matchState == MatchState.VisualPhase }
+        if (visualMatch != null) {
+            _uiState.value = RealsRootUiState.PendingEngagement(
+                session = ready.session,
+                title = "Visual review pendiente",
+                body = "Home detecto match ${visualMatch.matchId} en VISUAL_PHASE. Falta implementar la pantalla de visual review; no se inventa transicion local.",
+            )
+            return
+        }
+
+        val connection = home.activeConnections.firstOrNull()
+        if (connection != null) {
+            _uiState.value = RealsRootUiState.PendingEngagement(
+                session = ready.session,
+                title = pendingConnectionTitle(connection.connectionState),
+                body = pendingConnectionBody(connection),
+            )
+            return
+        }
+
+        _uiState.value = ready
+    }
+
+    private fun pendingConnectionTitle(state: ConnectionState): String = when (state) {
+        ConnectionState.SchedulingPhase -> "Scheduling pendiente"
+        ConnectionState.SecondChatScheduled -> "Esperando segundo chat"
+        ConnectionState.SecondChatAvailable,
+        ConnectionState.SecondChat -> "Second chat pendiente"
+        ConnectionState.Closed -> "Conexion cerrada"
+        is ConnectionState.Unknown -> "Conexion en estado desconocido"
+    }
+
+    private fun pendingConnectionBody(connection: HomeConnection): String {
+        val secondChat = connection.secondChat
+        return when (connection.connectionState) {
+            ConnectionState.SchedulingPhase ->
+                "Home detecto connection ${connection.connectionId} en SCHEDULING_PHASE. Falta implementar scheduling/proposals."
+            ConnectionState.SecondChatScheduled ->
+                "Home detecto connection ${connection.connectionId} con segundo chat programado. Falta implementar pantalla de espera."
+            ConnectionState.SecondChatAvailable,
+            ConnectionState.SecondChat ->
+                if (secondChat == null) {
+                    "Home detecto connection ${connection.connectionId} lista para segundo chat. Se debe llamar GET /api/connections/${connection.connectionId}/chat cuando se implemente ese flujo."
+                } else {
+                    "Home detecto second chat ${secondChat.chatId} (${secondChat.chatStatus.rawValue}). Falta implementar pantalla especifica de second chat."
+                }
+            ConnectionState.Closed ->
+                "Home detecto connection ${connection.connectionId} cerrada. Refresca Home para obtener el siguiente estado navegable."
+            is ConnectionState.Unknown ->
+                "Home detecto connection ${connection.connectionId} en estado ${connection.connectionState.rawValue}. Acciones bloqueadas hasta soportar ese estado."
+        }
+    }
+
+    private fun runChatExitAction(
+        action: suspend (chatId: String) -> ApiResult<*>,
+    ) {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        val chat = current.chat ?: return
+
+        viewModelScope.launch {
+            _uiState.value = current.copy(actionLoading = true, error = null, message = null)
+            when (val result = action(chat.id)) {
+                is ApiResult.Success -> {
+                    val chatResult = getChatUseCase(chat.id)
+                    val exitsResult = getChatExitRequestsUseCase(chat.id)
+                    _uiState.value = current.copy(
+                        chat = (chatResult as? ApiResult.Success)?.value ?: current.chat,
+                        exitRequests = (exitsResult as? ApiResult.Success)?.value ?: current.exitRequests,
+                        actionLoading = false,
+                        message = "Accion enviada al backend.",
+                        error = (chatResult as? ApiResult.Failure)?.error ?: (exitsResult as? ApiResult.Failure)?.error,
+                    )
+                }
+
+                is ApiResult.Failure -> _uiState.value = current.copy(
+                    actionLoading = false,
+                    error = result.error,
+                )
+            }
+        }
+    }
+
     private fun authenticate(
         email: String,
         password: String,
@@ -601,6 +1025,10 @@ class RealsRootViewModel(
                     }
                 }
             }
+            if (snapshot.profile.status == ProfileStatus.Active && _uiState.value is RealsRootUiState.Ready) {
+                val current = _uiState.value as RealsRootUiState.Ready
+                loadHomeForReady(current)
+            }
         } else {
             _uiState.value = RealsRootUiState.Ready(session)
         }
@@ -661,7 +1089,22 @@ class RealsRootViewModelFactory(
                 deleteProfilePhotoUseCase = appContainer.deleteProfilePhotoUseCase,
                 activateProfileUseCase = appContainer.activateProfileUseCase,
                 reactivateAccountUseCase = appContainer.reactivateAccountUseCase,
-                deleteAccountUseCase = appContainer.deleteAccountUseCase
+                deleteAccountUseCase = appContainer.deleteAccountUseCase,
+                enqueueMatchmakingUseCase = appContainer.enqueueMatchmakingUseCase,
+                getHomeUseCase = appContainer.getHomeUseCase,
+                leaveQueueUseCase = appContainer.leaveQueueUseCase,
+                getMatchUseCase = appContainer.getMatchUseCase,
+                getFirstChatForMatchUseCase = appContainer.getFirstChatForMatchUseCase,
+                submitChatDecisionUseCase = appContainer.submitChatDecisionUseCase,
+                getChatUseCase = appContainer.getChatUseCase,
+                getChatMessagesUseCase = appContainer.getChatMessagesUseCase,
+                sendChatMessageUseCase = appContainer.sendChatMessageUseCase,
+                getChatExitRequestsUseCase = appContainer.getChatExitRequestsUseCase,
+                requestMutualChatExitUseCase = appContainer.requestMutualChatExitUseCase,
+                acceptChatExitRequestUseCase = appContainer.acceptChatExitRequestUseCase,
+                rejectChatExitRequestUseCase = appContainer.rejectChatExitRequestUseCase,
+                cancelChatUseCase = appContainer.cancelChatUseCase,
+                safetyCancelChatUseCase = appContainer.safetyCancelChatUseCase,
             ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class ${modelClass.name}")

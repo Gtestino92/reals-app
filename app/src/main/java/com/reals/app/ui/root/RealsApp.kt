@@ -9,11 +9,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.reals.app.core.network.toDisplayMessage
 import com.reals.app.di.AppContainer
+import com.reals.app.domain.model.ChatContinueDecision
 import com.reals.app.domain.model.ProfileSnapshot
+import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.ui.account.AccountDeletionRecoveryScreen
 import com.reals.app.ui.account.formatBackendDate
 import com.reals.app.ui.auth.LoginScreen
+import com.reals.app.ui.chat.FirstChatScreen
 import com.reals.app.ui.common.FullScreenMessage
+import com.reals.app.ui.matchmaking.MatchmakingHomeScreen
 import com.reals.app.ui.profile.CreateProfileScreen
 import com.reals.app.ui.profile.ProfileActivationResultScreen
 import com.reals.app.ui.profile.ProfileStatusScreen
@@ -82,38 +86,93 @@ fun RealsApp(appContainer: AppContainer) {
                     onDeleteAccount = viewModel::deleteAccount,
                 )
 
-                is ProfileSnapshot.Found -> ProfileStatusScreen(
-                    session = current.session,
-                    profileUpdateLoading = current.updatingProfile,
-                    profileUpdateError = current.profileUpdateError,
-                    profileUpdateMessage = current.profileUpdateMessage,
-                    matchFiltersLoading = current.updatingMatchFilters,
-                    matchFiltersError = current.matchFiltersError,
-                    matchFiltersMessage = current.matchFiltersMessage,
-                    photosLoading = current.loadingPhotos,
-                    photos = current.profilePhotos,
-                    photosError = current.profilePhotosError,
-                    photoActionLoading = current.addingPhoto,
-                    photoActionError = current.photoActionError,
-                    photoActionMessage = current.photoActionMessage,
-                    activationLoading = current.activatingProfile,
-                    activationError = current.profileActivationError,
-                    onUpdateProfile = viewModel::updateProfile,
-                    onUpdateMatchFilters = viewModel::updateMatchFilters,
-                    onLoadPhotos = viewModel::loadProfilePhotos,
-                    onAddMockPhoto = viewModel::addMockProfilePhoto,
-                    onAddPhotoFile = viewModel::addProfilePhotoFile,
-                    onReplaceMockPhoto = viewModel::replaceMockProfilePhoto,
-                    onReplacePhotoFile = viewModel::replaceProfilePhotoFile,
-                    onDeletePhoto = { photoId, position -> viewModel.deleteProfilePhoto(photoId, position) },
-                    onActivateProfile = { viewModel.activateProfile() },
-                    onRefresh = viewModel::refreshSession,
-                    onSignOut = viewModel::signOut,
-                    accountDeleteLoading = current.deletingAccount,
-                    accountDeleteError = current.accountDeleteError,
-                    onDeleteAccount = viewModel::deleteAccount,
-                )
+                is ProfileSnapshot.Found -> {
+                    val profile = (current.session.profileSnapshot as ProfileSnapshot.Found).profile
+                    if (profile.status == ProfileStatus.Active) {
+                        MatchmakingHomeScreen(
+                            profile = profile,
+                            homeState = current.homeState,
+                            homeLoading = current.homeLoading,
+                            homeError = current.homeError,
+                            homeMessage = current.homeMessage,
+                            accountDeleteLoading = current.deletingAccount,
+                            accountDeleteError = current.accountDeleteError,
+                            onEnqueue = viewModel::enqueueMatchmaking,
+                            onLeaveQueue = viewModel::leaveMatchmakingQueue,
+                            onRefreshHome = viewModel::refreshHomeState,
+                            onRefreshSession = viewModel::refreshSession,
+                            onSignOut = viewModel::signOut,
+                            onDeleteAccount = viewModel::deleteAccount,
+                        )
+                    } else {
+                        ProfileStatusScreen(
+                            session = current.session,
+                            profileUpdateLoading = current.updatingProfile,
+                            profileUpdateError = current.profileUpdateError,
+                            profileUpdateMessage = current.profileUpdateMessage,
+                            matchFiltersLoading = current.updatingMatchFilters,
+                            matchFiltersError = current.matchFiltersError,
+                            matchFiltersMessage = current.matchFiltersMessage,
+                            photosLoading = current.loadingPhotos,
+                            photos = current.profilePhotos,
+                            photosError = current.profilePhotosError,
+                            photoActionLoading = current.addingPhoto,
+                            photoActionError = current.photoActionError,
+                            photoActionMessage = current.photoActionMessage,
+                            activationLoading = current.activatingProfile,
+                            activationError = current.profileActivationError,
+                            onUpdateProfile = viewModel::updateProfile,
+                            onUpdateMatchFilters = viewModel::updateMatchFilters,
+                            onLoadPhotos = viewModel::loadProfilePhotos,
+                            onAddMockPhoto = viewModel::addMockProfilePhoto,
+                            onAddPhotoFile = viewModel::addProfilePhotoFile,
+                            onReplaceMockPhoto = viewModel::replaceMockProfilePhoto,
+                            onReplacePhotoFile = viewModel::replaceProfilePhotoFile,
+                            onDeletePhoto = { photoId, position -> viewModel.deleteProfilePhoto(photoId, position) },
+                            onActivateProfile = { viewModel.activateProfile() },
+                            onRefresh = viewModel::refreshSession,
+                            onSignOut = viewModel::signOut,
+                            accountDeleteLoading = current.deletingAccount,
+                            accountDeleteError = current.accountDeleteError,
+                            onDeleteAccount = viewModel::deleteAccount,
+                        )
+                    }
+                }
             }
+
+            is RealsRootUiState.FirstChat -> FirstChatScreen(
+                currentUserId = current.session.user.id,
+                matchId = current.matchId,
+                match = current.match,
+                chat = current.chat,
+                messages = current.messages,
+                exitRequests = current.exitRequests,
+                loading = current.loading,
+                refreshing = current.refreshing,
+                sending = current.sending,
+                actionLoading = current.actionLoading,
+                error = current.error,
+                message = current.message,
+                onRefresh = viewModel::refreshFirstChat,
+                onSendMessage = viewModel::sendFirstChatMessage,
+                onApprove = { viewModel.submitFirstChatDecision(ChatContinueDecision.Approved) },
+                onReject = { viewModel.submitFirstChatDecision(ChatContinueDecision.Rejected) },
+                onRequestMutualExit = viewModel::requestMutualChatExit,
+                onCancelUnilaterally = viewModel::cancelChatUnilaterally,
+                onSafetyCancel = viewModel::safetyCancelChat,
+                onAcceptExitRequest = viewModel::acceptChatExitRequest,
+                onRejectExitRequest = viewModel::rejectChatExitRequest,
+                onBackHome = viewModel::closeFirstChat,
+            )
+
+            is RealsRootUiState.PendingEngagement -> FullScreenMessage(
+                title = current.title,
+                body = current.body,
+                primaryActionLabel = "Refrescar Home",
+                onPrimaryAction = viewModel::returnToHomeFromPendingEngagement,
+                secondaryActionLabel = "Cerrar sesion",
+                onSecondaryAction = viewModel::signOut,
+            )
 
             is RealsRootUiState.ActivationComplete -> ProfileActivationResultScreen(
                 session = current.session,

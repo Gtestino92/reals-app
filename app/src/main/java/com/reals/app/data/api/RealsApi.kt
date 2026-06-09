@@ -1,11 +1,22 @@
 ﻿package com.reals.app.data.api
 
 import com.reals.app.data.dto.AddPhotoRequestDto
+import com.reals.app.data.dto.ChatDecisionRequestDto
+import com.reals.app.data.dto.ChatExitOutcomeResponseDto
+import com.reals.app.data.dto.ChatExitRequestCreateRequestDto
+import com.reals.app.data.dto.ChatExitRequestResponseDto
+import com.reals.app.data.dto.ChatMessageResponseDto
+import com.reals.app.data.dto.ChatResponseDto
 import com.reals.app.data.dto.CreateProfileRequestDto
+import com.reals.app.data.dto.EnqueueMatchmakingRequestDto
+import com.reals.app.data.dto.HomeResponseDto
+import com.reals.app.data.dto.MatchResponseDto
 import com.reals.app.data.dto.PhotoResponseDto
 import com.reals.app.data.dto.PingResponseDto
 import com.reals.app.data.dto.ProfileResponseDto
+import com.reals.app.data.dto.QueueStatusResponseDto
 import com.reals.app.data.dto.ReplacePhotoRequestDto
+import com.reals.app.data.dto.SendMessageRequestDto
 import com.reals.app.data.dto.UpdateMatchFiltersRequestDto
 import com.reals.app.data.dto.UpdateProfileRequestDto
 import com.reals.app.data.dto.UserResponseDto
@@ -36,6 +47,11 @@ interface RealsApi {
     suspend fun getMe(
         @Header("Authorization") authorization: String,
     ): Response<UserResponseDto>
+
+    @GET("api/me/home")
+    suspend fun getHome(
+        @Header("Authorization") authorization: String,
+    ): Response<HomeResponseDto>
 
     @DELETE("api/me")
     suspend fun deleteMe(
@@ -114,4 +130,99 @@ interface RealsApi {
     suspend fun activateMyProfile(
         @Header("Authorization") authorization: String,
     ): Response<ProfileResponseDto>
+
+    @POST("api/matchmaking/queue")
+    suspend fun enqueueMatchmaking(
+        @Header("Authorization") authorization: String,
+        @Body body: EnqueueMatchmakingRequestDto,
+    ): Response<QueueStatusResponseDto>
+
+    @DELETE("api/matchmaking/queue")
+    suspend fun leaveMatchmakingQueue(
+        @Header("Authorization") authorization: String,
+    ): Response<QueueStatusResponseDto>
+
+    @GET("api/matchmaking/queue")
+    suspend fun getMatchmakingQueueStatus(
+        @Header("Authorization") authorization: String,
+    ): Response<QueueStatusResponseDto>
+
+    @GET("api/matches/{matchId}")
+    suspend fun getMatch(
+        @Header("Authorization") authorization: String,
+        @Path("matchId") matchId: String,
+    ): Response<MatchResponseDto>
+
+    @GET("api/matches/{matchId}/chat")
+    suspend fun getFirstChatForMatch(
+        @Header("Authorization") authorization: String,
+        @Path("matchId") matchId: String,
+    ): Response<ChatResponseDto>
+
+    @POST("api/matches/{matchId}/chat-decision")
+    suspend fun submitChatDecision(
+        @Header("Authorization") authorization: String,
+        @Path("matchId") matchId: String,
+        @Body body: ChatDecisionRequestDto,
+    ): Response<MatchResponseDto>
+
+    @GET("api/chats/{chatId}")
+    suspend fun getChat(
+        @Header("Authorization") authorization: String,
+        @Path("chatId") chatId: String,
+    ): Response<ChatResponseDto>
+
+    @POST("api/chats/{chatId}/messages")
+    suspend fun sendChatMessage(
+        @Header("Authorization") authorization: String,
+        @Path("chatId") chatId: String,
+        @Body body: SendMessageRequestDto,
+    ): Response<ChatMessageResponseDto>
+
+    @GET("api/chats/{chatId}/messages")
+    suspend fun getChatMessages(
+        @Header("Authorization") authorization: String,
+        @Path("chatId") chatId: String,
+    ): Response<List<ChatMessageResponseDto>>
+
+    @POST("api/chats/{chatId}/exit-requests")
+    suspend fun requestChatExit(
+        @Header("Authorization") authorization: String,
+        @Path("chatId") chatId: String,
+        @Body body: ChatExitRequestCreateRequestDto,
+    ): Response<ChatExitRequestResponseDto>
+
+    @GET("api/chats/{chatId}/exit-requests")
+    suspend fun getChatExitRequests(
+        @Header("Authorization") authorization: String,
+        @Path("chatId") chatId: String,
+    ): Response<List<ChatExitRequestResponseDto>>
+
+    @POST("api/chats/{chatId}/exit-requests/{exitRequestId}/acceptance")
+    suspend fun acceptChatExitRequest(
+        @Header("Authorization") authorization: String,
+        @Path("chatId") chatId: String,
+        @Path("exitRequestId") exitRequestId: String,
+    ): Response<ChatExitOutcomeResponseDto>
+
+    @POST("api/chats/{chatId}/exit-requests/{exitRequestId}/rejection")
+    suspend fun rejectChatExitRequest(
+        @Header("Authorization") authorization: String,
+        @Path("chatId") chatId: String,
+        @Path("exitRequestId") exitRequestId: String,
+    ): Response<ChatExitRequestResponseDto>
+
+    @POST("api/chats/{chatId}/cancellations")
+    suspend fun cancelChat(
+        @Header("Authorization") authorization: String,
+        @Path("chatId") chatId: String,
+        @Body body: ChatExitRequestCreateRequestDto,
+    ): Response<ChatExitOutcomeResponseDto>
+
+    @POST("api/chats/{chatId}/safety-cancellations")
+    suspend fun safetyCancelChat(
+        @Header("Authorization") authorization: String,
+        @Path("chatId") chatId: String,
+        @Body body: ChatExitRequestCreateRequestDto,
+    ): Response<ChatExitOutcomeResponseDto>
 }
