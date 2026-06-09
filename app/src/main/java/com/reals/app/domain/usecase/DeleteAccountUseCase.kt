@@ -3,10 +3,7 @@
 import com.reals.app.core.network.ApiResult
 import com.reals.app.data.repository.FirebaseAuthRepository
 import com.reals.app.data.repository.MeRepository
-
-data class DeleteAccountResult(
-    val deletionFinalizesAt: String?,
-)
+import com.reals.app.domain.model.DeleteAccountResult
 
 class DeleteAccountUseCase(
     private val meRepository: MeRepository,

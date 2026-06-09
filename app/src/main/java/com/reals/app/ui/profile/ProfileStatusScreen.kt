@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,8 +32,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.toDisplayMessage
 import com.reals.app.domain.model.Profile
@@ -383,8 +386,6 @@ private fun PhotoManagerActions(
 ) {
     var expanded by rememberSaveable(profile.id) { mutableStateOf(profile.status == ProfileStatus.Draft) }
     var positionText by rememberSaveable(profile.id) { mutableStateOf(((profile.photoCount + 1).coerceIn(1, 9)).toString()) }
-    var isPersonPhoto by rememberSaveable(profile.id) { mutableStateOf(false) }
-    var isFullBody by rememberSaveable(profile.id) { mutableStateOf(false) }
     var localError by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
     var replacePhotoId by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
     var replacePosition by rememberSaveable(profile.id) { mutableStateOf<Int?>(null) }
@@ -465,54 +466,10 @@ private fun PhotoManagerActions(
             ) {
                 Text(if (photoActionLoading) "Subiendo archivo..." else "Subir archivo a posicion")
             }
-            Text(
-                text = "Las marcas isPersonPhoto/isFullBody solo aplican al flujo mock por URL; el backend valida archivos por separado.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall,
-            )
-            CheckboxRow("isPersonPhoto", isPersonPhoto, !busy) { isPersonPhoto = it }
-            CheckboxRow("isFullBody", isFullBody, !busy) { isFullBody = it }
-            Text(
-                text = "URL add: ${previewGeneratedPhotoUrl(profile, positionText.toIntOrNull())}",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall,
-            )
             localError?.let { ErrorText(it) }
             photoActionMessage?.let { SuccessText(it) }
             photoActionError?.let { ErrorText(it.toDisplayMessage()) }
             activationError?.let { ErrorText(it.toDisplayMessage()) }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(
-                    onClick = {
-                        val position = positionText.toIntOrNull()
-                        if (position == null || position !in 1..9) {
-                            localError = "La posicion debe estar entre 1 y 9."
-                        } else {
-                            localError = null
-                            onAddMockPhoto(profile, position, isPersonPhoto, isFullBody)
-                        }
-                    },
-                    enabled = !busy,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text(if (photoActionLoading) "Guardando..." else "Agregar")
-                }
-                OutlinedButton(
-                    onClick = {
-                        val position = positionText.toIntOrNull()
-                        if (position == null || position !in 1..9) {
-                            localError = "La posicion debe estar entre 1 y 9."
-                        } else {
-                            localError = null
-                            onReplaceMockPhoto(profile, position, isPersonPhoto, isFullBody)
-                        }
-                    },
-                    enabled = !busy,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("Reemplazar")
-                }
-            }
             if (profile.status == ProfileStatus.Draft) {
                 OutlinedButton(onClick = { onActivateProfile(profile) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
                     Text(if (activationLoading) "Activando..." else "Intentar activar perfil")
@@ -531,14 +488,32 @@ private fun PhotoRow(
 ) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Posicion ${photo.position} - person=${photo.isPersonPhoto}, fullBody=${photo.isFullBody}")
+            val displayUrl = photo.url.toEmulatorReachableUrl()
+            Text("Posicion ${photo.position}")
+            if (photo.url.isLocalhostPresignedUrl()) {
+                Text(
+                    text = "La URL firmada usa localhost. El emulador no puede resolverla y cambiar el host invalida la firma.",
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            } else if (displayUrl.isRenderableImageUrl()) {
+                AsyncImage(
+                    model = displayUrl,
+                    contentDescription = "Foto de perfil en posicion ${photo.position}",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1f),
+                )
+            } else {
+                Text(
+                    text = "Imagen almacenada sin URL publica de descarga.",
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             Text(
-                text = "Validacion: ${photo.validationStatus}",
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                style = MaterialTheme.typography.bodySmall,
-            )
-            Text(
-                text = photo.url,
+                text = "Estado: ${photo.validationStatus}",
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -550,6 +525,25 @@ private fun PhotoRow(
             }
         }
     }
+}
+
+private fun String.toEmulatorReachableUrl(): String {
+    if (isPresignedUrl()) return this
+    return replace("http://localhost:", "http://10.0.2.2:")
+        .replace("http://127.0.0.1:", "http://10.0.2.2:")
+}
+
+private fun String.isRenderableImageUrl(): Boolean {
+    return startsWith("http://") || startsWith("https://")
+}
+
+private fun String.isPresignedUrl(): Boolean {
+    return contains("X-Amz-Signature=")
+}
+
+private fun String.isLocalhostPresignedUrl(): Boolean {
+    return isPresignedUrl() &&
+        (startsWith("http://localhost:") || startsWith("http://127.0.0.1:"))
 }
 
 @Composable
