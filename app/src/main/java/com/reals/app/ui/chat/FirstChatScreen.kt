@@ -26,7 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ApiError
-import com.reals.app.core.network.toDisplayMessage
+import com.reals.app.core.network.ErrorContext
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatContinueDecision
 import com.reals.app.domain.model.ChatExitRequest
@@ -35,6 +35,10 @@ import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.Match
 import com.reals.app.domain.model.MatchState
+import com.reals.app.ui.common.ApiErrorFeedbackCard
+import com.reals.app.ui.common.FeedbackCard
+import com.reals.app.ui.common.FeedbackTone
+import com.reals.app.ui.common.userLabel
 import kotlinx.coroutines.delay
 
 @Composable
@@ -86,12 +90,12 @@ fun FirstChatScreen(
         verticalArrangement = Arrangement.Center,
     ) {
         Text(
-            text = "First chat",
+            text = "Chat",
             style = MaterialTheme.typography.headlineLarge,
             color = MaterialTheme.colorScheme.primary,
         )
         Text(
-            text = "Match: $matchId",
+            text = "Conversa unos minutos y decidi si queres continuar.",
             modifier = Modifier.padding(top = 8.dp),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -102,14 +106,11 @@ fun FirstChatScreen(
         ) {
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Estado", style = MaterialTheme.typography.titleLarge)
-                Text("Match state: ${match?.state?.rawValue ?: "cargando"}")
-                Text("Chat status: ${chat?.status?.rawValue ?: "cargando"}")
-                Text("Timeout: ${chat?.timeoutAt ?: "-"}")
-                Button(onClick = onRefresh, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (refreshing || loading) "Refrescando..." else "Refresh manual")
-                }
-                error?.let { ErrorText(it.toDisplayMessage()) }
-                message?.let { SuccessText(it) }
+                Text("Experiencia: ${match?.state?.userLabel() ?: "Cargando"}")
+                Text("Chat: ${chat?.status?.userLabel() ?: "Cargando"}")
+                Text("Disponible hasta: ${chat?.timeoutAt?.substringBefore("T") ?: "-"}")
+                error?.let { ApiErrorFeedbackCard(it, ErrorContext.Chat) }
+                message?.let { SuccessFeedback(it) }
             }
         }
         Spacer(modifier = Modifier.height(16.dp))
@@ -144,7 +145,7 @@ fun FirstChatScreen(
                 }
                 if (!canChat) {
                     Text(
-                        text = "El backend no reporta chat ACTIVE; envio bloqueado.",
+                        text = "Este chat no esta disponible para enviar mensajes en este momento.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -189,7 +190,7 @@ fun FirstChatScreen(
                 pendingPartnerExitRequests.forEach { request ->
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Solicitud de cancelacion pendiente: ${request.reason?.rawValue ?: "sin razon"}")
+                            Text("Solicitud de cancelacion: ${request.reason?.userLabel() ?: "Sin motivo indicado"}")
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Button(
                                     onClick = { onAcceptExitRequest(request.id) },
@@ -211,7 +212,7 @@ fun FirstChatScreen(
                 }
                 if (exitRequests.isNotEmpty()) {
                     Text(
-                        text = "Exit requests visibles: ${exitRequests.joinToString { "${it.type.rawValue}/${it.status.rawValue}" }}",
+                        text = "Solicitudes: ${exitRequests.joinToString { "${it.type.userLabel()} (${it.status.userLabel()})" }}",
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                     )
                 }
@@ -249,11 +250,6 @@ private fun MessagesCard(
 }
 
 @Composable
-private fun ErrorText(message: String) {
-    Text(text = message, color = MaterialTheme.colorScheme.error)
-}
-
-@Composable
-private fun SuccessText(message: String) {
-    Text(text = message, color = MaterialTheme.colorScheme.primary)
+private fun SuccessFeedback(message: String) {
+    FeedbackCard(title = "Listo", message = message, tone = FeedbackTone.Success)
 }

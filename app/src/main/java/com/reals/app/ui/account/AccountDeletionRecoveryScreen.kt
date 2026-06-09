@@ -14,9 +14,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ApiError
+import com.reals.app.core.network.ErrorContext
 import com.reals.app.core.network.isAccountDeletionFinalized
-import com.reals.app.core.network.toDisplayMessage
 import com.reals.app.domain.model.BackendUser
+import com.reals.app.ui.common.ApiErrorFeedbackCard
+import com.reals.app.ui.common.FeedbackCard
+import com.reals.app.ui.common.FeedbackTone
 
 @Composable
 fun AccountDeletionRecoveryScreen(
@@ -45,16 +48,20 @@ fun AccountDeletionRecoveryScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         error?.let {
-            Text(
-                text = if (it.isAccountDeletionFinalized()) {
-                    "La cuenta ya no puede recuperarse. Podes crear una cuenta nueva."
-                } else {
-                    it.toDisplayMessage()
-                },
-                modifier = Modifier.padding(top = 16.dp),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-            )
+            if (it.isAccountDeletionFinalized()) {
+                FeedbackCard(
+                    title = "La cuenta ya no puede recuperarse",
+                    message = "Podes crear una cuenta nueva.",
+                    tone = FeedbackTone.Error,
+                    modifier = Modifier.padding(top = 16.dp),
+                )
+            } else {
+                ApiErrorFeedbackCard(
+                    error = it,
+                    context = ErrorContext.Account,
+                    modifier = Modifier.padding(top = 16.dp),
+                )
+            }
         }
         Row(
             modifier = Modifier.padding(top = 24.dp),

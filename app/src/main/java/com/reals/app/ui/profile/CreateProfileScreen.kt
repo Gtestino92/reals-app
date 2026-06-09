@@ -1,4 +1,4 @@
-﻿package com.reals.app.ui.profile
+package com.reals.app.ui.profile
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,7 +30,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ApiError
-import com.reals.app.core.network.toDisplayMessage
+import com.reals.app.core.network.ErrorContext
+import com.reals.app.ui.common.ApiErrorFeedbackCard
+import com.reals.app.ui.common.FeedbackCard
+import com.reals.app.ui.common.FeedbackTone
 import com.reals.app.domain.model.CreateProfileInput
 
 @Composable
@@ -71,7 +74,7 @@ fun CreateProfileScreen(
             color = MaterialTheme.colorScheme.primary,
         )
         Text(
-            text = "Estos datos crean tu perfil en estado DRAFT. La activacion, fotos y matchmaking quedan para los siguientes pasos.",
+            text = "Completa tus datos principales. Despues vas a poder sumar fotos y activar tu perfil.",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -171,13 +174,15 @@ fun CreateProfileScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                val visibleError = localError ?: error?.toDisplayMessage()
-                if (visibleError != null) {
-                    Text(
-                        text = visibleError,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyMedium,
+                localError?.let {
+                    FeedbackCard(
+                        title = "Revisa los datos",
+                        message = it,
+                        tone = FeedbackTone.Error,
                     )
+                }
+                if (localError == null) {
+                    error?.let { ApiErrorFeedbackCard(it, ErrorContext.ProfileCreation) }
                 }
 
                 Button(
@@ -210,18 +215,11 @@ fun CreateProfileScreen(
             }
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(onClick = onRefresh, enabled = !busy) {
-                Text("Refrescar")
-            }
-            OutlinedButton(onClick = onSignOut, enabled = !busy) {
-                Text("Cerrar sesion")
-            }
-        }
         DeleteAccountSection(
             busy = busy,
             loading = accountDeleteLoading,
             error = accountDeleteError,
+            onSignOut = onSignOut,
             onDeleteAccount = onDeleteAccount,
         )
         Spacer(modifier = Modifier.height(16.dp))
