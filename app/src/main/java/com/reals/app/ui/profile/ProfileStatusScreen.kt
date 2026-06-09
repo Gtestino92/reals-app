@@ -386,8 +386,6 @@ private fun PhotoManagerActions(
 ) {
     var expanded by rememberSaveable(profile.id) { mutableStateOf(profile.status == ProfileStatus.Draft) }
     var positionText by rememberSaveable(profile.id) { mutableStateOf(((profile.photoCount + 1).coerceIn(1, 9)).toString()) }
-    var isPersonPhoto by rememberSaveable(profile.id) { mutableStateOf(false) }
-    var isFullBody by rememberSaveable(profile.id) { mutableStateOf(false) }
     var localError by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
     var replacePhotoId by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
     var replacePosition by rememberSaveable(profile.id) { mutableStateOf<Int?>(null) }
@@ -468,54 +466,10 @@ private fun PhotoManagerActions(
             ) {
                 Text(if (photoActionLoading) "Subiendo archivo..." else "Subir archivo a posicion")
             }
-            Text(
-                text = "Las marcas isPersonPhoto/isFullBody solo aplican al flujo mock por URL; el backend valida archivos por separado.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall,
-            )
-            CheckboxRow("isPersonPhoto", isPersonPhoto, !busy) { isPersonPhoto = it }
-            CheckboxRow("isFullBody", isFullBody, !busy) { isFullBody = it }
-            Text(
-                text = "URL add: ${previewGeneratedPhotoUrl(profile, positionText.toIntOrNull())}",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall,
-            )
             localError?.let { ErrorText(it) }
             photoActionMessage?.let { SuccessText(it) }
             photoActionError?.let { ErrorText(it.toDisplayMessage()) }
             activationError?.let { ErrorText(it.toDisplayMessage()) }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(
-                    onClick = {
-                        val position = positionText.toIntOrNull()
-                        if (position == null || position !in 1..9) {
-                            localError = "La posicion debe estar entre 1 y 9."
-                        } else {
-                            localError = null
-                            onAddMockPhoto(profile, position, isPersonPhoto, isFullBody)
-                        }
-                    },
-                    enabled = !busy,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text(if (photoActionLoading) "Guardando..." else "Agregar")
-                }
-                OutlinedButton(
-                    onClick = {
-                        val position = positionText.toIntOrNull()
-                        if (position == null || position !in 1..9) {
-                            localError = "La posicion debe estar entre 1 y 9."
-                        } else {
-                            localError = null
-                            onReplaceMockPhoto(profile, position, isPersonPhoto, isFullBody)
-                        }
-                    },
-                    enabled = !busy,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("Reemplazar")
-                }
-            }
             if (profile.status == ProfileStatus.Draft) {
                 OutlinedButton(onClick = { onActivateProfile(profile) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
                     Text(if (activationLoading) "Activando..." else "Intentar activar perfil")
