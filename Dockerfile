@@ -24,10 +24,10 @@ COPY app/build.gradle.kts app/build.gradle.kts
 RUN chmod +x ./gradlew
 
 RUN --mount=type=cache,target=/home/gradle/.gradle \
-    ./gradlew :app:dependencies --configuration debugRuntimeClasspath --no-daemon --console=plain
+    ./gradlew :app:dependencies --configuration localDebugRuntimeClasspath --no-daemon --console=plain
 
 COPY app app
 COPY docs docs
 
 RUN --mount=type=cache,target=/home/gradle/.gradle \
-    ./gradlew :app:assembleDebug --no-daemon --console=plain
+    ./gradlew :app:assembleLocalDebug --no-daemon --console=plain

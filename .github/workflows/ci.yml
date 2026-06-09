@@ -42,16 +42,16 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Validate Kotlin compilation
-        run: ./gradlew :app:compileDebugKotlin --no-daemon --console=plain
+        run: ./gradlew :app:compileLocalDebugKotlin --no-daemon --console=plain
 
-      - name: Build debug APK
-        run: ./gradlew :app:assembleDebug --no-daemon --console=plain
+      - name: Build local debug APK
+        run: ./gradlew :app:assembleLocalDebug --no-daemon --console=plain
 
-      - name: Upload debug APK
+      - name: Upload local debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: reals-app-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: reals-app-local-debug-apk
+          path: app/build/outputs/apk/local/debug/*.apk
           if-no-files-found: error
 
   docker-build:
@@ -76,14 +76,14 @@ jobs:
         run: |
           id="$(docker create reals-app:ci)"
           mkdir -p docker-artifacts
-          docker cp "$id:/workspace/app/build/outputs/apk/debug/." docker-artifacts/
+          docker cp "$id:/workspace/app/build/outputs/apk/local/debug/." docker-artifacts/
           docker rm "$id"
           ls -la docker-artifacts
 
       - name: Upload Docker-built APK
         uses: actions/upload-artifact@v4
         with:
-          name: reals-app-debug-apk-docker
+          name: reals-app-local-debug-apk-docker
           path: docker-artifacts/*.apk
           if-no-files-found: error
 
