@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,8 +32,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.toDisplayMessage
 import com.reals.app.domain.model.Profile
@@ -531,14 +534,32 @@ private fun PhotoRow(
 ) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Posicion ${photo.position} - person=${photo.isPersonPhoto}, fullBody=${photo.isFullBody}")
+            val displayUrl = photo.url.toEmulatorReachableUrl()
+            Text("Posicion ${photo.position}")
+            if (photo.url.isLocalhostPresignedUrl()) {
+                Text(
+                    text = "La URL firmada usa localhost. El emulador no puede resolverla y cambiar el host invalida la firma.",
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            } else if (displayUrl.isRenderableImageUrl()) {
+                AsyncImage(
+                    model = displayUrl,
+                    contentDescription = "Foto de perfil en posicion ${photo.position}",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1f),
+                )
+            } else {
+                Text(
+                    text = "Imagen almacenada sin URL publica de descarga.",
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             Text(
-                text = "Validacion: ${photo.validationStatus}",
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                style = MaterialTheme.typography.bodySmall,
-            )
-            Text(
-                text = photo.url,
+                text = "Estado: ${photo.validationStatus}",
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -550,6 +571,25 @@ private fun PhotoRow(
             }
         }
     }
+}
+
+private fun String.toEmulatorReachableUrl(): String {
+    if (isPresignedUrl()) return this
+    return replace("http://localhost:", "http://10.0.2.2:")
+        .replace("http://127.0.0.1:", "http://10.0.2.2:")
+}
+
+private fun String.isRenderableImageUrl(): Boolean {
+    return startsWith("http://") || startsWith("https://")
+}
+
+private fun String.isPresignedUrl(): Boolean {
+    return contains("X-Amz-Signature=")
+}
+
+private fun String.isLocalhostPresignedUrl(): Boolean {
+    return isPresignedUrl() &&
+        (startsWith("http://localhost:") || startsWith("http://127.0.0.1:"))
 }
 
 @Composable
