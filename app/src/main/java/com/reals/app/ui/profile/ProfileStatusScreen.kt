@@ -37,7 +37,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.reals.app.core.network.ApiError
-import com.reals.app.core.network.toDisplayMessage
+import com.reals.app.core.network.ErrorContext
+import com.reals.app.ui.common.ApiErrorFeedbackCard
+import com.reals.app.ui.common.FeedbackCard
+import com.reals.app.ui.common.FeedbackTone
+import com.reals.app.ui.common.photoValidationLabel
+import com.reals.app.ui.common.userDescription
+import com.reals.app.ui.common.userLabel
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.ProfileSnapshot
@@ -77,26 +83,28 @@ fun ProfileStatusScreen(
     onRefresh: () -> Unit,
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit,
+    onBackHome: (() -> Unit)? = null,
 ) {
     val busy = profileUpdateLoading ||
         matchFiltersLoading ||
         photoActionLoading ||
         activationLoading ||
         accountDeleteLoading
+    val scrollState = rememberScrollState()
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(24.dp),
         verticalArrangement = Arrangement.Center,
     ) {
         Text(
-            text = "Estado de Reals",
+            text = if (onBackHome == null) "Estado de Reals" else "Perfil y filtros",
             style = MaterialTheme.typography.headlineLarge,
             color = MaterialTheme.colorScheme.primary,
         )
         Text(
-            text = "Backend user: ${session.user.id}",
+            text = "Gestiona tu perfil, tus fotos y tus preferencias.",
             modifier = Modifier.padding(top = 8.dp),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -131,15 +139,14 @@ fun ProfileStatusScreen(
                 onActivateProfile = onActivateProfile,
             )
         }
-        Row(
-            modifier = Modifier.padding(top = 24.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Button(onClick = onRefresh, enabled = !busy) {
-                Text("Refrescar")
-            }
-            OutlinedButton(onClick = onSignOut, enabled = !busy) {
-                Text("Cerrar sesion")
+        if (onBackHome != null) {
+            Row(
+                modifier = Modifier.padding(top = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Button(onClick = onBackHome, enabled = !busy) {
+                    Text("Volver a Home")
+                }
             }
         }
 
@@ -149,6 +156,7 @@ fun ProfileStatusScreen(
             busy = busy,
             loading = accountDeleteLoading,
             error = accountDeleteError,
+            onSignOut = onSignOut,
             onDeleteAccount = onDeleteAccount,
         )
     }
@@ -205,6 +213,10 @@ private fun ProfileCard(
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
     onActivateProfile: (Profile) -> Unit,
 ) {
+    var expandedSection by rememberSaveable(profile.id) {
+        mutableStateOf(if (profile.status == ProfileStatus.Draft) ProfileSection.Photos else null)
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
@@ -214,7 +226,7 @@ private fun ProfileCard(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(text = profile.displayName, style = MaterialTheme.typography.titleLarge)
-            Text("Status backend: ${profile.status.rawValue} (${profile.status.label})")
+            Text("Estado: ${profile.status.userLabel()}")
             Text("Edad: ${profile.age}. Ubicacion: ${profile.city}, ${profile.country}")
             Text("Fotos: ${profile.photoCount}. Identidad verificada: ${yesNo(profile.identityVerified)}")
             Text("Filtros: ${profile.preferredMinAge}-${profile.preferredMaxAge} anos, ${profile.maxDistanceKm} km")
@@ -228,6 +240,10 @@ private fun ProfileCard(
                 loading = profileUpdateLoading,
                 error = profileUpdateError,
                 message = profileUpdateMessage,
+                expanded = expandedSection == ProfileSection.Profile,
+                onToggleExpanded = {
+                    expandedSection = if (expandedSection == ProfileSection.Profile) null else ProfileSection.Profile
+                },
                 onUpdateProfile = onUpdateProfile,
             )
             MatchFiltersActions(
@@ -235,6 +251,10 @@ private fun ProfileCard(
                 loading = matchFiltersLoading,
                 error = matchFiltersError,
                 message = matchFiltersMessage,
+                expanded = expandedSection == ProfileSection.Filters,
+                onToggleExpanded = {
+                    expandedSection = if (expandedSection == ProfileSection.Filters) null else ProfileSection.Filters
+                },
                 onUpdateMatchFilters = onUpdateMatchFilters,
             )
             PhotoManagerActions(
@@ -247,6 +267,10 @@ private fun ProfileCard(
                 photoActionMessage = photoActionMessage,
                 activationLoading = activationLoading,
                 activationError = activationError,
+                expanded = expandedSection == ProfileSection.Photos,
+                onToggleExpanded = {
+                    expandedSection = if (expandedSection == ProfileSection.Photos) null else ProfileSection.Photos
+                },
                 onLoadPhotos = onLoadPhotos,
                 onAddMockPhoto = onAddMockPhoto,
                 onAddPhotoFile = onAddPhotoFile,
@@ -259,15 +283,22 @@ private fun ProfileCard(
     }
 }
 
+private enum class ProfileSection {
+    Profile,
+    Filters,
+    Photos,
+}
+
 @Composable
 private fun ProfileEditActions(
     profile: Profile,
     loading: Boolean,
     error: ApiError?,
     message: String?,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
     onUpdateProfile: (UpdateProfileInput) -> Unit,
 ) {
-    var expanded by rememberSaveable(profile.id) { mutableStateOf(false) }
     var displayName by rememberSaveable(profile.id) { mutableStateOf(profile.displayName) }
     var bio by rememberSaveable(profile.id) { mutableStateOf(profile.bio.orEmpty()) }
     var city by rememberSaveable(profile.id) { mutableStateOf(profile.city) }
@@ -277,7 +308,7 @@ private fun ProfileEditActions(
     var localError by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
 
     Column(modifier = Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        OutlinedButton(onClick = { expanded = !expanded }, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = onToggleExpanded, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
             Text(if (expanded) "Ocultar edicion de perfil" else "Editar perfil")
         }
         if (expanded) {
@@ -292,9 +323,9 @@ private fun ProfileEditActions(
             OutlinedTextField(country, { country = it }, label = { Text("Pais") }, enabled = !loading, singleLine = true, modifier = Modifier.fillMaxWidth())
             EnumDropdown("Intencion", intention, listOf("DATE", "FRIENDSHIP", "CASUAL"), !loading) { intention = it }
             EnumDropdown("Busco", lookingForGender, listOf("MEN", "WOMEN", "EVERYONE", "OTHER"), !loading) { lookingForGender = it }
-            localError?.let { ErrorText(it) }
-            error?.let { ErrorText(it.toDisplayMessage()) }
-            message?.let { SuccessText(it) }
+            localError?.let { ErrorFeedback("Revisa los datos", it) }
+            error?.let { ApiErrorFeedbackCard(it, ErrorContext.ProfileUpdate) }
+            message?.let { SuccessFeedback(it) }
             Button(
                 onClick = {
                     val input = validateUpdateProfileInput(displayName, bio, city, country, intention, lookingForGender)
@@ -320,21 +351,22 @@ private fun MatchFiltersActions(
     loading: Boolean,
     error: ApiError?,
     message: String?,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
     onUpdateMatchFilters: (UpdateMatchFiltersInput) -> Unit,
 ) {
-    var expanded by rememberSaveable(profile.id) { mutableStateOf(false) }
     var minAge by rememberSaveable(profile.id) { mutableStateOf(profile.preferredMinAge.toString()) }
     var maxAge by rememberSaveable(profile.id) { mutableStateOf(profile.preferredMaxAge.toString()) }
     var distance by rememberSaveable(profile.id) { mutableStateOf(profile.maxDistanceKm.toString()) }
     var localError by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
 
     Column(modifier = Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        OutlinedButton(onClick = { expanded = !expanded }, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = onToggleExpanded, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
             Text(if (expanded) "Ocultar filtros" else "Editar filtros de match")
         }
         if (expanded) {
             Text(
-                text = "Estos filtros se usan para matchmaking. El backend valida rangos y consistencia.",
+                text = "Estas preferencias nos ayudan a encontrar personas compatibles para vos.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -343,9 +375,9 @@ private fun MatchFiltersActions(
                 NumberField(maxAge, { maxAge = it }, "Edad max", !loading, Modifier.weight(1f))
             }
             NumberField(distance, { distance = it }, "Distancia maxima km", !loading, Modifier.fillMaxWidth())
-            localError?.let { ErrorText(it) }
-            error?.let { ErrorText(it.toDisplayMessage()) }
-            message?.let { SuccessText(it) }
+            localError?.let { ErrorFeedback("Revisa los filtros", it) }
+            error?.let { ApiErrorFeedbackCard(it, ErrorContext.MatchFilters) }
+            message?.let { SuccessFeedback(it) }
             Button(
                 onClick = {
                     val input = validateMatchFiltersInput(minAge, maxAge, distance)
@@ -376,6 +408,8 @@ private fun PhotoManagerActions(
     photoActionMessage: String?,
     activationLoading: Boolean,
     activationError: ApiError?,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
     onLoadPhotos: () -> Unit,
     onAddMockPhoto: (profile: Profile, position: Int, isPersonPhoto: Boolean, isFullBody: Boolean) -> Unit,
     onAddPhotoFile: (position: Int, fileUri: Uri) -> Unit,
@@ -384,7 +418,6 @@ private fun PhotoManagerActions(
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
     onActivateProfile: (Profile) -> Unit,
 ) {
-    var expanded by rememberSaveable(profile.id) { mutableStateOf(profile.status == ProfileStatus.Draft) }
     var positionText by rememberSaveable(profile.id) { mutableStateOf(((profile.photoCount + 1).coerceIn(1, 9)).toString()) }
     var localError by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
     var replacePhotoId by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
@@ -413,19 +446,21 @@ private fun PhotoManagerActions(
     val busy = photosLoading || photoActionLoading || activationLoading
 
     Column(modifier = Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        OutlinedButton(onClick = { expanded = !expanded }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = onToggleExpanded, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
             Text(if (expanded) "Ocultar fotos" else "Administrar fotos")
         }
         if (expanded) {
             Text(
-                text = "Lista, sube archivos, reemplaza o borra fotos. Mutar fotos puede volver un perfil activo a DRAFT.",
+                text = "Subi, reemplaza o borra fotos. Si cambias fotos importantes, puede que tengamos que revisar tu perfil otra vez.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
-            Button(onClick = onLoadPhotos, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                Text(if (photosLoading) "Cargando fotos..." else "Refrescar fotos")
+            photosError?.let {
+                ApiErrorFeedbackCard(it, ErrorContext.PhotoUpload)
+                OutlinedButton(onClick = onLoadPhotos, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (photosLoading) "Cargando fotos..." else "Reintentar carga de fotos")
+                }
             }
-            photosError?.let { ErrorText(it.toDisplayMessage()) }
             if (photos.isEmpty()) {
                 Text("No hay fotos cargadas.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
@@ -466,10 +501,10 @@ private fun PhotoManagerActions(
             ) {
                 Text(if (photoActionLoading) "Subiendo archivo..." else "Subir archivo a posicion")
             }
-            localError?.let { ErrorText(it) }
-            photoActionMessage?.let { SuccessText(it) }
-            photoActionError?.let { ErrorText(it.toDisplayMessage()) }
-            activationError?.let { ErrorText(it.toDisplayMessage()) }
+            localError?.let { ErrorFeedback("Revisa la posicion", it) }
+            photoActionMessage?.let { SuccessFeedback(it) }
+            photoActionError?.let { ApiErrorFeedbackCard(it, ErrorContext.PhotoUpload) }
+            activationError?.let { ApiErrorFeedbackCard(it, ErrorContext.ProfileActivation) }
             if (profile.status == ProfileStatus.Draft) {
                 OutlinedButton(onClick = { onActivateProfile(profile) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
                     Text(if (activationLoading) "Activando..." else "Intentar activar perfil")
@@ -513,7 +548,7 @@ private fun PhotoRow(
                 )
             }
             Text(
-                text = "Estado: ${photo.validationStatus}",
+                text = "Estado: ${photoValidationLabel(photo.validationStatus)}",
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -579,20 +614,17 @@ private fun NumberField(
 }
 
 @Composable
-private fun ErrorText(message: String) {
-    Text(text = message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+private fun ErrorFeedback(title: String, message: String) {
+    FeedbackCard(title = title, message = message, tone = FeedbackTone.Error)
 }
 
 @Composable
-private fun SuccessText(message: String) {
-    Text(text = message, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium)
+private fun SuccessFeedback(message: String) {
+    FeedbackCard(title = "Listo", message = message, tone = FeedbackTone.Success)
 }
 
 private fun profileNextStep(status: ProfileStatus): String = when (status) {
-    ProfileStatus.Active -> "Perfil activo. Ya estas listo para matchmaking; antes podes ajustar perfil, filtros y fotos."
-    ProfileStatus.Draft -> "Perfil en borrador. Agrega fotos mock o intenta activar para ver la validacion del backend."
-    ProfileStatus.Inactive -> "Perfil inactivo segun backend. Acciones bloqueadas hasta definir reactivacion."
-    is ProfileStatus.Unknown -> "Estado no reconocido: ${status.rawValue}. Acciones sensibles bloqueadas."
+    else -> status.userDescription()
 }
 
 private fun previewGeneratedPhotoUrl(profile: Profile, position: Int?): String {

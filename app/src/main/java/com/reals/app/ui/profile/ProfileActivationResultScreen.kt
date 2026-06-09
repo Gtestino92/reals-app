@@ -1,4 +1,4 @@
-﻿package com.reals.app.ui.profile
+package com.reals.app.ui.profile
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -21,12 +21,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.reals.app.domain.model.ProfileActivationResult
 import com.reals.app.domain.model.ProvisionedSession
+import com.reals.app.ui.common.userLabel
 
 @Composable
 fun ProfileActivationResultScreen(
     session: ProvisionedSession,
     result: ProfileActivationResult,
-    onRefresh: () -> Unit,
+    onContinueHome: () -> Unit,
     onSignOut: () -> Unit,
 ) {
     Column(
@@ -37,12 +38,12 @@ fun ProfileActivationResultScreen(
         verticalArrangement = Arrangement.Center,
     ) {
         Text(
-            text = "Perfil activado",
+            text = "Tu perfil esta activo",
             style = MaterialTheme.typography.headlineLarge,
             color = MaterialTheme.colorScheme.primary,
         )
         Text(
-            text = "El backend acepto las fotos generadas y movio el perfil al estado ${result.profile.status.rawValue}.",
+            text = "Ya podes entrar a Home y buscar un chat cuando quieras.",
             modifier = Modifier.padding(top = 8.dp),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -56,26 +57,17 @@ fun ProfileActivationResultScreen(
                 modifier = Modifier.padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text("Usuario backend: ${session.user.id}")
-                Text("Perfil: ${result.profile.id}")
-                Text("Status: ${result.profile.status.rawValue} (${result.profile.status.label})")
+                Text("Estado: ${result.profile.status.userLabel()}")
                 Text("Fotos totales: ${result.totalPhotoCount}")
-                Text("Las fotos se agregaron manualmente antes de activar.")
-                result.generatedUrls.firstOrNull()?.let { firstUrl ->
-                    Text(
-                        text = "Primera URL generada: $firstUrl",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
+                Text("Tus fotos quedaron guardadas. Si mas adelante las cambias, puede que revisemos tu perfil otra vez.")
             }
         }
         Row(
             modifier = Modifier.padding(top = 24.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Button(onClick = onRefresh) {
-                Text("Ver estado")
+            Button(onClick = onContinueHome) {
+                Text("Ir a Home")
             }
             OutlinedButton(onClick = onSignOut) {
                 Text("Cerrar sesion")

@@ -1,0 +1,80 @@
+package com.reals.app.domain.usecase
+
+import com.reals.app.core.network.ApiResult
+import com.reals.app.data.repository.ChatRepository
+import com.reals.app.domain.model.Chat
+import com.reals.app.domain.model.ChatExitOutcome
+import com.reals.app.domain.model.ChatExitReason
+import com.reals.app.domain.model.ChatExitRequest
+import com.reals.app.domain.model.ChatMessage
+
+class GetChatUseCase(
+    private val chatRepository: ChatRepository,
+) {
+    suspend operator fun invoke(chatId: String): ApiResult<Chat> =
+        chatRepository.getChat(chatId)
+}
+
+class GetChatMessagesUseCase(
+    private val chatRepository: ChatRepository,
+) {
+    suspend operator fun invoke(chatId: String): ApiResult<List<ChatMessage>> =
+        chatRepository.getMessages(chatId)
+}
+
+class SendChatMessageUseCase(
+    private val chatRepository: ChatRepository,
+) {
+    suspend operator fun invoke(chatId: String, content: String): ApiResult<ChatMessage> =
+        chatRepository.sendMessage(chatId, content)
+}
+
+class GetChatExitRequestsUseCase(
+    private val chatRepository: ChatRepository,
+) {
+    suspend operator fun invoke(chatId: String): ApiResult<List<ChatExitRequest>> =
+        chatRepository.getExitRequests(chatId)
+}
+
+class RequestMutualChatExitUseCase(
+    private val chatRepository: ChatRepository,
+) {
+    suspend operator fun invoke(
+        chatId: String,
+        reason: ChatExitReason?,
+        details: String?,
+    ): ApiResult<ChatExitRequest> =
+        chatRepository.requestMutualExit(chatId, reason, details)
+}
+
+class AcceptChatExitRequestUseCase(
+    private val chatRepository: ChatRepository,
+) {
+    suspend operator fun invoke(chatId: String, exitRequestId: String): ApiResult<ChatExitOutcome> =
+        chatRepository.acceptExitRequest(chatId, exitRequestId)
+}
+
+class RejectChatExitRequestUseCase(
+    private val chatRepository: ChatRepository,
+) {
+    suspend operator fun invoke(chatId: String, exitRequestId: String): ApiResult<ChatExitRequest> =
+        chatRepository.rejectExitRequest(chatId, exitRequestId)
+}
+
+class CancelChatUseCase(
+    private val chatRepository: ChatRepository,
+) {
+    suspend operator fun invoke(
+        chatId: String,
+        reason: ChatExitReason?,
+        details: String?,
+    ): ApiResult<ChatExitOutcome> =
+        chatRepository.cancelChat(chatId, reason, details)
+}
+
+class SafetyCancelChatUseCase(
+    private val chatRepository: ChatRepository,
+) {
+    suspend operator fun invoke(chatId: String, reason: ChatExitReason, details: String): ApiResult<ChatExitOutcome> =
+        chatRepository.safetyCancelChat(chatId, reason, details)
+}

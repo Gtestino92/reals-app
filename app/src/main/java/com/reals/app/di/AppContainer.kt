@@ -6,20 +6,39 @@ import com.reals.app.core.firebase.FirebaseAuthTokenProvider
 import com.reals.app.core.network.ApiExecutor
 import com.reals.app.data.api.RealsApiClient
 import com.reals.app.data.repository.FirebaseAuthRepository
+import com.reals.app.data.repository.ChatRepository
+import com.reals.app.data.repository.MatchRepository
+import com.reals.app.data.repository.MatchmakingRepository
 import com.reals.app.data.repository.MeRepository
 import com.reals.app.data.repository.ProfileRepository
+import com.reals.app.domain.usecase.AcceptChatExitRequestUseCase
 import com.reals.app.domain.usecase.ActivateProfileUseCase
 import com.reals.app.domain.usecase.AddMockProfilePhotoUseCase
 import com.reals.app.domain.usecase.AddProfilePhotoFileUseCase
+import com.reals.app.domain.usecase.CancelChatUseCase
 import com.reals.app.domain.usecase.CreateProfileUseCase
 import com.reals.app.domain.usecase.DeleteAccountUseCase
 import com.reals.app.domain.usecase.DeleteProfilePhotoUseCase
+import com.reals.app.domain.usecase.EnqueueMatchmakingUseCase
+import com.reals.app.domain.usecase.GetChatExitRequestsUseCase
+import com.reals.app.domain.usecase.GetChatMessagesUseCase
+import com.reals.app.domain.usecase.GetChatUseCase
+import com.reals.app.domain.usecase.GetFirstChatForMatchUseCase
+import com.reals.app.domain.usecase.GetHomeUseCase
+import com.reals.app.domain.usecase.GetMatchUseCase
 import com.reals.app.domain.usecase.GetMeUseCase
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
+import com.reals.app.domain.usecase.GetQueueStatusUseCase
+import com.reals.app.domain.usecase.LeaveQueueUseCase
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
 import com.reals.app.domain.usecase.ReactivateAccountUseCase
+import com.reals.app.domain.usecase.RejectChatExitRequestUseCase
 import com.reals.app.domain.usecase.ReplaceMockProfilePhotoUseCase
 import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
+import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
+import com.reals.app.domain.usecase.SafetyCancelChatUseCase
+import com.reals.app.domain.usecase.SendChatMessageUseCase
+import com.reals.app.domain.usecase.SubmitChatDecisionUseCase
 import com.reals.app.domain.usecase.UpdateMatchFiltersUseCase
 import com.reals.app.domain.usecase.UpdateProfileUseCase
 import kotlinx.serialization.json.Json
@@ -37,6 +56,9 @@ class AppContainer(context: Context) {
     val authRepository = FirebaseAuthRepository(appContext)
     private val meRepository = MeRepository(api, tokenProvider, apiExecutor)
     private val profileRepository = ProfileRepository(appContext, api, tokenProvider, apiExecutor)
+    private val matchmakingRepository = MatchmakingRepository(api, tokenProvider, apiExecutor)
+    private val matchRepository = MatchRepository(api, tokenProvider, apiExecutor)
+    private val chatRepository = ChatRepository(api, tokenProvider, apiExecutor)
     val provisionAndLoadProfileUseCase = ProvisionAndLoadProfileUseCase(
         meRepository = meRepository,
         profileRepository = profileRepository,
@@ -45,6 +67,7 @@ class AppContainer(context: Context) {
     val updateProfileUseCase = UpdateProfileUseCase(profileRepository)
     val updateMatchFiltersUseCase = UpdateMatchFiltersUseCase(profileRepository)
     val getMeUseCase = GetMeUseCase(meRepository)
+    val getHomeUseCase = GetHomeUseCase(meRepository)
     val getProfilePhotosUseCase = GetProfilePhotosUseCase(profileRepository)
     val addMockProfilePhotoUseCase = AddMockProfilePhotoUseCase(profileRepository)
     val addProfilePhotoFileUseCase = AddProfilePhotoFileUseCase(profileRepository)
@@ -54,4 +77,19 @@ class AppContainer(context: Context) {
     val activateProfileUseCase = ActivateProfileUseCase(profileRepository)
     val reactivateAccountUseCase = ReactivateAccountUseCase(meRepository)
     val deleteAccountUseCase = DeleteAccountUseCase(meRepository, authRepository)
+    val enqueueMatchmakingUseCase = EnqueueMatchmakingUseCase(matchmakingRepository)
+    val getQueueStatusUseCase = GetQueueStatusUseCase(matchmakingRepository)
+    val leaveQueueUseCase = LeaveQueueUseCase(matchmakingRepository)
+    val getMatchUseCase = GetMatchUseCase(matchRepository)
+    val getFirstChatForMatchUseCase = GetFirstChatForMatchUseCase(matchRepository)
+    val submitChatDecisionUseCase = SubmitChatDecisionUseCase(matchRepository)
+    val getChatUseCase = GetChatUseCase(chatRepository)
+    val getChatMessagesUseCase = GetChatMessagesUseCase(chatRepository)
+    val sendChatMessageUseCase = SendChatMessageUseCase(chatRepository)
+    val getChatExitRequestsUseCase = GetChatExitRequestsUseCase(chatRepository)
+    val requestMutualChatExitUseCase = RequestMutualChatExitUseCase(chatRepository)
+    val acceptChatExitRequestUseCase = AcceptChatExitRequestUseCase(chatRepository)
+    val rejectChatExitRequestUseCase = RejectChatExitRequestUseCase(chatRepository)
+    val cancelChatUseCase = CancelChatUseCase(chatRepository)
+    val safetyCancelChatUseCase = SafetyCancelChatUseCase(chatRepository)
 }
