@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
+import com.reals.app.core.security.TextSafety
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatContinueDecision
 import com.reals.app.domain.model.ChatExitRequest
@@ -127,7 +128,7 @@ fun FirstChatScreen(
                 Text("Enviar mensaje", style = MaterialTheme.typography.titleMedium)
                 OutlinedTextField(
                     value = draft,
-                    onValueChange = { draft = it },
+                    onValueChange = { draft = it.take(1_000) },
                     label = { Text("Mensaje") },
                     enabled = !busy && canChat,
                     minLines = 2,
@@ -174,7 +175,7 @@ fun FirstChatScreen(
                 }
                 OutlinedTextField(
                     value = safetyDetails,
-                    onValueChange = { safetyDetails = it },
+                    onValueChange = { safetyDetails = it.take(1_000) },
                     label = { Text("Detalle reporte seguridad") },
                     enabled = !busy && canChat,
                     minLines = 2,
@@ -242,7 +243,7 @@ private fun MessagesCard(
                 messages.sortedBy { it.sentAt }.forEach { item ->
                     val sender = if (item.senderId == currentUserId) "Yo" else "Partner"
                     Text("$sender - ${item.sentAt}")
-                    Text(item.content)
+                    Text(TextSafety.safeDisplay(item.content))
                 }
             }
         }

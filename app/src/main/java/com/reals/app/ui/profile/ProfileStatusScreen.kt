@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
+import com.reals.app.core.security.TextSafety
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
@@ -225,11 +226,18 @@ private fun ProfileCard(
             modifier = Modifier.padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(text = profile.displayName, style = MaterialTheme.typography.titleLarge)
+            Text(text = TextSafety.safeDisplay(profile.displayName, maxLength = 100), style = MaterialTheme.typography.titleLarge)
             Text("Estado: ${profile.status.userLabel()}")
-            Text("Edad: ${profile.age}. Ubicacion: ${profile.city}, ${profile.country}")
+            Text(
+                "Edad: ${profile.age}. Ubicacion: ${
+                    TextSafety.safeDisplay(profile.city, maxLength = 100)
+                }, ${TextSafety.safeDisplay(profile.country, maxLength = 100)}"
+            )
             Text("Fotos: ${profile.photoCount}. Identidad verificada: ${yesNo(profile.identityVerified)}")
             Text("Filtros: ${profile.preferredMinAge}-${profile.preferredMaxAge} anos, ${profile.maxDistanceKm} km")
+            profile.bio?.takeIf { it.isNotBlank() }?.let {
+                Text(TextSafety.safeDisplay(it, maxLength = 1_000))
+            }
             Text(
                 text = profileNextStep(profile.status),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -317,10 +325,10 @@ private fun ProfileEditActions(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
-            OutlinedTextField(displayName, { displayName = it }, label = { Text("Nombre visible") }, enabled = !loading, singleLine = true, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(bio, { bio = it }, label = { Text("Bio") }, enabled = !loading, minLines = 3, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(city, { city = it }, label = { Text("Ciudad") }, enabled = !loading, singleLine = true, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(country, { country = it }, label = { Text("Pais") }, enabled = !loading, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(displayName, { displayName = it.take(100) }, label = { Text("Nombre visible") }, enabled = !loading, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(bio, { bio = it.take(1_000) }, label = { Text("Bio") }, enabled = !loading, minLines = 3, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(city, { city = it.take(100) }, label = { Text("Ciudad") }, enabled = !loading, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(country, { country = it.take(100) }, label = { Text("Pais") }, enabled = !loading, singleLine = true, modifier = Modifier.fillMaxWidth())
             EnumDropdown("Intencion", intention, listOf("DATE", "FRIENDSHIP", "CASUAL"), !loading) { intention = it }
             EnumDropdown("Busco", lookingForGender, listOf("MEN", "WOMEN", "EVERYONE", "OTHER"), !loading) { lookingForGender = it }
             localError?.let { ErrorFeedback("Revisa los datos", it) }
@@ -330,7 +338,7 @@ private fun ProfileEditActions(
                 onClick = {
                     val input = validateUpdateProfileInput(displayName, bio, city, country, intention, lookingForGender)
                     if (input == null) {
-                        localError = "Revisa nombre, ciudad, pais y bio. Nombre minimo 2 caracteres; bio maximo 1000."
+                        localError = "Revisa nombre, ciudad, pais y bio. No uses etiquetas o formato HTML."
                     } else {
                         localError = null
                         onUpdateProfile(input)
@@ -669,15 +677,19 @@ private fun validateUpdateProfileInput(
     intention: String,
     lookingForGender: String,
 ): UpdateProfileInput? {
-    val cleanDisplayName = displayName.trim()
-    val cleanBio = bio.trim()
-    val cleanCity = city.trim()
-    val cleanCountry = country.trim()
+    val cleanDisplayName = TextSafety.normalizeSingleLine(displayName, maxLength = 100)
+    val cleanBio = TextSafety.normalizeMultiline(bio, maxLength = 1_000)
+    val cleanCity = TextSafety.normalizeSingleLine(city, maxLength = 100)
+    val cleanCountry = TextSafety.normalizeSingleLine(country, maxLength = 100)
 
     if (cleanDisplayName.length !in 2..100) return null
     if (cleanBio.length > 1000) return null
     if (cleanCity.isBlank() || cleanCity.length > 100) return null
     if (cleanCountry.isBlank() || cleanCountry.length > 100) return null
+    if (TextSafety.containsHtmlLikeMarkup(cleanDisplayName)) return null
+    if (TextSafety.containsHtmlLikeMarkup(cleanBio)) return null
+    if (TextSafety.containsHtmlLikeMarkup(cleanCity)) return null
+    if (TextSafety.containsHtmlLikeMarkup(cleanCountry)) return null
     if (intention !in listOf("DATE", "FRIENDSHIP", "CASUAL")) return null
     if (lookingForGender !in listOf("MEN", "WOMEN", "EVERYONE", "OTHER")) return null
 

@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ApiResult
 import com.reals.app.core.network.isAccountDeleted
+import com.reals.app.core.security.TextSafety
 import com.reals.app.data.repository.AuthOperationResult
 import com.reals.app.data.repository.FirebaseAuthRepository
 import com.reals.app.di.AppContainer
@@ -425,10 +426,10 @@ class RealsRootViewModel(
     fun sendFirstChatMessage(content: String) {
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
         val chat = current.chat ?: return
-        val cleanContent = content.trim()
-        if (cleanContent.isBlank()) {
+        val cleanContent = TextSafety.normalizeMultiline(content, maxLength = 1_000)
+        if (cleanContent.isBlank() || TextSafety.containsHtmlLikeMarkup(cleanContent)) {
             _uiState.value = current.copy(
-                error = ApiError.Unexpected("Escribi un mensaje antes de enviarlo."),
+                error = ApiError.Unexpected("El mensaje no es valido."),
                 message = null,
             )
             return
@@ -490,11 +491,11 @@ class RealsRootViewModel(
     }
 
     fun safetyCancelChat(details: String) {
-        val cleanDetails = details.trim()
-        if (cleanDetails.isBlank()) {
+        val cleanDetails = TextSafety.normalizeMultiline(details, maxLength = 1_000)
+        if (cleanDetails.isBlank() || TextSafety.containsHtmlLikeMarkup(cleanDetails)) {
             val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
             _uiState.value = current.copy(
-                error = ApiError.Unexpected("El reporte de seguridad requiere detalle."),
+                error = ApiError.Unexpected("El detalle del reporte no es valido."),
                 message = null,
             )
             return
