@@ -31,6 +31,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
+import com.reals.app.core.security.TextSafety
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
@@ -88,7 +89,7 @@ fun CreateProfileScreen(
             ) {
                 OutlinedTextField(
                     value = displayName,
-                    onValueChange = { displayName = it },
+                    onValueChange = { displayName = it.take(100) },
                     label = { Text("Nombre visible") },
                     enabled = !busy,
                     singleLine = true,
@@ -127,7 +128,7 @@ fun CreateProfileScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = city,
-                        onValueChange = { city = it },
+                        onValueChange = { city = it.take(100) },
                         label = { Text("Ciudad") },
                         enabled = !busy,
                         singleLine = true,
@@ -135,7 +136,7 @@ fun CreateProfileScreen(
                     )
                     OutlinedTextField(
                         value = country,
-                        onValueChange = { country = it },
+                        onValueChange = { country = it.take(100) },
                         label = { Text("Pais") },
                         enabled = !busy,
                         singleLine = true,
@@ -144,7 +145,7 @@ fun CreateProfileScreen(
                 }
                 OutlinedTextField(
                     value = bio,
-                    onValueChange = { bio = it },
+                    onValueChange = { bio = it.take(1_000) },
                     label = { Text("Bio opcional") },
                     enabled = !busy,
                     minLines = 3,
@@ -203,7 +204,7 @@ fun CreateProfileScreen(
                             maxDistanceKm = maxDistanceKm,
                         )
                         if (input == null) {
-                            localError = "Revisa los campos: nombre, fecha, ciudad, pais, edades y distancia son requeridos."
+                            localError = "Revisa los campos. No uses etiquetas o formato HTML; nombre, fecha, ciudad, pais, edades y distancia son requeridos."
                         } else {
                             localError = null
                             onSubmit(input)
@@ -297,22 +298,32 @@ private fun validateProfileInput(
     val distance = maxDistanceKm.toIntOrNull()
     val birthDatePattern = Regex("^\\d{4}-\\d{2}-\\d{2}$")
 
-    if (displayName.trim().length < 2) return null
-    if (!birthDatePattern.matches(birthDate.trim())) return null
-    if (city.trim().isBlank() || country.trim().isBlank()) return null
+    val cleanDisplayName = TextSafety.normalizeSingleLine(displayName, maxLength = 100)
+    val cleanBirthDate = birthDate.trim()
+    val cleanCity = TextSafety.normalizeSingleLine(city, maxLength = 100)
+    val cleanCountry = TextSafety.normalizeSingleLine(country, maxLength = 100)
+    val cleanBio = TextSafety.normalizeMultiline(bio, maxLength = 1_000)
+
+    if (cleanDisplayName.length < 2) return null
+    if (!birthDatePattern.matches(cleanBirthDate)) return null
+    if (cleanCity.isBlank() || cleanCountry.isBlank()) return null
+    if (TextSafety.containsHtmlLikeMarkup(cleanDisplayName)) return null
+    if (TextSafety.containsHtmlLikeMarkup(cleanCity)) return null
+    if (TextSafety.containsHtmlLikeMarkup(cleanCountry)) return null
+    if (TextSafety.containsHtmlLikeMarkup(cleanBio)) return null
     if (minAge == null || maxAge == null || distance == null) return null
     if (minAge !in 18..99 || maxAge !in 18..99 || minAge > maxAge) return null
     if (distance !in 1..1000) return null
 
     return CreateProfileInput(
-        displayName = displayName.trim(),
-        birthDate = birthDate.trim(),
+        displayName = cleanDisplayName,
+        birthDate = cleanBirthDate,
         gender = gender,
         lookingForGender = lookingForGender,
         intention = intention,
-        city = city.trim(),
-        country = country.trim(),
-        bio = bio.trim().ifBlank { null },
+        city = cleanCity,
+        country = cleanCountry,
+        bio = cleanBio.ifBlank { null },
         preferredMinAge = minAge,
         preferredMaxAge = maxAge,
         maxDistanceKm = distance,
