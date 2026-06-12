@@ -6,10 +6,14 @@ import com.reals.app.core.network.map
 import com.reals.app.data.api.AuthTokenProvider
 import com.reals.app.data.api.RealsApi
 import com.reals.app.data.dto.ChatDecisionRequestDto
+import com.reals.app.data.dto.PersonalMessageRequestDto
+import com.reals.app.data.dto.VisualDecisionRequestDto
 import com.reals.app.data.mapper.toDomain
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatContinueDecision
 import com.reals.app.domain.model.Match
+import com.reals.app.domain.model.VisualDecision
+import com.reals.app.domain.model.VisualProfile
 
 class MatchRepository(
     private val api: RealsApi,
@@ -35,4 +39,33 @@ class MatchRepository(
                 body = ChatDecisionRequestDto(decision.backendValue),
             )
         }.map { it.toDomain() }
+
+    suspend fun getVisualProfile(matchId: String): ApiResult<VisualProfile> =
+        authorizedCall { authorization -> api.getVisualProfile(authorization, matchId) }
+            .map { it.toDomain() }
+
+    suspend fun submitVisualDecision(
+        matchId: String,
+        decision: VisualDecision,
+    ): ApiResult<Match> =
+        authorizedCall { authorization ->
+            api.submitVisualDecision(
+                authorization = authorization,
+                matchId = matchId,
+                body = VisualDecisionRequestDto(decision.backendValue),
+            )
+        }.map { it.toDomain() }
+
+    suspend fun putMyPersonalMessage(matchId: String, message: String): ApiResult<Unit> =
+        authorizedUnitCall { authorization ->
+            api.putMyPersonalMessage(
+                authorization = authorization,
+                matchId = matchId,
+                body = PersonalMessageRequestDto(message),
+            )
+        }
+
+    suspend fun getPartnerPersonalMessage(matchId: String): ApiResult<String?> =
+        authorizedCall { authorization -> api.getPartnerPersonalMessage(authorization, matchId) }
+            .map { it.message }
 }

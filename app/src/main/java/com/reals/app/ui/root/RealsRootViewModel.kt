@@ -15,10 +15,13 @@ import com.reals.app.domain.model.BackendUser
 import com.reals.app.domain.model.BackendUserStatus
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatContinueDecision
+import com.reals.app.domain.model.ChatDecisionState
+import com.reals.app.domain.model.ChatExitOutcome
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.ConnectionState
 import com.reals.app.domain.model.Match
 import com.reals.app.domain.model.CreateProfileInput
@@ -34,6 +37,8 @@ import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.SearchLocationInput
 import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.UpdateProfileInput
+import com.reals.app.domain.model.VisualDecision
+import com.reals.app.domain.model.VisualProfile
 import com.reals.app.domain.usecase.AcceptChatExitRequestUseCase
 import com.reals.app.domain.usecase.ActivateProfileUseCase
 import com.reals.app.domain.usecase.AddMockProfilePhotoUseCase
@@ -45,14 +50,16 @@ import com.reals.app.domain.usecase.DeleteProfilePhotoUseCase
 import com.reals.app.domain.usecase.EnqueueMatchmakingUseCase
 import com.reals.app.domain.usecase.GetChatExitRequestsUseCase
 import com.reals.app.domain.usecase.GetChatMessagesUseCase
-import com.reals.app.domain.usecase.GetChatUseCase
 import com.reals.app.domain.usecase.GetFirstChatForMatchUseCase
 import com.reals.app.domain.usecase.GetHomeUseCase
 import com.reals.app.domain.usecase.GetMatchUseCase
 import com.reals.app.domain.usecase.GetMeUseCase
+import com.reals.app.domain.usecase.GetPartnerPersonalMessageUseCase
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
+import com.reals.app.domain.usecase.GetVisualProfileUseCase
 import com.reals.app.domain.usecase.LeaveQueueUseCase
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
+import com.reals.app.domain.usecase.PutMyPersonalMessageUseCase
 import com.reals.app.domain.usecase.ReactivateAccountUseCase
 import com.reals.app.domain.usecase.RejectChatExitRequestUseCase
 import com.reals.app.domain.usecase.ReplaceMockProfilePhotoUseCase
@@ -61,6 +68,7 @@ import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
 import com.reals.app.domain.usecase.SafetyCancelChatUseCase
 import com.reals.app.domain.usecase.SendChatMessageUseCase
 import com.reals.app.domain.usecase.SubmitChatDecisionUseCase
+import com.reals.app.domain.usecase.SubmitVisualDecisionUseCase
 import com.reals.app.domain.usecase.UpdateMatchFiltersUseCase
 import com.reals.app.domain.usecase.UpdateProfileUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -122,6 +130,20 @@ sealed interface RealsRootUiState {
         val error: ApiError? = null,
         val message: String? = null,
     ) : RealsRootUiState
+    data class VisualApproval(
+        val session: ProvisionedSession,
+        val matchId: String,
+        val match: Match? = null,
+        val profile: VisualProfile? = null,
+        val partnerMessage: String? = null,
+        val partnerMessageLoaded: Boolean = false,
+        val loading: Boolean = false,
+        val refreshing: Boolean = false,
+        val writingMessage: Boolean = false,
+        val deciding: Boolean = false,
+        val error: ApiError? = null,
+        val message: String? = null,
+    ) : RealsRootUiState
     data class PendingEngagement(
         val session: ProvisionedSession,
         val title: String,
@@ -156,7 +178,10 @@ class RealsRootViewModel(
     private val getMatchUseCase: GetMatchUseCase,
     private val getFirstChatForMatchUseCase: GetFirstChatForMatchUseCase,
     private val submitChatDecisionUseCase: SubmitChatDecisionUseCase,
-    private val getChatUseCase: GetChatUseCase,
+    private val getVisualProfileUseCase: GetVisualProfileUseCase,
+    private val submitVisualDecisionUseCase: SubmitVisualDecisionUseCase,
+    private val putMyPersonalMessageUseCase: PutMyPersonalMessageUseCase,
+    private val getPartnerPersonalMessageUseCase: GetPartnerPersonalMessageUseCase,
     private val getChatMessagesUseCase: GetChatMessagesUseCase,
     private val sendChatMessageUseCase: SendChatMessageUseCase,
     private val getChatExitRequestsUseCase: GetChatExitRequestsUseCase,
@@ -168,6 +193,9 @@ class RealsRootViewModel(
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<RealsRootUiState>(RealsRootUiState.Checking)
     val uiState: StateFlow<RealsRootUiState> = _uiState.asStateFlow()
+    private var lastSearchLocation: SearchLocationInput? = null
+    private val locallyHiddenPendingChatMatchIds = mutableSetOf<String>()
+    private val locallyHiddenVisualMatchIds = mutableSetOf<String>()
 
     init {
         refreshSession()
@@ -258,6 +286,7 @@ class RealsRootViewModel(
         val current = _uiState.value as? RealsRootUiState.Ready ?: return
 
         viewModelScope.launch {
+            lastSearchLocation = location
             val pending = current.copy(homeLoading = true, homeError = null, homeMessage = null)
             _uiState.value = pending
             when (val result = enqueueMatchmakingUseCase(location)) {
@@ -353,11 +382,18 @@ class RealsRootViewModel(
                 return@launch
             }
             val match = (matchResult as ApiResult.Success).value
-            val chatResult = if (chatId == null) {
-                getFirstChatForMatchUseCase(cleanMatchId)
-            } else {
-                getChatUseCase(chatId)
+            if (match.state !is MatchState.Unknown && match.state != MatchState.ChatActive) {
+                loadHomeForReady(
+                    ready = RealsRootUiState.Ready(
+                        session = session,
+                        homeLoading = true,
+                        homeMessage = firstChatExitMessage(match.state),
+                    ),
+                    autoNavigateEngagements = false,
+                )
+                return@launch
             }
+            val chatResult = getFirstChatForMatchUseCase(cleanMatchId)
             if (chatResult is ApiResult.Failure) {
                 _uiState.value = RealsRootUiState.FirstChat(
                     session = session,
@@ -370,6 +406,17 @@ class RealsRootViewModel(
                 return@launch
             }
             val chat = (chatResult as ApiResult.Success).value
+            if (!chat.status.isOpenFirstChatStatus()) {
+                loadHomeForReady(
+                    ready = RealsRootUiState.Ready(
+                        session = session,
+                        homeLoading = true,
+                        homeMessage = "El chat cambio de estado. Actualizamos tu Home.",
+                    ),
+                    autoNavigateEngagements = false,
+                )
+                return@launch
+            }
             val messagesResult = getChatMessagesUseCase(chat.id)
             val exitsResult = getChatExitRequestsUseCase(chat.id)
             _uiState.value = RealsRootUiState.FirstChat(
@@ -392,27 +439,104 @@ class RealsRootViewModel(
         refreshHomeState()
     }
 
-    fun refreshFirstChat() {
+    fun openVisualApproval(matchId: String) {
+        val session = when (val current = _uiState.value) {
+            is RealsRootUiState.Ready -> current.session
+            is RealsRootUiState.FirstChat -> current.session
+            is RealsRootUiState.VisualApproval -> current.session
+            else -> return
+        }
+        val cleanMatchId = matchId.trim()
+        if (cleanMatchId.isBlank()) return
+        if (cleanMatchId in locallyHiddenVisualMatchIds) {
+            viewModelScope.launch {
+                loadHomeForReady(
+                    ready = RealsRootUiState.Ready(session = session, homeLoading = true),
+                    autoNavigateEngagements = false,
+                )
+            }
+            return
+        }
+
+        viewModelScope.launch {
+            loadVisualApprovalState(
+                session = session,
+                matchId = cleanMatchId,
+                initialMatch = null,
+            )
+        }
+    }
+
+    fun closeVisualApproval() {
+        val current = _uiState.value as? RealsRootUiState.VisualApproval ?: return
+        viewModelScope.launch {
+            loadHomeForReady(
+                ready = RealsRootUiState.Ready(current.session, homeLoading = true),
+                autoNavigateEngagements = false,
+            )
+        }
+    }
+
+    fun refreshVisualApproval() {
+        val current = _uiState.value as? RealsRootUiState.VisualApproval ?: return
+        viewModelScope.launch {
+            loadVisualApprovalState(
+                session = current.session,
+                matchId = current.matchId,
+                initialMatch = current.match,
+                previous = current.copy(refreshing = true, error = null, message = null),
+            )
+        }
+    }
+
+    fun refreshFirstChat(silent: Boolean = false) {
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        if (current.refreshing || current.sending || current.actionLoading) return
         val chat = current.chat ?: return openFirstChat(current.matchId, current.chatId)
 
         viewModelScope.launch {
-            val pending = current.copy(refreshing = true, error = null, message = null)
+            val pending = current.copy(
+                refreshing = true,
+                error = if (silent) current.error else null,
+                message = if (silent) current.message else null,
+            )
             _uiState.value = pending
-            val chatResult = getChatUseCase(chat.id)
+            val chatResult = getFirstChatForMatchUseCase(current.matchId)
             val matchResult = getMatchUseCase(current.matchId)
-            val messagesResult = getChatMessagesUseCase(chat.id)
+            val messagesResult = getChatMessagesUseCase(chat.id, pending.messages.lastMessageCursor())
             val exitsResult = getChatExitRequestsUseCase(chat.id)
+            val updatedMatch = (matchResult as? ApiResult.Success)?.value ?: pending.match
+            val updatedChat = (chatResult as? ApiResult.Success)?.value ?: pending.chat
+            val updatedExitRequests = (exitsResult as? ApiResult.Success)?.value ?: pending.exitRequests
+            if (
+                (updatedMatch != null && updatedMatch.state !is MatchState.Unknown && updatedMatch.state != MatchState.ChatActive) ||
+                (updatedChat != null && !updatedChat.status.isOpenFirstChatStatus())
+            ) {
+                locallyHiddenPendingChatMatchIds += current.matchId
+                routeAfterFirstChatClosed(current.session, updatedMatch?.state)
+                return@launch
+            }
+            if (updatedExitRequests.latestExitRequest()?.status.isResolvedExitStatus()) {
+                locallyHiddenPendingChatMatchIds += current.matchId
+                reenterMatchmakingOrLoadHome(current.session)
+                return@launch
+            }
             _uiState.value = pending.copy(
-                match = (matchResult as? ApiResult.Success)?.value ?: pending.match,
-                chat = (chatResult as? ApiResult.Success)?.value ?: pending.chat,
-                messages = (messagesResult as? ApiResult.Success)?.value ?: pending.messages,
-                exitRequests = (exitsResult as? ApiResult.Success)?.value ?: pending.exitRequests,
+                match = updatedMatch,
+                chat = updatedChat,
+                messages = (messagesResult as? ApiResult.Success)?.value
+                    ?.let { pending.messages.appendUnique(it) }
+                    ?: pending.messages,
+                exitRequests = updatedExitRequests,
                 refreshing = false,
-                error = (chatResult as? ApiResult.Failure)?.error
-                    ?: (matchResult as? ApiResult.Failure)?.error
-                    ?: (messagesResult as? ApiResult.Failure)?.error
-                    ?: (exitsResult as? ApiResult.Failure)?.error,
+                error = if (silent) {
+                    pending.error
+                } else {
+                    (chatResult as? ApiResult.Failure)?.error
+                        ?: (matchResult as? ApiResult.Failure)?.error
+                        ?: (messagesResult as? ApiResult.Failure)?.error
+                        ?: (exitsResult as? ApiResult.Failure)?.error
+                },
             )
         }
     }
@@ -436,17 +560,21 @@ class RealsRootViewModel(
         }
 
         viewModelScope.launch {
+            val cursorBeforeSend = current.messages.lastMessageCursor()
             val pending = current.copy(sending = true, error = null, message = null)
             _uiState.value = pending
             when (val result = sendChatMessageUseCase(chat.id, cleanContent)) {
                 is ApiResult.Success -> {
-                    val messagesResult = getChatMessagesUseCase(chat.id)
-                    val chatResult = getChatUseCase(chat.id)
+                    val messagesResult = getChatMessagesUseCase(chat.id, cursorBeforeSend)
+                    val chatResult = getFirstChatForMatchUseCase(current.matchId)
                     _uiState.value = pending.copy(
                         chat = (chatResult as? ApiResult.Success)?.value ?: pending.chat,
-                        messages = (messagesResult as? ApiResult.Success)?.value ?: (pending.messages + result.value),
+                        messages = pending.messages.appendUnique(
+                            (messagesResult as? ApiResult.Success)?.value.orEmpty() + result.value
+                        ),
                         sending = false,
-                        error = (messagesResult as? ApiResult.Failure)?.error ?: (chatResult as? ApiResult.Failure)?.error,
+                        error = (messagesResult as? ApiResult.Failure)?.error
+                            ?: (chatResult as? ApiResult.Failure)?.error,
                     )
                 }
 
@@ -460,15 +588,40 @@ class RealsRootViewModel(
 
     fun submitFirstChatDecision(decision: ChatContinueDecision) {
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        val chat = current.chat
+        if (chat != null && chat.myDecision != ChatDecisionState.Pending) {
+            _uiState.value = current.copy(
+                message = "Ya registramos tu decision para este chat.",
+                error = null,
+            )
+            return
+        }
         viewModelScope.launch {
             val pending = current.copy(actionLoading = true, error = null, message = null)
             _uiState.value = pending
             when (val result = submitChatDecisionUseCase(current.matchId, decision)) {
-                is ApiResult.Success -> _uiState.value = pending.copy(
-                    match = result.value,
-                    actionLoading = false,
-                    message = "Listo, guardamos tu decision.",
-                )
+                is ApiResult.Success -> {
+                    if (decision == ChatContinueDecision.Approved && result.value.state == MatchState.ChatActive) {
+                        locallyHiddenPendingChatMatchIds += current.matchId
+                        reenterMatchmakingOrLoadHome(current.session)
+                        return@launch
+                    }
+
+                    if (decision == ChatContinueDecision.Rejected) {
+                        locallyHiddenPendingChatMatchIds += current.matchId
+                        reenterMatchmakingOrLoadHome(current.session)
+                        return@launch
+                    }
+
+                    loadHomeForReady(
+                        ready = RealsRootUiState.Ready(
+                            session = current.session,
+                            homeLoading = true,
+                            homeMessage = firstChatDecisionMessage(result.value.state),
+                        ),
+                        autoNavigateEngagements = false,
+                    )
+                }
 
                 is ApiResult.Failure -> _uiState.value = pending.copy(
                     actionLoading = false,
@@ -512,8 +665,102 @@ class RealsRootViewModel(
     }
 
     fun rejectChatExitRequest(exitRequestId: String) {
-        runChatExitAction { chatId ->
+        runChatExitAction(closeOnSuccess = true) { chatId ->
             rejectChatExitRequestUseCase(chatId, exitRequestId)
+        }
+    }
+
+    fun timeoutChatExitRequest(exitRequestId: String) {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        val request = current.exitRequests.firstOrNull {
+            it.id == exitRequestId && it.status == ChatExitRequestStatus.Pending
+        } ?: return
+        runChatExitAction(closeOnSuccess = true) { chatId ->
+            cancelChatUseCase(
+                chatId = chatId,
+                reason = request.reason ?: ChatExitReason.NoLongerInterested,
+                details = "Solicitud de salida consensuada sin respuesta.",
+            )
+        }
+    }
+
+    fun saveMyVisualPersonalMessage(message: String) {
+        val current = _uiState.value as? RealsRootUiState.VisualApproval ?: return
+        val cleanMessage = TextSafety.normalizeMultiline(message, maxLength = 280)
+        if (cleanMessage.isBlank() || TextSafety.containsHtmlLikeMarkup(cleanMessage)) {
+            _uiState.value = current.copy(
+                error = ApiError.Unexpected("El mensaje personal no es valido."),
+                message = null,
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            val pending = current.copy(writingMessage = true, error = null, message = null)
+            _uiState.value = pending
+            when (val result = putMyPersonalMessageUseCase(current.matchId, cleanMessage)) {
+                is ApiResult.Success -> _uiState.value = pending.copy(
+                    writingMessage = false,
+                    message = "Guardamos tu mensaje personal.",
+                )
+
+                is ApiResult.Failure -> _uiState.value = pending.copy(
+                    writingMessage = false,
+                    error = result.error,
+                )
+            }
+        }
+    }
+
+    fun submitVisualDecision(decision: VisualDecision) {
+        val current = _uiState.value as? RealsRootUiState.VisualApproval ?: return
+        viewModelScope.launch {
+            val pending = current.copy(deciding = true, error = null, message = null)
+            _uiState.value = pending
+            when (val result = submitVisualDecisionUseCase(current.matchId, decision)) {
+                is ApiResult.Success -> {
+                    locallyHiddenVisualMatchIds += current.matchId
+                    when (result.value.state) {
+                        MatchState.VisualPhase -> loadHomeForReady(
+                            ready = RealsRootUiState.Ready(
+                                session = current.session,
+                                homeLoading = true,
+                            ),
+                            autoNavigateEngagements = false,
+                        )
+
+                        MatchState.VisualApproved -> loadHomeForReady(
+                            ready = RealsRootUiState.Ready(
+                                session = current.session,
+                                homeLoading = true,
+                            ),
+                            autoNavigateEngagements = false,
+                        )
+
+                        MatchState.VisualRejected,
+                        MatchState.ChatRejected,
+                        MatchState.Expired -> loadHomeForReady(
+                            ready = RealsRootUiState.Ready(
+                                session = current.session,
+                                homeLoading = true,
+                            ),
+                            autoNavigateEngagements = false,
+                        )
+
+                        MatchState.ChatActive,
+                        is MatchState.Unknown -> _uiState.value = pending.copy(
+                            match = result.value,
+                            deciding = false,
+                            message = "Guardamos tu decision.",
+                        )
+                    }
+                }
+
+                is ApiResult.Failure -> _uiState.value = pending.copy(
+                    deciding = false,
+                    error = result.error,
+                )
+            }
         }
     }
 
@@ -856,6 +1103,56 @@ class RealsRootViewModel(
         }
     }
 
+    private suspend fun loadVisualApprovalState(
+        session: ProvisionedSession,
+        matchId: String,
+        initialMatch: Match?,
+        previous: RealsRootUiState.VisualApproval? = null,
+    ) {
+        val loadingState = previous ?: RealsRootUiState.VisualApproval(
+            session = session,
+            matchId = matchId,
+            match = initialMatch,
+            loading = true,
+        )
+        _uiState.value = loadingState
+
+        val matchResult = getMatchUseCase(matchId)
+        val match = (matchResult as? ApiResult.Success)?.value ?: initialMatch
+        if (matchId in locallyHiddenVisualMatchIds) {
+            loadHomeForReady(
+                ready = RealsRootUiState.Ready(session = session, homeLoading = true),
+                autoNavigateEngagements = false,
+            )
+            return
+        }
+        if (match != null && match.state != MatchState.VisualPhase && match.state !is MatchState.Unknown) {
+            loadHomeForReady(
+                ready = RealsRootUiState.Ready(
+                    session = session,
+                    homeLoading = true,
+                    homeMessage = "La revision visual cambio de estado. Actualizamos tu Home.",
+                ),
+                autoNavigateEngagements = false,
+            )
+            return
+        }
+
+        val profileResult = getVisualProfileUseCase(matchId)
+        val partnerMessageResult = getPartnerPersonalMessageUseCase(matchId)
+        _uiState.value = loadingState.copy(
+            match = match,
+            profile = (profileResult as? ApiResult.Success)?.value ?: loadingState.profile,
+            partnerMessage = (partnerMessageResult as? ApiResult.Success)?.value ?: loadingState.partnerMessage,
+            partnerMessageLoaded = partnerMessageResult is ApiResult.Success || loadingState.partnerMessageLoaded,
+            loading = false,
+            refreshing = false,
+            error = (matchResult as? ApiResult.Failure)?.error
+                ?: (profileResult as? ApiResult.Failure)?.error
+                ?: (partnerMessageResult as? ApiResult.Failure)?.error,
+        )
+    }
+
     private fun RealsRootUiState.Ready.clearProfileFeedback(): RealsRootUiState.Ready = copy(
         profileUpdateError = null,
         profileUpdateMessage = null,
@@ -878,7 +1175,7 @@ class RealsRootViewModel(
         when (val homeResult = getHomeUseCase()) {
             is ApiResult.Success -> routeFromHomeState(
                 ready = ready.copy(
-                    homeState = homeResult.value,
+                    homeState = homeResult.value.withLocallyHiddenMatches(),
                     homeLoading = false,
                     homeError = null,
                 ),
@@ -912,29 +1209,11 @@ class RealsRootViewModel(
             return
         }
 
-        val firstChatMatch = home.activeMatches.firstOrNull { it.firstChat != null }
+        val firstChatMatch = home.activeMatches.firstOrNull {
+            it.matchState == MatchState.ChatActive && it.firstChat != null
+        }
         if (firstChatMatch?.firstChat != null) {
             openFirstChat(firstChatMatch.matchId, firstChatMatch.firstChat.chatId)
-            return
-        }
-
-        val visualMatch = home.activeMatches.firstOrNull { it.matchState == MatchState.VisualPhase }
-        if (visualMatch != null) {
-            _uiState.value = RealsRootUiState.PendingEngagement(
-                session = ready.session,
-                title = "Revision visual pendiente",
-                body = "Tenes una revision visual pendiente. Esta parte de la experiencia todavia no esta disponible en la app.",
-            )
-            return
-        }
-
-        val connection = home.activeConnections.firstOrNull()
-        if (connection != null) {
-            _uiState.value = RealsRootUiState.PendingEngagement(
-                session = ready.session,
-                title = pendingConnectionTitle(connection.connectionState),
-                body = pendingConnectionBody(connection),
-            )
             return
         }
 
@@ -971,7 +1250,91 @@ class RealsRootViewModel(
         }
     }
 
+    private fun ChatStatus.isOpenFirstChatStatus(): Boolean = this == ChatStatus.Active
+
+    private fun HomeState.withLocallyHiddenMatches(): HomeState = copy(
+        activeMatches = activeMatches.filterNot { match ->
+            (match.matchState == MatchState.ChatActive &&
+                match.matchId in locallyHiddenPendingChatMatchIds) ||
+                (match.matchState == MatchState.VisualPhase &&
+                    match.matchId in locallyHiddenVisualMatchIds)
+        },
+    )
+
+    private fun firstChatDecisionMessage(state: MatchState): String = when (state) {
+        MatchState.ChatActive -> "Guardamos tu decision. Esperamos la respuesta de la otra persona."
+        MatchState.VisualPhase -> "Ambas personas aprobaron. La revision visual ya esta pendiente."
+        MatchState.ChatRejected -> "Buscando una nueva conversacion."
+        MatchState.Expired -> "El chat expiro. Actualizamos tu Home."
+        MatchState.VisualApproved -> "La revision ya fue aprobada. Actualizamos tu Home."
+        MatchState.VisualRejected -> "La revision visual quedo cerrada. Actualizamos tu Home."
+        is MatchState.Unknown -> "Guardamos tu decision. Actualizamos tu Home."
+    }
+
+    private suspend fun reenterMatchmakingOrLoadHome(session: ProvisionedSession) {
+        val location = lastSearchLocation
+        val ready = RealsRootUiState.Ready(session = session, homeLoading = true)
+        if (location == null) {
+            loadHomeForReady(ready = ready, autoNavigateEngagements = false)
+            return
+        }
+
+        when (val enqueueResult = enqueueMatchmakingUseCase(location)) {
+            is ApiResult.Success -> loadHomeForReady(
+                ready = ready,
+                autoNavigateEngagements = true,
+            )
+
+            is ApiResult.Failure -> loadHomeForReady(
+                ready = ready.copy(homeError = enqueueResult.error),
+                autoNavigateEngagements = false,
+            )
+        }
+    }
+
+    private suspend fun routeAfterFirstChatClosed(session: ProvisionedSession, state: MatchState?) {
+        if (state == MatchState.VisualPhase) {
+            loadHomeForReady(
+                ready = RealsRootUiState.Ready(
+                    session = session,
+                    homeLoading = true,
+                    homeMessage = firstChatExitMessage(state),
+                ),
+                autoNavigateEngagements = false,
+            )
+            return
+        }
+
+        reenterMatchmakingOrLoadHome(session)
+    }
+
+    private fun List<ChatMessage>.lastMessageCursor(): String? =
+        maxByOrNull { it.sentAt }?.id
+
+    private fun List<ChatMessage>.appendUnique(newMessages: List<ChatMessage>): List<ChatMessage> {
+        val seen = map { it.id }.toMutableSet()
+        return (this + newMessages.filter { seen.add(it.id) }).sortedBy { it.sentAt }
+    }
+
+    private fun List<ChatExitRequest>.latestExitRequest(): ChatExitRequest? =
+        maxByOrNull { it.createdAt }
+
+    private fun ChatExitRequestStatus?.isResolvedExitStatus(): Boolean =
+        this == ChatExitRequestStatus.Accepted || this == ChatExitRequestStatus.Rejected
+
+    private fun firstChatExitMessage(state: MatchState?): String = when (state) {
+        MatchState.VisualPhase -> "El chat paso a revision visual. Actualizamos tu lista."
+        MatchState.ChatRejected -> "Buscando una nueva conversacion."
+        MatchState.Expired -> "El chat expiro. Actualizamos tu Home."
+        MatchState.VisualApproved -> "La revision ya fue aprobada. Actualizamos tu Home."
+        MatchState.VisualRejected -> "La revision visual quedo cerrada. Actualizamos tu Home."
+        MatchState.ChatActive,
+        null,
+        is MatchState.Unknown -> "El chat cambio de estado. Actualizamos tu Home."
+    }
+
     private fun runChatExitAction(
+        closeOnSuccess: Boolean = false,
         action: suspend (chatId: String) -> ApiResult<*>,
     ) {
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
@@ -982,7 +1345,14 @@ class RealsRootViewModel(
             _uiState.value = pending
             when (val result = action(chat.id)) {
                 is ApiResult.Success -> {
-                    val chatResult = getChatUseCase(chat.id)
+                    val outcome = result.value as? ChatExitOutcome
+                    if (closeOnSuccess || (outcome != null && outcome.chat.status != ChatStatus.Active)) {
+                        locallyHiddenPendingChatMatchIds += current.matchId
+                        routeAfterFirstChatClosed(current.session, null)
+                        return@launch
+                    }
+
+                    val chatResult = getFirstChatForMatchUseCase(current.matchId)
                     val exitsResult = getChatExitRequestsUseCase(chat.id)
                     _uiState.value = pending.copy(
                         chat = (chatResult as? ApiResult.Success)?.value ?: pending.chat,
@@ -1162,7 +1532,10 @@ class RealsRootViewModelFactory(
                 getMatchUseCase = appContainer.getMatchUseCase,
                 getFirstChatForMatchUseCase = appContainer.getFirstChatForMatchUseCase,
                 submitChatDecisionUseCase = appContainer.submitChatDecisionUseCase,
-                getChatUseCase = appContainer.getChatUseCase,
+                getVisualProfileUseCase = appContainer.getVisualProfileUseCase,
+                submitVisualDecisionUseCase = appContainer.submitVisualDecisionUseCase,
+                putMyPersonalMessageUseCase = appContainer.putMyPersonalMessageUseCase,
+                getPartnerPersonalMessageUseCase = appContainer.getPartnerPersonalMessageUseCase,
                 getChatMessagesUseCase = appContainer.getChatMessagesUseCase,
                 sendChatMessageUseCase = appContainer.sendChatMessageUseCase,
                 getChatExitRequestsUseCase = appContainer.getChatExitRequestsUseCase,

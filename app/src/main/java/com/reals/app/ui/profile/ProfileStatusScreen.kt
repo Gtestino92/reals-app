@@ -26,6 +26,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -430,6 +431,7 @@ private fun PhotoManagerActions(
     var localError by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
     var replacePhotoId by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
     var replacePosition by rememberSaveable(profile.id) { mutableStateOf<Int?>(null) }
+    var pendingAddedPosition by rememberSaveable(profile.id) { mutableStateOf<Int?>(null) }
     val addFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
             val position = positionText.toIntOrNull()
@@ -437,6 +439,7 @@ private fun PhotoManagerActions(
                 localError = "La posicion debe estar entre 1 y 9."
             } else {
                 localError = null
+                pendingAddedPosition = position
                 onAddPhotoFile(position, uri)
             }
         }
@@ -452,6 +455,17 @@ private fun PhotoManagerActions(
         }
     }
     val busy = photosLoading || photoActionLoading || activationLoading
+
+    LaunchedEffect(photoActionLoading, photoActionMessage) {
+        val addedPosition = pendingAddedPosition
+        if (!photoActionLoading && photoActionMessage != null && addedPosition != null) {
+            positionText = nextAvailablePhotoPosition(photos, addedPosition).toString()
+            pendingAddedPosition = null
+        }
+        if (!photoActionLoading && photoActionError != null) {
+            pendingAddedPosition = null
+        }
+    }
 
     Column(modifier = Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         OutlinedButton(onClick = onToggleExpanded, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
@@ -640,6 +654,13 @@ private fun previewGeneratedPhotoUrl(profile: Profile, position: Int?): String {
     val userId = profile.userId.replace("-", "")
     val profileId = profile.id.replace("-", "")
     return "https://static.reals.local/mock-profiles/$userId/$profileId/photo-$position.jpg"
+}
+
+private fun nextAvailablePhotoPosition(photos: List<ProfilePhoto>, addedPosition: Int): Int {
+    val occupied = photos.map { it.position }.toSet()
+    return ((addedPosition + 1)..9).firstOrNull { it !in occupied }
+        ?: (1..9).firstOrNull { it !in occupied }
+        ?: addedPosition.coerceIn(1, 9)
 }
 
 @Composable

@@ -3,6 +3,7 @@ package com.reals.app.ui.common
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatExitRequestType
+import com.reals.app.domain.model.ChatDecisionState
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.ConnectionState
 import com.reals.app.domain.model.MatchState
@@ -48,6 +49,14 @@ fun ChatStatus.userLabel(): String = when (this) {
     ChatStatus.Closed -> "Cerrado"
     ChatStatus.Finished -> "Finalizado"
     is ChatStatus.Unknown -> "Estado no disponible"
+}
+
+fun ChatDecisionState.userLabel(): String = when (this) {
+    ChatDecisionState.Pending -> "Pendiente"
+    ChatDecisionState.Approved -> "Aprobado"
+    ChatDecisionState.Rejected -> "Rechazado"
+    ChatDecisionState.Abandoned -> "Abandonado"
+    is ChatDecisionState.Unknown -> "Estado no disponible"
 }
 
 fun ConnectionState.userLabel(): String = when (this) {

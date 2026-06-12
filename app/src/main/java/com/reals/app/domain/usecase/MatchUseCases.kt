@@ -5,6 +5,8 @@ import com.reals.app.data.repository.MatchRepository
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatContinueDecision
 import com.reals.app.domain.model.Match
+import com.reals.app.domain.model.VisualDecision
+import com.reals.app.domain.model.VisualProfile
 
 class GetMatchUseCase(
     private val matchRepository: MatchRepository,
@@ -25,4 +27,32 @@ class SubmitChatDecisionUseCase(
 ) {
     suspend operator fun invoke(matchId: String, decision: ChatContinueDecision): ApiResult<Match> =
         matchRepository.submitChatDecision(matchId, decision)
+}
+
+class GetVisualProfileUseCase(
+    private val matchRepository: MatchRepository,
+) {
+    suspend operator fun invoke(matchId: String): ApiResult<VisualProfile> =
+        matchRepository.getVisualProfile(matchId)
+}
+
+class SubmitVisualDecisionUseCase(
+    private val matchRepository: MatchRepository,
+) {
+    suspend operator fun invoke(matchId: String, decision: VisualDecision): ApiResult<Match> =
+        matchRepository.submitVisualDecision(matchId, decision)
+}
+
+class PutMyPersonalMessageUseCase(
+    private val matchRepository: MatchRepository,
+) {
+    suspend operator fun invoke(matchId: String, message: String): ApiResult<Unit> =
+        matchRepository.putMyPersonalMessage(matchId, message)
+}
+
+class GetPartnerPersonalMessageUseCase(
+    private val matchRepository: MatchRepository,
+) {
+    suspend operator fun invoke(matchId: String): ApiResult<String?> =
+        matchRepository.getPartnerPersonalMessage(matchId)
 }

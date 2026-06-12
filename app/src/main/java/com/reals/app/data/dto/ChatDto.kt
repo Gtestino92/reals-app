@@ -13,8 +13,19 @@ data class ChatResponseDto(
     val availableAt: String? = null,
     val activatedAt: String? = null,
     val timeoutAt: String,
+    val expiresAt: String? = null,
+    val partner: ChatPartnerResponseDto? = null,
+    val myDecision: String? = null,
+    val partnerDecision: String? = null,
     val endedAt: String? = null,
     val lastMessageAt: String? = null,
+)
+
+@Serializable
+data class ChatPartnerResponseDto(
+    val userId: String,
+    val profileId: String,
+    val displayName: String,
 )
 
 @Serializable
@@ -29,6 +40,13 @@ data class ChatMessageResponseDto(
     val senderId: String,
     val content: String,
     val sentAt: String,
+)
+
+@Serializable
+data class ChatMessagesResponseDto(
+    val messages: List<ChatMessageResponseDto>,
+    val hasMore: Boolean = false,
+    val serverTime: String? = null,
 )
 
 @Serializable

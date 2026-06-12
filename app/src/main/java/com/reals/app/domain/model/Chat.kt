@@ -10,8 +10,18 @@ data class Chat(
     val availableAt: String?,
     val activatedAt: String?,
     val timeoutAt: String,
+    val expiresAt: String,
+    val partner: ChatPartner?,
+    val myDecision: ChatDecisionState,
+    val partnerDecision: ChatDecisionState,
     val endedAt: String?,
     val lastMessageAt: String?,
+)
+
+data class ChatPartner(
+    val userId: String,
+    val profileId: String,
+    val displayName: String,
 )
 
 data class ChatMessage(
@@ -59,6 +69,40 @@ sealed interface ChatType {
         fun fromBackend(value: String): ChatType = when (value.uppercase()) {
             FirstChat.rawValue -> FirstChat
             SecondChat.rawValue -> SecondChat
+            else -> Unknown(value)
+        }
+    }
+}
+
+sealed interface ChatDecisionState {
+    val rawValue: String
+
+    data object Pending : ChatDecisionState {
+        override val rawValue = "PENDING"
+    }
+
+    data object Approved : ChatDecisionState {
+        override val rawValue = "APPROVED"
+    }
+
+    data object Rejected : ChatDecisionState {
+        override val rawValue = "REJECTED"
+    }
+
+    data object Abandoned : ChatDecisionState {
+        override val rawValue = "ABANDONED"
+    }
+
+    data class Unknown(override val rawValue: String) : ChatDecisionState
+
+    companion object {
+        fun fromBackend(value: String?): ChatDecisionState = when (value?.uppercase()) {
+            null,
+            "",
+            Pending.rawValue -> Pending
+            Approved.rawValue -> Approved
+            Rejected.rawValue -> Rejected
+            Abandoned.rawValue -> Abandoned
             else -> Unknown(value)
         }
     }

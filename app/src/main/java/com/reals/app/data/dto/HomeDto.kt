@@ -28,6 +28,7 @@ data class HomeConnectionResponseDto(
     val matchId: String,
     val connectionState: String,
     val secondChat: HomeChatResponseDto? = null,
+    val partner: ChatPartnerResponseDto? = null,
 )
 
 @Serializable
@@ -35,4 +36,6 @@ data class HomeChatResponseDto(
     val chatId: String,
     val chatType: String,
     val chatStatus: String,
+    val expiresAt: String? = null,
+    val partner: ChatPartnerResponseDto? = null,
 )

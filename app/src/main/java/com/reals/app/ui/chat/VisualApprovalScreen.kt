@@ -1,0 +1,274 @@
+package com.reals.app.ui.chat
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
+import com.reals.app.core.network.ApiError
+import com.reals.app.core.network.ErrorContext
+import com.reals.app.core.security.TextSafety
+import com.reals.app.domain.model.Match
+import com.reals.app.domain.model.VisualProfile
+import com.reals.app.ui.common.ApiErrorFeedbackCard
+import com.reals.app.ui.common.FeedbackCard
+import com.reals.app.ui.common.FeedbackTone
+import com.reals.app.ui.common.userLabel
+
+@Composable
+fun VisualApprovalScreen(
+    matchId: String,
+    match: Match?,
+    profile: VisualProfile?,
+    partnerMessage: String?,
+    partnerMessageLoaded: Boolean,
+    loading: Boolean,
+    refreshing: Boolean,
+    writingMessage: Boolean,
+    deciding: Boolean,
+    error: ApiError?,
+    message: String?,
+    onRefresh: () -> Unit,
+    onSavePersonalMessage: (String) -> Unit,
+    onApprove: () -> Unit,
+    onReject: () -> Unit,
+    onBackHome: () -> Unit,
+) {
+    var personalMessage by rememberSaveable(matchId) { mutableStateOf("") }
+    val busy = loading || refreshing || writingMessage || deciding
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            text = "Aprobacion visual",
+            style = MaterialTheme.typography.headlineLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = "Revisa el perfil visual antes de decidir si queres continuar.",
+            modifier = Modifier.padding(top = 8.dp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        StatusCard(
+            match = match,
+            loading = loading,
+            refreshing = refreshing,
+            error = error,
+            message = message,
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        if (profile == null) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+            ) {
+                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Perfil visual", style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        text = if (loading) "Cargando perfil..." else "No pudimos cargar el perfil visual todavia.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedButton(onClick = onRefresh, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (refreshing) "Actualizando..." else "Reintentar")
+                    }
+                }
+            }
+        } else {
+            VisualProfileCard(profile)
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        PartnerMessageCard(
+            partnerMessage = partnerMessage,
+            partnerMessageLoaded = partnerMessageLoaded,
+            busy = busy,
+            refreshing = refreshing,
+            onRefresh = onRefresh,
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        ) {
+            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Mi mensaje personal", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = "Opcional para esta version, pero si lo escribis solo se puede guardar una vez.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = personalMessage,
+                    onValueChange = { personalMessage = it.take(280) },
+                    label = { Text("Mensaje personal") },
+                    enabled = !busy,
+                    minLines = 2,
+                    supportingText = { Text("${personalMessage.length}/280") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedButton(
+                    onClick = {
+                        onSavePersonalMessage(personalMessage)
+                        personalMessage = ""
+                    },
+                    enabled = !busy && personalMessage.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (writingMessage) "Guardando..." else "Guardar mensaje")
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        ) {
+            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Decision visual", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = "Si aprobas y la otra persona tambien aprueba, se crea la conexion para la siguiente etapa.",
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = onApprove, enabled = !busy && profile != null, modifier = Modifier.weight(1f)) {
+                        Text("Aprobar")
+                    }
+                    OutlinedButton(onClick = onReject, enabled = !busy && profile != null, modifier = Modifier.weight(1f)) {
+                        Text("Rechazar")
+                    }
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(24.dp))
+        OutlinedButton(onClick = onBackHome, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+            Text("Volver a Home")
+        }
+    }
+}
+
+@Composable
+private fun StatusCard(
+    match: Match?,
+    loading: Boolean,
+    refreshing: Boolean,
+    error: ApiError?,
+    message: String?,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Estado", style = MaterialTheme.typography.titleLarge)
+            Text("Match: ${match?.state?.userLabel() ?: "Cargando"}")
+            if (loading || refreshing) {
+                Text(
+                    text = if (loading) "Cargando revision visual..." else "Actualizando revision visual...",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            error?.let { ApiErrorFeedbackCard(it, ErrorContext.VisualReview) }
+            message?.let { SuccessFeedback(it) }
+        }
+    }
+}
+
+@Composable
+private fun VisualProfileCard(profile: VisualProfile) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                text = TextSafety.safeDisplay(profile.displayName, maxLength = 100),
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Text("Edad: ${profile.age}")
+            profile.bio?.takeIf { it.isNotBlank() }?.let {
+                Text(TextSafety.safeDisplay(it, maxLength = 1_000))
+            }
+            if (profile.photos.isEmpty()) {
+                Text("No hay fotos para revisar.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                profile.photos.forEach { photo ->
+                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text("Foto ${photo.position}")
+                            AsyncImage(
+                                model = photo.url,
+                                contentDescription = "Foto ${photo.position}",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(260.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PartnerMessageCard(
+    partnerMessage: String?,
+    partnerMessageLoaded: Boolean,
+    busy: Boolean,
+    refreshing: Boolean,
+    onRefresh: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Mensaje personal de la otra persona", style = MaterialTheme.typography.titleMedium)
+            val body = when {
+                !partnerMessageLoaded -> "Cargando mensaje personal..."
+                partnerMessage.isNullOrBlank() -> "La otra persona todavia no dejo un mensaje personal."
+                else -> TextSafety.safeDisplay(partnerMessage, maxLength = 280)
+            }
+            Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (!partnerMessageLoaded) {
+                OutlinedButton(onClick = onRefresh, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (refreshing) "Actualizando..." else "Reintentar lectura")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SuccessFeedback(message: String) {
+    FeedbackCard(title = "Listo", message = message, tone = FeedbackTone.Success)
+}

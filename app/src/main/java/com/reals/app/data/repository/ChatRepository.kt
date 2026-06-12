@@ -6,6 +6,8 @@ import com.reals.app.core.network.map
 import com.reals.app.data.api.AuthTokenProvider
 import com.reals.app.data.api.RealsApi
 import com.reals.app.data.dto.ChatExitRequestCreateRequestDto
+import com.reals.app.data.dto.ChatMessageResponseDto
+import com.reals.app.data.dto.ChatMessagesResponseDto
 import com.reals.app.data.dto.SendMessageRequestDto
 import com.reals.app.data.mapper.toDomain
 import com.reals.app.domain.model.Chat
@@ -13,9 +15,14 @@ import com.reals.app.domain.model.ChatExitOutcome
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatMessage
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.decodeFromJsonElement
 
 class ChatRepository(
     private val api: RealsApi,
+    private val json: Json,
     tokenProvider: AuthTokenProvider,
     apiExecutor: ApiExecutor,
 ) : AuthenticatedRepository(tokenProvider, apiExecutor) {
@@ -23,9 +30,16 @@ class ChatRepository(
         authorizedCall { authorization -> api.getChat(authorization, chatId) }
             .map { it.toDomain() }
 
-    suspend fun getMessages(chatId: String): ApiResult<List<ChatMessage>> =
-        authorizedCall { authorization -> api.getChatMessages(authorization, chatId) }
-            .map { messages -> messages.map { it.toDomain() } }
+    suspend fun getMessages(chatId: String, afterMessageId: String? = null): ApiResult<List<ChatMessage>> =
+        authorizedCall { authorization ->
+            api.getChatMessages(
+                authorization = authorization,
+                chatId = chatId,
+                afterMessageId = afterMessageId,
+                afterMessageIdAlias = afterMessageId,
+            )
+        }
+            .map { payload -> payload.toMessageDtos().map { it.toDomain() } }
 
     suspend fun sendMessage(chatId: String, content: String): ApiResult<ChatMessage> =
         authorizedCall { authorization ->
@@ -92,4 +106,11 @@ class ChatRepository(
             reason = reason?.rawValue,
             details = details?.trim()?.ifBlank { null },
         )
+
+    private fun JsonElement.toMessageDtos(): List<ChatMessageResponseDto> =
+        if (this is JsonArray) {
+            json.decodeFromJsonElement<List<ChatMessageResponseDto>>(this)
+        } else {
+            json.decodeFromJsonElement<ChatMessagesResponseDto>(this).messages
+        }
 }

@@ -11,11 +11,21 @@ The formal OpenAPI contract lives in `docs/openapi.yaml`.
 
 - `POST /api/me/provision`: create or link the authenticated Firebase identity to a local backend user. This is the only Firebase flow endpoint that provisions a missing local user.
 - `GET /api/me`: fetch the authenticated user.
-- `GET /api/me/home`: fetch the authenticated user's current app state for home/navigation. Includes profile status, queue state, active matches with first-chat ids and active connections with second-chat ids when available.
+- `GET /api/me/home`: fetch the authenticated user's current app state for home/navigation. Includes profile status, queue state, active matches with first-chat ids and partner summaries while still in `CHAT_ACTIVE`, and active connections with second-chat ids and partner summaries when available.
 - `DELETE /api/me`: schedule soft deletion for the authenticated user account. The account remains recoverable during `account.deletion.recovery-window-days`.
 - `POST /api/me/reactivation`: reactivate an account that is still inside the deletion recovery window.
 
+For first-chat navigation, `GET /api/me/home` exposes `activeMatches[].firstChat`
+only while the match remains in `CHAT_ACTIVE`. Once both users approve and the
+match moves to `VISUAL_PHASE`, the match remains in `activeMatches[]` with
+`matchState = VISUAL_PHASE` and `firstChat = null`.
+
 Most current-user flows should prefer `@CurrentUserId` instead of accepting arbitrary user ids.
+
+User-generated text fields are plain text. The backend rejects control
+characters and markup delimiters `<` / `>` in profile text, chat messages,
+visual personal messages and cancellation/report details. Frontends must render
+these values as text, not HTML.
 
 ## Profiles
 
@@ -47,9 +57,9 @@ queue entry has become an active match. Do not infer match/chat ids locally.
 ## Matches
 
 - `GET /api/matches/{matchId}`: fetch match details and linked connection id if present.
-- `GET /api/matches/{matchId}/chat`: fetch active first chat for match.
+- `GET /api/matches/{matchId}/chat`: fetch active first chat for match. Includes `partner`, `myDecision`, `partnerDecision` and `expiresAt`.
 - `GET /api/matches/{matchId}/visual-profile`: fetch partner profile for visual phase or later.
-- `POST /api/matches/{matchId}/chat-decision`: submit first-chat continuation decision.
+- `POST /api/matches/{matchId}/chat-decision`: submit first-chat continuation decision. `APPROVED` is individual and requires both users to move the match to `VISUAL_PHASE`. `REJECTED` is unilateral cancellation: it closes the first chat, moves the match to `CHAT_REJECTED`, releases locks and applies cancellation penalty policy.
 - `POST /api/matches/{matchId}/visual-decision`: submit visual decision.
 - `PUT /api/matches/{matchId}/personal-messages/me`: store the authenticated user's personal visual-review message.
 - `GET /api/matches/{matchId}/personal-messages/partner`: get the partner's personal message from `VISUAL_PHASE` onwards. If present, it must be read before visual approval.
@@ -58,13 +68,13 @@ queue entry has become an active match. Do not infer match/chat ids locally.
 
 - `GET /api/chats/{chatId}`: fetch chat.
 - `POST /api/chats/{chatId}/messages`: send message as authenticated user.
-- `GET /api/chats/{chatId}/messages`: list messages as an authenticated chat participant.
+- `GET /api/chats/{chatId}/messages`: list messages as an authenticated chat participant. With no cursor, returns the legacy array. With `after={messageId}` or `afterMessageId={messageId}`, returns `{ "messages": [...], "hasMore": false, "serverTime": "..." }`.
 - `POST /api/chats/{chatId}/exit-requests`: request mutual cancellation.
 - `GET /api/chats/{chatId}/exit-requests`: list exit requests visible to a participant.
 - `POST /api/chats/{chatId}/exit-requests/{exitRequestId}/acceptance`: accept mutual cancellation and close without penalty.
 - `POST /api/chats/{chatId}/exit-requests/{exitRequestId}/rejection`: reject mutual cancellation; chat remains active.
 - `POST /api/chats/{chatId}/cancellations`: unilateral cancellation. Applies penalty policy.
-- `POST /api/chats/{chatId}/safety-cancellations`: safety/report cancellation. Exempts reporter and penalizes reported participant.
+- `POST /api/chats/{chatId}/safety-cancellations`: safety/report cancellation. Exempts reporter, penalizes reported participant and closes the chat.
 
 ## Connections And Scheduling
 
@@ -106,6 +116,7 @@ Common mappings:
 - `NoSuchElementException`: `404 Not Found`
 - `IllegalArgumentException`: `400 Bad Request`
 - `IllegalStateException`: `409 Conflict`
+- Bean validation failures: `400 Bad Request` with `VALIDATION_ERROR`
 - `DomainNotFoundException`: `404 Not Found` with stable domain code
 - generic exception: `500 Internal Server Error`
 

@@ -12,6 +12,7 @@ import com.reals.app.data.dto.HomeMatchResponseDto
 import com.reals.app.data.dto.HomeQueueResponseDto
 import com.reals.app.data.dto.HomeResponseDto
 import com.reals.app.data.dto.MatchResponseDto
+import com.reals.app.data.dto.VisualProfileResponseDto
 import com.reals.app.data.dto.PhotoResponseDto
 import com.reals.app.data.dto.ProfileResponseDto
 import com.reals.app.data.dto.QueueStatusResponseDto
@@ -21,12 +22,14 @@ import com.reals.app.data.dto.UserResponseDto
 import com.reals.app.domain.model.BackendUser
 import com.reals.app.domain.model.BackendUserStatus
 import com.reals.app.domain.model.Chat
+import com.reals.app.domain.model.ChatDecisionState
 import com.reals.app.domain.model.ChatExitOutcome
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatExitRequestType
 import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.ChatPartner
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.ChatType
 import com.reals.app.domain.model.ConnectionState
@@ -45,6 +48,7 @@ import com.reals.app.domain.model.QueueStatus
 import com.reals.app.domain.model.SearchLocationInput
 import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.UpdateProfileInput
+import com.reals.app.domain.model.VisualProfile
 
 fun UserResponseDto.toDomain(): BackendUser = BackendUser(
     id = id,
@@ -137,12 +141,15 @@ fun HomeConnectionResponseDto.toDomain(): HomeConnection = HomeConnection(
     matchId = matchId,
     connectionState = ConnectionState.fromBackend(connectionState),
     secondChat = secondChat?.toDomain(),
+    partner = partner?.toDomain(),
 )
 
 fun HomeChatResponseDto.toDomain(): HomeChat = HomeChat(
     chatId = chatId,
     chatType = ChatType.fromBackend(chatType),
     chatStatus = ChatStatus.fromBackend(chatStatus),
+    expiresAt = expiresAt,
+    partner = partner?.toDomain(),
 )
 
 fun SearchLocationInput.toDto(): EnqueueMatchmakingRequestDto = EnqueueMatchmakingRequestDto(
@@ -166,6 +173,14 @@ fun MatchResponseDto.toDomain(): Match = Match(
     updatedAt = updatedAt,
 )
 
+fun VisualProfileResponseDto.toDomain(): VisualProfile = VisualProfile(
+    profileId = profileId,
+    displayName = displayName,
+    age = age,
+    bio = bio,
+    photos = photos.map { it.toDomain() }.sortedBy { it.position },
+)
+
 fun ChatResponseDto.toDomain(): Chat = Chat(
     id = id,
     matchId = matchId,
@@ -176,8 +191,18 @@ fun ChatResponseDto.toDomain(): Chat = Chat(
     availableAt = availableAt,
     activatedAt = activatedAt,
     timeoutAt = timeoutAt,
+    expiresAt = expiresAt ?: timeoutAt,
+    partner = partner?.toDomain(),
+    myDecision = ChatDecisionState.fromBackend(myDecision),
+    partnerDecision = ChatDecisionState.fromBackend(partnerDecision),
     endedAt = endedAt,
     lastMessageAt = lastMessageAt,
+)
+
+fun com.reals.app.data.dto.ChatPartnerResponseDto.toDomain(): ChatPartner = ChatPartner(
+    userId = userId,
+    profileId = profileId,
+    displayName = displayName,
 )
 
 fun ChatMessageResponseDto.toDomain(): ChatMessage = ChatMessage(
