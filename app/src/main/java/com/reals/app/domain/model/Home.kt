@@ -22,12 +22,15 @@ data class HomeConnection(
     val matchId: String,
     val connectionState: ConnectionState,
     val secondChat: HomeChat?,
+    val partner: ChatPartner?,
 )
 
 data class HomeChat(
     val chatId: String,
     val chatType: ChatType,
     val chatStatus: ChatStatus,
+    val expiresAt: String?,
+    val partner: ChatPartner?,
 )
 
 sealed interface ConnectionState {

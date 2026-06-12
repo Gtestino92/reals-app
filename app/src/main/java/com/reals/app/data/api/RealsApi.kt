@@ -11,6 +11,8 @@ import com.reals.app.data.dto.CreateProfileRequestDto
 import com.reals.app.data.dto.EnqueueMatchmakingRequestDto
 import com.reals.app.data.dto.HomeResponseDto
 import com.reals.app.data.dto.MatchResponseDto
+import com.reals.app.data.dto.PartnerPersonalMessageResponseDto
+import com.reals.app.data.dto.PersonalMessageRequestDto
 import com.reals.app.data.dto.PhotoResponseDto
 import com.reals.app.data.dto.PingResponseDto
 import com.reals.app.data.dto.ProfileResponseDto
@@ -20,6 +22,9 @@ import com.reals.app.data.dto.SendMessageRequestDto
 import com.reals.app.data.dto.UpdateMatchFiltersRequestDto
 import com.reals.app.data.dto.UpdateProfileRequestDto
 import com.reals.app.data.dto.UserResponseDto
+import com.reals.app.data.dto.VisualDecisionRequestDto
+import com.reals.app.data.dto.VisualProfileResponseDto
+import kotlinx.serialization.json.JsonElement
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import retrofit2.Response
@@ -33,6 +38,7 @@ import retrofit2.http.Path
 import retrofit2.http.POST
 import retrofit2.http.Part
 import retrofit2.http.PUT
+import retrofit2.http.Query
 
 interface RealsApi {
     @GET("api/ping")
@@ -166,6 +172,32 @@ interface RealsApi {
         @Body body: ChatDecisionRequestDto,
     ): Response<MatchResponseDto>
 
+    @GET("api/matches/{matchId}/visual-profile")
+    suspend fun getVisualProfile(
+        @Header("Authorization") authorization: String,
+        @Path("matchId") matchId: String,
+    ): Response<VisualProfileResponseDto>
+
+    @POST("api/matches/{matchId}/visual-decision")
+    suspend fun submitVisualDecision(
+        @Header("Authorization") authorization: String,
+        @Path("matchId") matchId: String,
+        @Body body: VisualDecisionRequestDto,
+    ): Response<MatchResponseDto>
+
+    @PUT("api/matches/{matchId}/personal-messages/me")
+    suspend fun putMyPersonalMessage(
+        @Header("Authorization") authorization: String,
+        @Path("matchId") matchId: String,
+        @Body body: PersonalMessageRequestDto,
+    ): Response<Unit>
+
+    @GET("api/matches/{matchId}/personal-messages/partner")
+    suspend fun getPartnerPersonalMessage(
+        @Header("Authorization") authorization: String,
+        @Path("matchId") matchId: String,
+    ): Response<PartnerPersonalMessageResponseDto>
+
     @GET("api/chats/{chatId}")
     suspend fun getChat(
         @Header("Authorization") authorization: String,
@@ -183,7 +215,9 @@ interface RealsApi {
     suspend fun getChatMessages(
         @Header("Authorization") authorization: String,
         @Path("chatId") chatId: String,
-    ): Response<List<ChatMessageResponseDto>>
+        @Query("after") afterMessageId: String? = null,
+        @Query("afterMessageId") afterMessageIdAlias: String? = null,
+    ): Response<JsonElement>
 
     @POST("api/chats/{chatId}/exit-requests")
     suspend fun requestChatExit(

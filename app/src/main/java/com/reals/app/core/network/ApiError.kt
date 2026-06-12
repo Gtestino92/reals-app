@@ -32,6 +32,7 @@ enum class ErrorContext {
     Matchmaking,
     Home,
     Chat,
+    VisualReview,
     Account,
 }
 
@@ -53,7 +54,11 @@ enum class AuthFailureReason {
 fun ApiError.toDisplayMessage(): String = toUserMessage()
 
 fun ApiError.toUserMessage(context: ErrorContext = ErrorContext.General): String = when (this) {
-    is ApiError.Backend -> userMessageForBackendError(code, context)
+    is ApiError.Backend -> if (code == "DOMAIN_CONFLICT" && message.isNotBlank()) {
+        message
+    } else {
+        userMessageForBackendError(code, context)
+    }
     is ApiError.Network -> "No pudimos conectarnos. Revisa tu conexion e intenta nuevamente."
     is ApiError.Auth -> when (reason) {
         AuthFailureReason.FIREBASE_NOT_CONFIGURED -> "La app todavia no esta lista para iniciar sesion en este entorno."
@@ -75,6 +80,7 @@ fun ApiError.toUserTitle(context: ErrorContext = ErrorContext.General): String =
     ErrorContext.Matchmaking -> "No pudimos iniciar la busqueda"
     ErrorContext.Home -> "No pudimos actualizar tu estado"
     ErrorContext.Chat -> "No pudimos completar la accion"
+    ErrorContext.VisualReview -> "No pudimos completar la revision"
     ErrorContext.Account -> "No pudimos actualizar tu cuenta"
     ErrorContext.General -> "Algo salio mal"
 }
@@ -101,12 +107,18 @@ private fun userMessageForBackendError(code: String?, context: ErrorContext): St
     "PROFILE_PHOTO_NOT_FOUND" -> "No encontramos esa foto. Actualiza la lista e intenta nuevamente."
     "ACCOUNT_DELETED" -> "Esta cuenta esta pendiente de eliminacion. Podes recuperarla si todavia esta dentro del plazo."
     "ACCOUNT_DELETION_FINALIZED" -> "La cuenta ya no puede recuperarse. Podes crear una cuenta nueva."
+    "DOMAIN_CONFLICT" -> when (context) {
+        ErrorContext.Chat -> "La conversacion no cumple una regla del flujo todavia. Revisa el estado e intenta nuevamente."
+        ErrorContext.VisualReview -> "La revision visual no cumple una regla del flujo todavia. Revisa el mensaje personal o actualiza el estado."
+        else -> "Esta accion no esta disponible con el estado actual."
+    }
     else -> when (context) {
         ErrorContext.ProfileActivation -> "Revisa que tu perfil tenga la informacion y fotos necesarias."
         ErrorContext.PhotoUpload,
         ErrorContext.PhotoReplace -> "Proba con otra foto o intenta nuevamente en unos segundos."
         ErrorContext.Matchmaking -> "No pudimos iniciar la busqueda. Revisa tu perfil e intenta nuevamente."
         ErrorContext.Chat -> "La conversacion cambio de estado. Actualiza e intenta nuevamente."
+        ErrorContext.VisualReview -> "La revision visual cambio de estado. Actualiza e intenta nuevamente."
         else -> "Intenta nuevamente en unos segundos."
     }
 }

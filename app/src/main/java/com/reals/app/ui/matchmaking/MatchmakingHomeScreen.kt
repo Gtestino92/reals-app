@@ -54,7 +54,11 @@ import androidx.core.location.LocationManagerCompat
 import androidx.core.os.CancellationSignal
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
+import com.reals.app.domain.model.ConnectionState
+import com.reals.app.domain.model.HomeConnection
+import com.reals.app.domain.model.HomeMatch
 import com.reals.app.domain.model.HomeState
+import com.reals.app.domain.model.MatchState
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.SearchLocationInput
 import com.reals.app.ui.common.ApiErrorFeedbackCard
@@ -62,6 +66,9 @@ import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
 import com.reals.app.ui.common.userLabel
 import kotlin.coroutines.resume
+import java.time.OffsetDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -79,12 +86,12 @@ fun MatchmakingHomeScreen(
     onLeaveQueue: () -> Unit,
     onRefreshHome: () -> Unit,
     onOpenFirstChat: (matchId: String, chatId: String) -> Unit,
+    onOpenVisualApproval: (matchId: String) -> Unit,
     onEditProfile: () -> Unit,
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit,
 ) {
-    val hasActiveEngagements = homeState?.activeMatches?.isNotEmpty() == true ||
-        homeState?.activeConnections?.isNotEmpty() == true
+    val hasActiveEngagements = homeState.hasBlockingEngagements()
     val inQueue = homeState?.queue?.inQueue == true
 
     if (homeState == null && homeLoading) {
@@ -103,6 +110,15 @@ fun MatchmakingHomeScreen(
         return
     }
 
+    if (homeState.shouldPollHome()) {
+        LaunchedEffect(homeState?.activeMatches?.size, homeState?.activeConnections?.size) {
+            while (true) {
+                delay(5000)
+                onRefreshHome()
+            }
+        }
+    }
+
     MatchmakingIdleScreen(
         profile = profile,
         homeState = homeState,
@@ -115,6 +131,7 @@ fun MatchmakingHomeScreen(
         onEnqueue = onEnqueue,
         onRefreshHome = onRefreshHome,
         onOpenFirstChat = onOpenFirstChat,
+        onOpenVisualApproval = onOpenVisualApproval,
         onEditProfile = onEditProfile,
         onSignOut = onSignOut,
         onDeleteAccount = onDeleteAccount,
@@ -256,6 +273,7 @@ private fun MatchmakingIdleScreen(
     onEnqueue: (SearchLocationInput) -> Unit,
     onRefreshHome: () -> Unit,
     onOpenFirstChat: (matchId: String, chatId: String) -> Unit,
+    onOpenVisualApproval: (matchId: String) -> Unit,
     onEditProfile: () -> Unit,
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit,
@@ -315,6 +333,7 @@ private fun MatchmakingIdleScreen(
             homeState = homeState,
             busy = busy,
             onOpenFirstChat = onOpenFirstChat,
+            onOpenVisualApproval = onOpenVisualApproval,
         )
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -401,10 +420,18 @@ private fun ActiveEngagementCard(
     homeState: HomeState?,
     busy: Boolean,
     onOpenFirstChat: (matchId: String, chatId: String) -> Unit,
+    onOpenVisualApproval: (matchId: String) -> Unit,
 ) {
-    val firstChatMatch = homeState?.activeMatches?.firstOrNull { it.firstChat != null }
-    val firstChat = firstChatMatch?.firstChat
-    if (firstChatMatch == null || firstChat == null) return
+    val firstChatMatches = homeState?.activeMatches
+        ?.filter { it.matchState == MatchState.ChatActive && it.firstChat != null }
+        .orEmpty()
+    val visualApprovals = homeState?.activeMatches
+        ?.filter { it.matchState == MatchState.VisualPhase }
+        .orEmpty()
+    val connections = homeState?.activeConnections
+        ?.filter { it.connectionState != ConnectionState.Closed }
+        .orEmpty()
+    if (firstChatMatches.isEmpty() && visualApprovals.isEmpty() && connections.isEmpty()) return
 
     Card(
         modifier = Modifier
@@ -414,21 +441,109 @@ private fun ActiveEngagementCard(
     ) {
         Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
-                text = "Tenes un chat listo",
+                text = "Experiencias activas",
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
+            firstChatMatches.forEach { match ->
+                FirstChatItem(
+                    match = match,
+                    busy = busy,
+                    onOpenFirstChat = onOpenFirstChat,
+                )
+            }
+            visualApprovals.forEach { match ->
+                VisualApprovalItem(
+                    match = match,
+                    busy = busy,
+                    onOpenVisualApproval = onOpenVisualApproval,
+                )
+            }
+            connections.forEach { connection ->
+                ConnectionPlaceholderItem(connection)
+            }
+        }
+    }
+}
+
+@Composable
+private fun FirstChatItem(
+    match: HomeMatch,
+    busy: Boolean,
+    onOpenFirstChat: (matchId: String, chatId: String) -> Unit,
+) {
+    val firstChat = match.firstChat ?: return
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Chat inicial", style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = "Con ${firstChat.partner?.displayName?.takeIf { it.isNotBlank() } ?: "Partner"}",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = "Valido hasta ${formatBackendDateTime(firstChat.expiresAt)}",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Text(
                 text = "Estado: ${firstChat.chatStatus.userLabel()}. Podes entrar cuando quieras.",
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Button(
-                onClick = { onOpenFirstChat(firstChatMatch.matchId, firstChat.chatId) },
+                onClick = { onOpenFirstChat(match.matchId, firstChat.chatId) },
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("Entrar al chat")
             }
+        }
+    }
+}
+
+@Composable
+private fun VisualApprovalItem(
+    match: HomeMatch,
+    busy: Boolean,
+    onOpenVisualApproval: (matchId: String) -> Unit,
+) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Aprobacion visual pendiente", style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = "Revisa el perfil visual y decidi si queres continuar.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Button(
+                onClick = { onOpenVisualApproval(match.matchId) },
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Abrir aprobacion visual")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConnectionPlaceholderItem(connection: HomeConnection) {
+    val partnerName = connection.secondChat?.partner?.displayName?.takeIf { it.isNotBlank() }
+        ?: connection.partner?.displayName?.takeIf { it.isNotBlank() }
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Siguiente etapa", style = MaterialTheme.typography.titleMedium)
+            partnerName?.let {
+                Text(
+                    text = "Con $it",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                text = "Estado: ${connection.connectionState.userLabel()}",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = "La pantalla de coordinacion/segundo chat se implementa en la siguiente etapa.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -515,8 +630,12 @@ private fun AccountSection(
 
 @Composable
 private fun EngagementSummary(homeState: HomeState?) {
-    val matchCount = homeState?.activeMatches?.size ?: 0
-    val connectionCount = homeState?.activeConnections?.size ?: 0
+    val matchCount = homeState?.activeMatches
+        ?.count { it.matchState == MatchState.ChatActive || it.matchState == MatchState.VisualPhase }
+        ?: 0
+    val connectionCount = homeState?.activeConnections
+        ?.count { it.connectionState != ConnectionState.Closed }
+        ?: 0
     if (matchCount > 1 || connectionCount > 1) {
         Text(
             text = "Tenes mas de una experiencia activa. Por ahora vamos a abrir la primera disponible.",
@@ -668,4 +787,27 @@ private fun validateLocation(
         longitude = parsedLongitude,
         accuracyMeters = parsedAccuracy,
     )
+}
+
+private fun HomeState?.hasBlockingEngagements(): Boolean {
+    if (this == null) return false
+    return activeMatches.any {
+        it.matchState == MatchState.ChatActive || it.matchState == MatchState.VisualPhase
+    }
+}
+
+private fun HomeState?.shouldPollHome(): Boolean {
+    if (this == null) return false
+    return activeMatches.any {
+        it.matchState == MatchState.ChatActive || it.matchState == MatchState.VisualPhase
+    } || activeConnections.any { it.connectionState != ConnectionState.Closed }
+}
+
+private fun formatBackendDateTime(value: String?): String {
+    if (value.isNullOrBlank()) return "-"
+    return runCatching {
+        OffsetDateTime.parse(value).format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm", Locale.getDefault()))
+    }.getOrElse {
+        value.replace("T", " ").substringBeforeLast(":")
+    }
 }

@@ -13,10 +13,12 @@ import com.reals.app.di.AppContainer
 import com.reals.app.domain.model.ChatContinueDecision
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProfileStatus
+import com.reals.app.domain.model.VisualDecision
 import com.reals.app.ui.account.AccountDeletionRecoveryScreen
 import com.reals.app.ui.account.formatBackendDate
 import com.reals.app.ui.auth.LoginScreen
 import com.reals.app.ui.chat.FirstChatScreen
+import com.reals.app.ui.chat.VisualApprovalScreen
 import com.reals.app.ui.common.FullScreenMessage
 import com.reals.app.ui.matchmaking.MatchmakingHomeScreen
 import com.reals.app.ui.profile.CreateProfileScreen
@@ -139,6 +141,7 @@ fun RealsApp(appContainer: AppContainer) {
                             onLeaveQueue = viewModel::leaveMatchmakingQueue,
                             onRefreshHome = viewModel::refreshHomeState,
                             onOpenFirstChat = { matchId, chatId -> viewModel.openFirstChat(matchId, chatId) },
+                            onOpenVisualApproval = viewModel::openVisualApproval,
                             onEditProfile = viewModel::openProfileManagement,
                             onSignOut = viewModel::signOut,
                             onDeleteAccount = viewModel::deleteAccount,
@@ -155,21 +158,38 @@ fun RealsApp(appContainer: AppContainer) {
                 messages = current.messages,
                 exitRequests = current.exitRequests,
                 loading = current.loading,
-                refreshing = current.refreshing,
                 sending = current.sending,
                 actionLoading = current.actionLoading,
                 error = current.error,
                 message = current.message,
-                onRefresh = viewModel::refreshFirstChat,
+                onRefresh = { viewModel.refreshFirstChat(silent = true) },
                 onSendMessage = viewModel::sendFirstChatMessage,
                 onApprove = { viewModel.submitFirstChatDecision(ChatContinueDecision.Approved) },
                 onReject = { viewModel.submitFirstChatDecision(ChatContinueDecision.Rejected) },
                 onRequestMutualExit = viewModel::requestMutualChatExit,
-                onCancelUnilaterally = viewModel::cancelChatUnilaterally,
                 onSafetyCancel = viewModel::safetyCancelChat,
                 onAcceptExitRequest = viewModel::acceptChatExitRequest,
                 onRejectExitRequest = viewModel::rejectChatExitRequest,
-                onBackHome = viewModel::closeFirstChat,
+                onExitRequestTimeout = viewModel::timeoutChatExitRequest,
+            )
+
+            is RealsRootUiState.VisualApproval -> VisualApprovalScreen(
+                matchId = current.matchId,
+                match = current.match,
+                profile = current.profile,
+                partnerMessage = current.partnerMessage,
+                partnerMessageLoaded = current.partnerMessageLoaded,
+                loading = current.loading,
+                refreshing = current.refreshing,
+                writingMessage = current.writingMessage,
+                deciding = current.deciding,
+                error = current.error,
+                message = current.message,
+                onRefresh = viewModel::refreshVisualApproval,
+                onSavePersonalMessage = viewModel::saveMyVisualPersonalMessage,
+                onApprove = { viewModel.submitVisualDecision(VisualDecision.Approved) },
+                onReject = { viewModel.submitVisualDecision(VisualDecision.Rejected) },
+                onBackHome = viewModel::closeVisualApproval,
             )
 
             is RealsRootUiState.PendingEngagement -> FullScreenMessage(

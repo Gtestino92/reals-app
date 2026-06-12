@@ -27,10 +27,13 @@ import com.reals.app.domain.usecase.GetFirstChatForMatchUseCase
 import com.reals.app.domain.usecase.GetHomeUseCase
 import com.reals.app.domain.usecase.GetMatchUseCase
 import com.reals.app.domain.usecase.GetMeUseCase
+import com.reals.app.domain.usecase.GetPartnerPersonalMessageUseCase
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
 import com.reals.app.domain.usecase.GetQueueStatusUseCase
+import com.reals.app.domain.usecase.GetVisualProfileUseCase
 import com.reals.app.domain.usecase.LeaveQueueUseCase
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
+import com.reals.app.domain.usecase.PutMyPersonalMessageUseCase
 import com.reals.app.domain.usecase.ReactivateAccountUseCase
 import com.reals.app.domain.usecase.RejectChatExitRequestUseCase
 import com.reals.app.domain.usecase.ReplaceMockProfilePhotoUseCase
@@ -39,6 +42,7 @@ import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
 import com.reals.app.domain.usecase.SafetyCancelChatUseCase
 import com.reals.app.domain.usecase.SendChatMessageUseCase
 import com.reals.app.domain.usecase.SubmitChatDecisionUseCase
+import com.reals.app.domain.usecase.SubmitVisualDecisionUseCase
 import com.reals.app.domain.usecase.UpdateMatchFiltersUseCase
 import com.reals.app.domain.usecase.UpdateProfileUseCase
 import kotlinx.serialization.json.Json
@@ -58,7 +62,7 @@ class AppContainer(context: Context) {
     private val profileRepository = ProfileRepository(appContext, api, tokenProvider, apiExecutor)
     private val matchmakingRepository = MatchmakingRepository(api, tokenProvider, apiExecutor)
     private val matchRepository = MatchRepository(api, tokenProvider, apiExecutor)
-    private val chatRepository = ChatRepository(api, tokenProvider, apiExecutor)
+    private val chatRepository = ChatRepository(api, json, tokenProvider, apiExecutor)
     val provisionAndLoadProfileUseCase = ProvisionAndLoadProfileUseCase(
         meRepository = meRepository,
         profileRepository = profileRepository,
@@ -83,6 +87,10 @@ class AppContainer(context: Context) {
     val getMatchUseCase = GetMatchUseCase(matchRepository)
     val getFirstChatForMatchUseCase = GetFirstChatForMatchUseCase(matchRepository)
     val submitChatDecisionUseCase = SubmitChatDecisionUseCase(matchRepository)
+    val getVisualProfileUseCase = GetVisualProfileUseCase(matchRepository)
+    val submitVisualDecisionUseCase = SubmitVisualDecisionUseCase(matchRepository)
+    val putMyPersonalMessageUseCase = PutMyPersonalMessageUseCase(matchRepository)
+    val getPartnerPersonalMessageUseCase = GetPartnerPersonalMessageUseCase(matchRepository)
     val getChatUseCase = GetChatUseCase(chatRepository)
     val getChatMessagesUseCase = GetChatMessagesUseCase(chatRepository)
     val sendChatMessageUseCase = SendChatMessageUseCase(chatRepository)

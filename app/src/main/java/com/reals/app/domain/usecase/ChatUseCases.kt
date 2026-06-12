@@ -18,8 +18,8 @@ class GetChatUseCase(
 class GetChatMessagesUseCase(
     private val chatRepository: ChatRepository,
 ) {
-    suspend operator fun invoke(chatId: String): ApiResult<List<ChatMessage>> =
-        chatRepository.getMessages(chatId)
+    suspend operator fun invoke(chatId: String, afterMessageId: String? = null): ApiResult<List<ChatMessage>> =
+        chatRepository.getMessages(chatId, afterMessageId)
 }
 
 class SendChatMessageUseCase(
