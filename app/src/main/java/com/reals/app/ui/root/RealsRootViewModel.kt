@@ -282,6 +282,30 @@ class RealsRootViewModel(
         }
     }
 
+    fun pollHomeStateSilently() {
+        val current = _uiState.value as? RealsRootUiState.Ready ?: return
+
+        viewModelScope.launch {
+            when (val homeResult = getHomeUseCase()) {
+                is ApiResult.Success -> {
+                    val latest = _uiState.value as? RealsRootUiState.Ready ?: return@launch
+
+                    routeFromHomeState(
+                        ready = latest.copy(
+                            homeState = homeResult.value.withLocallyHiddenMatches(),
+                            homeLoading = false,
+                        ),
+                        autoNavigateEngagements = latest.homeState?.queue?.inQueue == true,
+                    )
+                }
+
+                is ApiResult.Failure -> {
+                    // polling silencioso: no pisar UI
+                }
+            }
+        }
+    }
+
     fun enqueueMatchmaking(location: SearchLocationInput) {
         val current = _uiState.value as? RealsRootUiState.Ready ?: return
 
@@ -1309,7 +1333,10 @@ class RealsRootViewModel(
     }
 
     private fun List<ChatMessage>.lastMessageCursor(): String? =
-        maxByOrNull { it.sentAt }?.id
+        sortedWith(
+            compareBy<ChatMessage> { it.sentAt }
+                .thenBy { it.id }
+        ).lastOrNull()?.id
 
     private fun List<ChatMessage>.appendUnique(newMessages: List<ChatMessage>): List<ChatMessage> {
         val seen = map { it.id }.toMutableSet()

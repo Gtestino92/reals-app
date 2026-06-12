@@ -140,6 +140,7 @@ fun RealsApp(appContainer: AppContainer) {
                             onEnqueue = viewModel::enqueueMatchmaking,
                             onLeaveQueue = viewModel::leaveMatchmakingQueue,
                             onRefreshHome = viewModel::refreshHomeState,
+                            onPollHome = viewModel::pollHomeStateSilently,
                             onOpenFirstChat = { matchId, chatId -> viewModel.openFirstChat(matchId, chatId) },
                             onOpenVisualApproval = viewModel::openVisualApproval,
                             onEditProfile = viewModel::openProfileManagement,

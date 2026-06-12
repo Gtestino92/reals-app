@@ -49,6 +49,7 @@ import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 
 private const val MUTUAL_EXIT_TIMEOUT_SECONDS = 20L
 
@@ -89,10 +90,12 @@ fun FirstChatScreen(
         chat?.status == ChatStatus.Active &&
         chat.myDecision == ChatDecisionState.Pending &&
         !exitFlowLocked
+    val partnerDisplayName = chat?.partner?.displayName
+        ?.takeIf { it.isNotBlank() }
 
     LaunchedEffect(chat?.id, canChat) {
         while (canChat) {
-            delay(5000)
+            delay(5000.milliseconds)
             onRefresh()
         }
     }
@@ -104,7 +107,7 @@ fun FirstChatScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         ChatHeader(
-            partnerName = chat?.partner?.displayName?.takeIf { it.isNotBlank() } ?: "Partner",
+            partnerName = partnerDisplayName,
             expiresAt = chat?.expiresAt,
             myDecision = chat?.myDecision,
             partnerDecision = chat?.partnerDecision,
@@ -181,7 +184,7 @@ fun FirstChatScreen(
 
 @Composable
 private fun ChatHeader(
-    partnerName: String,
+    partnerName: String?,
     expiresAt: String?,
     myDecision: ChatDecisionState?,
     partnerDecision: ChatDecisionState?,
@@ -197,7 +200,7 @@ private fun ChatHeader(
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
-                text = "Chat con $partnerName",
+                text = partnerName?.let { "Chat con ${TextSafety.safeDisplay(it)}" } ?: "Cargando chat",
                 style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.primary,
             )
@@ -570,14 +573,16 @@ private fun ChatExitRequest.remainingExitSeconds(nowMillis: Long): Long {
 private fun chatDecisionSummary(
     myDecision: ChatDecisionState?,
     partnerDecision: ChatDecisionState?,
-    partnerName: String,
+    partnerName: String?,
 ): String? {
     if (myDecision == null || partnerDecision == null) return null
+    val partnerLabel = partnerName?.takeIf { it.isNotBlank() } ?: "La otra persona"
+
     return when {
         myDecision == ChatDecisionState.Approved && partnerDecision == ChatDecisionState.Pending ->
-            "Aprobaste el chat. Esperando decision de $partnerName."
+            "Aprobaste el chat. Esperando decision de $partnerLabel."
         myDecision == ChatDecisionState.Pending && partnerDecision == ChatDecisionState.Approved ->
-            "$partnerName aprobo el chat. Falta tu decision."
+            "$partnerLabel aprobo el chat. Falta tu decision."
         myDecision == ChatDecisionState.Approved && partnerDecision == ChatDecisionState.Approved ->
             "Ambas personas aprobaron. Pasando a revision visual."
         myDecision == ChatDecisionState.Rejected || partnerDecision == ChatDecisionState.Rejected ->

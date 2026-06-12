@@ -43,7 +43,6 @@ import com.reals.app.core.security.TextSafety
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
-import com.reals.app.ui.common.photoValidationLabel
 import com.reals.app.ui.common.userDescription
 import com.reals.app.ui.common.userLabel
 import com.reals.app.domain.model.Profile
@@ -569,11 +568,6 @@ private fun PhotoRow(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-            Text(
-                text = "Estado: ${photoValidationLabel(photo.validationStatus)}",
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                style = MaterialTheme.typography.bodySmall,
-            )
             OutlinedButton(onClick = { onPickReplacementFile(photo.id, photo.position) }, enabled = !busy) {
                 Text("Reemplazar archivo")
             }

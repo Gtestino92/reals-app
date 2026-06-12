@@ -72,6 +72,7 @@ import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 fun MatchmakingHomeScreen(
@@ -85,6 +86,7 @@ fun MatchmakingHomeScreen(
     onEnqueue: (SearchLocationInput) -> Unit,
     onLeaveQueue: () -> Unit,
     onRefreshHome: () -> Unit,
+    onPollHome: () -> Unit,
     onOpenFirstChat: (matchId: String, chatId: String) -> Unit,
     onOpenVisualApproval: (matchId: String) -> Unit,
     onEditProfile: () -> Unit,
@@ -103,7 +105,7 @@ fun MatchmakingHomeScreen(
         SearchingChatScreen(
             homeError = homeError,
             accountDeleteLoading = accountDeleteLoading,
-            onPollHome = onRefreshHome,
+            onPollHome = onPollHome,
             onLeaveQueue = onLeaveQueue,
             onSignOut = onSignOut,
         )
@@ -111,10 +113,14 @@ fun MatchmakingHomeScreen(
     }
 
     if (homeState.shouldPollHome()) {
-        LaunchedEffect(homeState?.activeMatches?.size, homeState?.activeConnections?.size) {
+        LaunchedEffect(
+            homeState?.queue?.inQueue,
+            homeState?.activeMatches?.size,
+            homeState?.activeConnections?.size,
+        ) {
             while (true) {
-                delay(5000)
-                onRefreshHome()
+                delay(10_000.milliseconds)
+                onPollHome()
             }
         }
     }
@@ -206,7 +212,7 @@ private fun SearchingChatScreen(
 
     LaunchedEffect(Unit) {
         while (true) {
-            delay(2000)
+            delay(10_000.milliseconds)
             onPollHome()
         }
     }
