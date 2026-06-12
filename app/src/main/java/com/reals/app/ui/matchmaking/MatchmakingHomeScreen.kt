@@ -54,6 +54,7 @@ import androidx.core.location.LocationManagerCompat
 import androidx.core.os.CancellationSignal
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
+import com.reals.app.core.security.TextSafety
 import com.reals.app.domain.model.ConnectionState
 import com.reals.app.domain.model.HomeConnection
 import com.reals.app.domain.model.HomeMatch
@@ -482,8 +483,12 @@ private fun FirstChatItem(
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Chat inicial", style = MaterialTheme.typography.titleMedium)
+            val partnerName = firstChat.partner?.displayName
+                ?.takeIf { it.isNotBlank() }
+                ?.let(TextSafety::safeDisplay)
+
             Text(
-                text = "Con ${firstChat.partner?.displayName?.takeIf { it.isNotBlank() } ?: "Partner"}",
+                text = partnerName?.let { "Con $it" } ?: "Chat inicial activo",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
