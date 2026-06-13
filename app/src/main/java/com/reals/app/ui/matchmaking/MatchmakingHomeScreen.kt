@@ -213,7 +213,7 @@ private fun SearchingChatScreen(
 
     LaunchedEffect(Unit) {
         while (true) {
-            delay(10_000.milliseconds)
+            delay(2000.milliseconds)
             onPollHome()
         }
     }
