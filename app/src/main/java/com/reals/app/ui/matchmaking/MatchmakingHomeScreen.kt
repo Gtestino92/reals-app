@@ -54,6 +54,7 @@ import androidx.core.location.LocationManagerCompat
 import androidx.core.os.CancellationSignal
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
+import com.reals.app.core.security.TextSafety
 import com.reals.app.domain.model.ConnectionState
 import com.reals.app.domain.model.HomeConnection
 import com.reals.app.domain.model.HomeMatch
@@ -72,6 +73,7 @@ import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 fun MatchmakingHomeScreen(
@@ -85,11 +87,13 @@ fun MatchmakingHomeScreen(
     onEnqueue: (SearchLocationInput) -> Unit,
     onLeaveQueue: () -> Unit,
     onRefreshHome: () -> Unit,
+    onPollHome: () -> Unit,
     onOpenFirstChat: (matchId: String, chatId: String) -> Unit,
     onOpenVisualApproval: (matchId: String) -> Unit,
     onEditProfile: () -> Unit,
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit,
+    hasLocallyHiddenInteractions: Boolean,
 ) {
     val hasActiveEngagements = homeState.hasBlockingEngagements()
     val inQueue = homeState?.queue?.inQueue == true
@@ -103,18 +107,22 @@ fun MatchmakingHomeScreen(
         SearchingChatScreen(
             homeError = homeError,
             accountDeleteLoading = accountDeleteLoading,
-            onPollHome = onRefreshHome,
+            onPollHome = onPollHome,
             onLeaveQueue = onLeaveQueue,
             onSignOut = onSignOut,
         )
         return
     }
 
-    if (homeState.shouldPollHome()) {
-        LaunchedEffect(homeState?.activeMatches?.size, homeState?.activeConnections?.size) {
+    if (homeState.shouldPollHome(hasLocallyHiddenInteractions)) {
+        LaunchedEffect(
+            homeState?.queue?.inQueue,
+            homeState?.activeMatches?.size,
+            homeState?.activeConnections?.size,
+        ) {
             while (true) {
-                delay(5000)
-                onRefreshHome()
+                delay(10_000.milliseconds)
+                onPollHome()
             }
         }
     }
@@ -206,7 +214,7 @@ private fun SearchingChatScreen(
 
     LaunchedEffect(Unit) {
         while (true) {
-            delay(2000)
+            delay(2000.milliseconds)
             onPollHome()
         }
     }
@@ -329,7 +337,7 @@ private fun MatchmakingIdleScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(modifier = Modifier.height(20.dp))
-        ActiveEngagementCard(
+        PendingInteractionsCard(
             homeState = homeState,
             busy = busy,
             onOpenFirstChat = onOpenFirstChat,
@@ -416,7 +424,7 @@ private fun MatchmakingIdleScreen(
 }
 
 @Composable
-private fun ActiveEngagementCard(
+private fun PendingInteractionsCard(
     homeState: HomeState?,
     busy: Boolean,
     onOpenFirstChat: (matchId: String, chatId: String) -> Unit,
@@ -425,23 +433,27 @@ private fun ActiveEngagementCard(
     val firstChatMatches = homeState?.activeMatches
         ?.filter { it.matchState == MatchState.ChatActive && it.firstChat != null }
         .orEmpty()
+
     val visualApprovals = homeState?.activeMatches
         ?.filter { it.matchState == MatchState.VisualPhase }
         .orEmpty()
-    val connections = homeState?.activeConnections
-        ?.filter { it.connectionState != ConnectionState.Closed }
-        .orEmpty()
-    if (firstChatMatches.isEmpty() && visualApprovals.isEmpty() && connections.isEmpty()) return
+
+    if (firstChatMatches.isEmpty() && visualApprovals.isEmpty()) return
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+        ),
     ) {
-        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
             Text(
-                text = "Experiencias activas",
+                text = "Interacciones pendientes",
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
@@ -459,6 +471,38 @@ private fun ActiveEngagementCard(
                     onOpenVisualApproval = onOpenVisualApproval,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun NextStepCard(
+    homeState: HomeState?,
+) {
+    val connections = homeState?.activeConnections
+        ?.filter { it.connectionState != ConnectionState.Closed }
+        .orEmpty()
+
+    if (connections.isEmpty()) return
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = "Siguiente etapa",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+
             connections.forEach { connection ->
                 ConnectionPlaceholderItem(connection)
             }
@@ -476,8 +520,12 @@ private fun FirstChatItem(
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Chat inicial", style = MaterialTheme.typography.titleMedium)
+            val partnerName = firstChat.partner?.displayName
+                ?.takeIf { it.isNotBlank() }
+                ?.let(TextSafety::safeDisplay)
+
             Text(
-                text = "Con ${firstChat.partner?.displayName?.takeIf { it.isNotBlank() } ?: "Partner"}",
+                text = partnerName?.let { "Con $it" } ?: "Chat inicial activo",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
@@ -527,21 +575,28 @@ private fun VisualApprovalItem(
 private fun ConnectionPlaceholderItem(connection: HomeConnection) {
     val partnerName = connection.secondChat?.partner?.displayName?.takeIf { it.isNotBlank() }
         ?: connection.partner?.displayName?.takeIf { it.isNotBlank() }
+
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Siguiente etapa", style = MaterialTheme.typography.titleMedium)
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text("Coordinación pendiente", style = MaterialTheme.typography.titleMedium)
+
             partnerName?.let {
                 Text(
                     text = "Con $it",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+
             Text(
                 text = "Estado: ${connection.connectionState.userLabel()}",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
             Text(
-                text = "La pantalla de coordinacion/segundo chat se implementa en la siguiente etapa.",
+                text = "Ya hubo aprobación visual mutua. Falta implementar la coordinación del próximo chat.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -630,24 +685,55 @@ private fun AccountSection(
 
 @Composable
 private fun EngagementSummary(homeState: HomeState?) {
-    val matchCount = homeState?.activeMatches
-        ?.count { it.matchState == MatchState.ChatActive || it.matchState == MatchState.VisualPhase }
+    val firstChatCount = homeState?.activeMatches
+        ?.count { it.matchState == MatchState.ChatActive }
         ?: 0
+
+    val visualReviewCount = homeState?.activeMatches
+        ?.count { it.matchState == MatchState.VisualPhase }
+        ?: 0
+
     val connectionCount = homeState?.activeConnections
         ?.count { it.connectionState != ConnectionState.Closed }
         ?: 0
-    if (matchCount > 1 || connectionCount > 1) {
+
+    val totalPending = firstChatCount + visualReviewCount + connectionCount
+    if (totalPending == 0) return
+
+    val parts = buildList {
+        if (firstChatCount > 0) {
+            add(
+                "$firstChatCount " +
+                        if (firstChatCount == 1) "chat inicial" else "chats iniciales"
+            )
+        }
+
+        if (visualReviewCount > 0) {
+            add(
+                "$visualReviewCount " +
+                        if (visualReviewCount == 1) "revisión visual" else "revisiones visuales"
+            )
+        }
+
+        if (connectionCount > 0) {
+            add(
+                "$connectionCount " +
+                        if (connectionCount == 1) "conexión" else "conexiones"
+            )
+        }
+    }
+
+    if (totalPending > 1) {
         Text(
-            text = "Tenes mas de una experiencia activa. Por ahora vamos a abrir la primera disponible.",
+            text = "Tenés más de una interacción pendiente. Podés continuar una de ellas o buscar un nuevo chat si todavía tenés cupo disponible.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
-    if (matchCount > 0 || connectionCount > 0) {
-        Text(
-            text = "Experiencias activas: $matchCount chats, $connectionCount conexiones.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
+
+    Text(
+        text = "Interacciones pendientes: ${parts.joinToString(", ")}.",
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable
@@ -719,7 +805,7 @@ private suspend fun currentSearchLocation(context: Context): SearchLocationInput
     val provider = preferredProvider(locationManager)
         ?: error("Activa la ubicacion del dispositivo para buscar chat.")
     val location = requestCurrentLocation(context, locationManager, provider)
-        ?: newestLastKnownLocation(locationManager)
+        ?: newestLastKnownLocation(context, locationManager)
         ?: error("No hay ubicacion disponible todavia. Intenta nuevamente en unos segundos.")
     return SearchLocationInput(
         latitude = location.latitude,
@@ -758,10 +844,32 @@ private suspend fun requestCurrentLocation(
     }
 }
 
-private fun newestLastKnownLocation(locationManager: LocationManager): Location? {
-    return listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+private fun newestLastKnownLocation(
+    context: Context,
+    locationManager: LocationManager,
+): Location? {
+    val hasFineLocation = ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.ACCESS_FINE_LOCATION,
+    ) == PackageManager.PERMISSION_GRANTED
+
+    val hasCoarseLocation = ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.ACCESS_COARSE_LOCATION,
+    ) == PackageManager.PERMISSION_GRANTED
+
+    if (!hasFineLocation && !hasCoarseLocation) {
+        return null
+    }
+
+    return listOf(
+        LocationManager.GPS_PROVIDER,
+        LocationManager.NETWORK_PROVIDER,
+    )
         .mapNotNull { provider ->
-            runCatching { locationManager.getLastKnownLocation(provider) }.getOrNull()
+            runCatching {
+                locationManager.getLastKnownLocation(provider)
+            }.getOrNull()
         }
         .maxByOrNull { it.time }
 }
@@ -791,16 +899,21 @@ private fun validateLocation(
 
 private fun HomeState?.hasBlockingEngagements(): Boolean {
     if (this == null) return false
+
     return activeMatches.any {
-        it.matchState == MatchState.ChatActive || it.matchState == MatchState.VisualPhase
+        it.matchState == MatchState.ChatActive
     }
 }
 
-private fun HomeState?.shouldPollHome(): Boolean {
+private fun HomeState?.shouldPollHome(hasLocallyHiddenInteractions: Boolean): Boolean {
+    if (hasLocallyHiddenInteractions) return true
     if (this == null) return false
+
     return activeMatches.any {
         it.matchState == MatchState.ChatActive || it.matchState == MatchState.VisualPhase
-    } || activeConnections.any { it.connectionState != ConnectionState.Closed }
+    } || activeConnections.any {
+        it.connectionState != ConnectionState.Closed
+    }
 }
 
 private fun formatBackendDateTime(value: String?): String {

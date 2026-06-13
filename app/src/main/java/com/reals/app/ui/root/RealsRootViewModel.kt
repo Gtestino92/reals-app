@@ -282,6 +282,30 @@ class RealsRootViewModel(
         }
     }
 
+    fun pollHomeStateSilently() {
+        val current = _uiState.value as? RealsRootUiState.Ready ?: return
+
+        viewModelScope.launch {
+            when (val homeResult = getHomeUseCase()) {
+                is ApiResult.Success -> {
+                    val latest = _uiState.value as? RealsRootUiState.Ready ?: return@launch
+
+                    routeFromHomeState(
+                        ready = latest.copy(
+                            homeState = homeResult.value.withLocallyHiddenMatchesAndPrunedState(),
+                            homeLoading = false,
+                        ),
+                        autoNavigateEngagements = latest.homeState?.queue?.inQueue == true,
+                    )
+                }
+
+                is ApiResult.Failure -> {
+                    // polling silencioso: no pisar UI
+                }
+            }
+        }
+    }
+
     fun enqueueMatchmaking(location: SearchLocationInput) {
         val current = _uiState.value as? RealsRootUiState.Ready ?: return
 
@@ -360,6 +384,19 @@ class RealsRootViewModel(
             is RealsRootUiState.FirstChat -> current.session
             else -> return
         }
+
+        openFirstChat(
+            session = session,
+            matchId = matchId,
+            chatId = chatId,
+        )
+    }
+
+    private fun openFirstChat(
+        session: ProvisionedSession,
+        matchId: String,
+        chatId: String? = null,
+    ) {
         val cleanMatchId = matchId.trim()
         if (cleanMatchId.isBlank()) return
 
@@ -370,6 +407,7 @@ class RealsRootViewModel(
                 chatId = chatId,
                 loading = true,
             )
+
             val matchResult = getMatchUseCase(cleanMatchId)
             if (matchResult is ApiResult.Failure) {
                 _uiState.value = RealsRootUiState.FirstChat(
@@ -381,6 +419,7 @@ class RealsRootViewModel(
                 )
                 return@launch
             }
+
             val match = (matchResult as ApiResult.Success).value
             if (match.state !is MatchState.Unknown && match.state != MatchState.ChatActive) {
                 loadHomeForReady(
@@ -393,6 +432,7 @@ class RealsRootViewModel(
                 )
                 return@launch
             }
+
             val chatResult = getFirstChatForMatchUseCase(cleanMatchId)
             if (chatResult is ApiResult.Failure) {
                 _uiState.value = RealsRootUiState.FirstChat(
@@ -405,6 +445,7 @@ class RealsRootViewModel(
                 )
                 return@launch
             }
+
             val chat = (chatResult as ApiResult.Success).value
             if (!chat.status.isOpenFirstChatStatus()) {
                 loadHomeForReady(
@@ -417,8 +458,10 @@ class RealsRootViewModel(
                 )
                 return@launch
             }
+
             val messagesResult = getChatMessagesUseCase(chat.id)
             val exitsResult = getChatExitRequestsUseCase(chat.id)
+
             _uiState.value = RealsRootUiState.FirstChat(
                 session = session,
                 matchId = cleanMatchId,
@@ -428,7 +471,8 @@ class RealsRootViewModel(
                 messages = (messagesResult as? ApiResult.Success)?.value.orEmpty(),
                 exitRequests = (exitsResult as? ApiResult.Success)?.value.orEmpty(),
                 loading = false,
-                error = (messagesResult as? ApiResult.Failure)?.error ?: (exitsResult as? ApiResult.Failure)?.error,
+                error = (messagesResult as? ApiResult.Failure)?.error
+                    ?: (exitsResult as? ApiResult.Failure)?.error,
             )
         }
     }
@@ -1017,6 +1061,10 @@ class RealsRootViewModel(
         }
     }
 
+    val hasLocallyHiddenInteractions: Boolean
+        get() = locallyHiddenPendingChatMatchIds.isNotEmpty() ||
+                locallyHiddenVisualMatchIds.isNotEmpty()
+
     fun deleteProfilePhoto(photoId: String, position: Int) {
         val current = _uiState.value as? RealsRootUiState.Ready ?: return
         viewModelScope.launch {
@@ -1081,26 +1129,26 @@ class RealsRootViewModel(
         previous: RealsRootUiState.Ready,
         successMessage: String,
     ) {
-        when (val refreshedSession = provisionAndLoadProfile()) {
-            is ApiResult.Success -> {
-                val refreshedPhotos = getProfilePhotosUseCase.invoke()
-                val updatedPhotos = (refreshedPhotos as? ApiResult.Success)?.value
-                    ?.sortedBy { it.position }
-                    ?: previous.profilePhotos
-                _uiState.value = previous.copy(
-                    session = refreshedSession.value,
-                    profilePhotos = updatedPhotos,
-                    profilePhotosError = null,
-                    addingPhoto = false,
-                    photoActionMessage = successMessage,
-                )
-            }
+        val refreshedPhotos = getProfilePhotosUseCase.invoke()
+        val refreshedSession = provisionAndLoadProfile()
 
-            is ApiResult.Failure -> _uiState.value = previous.copy(
+        if (refreshedPhotos is ApiResult.Success) {
+            _uiState.value = previous.copy(
+                session = (refreshedSession as? ApiResult.Success)?.value ?: previous.session,
+                profilePhotos = refreshedPhotos.value.sortedBy { it.position },
+                profilePhotosError = null,
                 addingPhoto = false,
-                photoActionError = refreshedSession.error,
+                photoActionMessage = successMessage,
+                photoActionError = null,
             )
+            return
         }
+
+        _uiState.value = previous.copy(
+            session = (refreshedSession as? ApiResult.Success)?.value ?: previous.session,
+            addingPhoto = false,
+            photoActionError = (refreshedPhotos as ApiResult.Failure).error,
+        )
     }
 
     private suspend fun loadVisualApprovalState(
@@ -1170,23 +1218,33 @@ class RealsRootViewModel(
         autoNavigateEngagements: Boolean = false,
     ) {
         if (publishLoadingState) {
-            _uiState.value = ready.copy(homeLoading = true, homeError = null)
+            _uiState.value = ready.copy(
+                homeLoading = true,
+                homeError = null,
+            )
         }
-        when (val homeResult = getHomeUseCase()) {
-            is ApiResult.Success -> routeFromHomeState(
-                ready = ready.copy(
-                    homeState = homeResult.value.withLocallyHiddenMatches(),
-                    homeLoading = false,
-                    homeError = null,
-                ),
-                autoNavigateEngagements = autoNavigateEngagements,
-            )
 
-            is ApiResult.Failure -> _uiState.value = ready.copy(
-                homeLoading = false,
-                homeError = homeResult.error,
-                homeMessage = null,
-            )
+        when (val homeResult = getHomeUseCase()) {
+            is ApiResult.Success -> {
+                val visibleHomeState = homeResult.value.withLocallyHiddenMatchesAndPrunedState()
+
+                routeFromHomeState(
+                    ready = ready.copy(
+                        homeState = visibleHomeState,
+                        homeLoading = false,
+                        homeError = null,
+                    ),
+                    autoNavigateEngagements = autoNavigateEngagements,
+                )
+            }
+
+            is ApiResult.Failure -> {
+                _uiState.value = ready.copy(
+                    homeLoading = false,
+                    homeError = homeResult.error,
+                    homeMessage = null,
+                )
+            }
         }
     }
 
@@ -1212,8 +1270,13 @@ class RealsRootViewModel(
         val firstChatMatch = home.activeMatches.firstOrNull {
             it.matchState == MatchState.ChatActive && it.firstChat != null
         }
+
         if (firstChatMatch?.firstChat != null) {
-            openFirstChat(firstChatMatch.matchId, firstChatMatch.firstChat.chatId)
+            openFirstChat(
+                session = ready.session,
+                matchId = firstChatMatch.matchId,
+                chatId = firstChatMatch.firstChat.chatId,
+            )
             return
         }
 
@@ -1260,6 +1323,30 @@ class RealsRootViewModel(
                     match.matchId in locallyHiddenVisualMatchIds)
         },
     )
+
+    private fun HomeState.withLocallyHiddenMatchesAndPrunedState(): HomeState {
+        val stillChatActiveIds = activeMatches
+            .filter { it.matchState == MatchState.ChatActive }
+            .map { it.matchId }
+            .toSet()
+
+        val stillVisualPhaseIds = activeMatches
+            .filter { it.matchState == MatchState.VisualPhase }
+            .map { it.matchId }
+            .toSet()
+
+        locallyHiddenPendingChatMatchIds.retainAll(stillChatActiveIds)
+        locallyHiddenVisualMatchIds.retainAll(stillVisualPhaseIds)
+
+        return copy(
+            activeMatches = activeMatches.filterNot { match ->
+                match.matchState == MatchState.ChatActive &&
+                        match.matchId in locallyHiddenPendingChatMatchIds ||
+                        match.matchState == MatchState.VisualPhase &&
+                        match.matchId in locallyHiddenVisualMatchIds
+            }
+        )
+    }
 
     private fun firstChatDecisionMessage(state: MatchState): String = when (state) {
         MatchState.ChatActive -> "Guardamos tu decision. Esperamos la respuesta de la otra persona."
@@ -1309,7 +1396,10 @@ class RealsRootViewModel(
     }
 
     private fun List<ChatMessage>.lastMessageCursor(): String? =
-        maxByOrNull { it.sentAt }?.id
+        sortedWith(
+            compareBy<ChatMessage> { it.sentAt }
+                .thenBy { it.id }
+        ).lastOrNull()?.id
 
     private fun List<ChatMessage>.appendUnique(newMessages: List<ChatMessage>): List<ChatMessage> {
         val seen = map { it.id }.toMutableSet()
@@ -1436,11 +1526,12 @@ class RealsRootViewModel(
         if (snapshot is ProfileSnapshot.Found) {
             if (snapshot.profile.status == ProfileStatus.Active) {
                 loadHomeForReady(
-                    RealsRootUiState.Ready(
+                    ready = RealsRootUiState.Ready(
                         session = session,
                         homeLoading = true,
                     ),
                     publishLoadingState = false,
+                    autoNavigateEngagements = true,
                 )
                 return
             }
