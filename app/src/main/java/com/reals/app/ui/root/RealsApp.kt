@@ -146,6 +146,7 @@ fun RealsApp(appContainer: AppContainer) {
                             onEditProfile = viewModel::openProfileManagement,
                             onSignOut = viewModel::signOut,
                             onDeleteAccount = viewModel::deleteAccount,
+                            hasLocallyHiddenInteractions = viewModel.hasLocallyHiddenInteractions
                         )
                     }
                 }

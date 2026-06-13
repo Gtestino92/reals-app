@@ -93,6 +93,7 @@ fun MatchmakingHomeScreen(
     onEditProfile: () -> Unit,
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit,
+    hasLocallyHiddenInteractions: Boolean,
 ) {
     val hasActiveEngagements = homeState.hasBlockingEngagements()
     val inQueue = homeState?.queue?.inQueue == true
@@ -113,7 +114,7 @@ fun MatchmakingHomeScreen(
         return
     }
 
-    if (homeState.shouldPollHome()) {
+    if (homeState.shouldPollHome(hasLocallyHiddenInteractions)) {
         LaunchedEffect(
             homeState?.queue?.inQueue,
             homeState?.activeMatches?.size,
@@ -684,24 +685,55 @@ private fun AccountSection(
 
 @Composable
 private fun EngagementSummary(homeState: HomeState?) {
-    val matchCount = homeState?.activeMatches
-        ?.count { it.matchState == MatchState.ChatActive || it.matchState == MatchState.VisualPhase }
+    val firstChatCount = homeState?.activeMatches
+        ?.count { it.matchState == MatchState.ChatActive }
         ?: 0
+
+    val visualReviewCount = homeState?.activeMatches
+        ?.count { it.matchState == MatchState.VisualPhase }
+        ?: 0
+
     val connectionCount = homeState?.activeConnections
         ?.count { it.connectionState != ConnectionState.Closed }
         ?: 0
-    if (matchCount > 1 || connectionCount > 1) {
+
+    val totalPending = firstChatCount + visualReviewCount + connectionCount
+    if (totalPending == 0) return
+
+    val parts = buildList {
+        if (firstChatCount > 0) {
+            add(
+                "$firstChatCount " +
+                        if (firstChatCount == 1) "chat inicial" else "chats iniciales"
+            )
+        }
+
+        if (visualReviewCount > 0) {
+            add(
+                "$visualReviewCount " +
+                        if (visualReviewCount == 1) "revisión visual" else "revisiones visuales"
+            )
+        }
+
+        if (connectionCount > 0) {
+            add(
+                "$connectionCount " +
+                        if (connectionCount == 1) "conexión" else "conexiones"
+            )
+        }
+    }
+
+    if (totalPending > 1) {
         Text(
-            text = "Tenes mas de una experiencia activa. Por ahora vamos a abrir la primera disponible.",
+            text = "Tenés más de una interacción pendiente. Podés continuar una de ellas o buscar un nuevo chat si todavía tenés cupo disponible.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
-    if (matchCount > 0 || connectionCount > 0) {
-        Text(
-            text = "Experiencias activas: $matchCount chats, $connectionCount conexiones.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
+
+    Text(
+        text = "Interacciones pendientes: ${parts.joinToString(", ")}.",
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable
@@ -867,16 +899,21 @@ private fun validateLocation(
 
 private fun HomeState?.hasBlockingEngagements(): Boolean {
     if (this == null) return false
+
     return activeMatches.any {
-        it.matchState == MatchState.ChatActive || it.matchState == MatchState.VisualPhase
+        it.matchState == MatchState.ChatActive
     }
 }
 
-private fun HomeState?.shouldPollHome(): Boolean {
+private fun HomeState?.shouldPollHome(hasLocallyHiddenInteractions: Boolean): Boolean {
+    if (hasLocallyHiddenInteractions) return true
     if (this == null) return false
+
     return activeMatches.any {
         it.matchState == MatchState.ChatActive || it.matchState == MatchState.VisualPhase
-    } || activeConnections.any { it.connectionState != ConnectionState.Closed }
+    } || activeConnections.any {
+        it.connectionState != ConnectionState.Closed
+    }
 }
 
 private fun formatBackendDateTime(value: String?): String {

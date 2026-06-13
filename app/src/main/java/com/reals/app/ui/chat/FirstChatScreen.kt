@@ -95,7 +95,7 @@ fun FirstChatScreen(
 
     LaunchedEffect(chat?.id, canChat) {
         while (canChat) {
-            delay(5000.milliseconds)
+            delay(2000.milliseconds)
             onRefresh()
         }
     }
