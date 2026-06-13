@@ -336,7 +336,7 @@ private fun MatchmakingIdleScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(modifier = Modifier.height(20.dp))
-        ActiveEngagementCard(
+        PendingInteractionsCard(
             homeState = homeState,
             busy = busy,
             onOpenFirstChat = onOpenFirstChat,
@@ -423,7 +423,7 @@ private fun MatchmakingIdleScreen(
 }
 
 @Composable
-private fun ActiveEngagementCard(
+private fun PendingInteractionsCard(
     homeState: HomeState?,
     busy: Boolean,
     onOpenFirstChat: (matchId: String, chatId: String) -> Unit,
@@ -432,23 +432,27 @@ private fun ActiveEngagementCard(
     val firstChatMatches = homeState?.activeMatches
         ?.filter { it.matchState == MatchState.ChatActive && it.firstChat != null }
         .orEmpty()
+
     val visualApprovals = homeState?.activeMatches
         ?.filter { it.matchState == MatchState.VisualPhase }
         .orEmpty()
-    val connections = homeState?.activeConnections
-        ?.filter { it.connectionState != ConnectionState.Closed }
-        .orEmpty()
-    if (firstChatMatches.isEmpty() && visualApprovals.isEmpty() && connections.isEmpty()) return
+
+    if (firstChatMatches.isEmpty() && visualApprovals.isEmpty()) return
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+        ),
     ) {
-        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
             Text(
-                text = "Experiencias activas",
+                text = "Interacciones pendientes",
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
@@ -466,6 +470,38 @@ private fun ActiveEngagementCard(
                     onOpenVisualApproval = onOpenVisualApproval,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun NextStepCard(
+    homeState: HomeState?,
+) {
+    val connections = homeState?.activeConnections
+        ?.filter { it.connectionState != ConnectionState.Closed }
+        .orEmpty()
+
+    if (connections.isEmpty()) return
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = "Siguiente etapa",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+
             connections.forEach { connection ->
                 ConnectionPlaceholderItem(connection)
             }
@@ -538,21 +574,28 @@ private fun VisualApprovalItem(
 private fun ConnectionPlaceholderItem(connection: HomeConnection) {
     val partnerName = connection.secondChat?.partner?.displayName?.takeIf { it.isNotBlank() }
         ?: connection.partner?.displayName?.takeIf { it.isNotBlank() }
+
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Siguiente etapa", style = MaterialTheme.typography.titleMedium)
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text("Coordinación pendiente", style = MaterialTheme.typography.titleMedium)
+
             partnerName?.let {
                 Text(
                     text = "Con $it",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+
             Text(
                 text = "Estado: ${connection.connectionState.userLabel()}",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
             Text(
-                text = "La pantalla de coordinacion/segundo chat se implementa en la siguiente etapa.",
+                text = "Ya hubo aprobación visual mutua. Falta implementar la coordinación del próximo chat.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -730,7 +773,7 @@ private suspend fun currentSearchLocation(context: Context): SearchLocationInput
     val provider = preferredProvider(locationManager)
         ?: error("Activa la ubicacion del dispositivo para buscar chat.")
     val location = requestCurrentLocation(context, locationManager, provider)
-        ?: newestLastKnownLocation(locationManager)
+        ?: newestLastKnownLocation(context, locationManager)
         ?: error("No hay ubicacion disponible todavia. Intenta nuevamente en unos segundos.")
     return SearchLocationInput(
         latitude = location.latitude,
@@ -769,10 +812,32 @@ private suspend fun requestCurrentLocation(
     }
 }
 
-private fun newestLastKnownLocation(locationManager: LocationManager): Location? {
-    return listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+private fun newestLastKnownLocation(
+    context: Context,
+    locationManager: LocationManager,
+): Location? {
+    val hasFineLocation = ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.ACCESS_FINE_LOCATION,
+    ) == PackageManager.PERMISSION_GRANTED
+
+    val hasCoarseLocation = ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.ACCESS_COARSE_LOCATION,
+    ) == PackageManager.PERMISSION_GRANTED
+
+    if (!hasFineLocation && !hasCoarseLocation) {
+        return null
+    }
+
+    return listOf(
+        LocationManager.GPS_PROVIDER,
+        LocationManager.NETWORK_PROVIDER,
+    )
         .mapNotNull { provider ->
-            runCatching { locationManager.getLastKnownLocation(provider) }.getOrNull()
+            runCatching {
+                locationManager.getLastKnownLocation(provider)
+            }.getOrNull()
         }
         .maxByOrNull { it.time }
 }

@@ -1105,26 +1105,26 @@ class RealsRootViewModel(
         previous: RealsRootUiState.Ready,
         successMessage: String,
     ) {
-        when (val refreshedSession = provisionAndLoadProfile()) {
-            is ApiResult.Success -> {
-                val refreshedPhotos = getProfilePhotosUseCase.invoke()
-                val updatedPhotos = (refreshedPhotos as? ApiResult.Success)?.value
-                    ?.sortedBy { it.position }
-                    ?: previous.profilePhotos
-                _uiState.value = previous.copy(
-                    session = refreshedSession.value,
-                    profilePhotos = updatedPhotos,
-                    profilePhotosError = null,
-                    addingPhoto = false,
-                    photoActionMessage = successMessage,
-                )
-            }
+        val refreshedPhotos = getProfilePhotosUseCase.invoke()
+        val refreshedSession = provisionAndLoadProfile()
 
-            is ApiResult.Failure -> _uiState.value = previous.copy(
+        if (refreshedPhotos is ApiResult.Success) {
+            _uiState.value = previous.copy(
+                session = (refreshedSession as? ApiResult.Success)?.value ?: previous.session,
+                profilePhotos = refreshedPhotos.value.sortedBy { it.position },
+                profilePhotosError = null,
                 addingPhoto = false,
-                photoActionError = refreshedSession.error,
+                photoActionMessage = successMessage,
+                photoActionError = null,
             )
+            return
         }
+
+        _uiState.value = previous.copy(
+            session = (refreshedSession as? ApiResult.Success)?.value ?: previous.session,
+            addingPhoto = false,
+            photoActionError = (refreshedPhotos as ApiResult.Failure).error,
+        )
     }
 
     private suspend fun loadVisualApprovalState(
