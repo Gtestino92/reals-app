@@ -114,6 +114,7 @@ sealed interface RealsRootUiState {
         val homeError: ApiError? = null,
         val homeMessage: String? = null,
         val editingActiveProfile: Boolean = false,
+        val matchmakingBlockedReason: ApiError? = null
     ) : RealsRootUiState
     data class FirstChat(
         val session: ProvisionedSession,
@@ -311,7 +312,12 @@ class RealsRootViewModel(
 
         viewModelScope.launch {
             lastSearchLocation = location
-            val pending = current.copy(homeLoading = true, homeError = null, homeMessage = null)
+            val pending = current.copy(
+                homeLoading = true,
+                homeError = null,
+                homeMessage = null,
+                matchmakingBlockedReason = null,
+            )
             _uiState.value = pending
             when (val result = enqueueMatchmakingUseCase(location)) {
                 is ApiResult.Success -> loadHomeForReady(
@@ -325,6 +331,9 @@ class RealsRootViewModel(
                 is ApiResult.Failure -> _uiState.value = pending.copy(
                     homeLoading = false,
                     homeError = result.error,
+                    matchmakingBlockedReason = result.error.takeIf {
+                        it is ApiError.Backend && it.code == "ACTIVE_MATCH_LIMIT_REACHED"
+                    },
                 )
             }
         }
@@ -650,21 +659,6 @@ class RealsRootViewModel(
                         reenterMatchmakingOrLoadHome(current.session)
                         return@launch
                     }
-
-                    if (decision == ChatContinueDecision.Rejected) {
-                        locallyHiddenPendingChatMatchIds += current.matchId
-                        reenterMatchmakingOrLoadHome(current.session)
-                        return@launch
-                    }
-
-                    loadHomeForReady(
-                        ready = RealsRootUiState.Ready(
-                            session = current.session,
-                            homeLoading = true,
-                            homeMessage = firstChatDecisionMessage(result.value.state),
-                        ),
-                        autoNavigateEngagements = false,
-                    )
                 }
 
                 is ApiResult.Failure -> _uiState.value = pending.copy(
@@ -1216,6 +1210,7 @@ class RealsRootViewModel(
         ready: RealsRootUiState.Ready,
         publishLoadingState: Boolean = true,
         autoNavigateEngagements: Boolean = false,
+        matchmakingBlockedReason: Boolean = false
     ) {
         if (publishLoadingState) {
             _uiState.value = ready.copy(
@@ -1361,21 +1356,39 @@ class RealsRootViewModel(
     private suspend fun reenterMatchmakingOrLoadHome(session: ProvisionedSession) {
         val location = lastSearchLocation
         val ready = RealsRootUiState.Ready(session = session, homeLoading = true)
+
         if (location == null) {
-            loadHomeForReady(ready = ready, autoNavigateEngagements = false)
+            loadHomeForReady(
+                ready = ready,
+                autoNavigateEngagements = false,
+            )
             return
         }
 
         when (val enqueueResult = enqueueMatchmakingUseCase(location)) {
             is ApiResult.Success -> loadHomeForReady(
-                ready = ready,
+                ready = ready.copy(
+                    matchmakingBlockedReason = null,
+                ),
                 autoNavigateEngagements = true,
             )
 
-            is ApiResult.Failure -> loadHomeForReady(
-                ready = ready.copy(homeError = enqueueResult.error),
-                autoNavigateEngagements = false,
-            )
+            is ApiResult.Failure -> {
+                val reachedLimit = enqueueResult.error is ApiError.Backend &&
+                        enqueueResult.error.code == "ACTIVE_MATCH_LIMIT_REACHED"
+
+                loadHomeForReady(
+                    ready = ready.copy(
+                        homeMessage = if (reachedLimit) {
+                            "Aprobaste el chat. Ya tenés el máximo de interacciones activas."
+                        } else {
+                            "Aprobaste el chat. No pudimos volver a iniciar la búsqueda automáticamente."
+                        },
+                        matchmakingBlockedReason = enqueueResult.error,
+                    ),
+                    autoNavigateEngagements = false,
+                )
+            }
         }
     }
 
