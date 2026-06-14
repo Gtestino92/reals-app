@@ -3,6 +3,7 @@
 import com.reals.app.data.dto.ChatExitOutcomeResponseDto
 import com.reals.app.data.dto.ChatExitRequestResponseDto
 import com.reals.app.data.dto.ChatMessageResponseDto
+import com.reals.app.data.dto.ChatPartnerResponseDto
 import com.reals.app.data.dto.ChatResponseDto
 import com.reals.app.data.dto.CreateProfileRequestDto
 import com.reals.app.data.dto.EnqueueMatchmakingRequestDto
@@ -134,6 +135,7 @@ fun HomeMatchResponseDto.toDomain(): HomeMatch = HomeMatch(
     matchId = matchId,
     matchState = MatchState.fromBackend(matchState),
     firstChat = firstChat?.toDomain(),
+    partnerDisplayName = partner?.displayName,
 )
 
 fun HomeConnectionResponseDto.toDomain(): HomeConnection = HomeConnection(
@@ -199,7 +201,7 @@ fun ChatResponseDto.toDomain(): Chat = Chat(
     lastMessageAt = lastMessageAt,
 )
 
-fun com.reals.app.data.dto.ChatPartnerResponseDto.toDomain(): ChatPartner = ChatPartner(
+fun ChatPartnerResponseDto.toDomain(): ChatPartner = ChatPartner(
     userId = userId,
     profileId = profileId,
     displayName = displayName,

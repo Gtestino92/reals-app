@@ -20,6 +20,7 @@ data class HomeMatchResponseDto(
     val matchId: String,
     val matchState: String,
     val firstChat: HomeChatResponseDto? = null,
+    val partner: ChatPartnerResponseDto? = null
 )
 
 @Serializable

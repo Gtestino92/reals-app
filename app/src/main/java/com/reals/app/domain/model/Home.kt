@@ -15,6 +15,7 @@ data class HomeMatch(
     val matchId: String,
     val matchState: MatchState,
     val firstChat: HomeChat?,
+    val partnerDisplayName: String?,
 )
 
 data class HomeConnection(

@@ -343,6 +343,9 @@ private fun MatchmakingIdleScreen(
             onOpenFirstChat = onOpenFirstChat,
             onOpenVisualApproval = onOpenVisualApproval,
         )
+        NextStepCard(
+            homeState = homeState,
+        )
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
@@ -355,7 +358,7 @@ private fun MatchmakingIdleScreen(
                 )
                 EngagementSummary(homeState)
                 localError?.let { ErrorFeedback("No pudimos usar tu ubicacion", it) }
-                homeError?.let { ApiErrorFeedbackCard(it, ErrorContext.Matchmaking) }
+                homeError?.let { ApiErrorFeedbackCard(it, ErrorContext.Home) }
                 homeMessage?.let { SuccessFeedback(it) }
                 Button(
                     onClick = {
@@ -555,7 +558,12 @@ private fun VisualApprovalItem(
 ) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Aprobacion visual pendiente", style = MaterialTheme.typography.titleMedium)
+            val partnerName = match.partnerDisplayName?.takeIf { it.isNotBlank() }
+
+            Text(
+                text = partnerName?.let { "Aprobación visual con $it" }
+                    ?: "Aprobación visual pendiente"
+            )
             Text(
                 text = "Revisa el perfil visual y decidi si queres continuar.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
