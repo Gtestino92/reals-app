@@ -136,7 +136,7 @@ Selected stable frontend-facing domain codes:
 - `PROFILE_PHOTO_LIMIT_REACHED`: profile already has the maximum number of photos.
 - `ACCOUNT_PENDING_DELETION`: account/email is still inside the deletion recovery window.
 - `ACCOUNT_DELETION_FINALIZED`: account deletion can no longer be recovered.
-- `INVALID_PROFILE_BIRTH_DATE`: birth date is invalid for profile creation.
+- `INVALID_PROFILE_BIRTH_DATE`: birthdate is invalid for profile creation.
 - `INVALID_MATCH_FILTERS`: dynamic match filters are internally inconsistent or out of range.
 - `PHOTO_POSITION_INVALID`: requested photo position is outside the configured range.
 - `PHOTO_POSITION_OCCUPIED`: requested photo position is already used.

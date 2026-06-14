@@ -82,6 +82,7 @@ fun MatchmakingHomeScreen(
     homeLoading: Boolean,
     homeError: ApiError?,
     homeMessage: String?,
+    matchmakingBlockedReason: ApiError?,
     accountDeleteLoading: Boolean,
     accountDeleteError: ApiError?,
     onEnqueue: (SearchLocationInput) -> Unit,
@@ -97,6 +98,9 @@ fun MatchmakingHomeScreen(
 ) {
     val hasActiveEngagements = homeState.hasBlockingEngagements()
     val inQueue = homeState?.queue?.inQueue == true
+    val matchmakingBlockedByLimit =
+        matchmakingBlockedReason is ApiError.Backend &&
+                matchmakingBlockedReason.code == "ACTIVE_MATCH_LIMIT_REACHED"
 
     if (homeState == null && homeLoading) {
         LoadingHomeStateScreen()
@@ -133,6 +137,7 @@ fun MatchmakingHomeScreen(
         homeLoading = homeLoading,
         homeError = homeError,
         homeMessage = homeMessage,
+        matchmakingBlockedByLimit = matchmakingBlockedByLimit,
         accountDeleteLoading = accountDeleteLoading,
         accountDeleteError = accountDeleteError,
         hasActiveEngagements = hasActiveEngagements,
@@ -275,6 +280,7 @@ private fun MatchmakingIdleScreen(
     homeLoading: Boolean,
     homeError: ApiError?,
     homeMessage: String?,
+    matchmakingBlockedByLimit: Boolean,
     accountDeleteLoading: Boolean,
     accountDeleteError: ApiError?,
     hasActiveEngagements: Boolean,
@@ -343,6 +349,9 @@ private fun MatchmakingIdleScreen(
             onOpenFirstChat = onOpenFirstChat,
             onOpenVisualApproval = onOpenVisualApproval,
         )
+        NextStepCard(
+            homeState = homeState,
+        )
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
@@ -355,8 +364,14 @@ private fun MatchmakingIdleScreen(
                 )
                 EngagementSummary(homeState)
                 localError?.let { ErrorFeedback("No pudimos usar tu ubicacion", it) }
-                homeError?.let { ApiErrorFeedbackCard(it, ErrorContext.Matchmaking) }
+                homeError?.let { ApiErrorFeedbackCard(it, ErrorContext.Home) }
                 homeMessage?.let { SuccessFeedback(it) }
+                if (matchmakingBlockedByLimit) {
+                    Text(
+                        text = "Ya tenés el máximo de interacciones activas. Resolvé alguna pendiente antes de buscar otro chat.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Button(
                     onClick = {
                         if (hasLocationPermission(context)) {
@@ -370,7 +385,7 @@ private fun MatchmakingIdleScreen(
                             )
                         }
                     },
-                    enabled = !busy && !hasActiveEngagements,
+                    enabled = !busy && !hasActiveEngagements && !matchmakingBlockedByLimit,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(if (locating || homeLoading) "Preparando busqueda..." else "Buscar chat")
@@ -380,7 +395,7 @@ private fun MatchmakingIdleScreen(
                 }
                 OutlinedButton(
                     onClick = { manualExpanded = !manualExpanded },
-                    enabled = !busy && !hasActiveEngagements,
+                    enabled = !busy && !hasActiveEngagements && !matchmakingBlockedByLimit,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(if (manualExpanded) "Ocultar fallback manual" else "Fallback manual dev")
@@ -390,7 +405,7 @@ private fun MatchmakingIdleScreen(
                         latitude = latitude,
                         longitude = longitude,
                         accuracy = accuracy,
-                        enabled = !busy && !hasActiveEngagements,
+                        enabled = !busy && !hasActiveEngagements && !matchmakingBlockedByLimit,
                         onLatitudeChange = { latitude = signedDecimalInput(it) },
                         onLongitudeChange = { longitude = signedDecimalInput(it) },
                         onAccuracyChange = { accuracy = it.filter { char -> char.isDigit() } },
@@ -555,7 +570,12 @@ private fun VisualApprovalItem(
 ) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Aprobacion visual pendiente", style = MaterialTheme.typography.titleMedium)
+            val partnerName = match.partnerDisplayName?.takeIf { it.isNotBlank() }
+
+            Text(
+                text = partnerName?.let { "Aprobación visual con $it" }
+                    ?: "Aprobación visual pendiente"
+            )
             Text(
                 text = "Revisa el perfil visual y decidi si queres continuar.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
