@@ -18,7 +18,8 @@ The formal OpenAPI contract lives in `docs/openapi.yaml`.
 For first-chat navigation, `GET /api/me/home` exposes `activeMatches[].firstChat`
 only while the match remains in `CHAT_ACTIVE`. Once both users approve and the
 match moves to `VISUAL_PHASE`, the match remains in `activeMatches[]` with
-`matchState = VISUAL_PHASE` and `firstChat = null`.
+`matchState = VISUAL_PHASE` and `firstChat = null`. Expired visual-phase
+matches are not returned by home.
 
 Most current-user flows should prefer `@CurrentUserId` instead of accepting arbitrary user ids.
 
@@ -136,7 +137,7 @@ Selected stable frontend-facing domain codes:
 - `PROFILE_PHOTO_LIMIT_REACHED`: profile already has the maximum number of photos.
 - `ACCOUNT_PENDING_DELETION`: account/email is still inside the deletion recovery window.
 - `ACCOUNT_DELETION_FINALIZED`: account deletion can no longer be recovered.
-- `INVALID_PROFILE_BIRTH_DATE`: birthdate is invalid for profile creation.
+- `INVALID_PROFILE_BIRTH_DATE`: birth date is invalid for profile creation.
 - `INVALID_MATCH_FILTERS`: dynamic match filters are internally inconsistent or out of range.
 - `PHOTO_POSITION_INVALID`: requested photo position is outside the configured range.
 - `PHOTO_POSITION_OCCUPIED`: requested photo position is already used.
