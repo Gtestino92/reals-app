@@ -5,6 +5,14 @@ data class HomeState(
     val queue: HomeQueueState,
     val activeMatches: List<HomeMatch>,
     val activeConnections: List<HomeConnection>,
+    val engagementSummary: HomeEngagementSummary,
+)
+
+data class HomeEngagementSummary(
+    val activeMatchCount: Int,
+    val activeConnectionCount: Int,
+    val pendingSchedulingConnectionCount: Int,
+    val actionableConnectionCount: Int,
 )
 
 data class HomeQueueState(
@@ -37,6 +45,10 @@ data class HomeChat(
 sealed interface ConnectionState {
     val rawValue: String
 
+    data object SchedulingPending : ConnectionState {
+        override val rawValue = "SCHEDULING_PENDING"
+    }
+
     data object SchedulingPhase : ConnectionState {
         override val rawValue = "SCHEDULING_PHASE"
     }
@@ -61,6 +73,7 @@ sealed interface ConnectionState {
 
     companion object {
         fun fromBackend(value: String): ConnectionState = when (value.uppercase()) {
+            SchedulingPending.rawValue -> SchedulingPending
             SchedulingPhase.rawValue -> SchedulingPhase
             SecondChatScheduled.rawValue -> SecondChatScheduled
             SecondChatAvailable.rawValue -> SecondChatAvailable

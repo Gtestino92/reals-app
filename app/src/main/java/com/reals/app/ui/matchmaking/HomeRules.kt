@@ -38,7 +38,7 @@ internal fun HomeState?.pendingVisualApprovals(): List<HomeMatch> =
 
 internal fun HomeState?.nextStepConnections(): List<HomeConnection> =
     this?.activeConnections
-        ?.filter { it.connectionState != ConnectionState.Closed }
+        ?.filter { it.connectionState == ConnectionState.SchedulingPhase }
         .orEmpty()
 
 internal fun HomeState?.engagementCounts(): EngagementCounts {

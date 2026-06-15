@@ -274,7 +274,7 @@ private fun MatchmakingIdleScreen(
                         latitude = latitude,
                         longitude = longitude,
                         accuracy = accuracy,
-                        enabled = !busy && !hasActiveEngagements && !matchmakingBlockedByLimit,
+                        enabled = !busy && !matchmakingBlockedByLimit,
                         onLatitudeChange = { latitude = signedDecimalInput(it) },
                         onLongitudeChange = { longitude = signedDecimalInput(it) },
                         onAccuracyChange = { accuracy = it.filter { char -> char.isDigit() } },
@@ -379,42 +379,27 @@ private fun ConnectionPlaceholderItem(
 
 @Composable
 private fun EngagementSummary(homeState: HomeState?) {
-    val counts = homeState.engagementCounts()
-    if (counts.total == 0) return
+    val summary = homeState?.engagementSummary ?: return
+    if (summary.activeMatchCount == 0 &&
+        summary.activeConnectionCount == 0 &&
+        summary.pendingSchedulingConnectionCount == 0
+    ) return
 
-    val parts = buildList {
-        if (counts.firstChats > 0) {
-            add(
-                "${counts.firstChats} " +
-                        if (counts.firstChats == 1) "chat inicial" else "chats iniciales"
-            )
-        }
+    Text(
+        text = "Interacciones activas: " +
+            "${summary.activeMatchCount} ${if (summary.activeMatchCount == 1) "chat" else "chats"}, " +
+            "${summary.activeConnectionCount} ${if (summary.activeConnectionCount == 1) "conexion" else "conexiones"}.",
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 
-        if (counts.visualReviews > 0) {
-            add(
-                "${counts.visualReviews} " +
-                        if (counts.visualReviews == 1) "revisión visual" else "revisiones visuales"
-            )
-        }
-
-        if (counts.connections > 0) {
-            add(
-                "${counts.connections} " +
-                        if (counts.connections == 1) "conexión" else "conexiones"
-            )
-        }
-    }
-
-    if (counts.total > 1) {
+    if (summary.pendingSchedulingConnectionCount > 0) {
         Text(
-            text = "Tenés más de una interacción pendiente. Podés continuar una de ellas o buscar un nuevo chat si todavía tenés cupo disponible.",
+            text = if (summary.pendingSchedulingConnectionCount == 1) {
+                "Tenes una coordinacion en preparacion. Se habilitara mas adelante."
+            } else {
+                "Tenes ${summary.pendingSchedulingConnectionCount} coordinaciones en preparacion. Se habilitaran mas adelante."
+            },
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
-
-    Text(
-        text = "Interacciones pendientes: ${parts.joinToString(", ")}.",
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
 }
-

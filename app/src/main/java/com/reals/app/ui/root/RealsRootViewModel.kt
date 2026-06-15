@@ -1222,6 +1222,7 @@ class RealsRootViewModel(
     }
 
     private fun pendingConnectionTitle(state: ConnectionState): String = when (state) {
+        ConnectionState.SchedulingPending -> "Coordinacion en preparacion"
         ConnectionState.SchedulingPhase -> "Coordinacion pendiente"
         ConnectionState.SecondChatScheduled -> "Esperando segundo chat"
         ConnectionState.SecondChatAvailable,
@@ -1233,6 +1234,8 @@ class RealsRootViewModel(
     private fun pendingConnectionBody(connection: HomeConnection): String {
         val secondChat = connection.secondChat
         return when (connection.connectionState) {
+            ConnectionState.SchedulingPending ->
+                "Tenes una coordinacion en preparacion. Se habilitara mas adelante."
             ConnectionState.SchedulingPhase ->
                 "Tenes una conexion esperando coordinacion. Esta parte de la experiencia todavia no esta disponible en la app."
             ConnectionState.SecondChatScheduled ->
