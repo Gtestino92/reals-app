@@ -100,4 +100,53 @@ class AppContainer(context: Context) {
     val rejectChatExitRequestUseCase = RejectChatExitRequestUseCase(chatRepository)
     val cancelChatUseCase = CancelChatUseCase(chatRepository)
     val safetyCancelChatUseCase = SafetyCancelChatUseCase(chatRepository)
+
+    val rootDependencies = RealsRootDependencies(
+        session = SessionFeatureDependencies(
+            authRepository = authRepository,
+            provisionAndLoadProfile = provisionAndLoadProfileUseCase,
+            getMe = getMeUseCase,
+        ),
+        account = AccountFeatureDependencies(
+            reactivateAccount = reactivateAccountUseCase,
+            deleteAccount = deleteAccountUseCase,
+        ),
+        profile = ProfileFeatureDependencies(
+            createProfile = createProfileUseCase,
+            updateProfile = updateProfileUseCase,
+            updateMatchFilters = updateMatchFiltersUseCase,
+            getProfilePhotos = getProfilePhotosUseCase,
+            addMockProfilePhoto = addMockProfilePhotoUseCase,
+            addProfilePhotoFile = addProfilePhotoFileUseCase,
+            replaceMockProfilePhoto = replaceMockProfilePhotoUseCase,
+            replaceProfilePhotoFile = replaceProfilePhotoFileUseCase,
+            deleteProfilePhoto = deleteProfilePhotoUseCase,
+            activateProfile = activateProfileUseCase,
+        ),
+        home = HomeFeatureDependencies(
+            enqueueMatchmaking = enqueueMatchmakingUseCase,
+            getHome = getHomeUseCase,
+            leaveQueue = leaveQueueUseCase,
+        ),
+        firstChat = FirstChatFeatureDependencies(
+            getMatch = getMatchUseCase,
+            getFirstChatForMatch = getFirstChatForMatchUseCase,
+            submitChatDecision = submitChatDecisionUseCase,
+            getChatMessages = getChatMessagesUseCase,
+            sendChatMessage = sendChatMessageUseCase,
+            getChatExitRequests = getChatExitRequestsUseCase,
+            requestMutualChatExit = requestMutualChatExitUseCase,
+            acceptChatExitRequest = acceptChatExitRequestUseCase,
+            rejectChatExitRequest = rejectChatExitRequestUseCase,
+            cancelChat = cancelChatUseCase,
+            safetyCancelChat = safetyCancelChatUseCase,
+        ),
+        visualApproval = VisualApprovalFeatureDependencies(
+            getMatch = getMatchUseCase,
+            getVisualProfile = getVisualProfileUseCase,
+            submitVisualDecision = submitVisualDecisionUseCase,
+            putMyPersonalMessage = putMyPersonalMessageUseCase,
+            getPartnerPersonalMessage = getPartnerPersonalMessageUseCase,
+        ),
+    )
 }

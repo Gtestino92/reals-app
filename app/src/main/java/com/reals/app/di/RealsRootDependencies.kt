@@ -1,0 +1,96 @@
+package com.reals.app.di
+
+import com.reals.app.data.repository.FirebaseAuthRepository
+import com.reals.app.domain.usecase.AcceptChatExitRequestUseCase
+import com.reals.app.domain.usecase.ActivateProfileUseCase
+import com.reals.app.domain.usecase.AddMockProfilePhotoUseCase
+import com.reals.app.domain.usecase.AddProfilePhotoFileUseCase
+import com.reals.app.domain.usecase.CancelChatUseCase
+import com.reals.app.domain.usecase.CreateProfileUseCase
+import com.reals.app.domain.usecase.DeleteAccountUseCase
+import com.reals.app.domain.usecase.DeleteProfilePhotoUseCase
+import com.reals.app.domain.usecase.EnqueueMatchmakingUseCase
+import com.reals.app.domain.usecase.GetChatExitRequestsUseCase
+import com.reals.app.domain.usecase.GetChatMessagesUseCase
+import com.reals.app.domain.usecase.GetFirstChatForMatchUseCase
+import com.reals.app.domain.usecase.GetHomeUseCase
+import com.reals.app.domain.usecase.GetMatchUseCase
+import com.reals.app.domain.usecase.GetMeUseCase
+import com.reals.app.domain.usecase.GetPartnerPersonalMessageUseCase
+import com.reals.app.domain.usecase.GetProfilePhotosUseCase
+import com.reals.app.domain.usecase.GetVisualProfileUseCase
+import com.reals.app.domain.usecase.LeaveQueueUseCase
+import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
+import com.reals.app.domain.usecase.PutMyPersonalMessageUseCase
+import com.reals.app.domain.usecase.ReactivateAccountUseCase
+import com.reals.app.domain.usecase.RejectChatExitRequestUseCase
+import com.reals.app.domain.usecase.ReplaceMockProfilePhotoUseCase
+import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
+import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
+import com.reals.app.domain.usecase.SafetyCancelChatUseCase
+import com.reals.app.domain.usecase.SendChatMessageUseCase
+import com.reals.app.domain.usecase.SubmitChatDecisionUseCase
+import com.reals.app.domain.usecase.SubmitVisualDecisionUseCase
+import com.reals.app.domain.usecase.UpdateMatchFiltersUseCase
+import com.reals.app.domain.usecase.UpdateProfileUseCase
+
+data class RealsRootDependencies(
+    val session: SessionFeatureDependencies,
+    val account: AccountFeatureDependencies,
+    val profile: ProfileFeatureDependencies,
+    val home: HomeFeatureDependencies,
+    val firstChat: FirstChatFeatureDependencies,
+    val visualApproval: VisualApprovalFeatureDependencies,
+)
+
+data class SessionFeatureDependencies(
+    val authRepository: FirebaseAuthRepository,
+    val provisionAndLoadProfile: ProvisionAndLoadProfileUseCase,
+    val getMe: GetMeUseCase,
+)
+
+data class AccountFeatureDependencies(
+    val reactivateAccount: ReactivateAccountUseCase,
+    val deleteAccount: DeleteAccountUseCase,
+)
+
+data class ProfileFeatureDependencies(
+    val createProfile: CreateProfileUseCase,
+    val updateProfile: UpdateProfileUseCase,
+    val updateMatchFilters: UpdateMatchFiltersUseCase,
+    val getProfilePhotos: GetProfilePhotosUseCase,
+    val addMockProfilePhoto: AddMockProfilePhotoUseCase,
+    val addProfilePhotoFile: AddProfilePhotoFileUseCase,
+    val replaceMockProfilePhoto: ReplaceMockProfilePhotoUseCase,
+    val replaceProfilePhotoFile: ReplaceProfilePhotoFileUseCase,
+    val deleteProfilePhoto: DeleteProfilePhotoUseCase,
+    val activateProfile: ActivateProfileUseCase,
+)
+
+data class HomeFeatureDependencies(
+    val enqueueMatchmaking: EnqueueMatchmakingUseCase,
+    val getHome: GetHomeUseCase,
+    val leaveQueue: LeaveQueueUseCase,
+)
+
+data class FirstChatFeatureDependencies(
+    val getMatch: GetMatchUseCase,
+    val getFirstChatForMatch: GetFirstChatForMatchUseCase,
+    val submitChatDecision: SubmitChatDecisionUseCase,
+    val getChatMessages: GetChatMessagesUseCase,
+    val sendChatMessage: SendChatMessageUseCase,
+    val getChatExitRequests: GetChatExitRequestsUseCase,
+    val requestMutualChatExit: RequestMutualChatExitUseCase,
+    val acceptChatExitRequest: AcceptChatExitRequestUseCase,
+    val rejectChatExitRequest: RejectChatExitRequestUseCase,
+    val cancelChat: CancelChatUseCase,
+    val safetyCancelChat: SafetyCancelChatUseCase,
+)
+
+data class VisualApprovalFeatureDependencies(
+    val getMatch: GetMatchUseCase,
+    val getVisualProfile: GetVisualProfileUseCase,
+    val submitVisualDecision: SubmitVisualDecisionUseCase,
+    val putMyPersonalMessage: PutMyPersonalMessageUseCase,
+    val getPartnerPersonalMessage: GetPartnerPersonalMessageUseCase,
+)
