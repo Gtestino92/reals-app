@@ -2,6 +2,8 @@ package com.reals.app.ui.root
 
 import com.reals.app.core.network.ApiResult
 import com.reals.app.di.FirstChatFeatureDependencies
+import com.reals.app.domain.model.ChatDecisionState
+import com.reals.app.domain.model.MatchState
 import com.reals.app.domain.model.ProvisionedSession
 
 internal class FirstChatCoordinator(
@@ -26,8 +28,8 @@ internal class FirstChatCoordinator(
         }
 
         val match = (matchResult as ApiResult.Success).value
-        if (match.state !is com.reals.app.domain.model.MatchState.Unknown &&
-            match.state != com.reals.app.domain.model.MatchState.ChatActive
+        if (match.state !is MatchState.Unknown &&
+            match.state != MatchState.ChatActive
         ) {
             return FirstChatLoadResult.RouteHome(firstChatExitMessage(match.state))
         }
@@ -47,8 +49,13 @@ internal class FirstChatCoordinator(
         }
 
         val chat = (chatResult as ApiResult.Success).value
+
         if (!chat.status.isOpenFirstChatStatus()) {
             return FirstChatLoadResult.RouteHome("El chat cambio de estado. Actualizamos tu Home.")
+        }
+
+        if (chat.myDecision != ChatDecisionState.Pending) {
+            return FirstChatLoadResult.RouteHome("Ya registramos tu decision. Actualizamos tu Home.")
         }
 
         val messagesResult = dependencies.getChatMessages(chat.id)
@@ -90,8 +97,8 @@ internal class FirstChatCoordinator(
 
         if (
             (updatedMatch != null &&
-                updatedMatch.state !is com.reals.app.domain.model.MatchState.Unknown &&
-                updatedMatch.state != com.reals.app.domain.model.MatchState.ChatActive) ||
+                updatedMatch.state !is MatchState.Unknown &&
+                updatedMatch.state != MatchState.ChatActive) ||
             (updatedChat != null && !updatedChat.status.isOpenFirstChatStatus())
         ) {
             return FirstChatRefreshResult.Closed(updatedMatch?.state)
@@ -160,6 +167,6 @@ internal sealed interface FirstChatLoadResult {
 internal sealed interface FirstChatRefreshResult {
     data class Show(val state: RealsRootUiState.FirstChat) : FirstChatRefreshResult
     data class Reopen(val matchId: String, val chatId: String?) : FirstChatRefreshResult
-    data class Closed(val matchState: com.reals.app.domain.model.MatchState?) : FirstChatRefreshResult
+    data class Closed(val matchState: MatchState?) : FirstChatRefreshResult
     data object ExitResolved : FirstChatRefreshResult
 }

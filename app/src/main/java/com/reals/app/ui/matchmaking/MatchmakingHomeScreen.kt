@@ -249,7 +249,7 @@ private fun MatchmakingIdleScreen(
                             )
                         }
                     },
-                    enabled = !busy && !hasActiveEngagements && !matchmakingBlockedByLimit,
+                    enabled = !busy && !matchmakingBlockedByLimit,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(if (locating || homeLoading) "Preparando busqueda..." else "Buscar chat")
@@ -259,7 +259,7 @@ private fun MatchmakingIdleScreen(
                 }
                 OutlinedButton(
                     onClick = { manualExpanded = !manualExpanded },
-                    enabled = !busy && !hasActiveEngagements && !matchmakingBlockedByLimit,
+                    enabled = !busy && !matchmakingBlockedByLimit,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(if (manualExpanded) "Ocultar fallback manual" else "Fallback manual dev")
