@@ -70,6 +70,7 @@ class RealsRootViewModel(
     private val rejectChatExitRequestUseCase = dependencies.firstChat.rejectChatExitRequest
     private val cancelChatUseCase = dependencies.firstChat.cancelChat
     private val safetyCancelChatUseCase = dependencies.firstChat.safetyCancelChat
+    private val getVisualProfileUseCase = dependencies.visualApproval.getVisualProfile
     private val firstChatCoordinator = FirstChatCoordinator(dependencies.firstChat)
     private val visualApprovalCoordinator = VisualApprovalCoordinator(dependencies.visualApproval)
     private val _uiState = MutableStateFlow<RealsRootUiState>(RealsRootUiState.Checking)
@@ -404,6 +405,43 @@ class RealsRootViewModel(
                 matchId = current.matchId,
                 initialMatch = current.match,
                 previous = current.copy(refreshing = true, error = null, message = null),
+            )
+        }
+    }
+
+    fun openConnectionPartnerProfile(matchId: String) {
+        val current = _uiState.value as? RealsRootUiState.Ready ?: return
+        val cleanMatchId = matchId.trim()
+        if (cleanMatchId.isBlank()) return
+
+        viewModelScope.launch {
+            loadPartnerProfile(
+                session = current.session,
+                matchId = cleanMatchId,
+            )
+        }
+    }
+
+    fun refreshPartnerProfile() {
+        val current = _uiState.value as? RealsRootUiState.PartnerProfile ?: return
+        viewModelScope.launch {
+            loadPartnerProfile(
+                session = current.session,
+                matchId = current.matchId,
+                previous = current.copy(refreshing = true, error = null),
+            )
+        }
+    }
+
+    fun closePartnerProfile() {
+        val current = _uiState.value as? RealsRootUiState.PartnerProfile ?: return
+        viewModelScope.launch {
+            loadHomeForReady(
+                ready = RealsRootUiState.Ready(
+                    session = current.session,
+                    home = HomeUiState(homeLoading = true),
+                ),
+                autoNavigateEngagements = false,
             )
         }
     }
@@ -1073,6 +1111,34 @@ class RealsRootViewModel(
                     ),
                 ),
                 autoNavigateEngagements = false,
+            )
+        }
+    }
+
+    private suspend fun loadPartnerProfile(
+        session: ProvisionedSession,
+        matchId: String,
+        previous: RealsRootUiState.PartnerProfile? = null,
+    ) {
+        val loadingState = previous ?: RealsRootUiState.PartnerProfile(
+            session = session,
+            matchId = matchId,
+            loading = true,
+        )
+        _uiState.value = loadingState
+
+        when (val result = getVisualProfileUseCase(matchId)) {
+            is ApiResult.Success -> _uiState.value = loadingState.copy(
+                profile = result.value,
+                loading = false,
+                refreshing = false,
+                error = null,
+            )
+
+            is ApiResult.Failure -> _uiState.value = loadingState.copy(
+                loading = false,
+                refreshing = false,
+                error = result.error,
             )
         }
     }

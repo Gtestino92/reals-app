@@ -23,9 +23,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
 import com.reals.app.core.security.TextSafety
@@ -194,47 +192,6 @@ private fun StatusCard(
             }
             error?.let { ApiErrorFeedbackCard(it, ErrorContext.VisualReview) }
             message?.let { SuccessFeedback(it) }
-        }
-    }
-}
-
-@Composable
-private fun VisualProfileCard(profile: VisualProfile) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-    ) {
-        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(
-                text = TextSafety.safeDisplay(profile.displayName, maxLength = 100),
-                style = MaterialTheme.typography.titleLarge,
-            )
-            Text("Edad: ${profile.age}")
-            profile.bio?.takeIf { it.isNotBlank() }?.let {
-                Text(TextSafety.safeDisplay(it, maxLength = 1_000))
-            }
-            if (profile.photos.isEmpty()) {
-                Text("No hay fotos para revisar.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else {
-                profile.photos.forEach { photo ->
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-                        Column(
-                            modifier = Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Text("Foto ${photo.position}")
-                            AsyncImage(
-                                model = photo.url,
-                                contentDescription = "Foto ${photo.position}",
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(260.dp),
-                            )
-                        }
-                    }
-                }
-            }
         }
     }
 }

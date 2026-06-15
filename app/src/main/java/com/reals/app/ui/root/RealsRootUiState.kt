@@ -95,6 +95,15 @@ sealed interface RealsRootUiState {
         val message: String? = null,
     ) : RealsRootUiState
 
+    data class PartnerProfile(
+        val session: ProvisionedSession,
+        val matchId: String,
+        val profile: VisualProfile? = null,
+        val loading: Boolean = false,
+        val refreshing: Boolean = false,
+        val error: ApiError? = null,
+    ) : RealsRootUiState
+
     data class PendingEngagement(
         val session: ProvisionedSession,
         val title: String,

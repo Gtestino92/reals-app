@@ -68,6 +68,8 @@ internal fun PendingInteractionsCard(
 @Composable
 internal fun NextStepCard(
     homeState: HomeState?,
+    busy: Boolean,
+    onOpenPartnerProfile: (matchId: String) -> Unit,
 ) {
     val connections = homeState.nextStepConnections()
 
@@ -92,7 +94,11 @@ internal fun NextStepCard(
             )
 
             connections.forEach { connection ->
-                ConnectionPlaceholderItem(connection)
+                ConnectionPlaceholderItem(
+                    connection = connection,
+                    busy = busy,
+                    onOpenPartnerProfile = onOpenPartnerProfile,
+                )
             }
         }
     }
@@ -146,8 +152,8 @@ private fun VisualApprovalItem(
             val partnerName = match.partnerDisplayName?.takeIf { it.isNotBlank() }
 
             Text(
-                text = partnerName?.let { "Aprobación visual con $it" }
-                    ?: "Aprobación visual pendiente"
+                text = partnerName?.let { "Aprobacion visual con $it" }
+                    ?: "Aprobacion visual pendiente"
             )
             Text(
                 text = "Revisa el perfil visual y decidi si queres continuar.",
@@ -165,32 +171,39 @@ private fun VisualApprovalItem(
 }
 
 @Composable
-private fun ConnectionPlaceholderItem(connection: HomeConnection) {
+private fun ConnectionPlaceholderItem(
+    connection: HomeConnection,
+    busy: Boolean,
+    onOpenPartnerProfile: (matchId: String) -> Unit,
+) {
     val partnerName = connection.partnerDisplayName()
+        ?.let(TextSafety::safeDisplay)
 
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(
             modifier = Modifier.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text("Coordinación pendiente", style = MaterialTheme.typography.titleMedium)
-
-            partnerName?.let {
-                Text(
-                    text = "Con $it",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
+            Text("Coordinacion pendiente", style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = partnerName?.let { "Con $it" } ?: "Con la otra persona",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Text(
                 text = "Estado: ${connection.connectionState.userLabel()}",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-
             Text(
-                text = "Ya hubo aprobación visual mutua. Falta implementar la coordinación del próximo chat.",
+                text = "Ya hubo aprobacion visual mutua. Falta implementar la coordinacion del proximo chat.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Button(
+                onClick = { onOpenPartnerProfile(connection.matchId) },
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Ver perfil")
+            }
         }
     }
 }

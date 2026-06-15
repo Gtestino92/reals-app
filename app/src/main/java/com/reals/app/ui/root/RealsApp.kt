@@ -18,6 +18,7 @@ import com.reals.app.ui.account.AccountDeletionRecoveryScreen
 import com.reals.app.ui.account.formatBackendDate
 import com.reals.app.ui.auth.LoginScreen
 import com.reals.app.ui.chat.FirstChatScreen
+import com.reals.app.ui.chat.PartnerProfileScreen
 import com.reals.app.ui.chat.VisualApprovalScreen
 import com.reals.app.ui.common.FullScreenMessage
 import com.reals.app.ui.matchmaking.MatchmakingHomeScreen
@@ -144,6 +145,7 @@ fun RealsApp(appContainer: AppContainer) {
                             onPollHome = viewModel::pollHomeStateSilently,
                             onOpenFirstChat = { matchId, chatId -> viewModel.openFirstChat(matchId, chatId) },
                             onOpenVisualApproval = viewModel::openVisualApproval,
+                            onOpenConnectionPartnerProfile = viewModel::openConnectionPartnerProfile,
                             onEditProfile = viewModel::openProfileManagement,
                             onSignOut = viewModel::signOut,
                             onDeleteAccount = viewModel::deleteAccount,
@@ -193,6 +195,15 @@ fun RealsApp(appContainer: AppContainer) {
                 onApprove = { viewModel.submitVisualDecision(VisualDecision.Approved) },
                 onReject = { viewModel.submitVisualDecision(VisualDecision.Rejected) },
                 onBackHome = viewModel::closeVisualApproval,
+            )
+
+            is RealsRootUiState.PartnerProfile -> PartnerProfileScreen(
+                profile = current.profile,
+                loading = current.loading,
+                refreshing = current.refreshing,
+                error = current.error,
+                onRefresh = viewModel::refreshPartnerProfile,
+                onBackHome = viewModel::closePartnerProfile,
             )
 
             is RealsRootUiState.PendingEngagement -> FullScreenMessage(
