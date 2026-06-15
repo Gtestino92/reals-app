@@ -79,6 +79,7 @@ fun MatchmakingHomeScreen(
     onPollHome: () -> Unit,
     onOpenFirstChat: (matchId: String, chatId: String) -> Unit,
     onOpenVisualApproval: (matchId: String) -> Unit,
+    onOpenConnectionPartnerProfile: (matchId: String) -> Unit,
     onEditProfile: () -> Unit,
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit,
@@ -131,6 +132,7 @@ fun MatchmakingHomeScreen(
         onRefreshHome = onRefreshHome,
         onOpenFirstChat = onOpenFirstChat,
         onOpenVisualApproval = onOpenVisualApproval,
+        onOpenConnectionPartnerProfile = onOpenConnectionPartnerProfile,
         onEditProfile = onEditProfile,
         onSignOut = onSignOut,
         onDeleteAccount = onDeleteAccount,
@@ -152,6 +154,7 @@ private fun MatchmakingIdleScreen(
     onRefreshHome: () -> Unit,
     onOpenFirstChat: (matchId: String, chatId: String) -> Unit,
     onOpenVisualApproval: (matchId: String) -> Unit,
+    onOpenConnectionPartnerProfile: (matchId: String) -> Unit,
     onEditProfile: () -> Unit,
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit,
@@ -215,6 +218,8 @@ private fun MatchmakingIdleScreen(
         )
         NextStepCard(
             homeState = homeState,
+            busy = busy,
+            onOpenPartnerProfile = onOpenConnectionPartnerProfile,
         )
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -332,8 +337,13 @@ private fun VisualApprovalItem(
 }
 
 @Composable
-private fun ConnectionPlaceholderItem(connection: HomeConnection) {
+private fun ConnectionPlaceholderItem(
+    connection: HomeConnection,
+    busy: Boolean,
+    onOpenPartnerProfile: (matchId: String) -> Unit,
+) {
     val partnerName = connection.partnerDisplayName()
+        ?.let(TextSafety::safeDisplay)
 
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(
@@ -342,17 +352,22 @@ private fun ConnectionPlaceholderItem(connection: HomeConnection) {
         ) {
             Text("Coordinación pendiente", style = MaterialTheme.typography.titleMedium)
 
-            partnerName?.let {
-                Text(
-                    text = "Con $it",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Text(
+                text = partnerName?.let { "Con $it" } ?: "Con la otra persona",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
 
             Text(
                 text = "Estado: ${connection.connectionState.userLabel()}",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Button(
+                onClick = { onOpenPartnerProfile(connection.matchId) },
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Ver perfil")
+            }
 
             Text(
                 text = "Ya hubo aprobación visual mutua. Falta implementar la coordinación del próximo chat.",
