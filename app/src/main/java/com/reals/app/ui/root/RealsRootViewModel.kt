@@ -518,7 +518,17 @@ class RealsRootViewModel(
                         MatchState.ChatActive -> {
                             if (decision == ChatContinueDecision.Approved) {
                                 locallyHiddenPendingChatMatchIds += current.matchId
-                                reenterMatchmakingOrLoadHome(current.session)
+                                loadHomeForReady(
+                                    ready = RealsRootUiState.Ready(
+                                        session = current.session,
+                                        home = HomeUiState(
+                                            homeLoading = true,
+                                            homeMessage = "Aprobaste el chat. Te avisaremos si la otra persona también aprueba.",
+                                            matchmakingBlockedReason = null,
+                                        ),
+                                    ),
+                                    autoNavigateEngagements = false,
+                                )
                             } else {
                                 _uiState.value = pending.copy(
                                     match = result.value,
@@ -1319,9 +1329,12 @@ class RealsRootViewModel(
         when (val enqueueResult = enqueueMatchmakingUseCase(location)) {
             is ApiResult.Success -> loadHomeForReady(
                 ready = ready.copy(
-                    home = ready.home.copy(matchmakingBlockedReason = null),
+                    home = ready.home.copy(
+                        matchmakingBlockedReason = null,
+                        homeMessage = "Aprobaste el chat. Te avisaremos si la otra persona también aprueba.",
+                    ),
                 ),
-                autoNavigateEngagements = true,
+                autoNavigateEngagements = false,
             )
 
             is ApiResult.Failure -> {

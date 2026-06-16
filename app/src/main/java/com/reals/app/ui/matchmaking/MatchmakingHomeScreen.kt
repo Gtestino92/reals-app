@@ -162,6 +162,7 @@ private fun MatchmakingIdleScreen(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { grants ->
         if (grants.values.any { it }) {
+            localError = null
             enqueueWithDeviceLocation()
         } else {
             localError = "Necesitamos ubicacion para buscar personas cerca. Podes habilitar permisos o usar el fallback manual de desarrollo."
@@ -209,7 +210,9 @@ private fun MatchmakingIdleScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 ActiveInteractionsSummary(homeState)
-                localError?.let { ErrorFeedback("No pudimos usar tu ubicacion", it) }
+                if (!locating) {
+                    localError?.let { ErrorFeedback("No pudimos usar tu ubicacion", it) }
+                }
                 homeError?.let { ApiErrorFeedbackCard(it, ErrorContext.Home) }
                 homeMessage?.let { SuccessFeedback(it) }
                 if (matchmakingBlockedByLimit) {
@@ -220,6 +223,7 @@ private fun MatchmakingIdleScreen(
                 }
                 Button(
                     onClick = {
+                        localError = null
                         if (hasLocationPermission(context)) {
                             enqueueWithDeviceLocation()
                         } else {
