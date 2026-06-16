@@ -5,10 +5,10 @@ data class HomeState(
     val queue: HomeQueueState,
     val activeMatches: List<HomeMatch>,
     val activeConnections: List<HomeConnection>,
-    val engagementSummary: HomeEngagementSummary,
+    val activeInteractionsSummary: HomeActiveInteractionsSummary,
 )
 
-data class HomeEngagementSummary(
+data class HomeActiveInteractionsSummary(
     val activeMatchCount: Int,
     val activeConnectionCount: Int,
     val pendingSchedulingConnectionCount: Int,

@@ -3,35 +3,21 @@ package com.reals.app.ui.matchmaking
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -39,25 +25,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
 import com.reals.app.core.security.TextSafety
-import com.reals.app.domain.model.ConnectionState
 import com.reals.app.domain.model.HomeConnection
 import com.reals.app.domain.model.HomeMatch
 import com.reals.app.domain.model.HomeState
-import com.reals.app.domain.model.MatchState
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.SearchLocationInput
 import com.reals.app.ui.common.ApiErrorFeedbackCard
-import com.reals.app.ui.common.FeedbackCard
-import com.reals.app.ui.common.FeedbackTone
 import com.reals.app.ui.common.userLabel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -85,7 +64,7 @@ fun MatchmakingHomeScreen(
     onDeleteAccount: () -> Unit,
     hasLocallyHiddenInteractions: Boolean,
 ) {
-    val hasActiveEngagements = homeState.hasBlockingEngagements()
+    val hasActiveInteractions = homeState.hasBlockingInteractions()
     val inQueue = homeState?.queue?.inQueue == true
     val matchmakingBlockedByLimit = matchmakingBlockedReason.isActiveMatchLimitReached()
 
@@ -94,7 +73,7 @@ fun MatchmakingHomeScreen(
         return
     }
 
-    if (inQueue && !hasActiveEngagements) {
+    if (inQueue && !hasActiveInteractions) {
         SearchingChatScreen(
             homeError = homeError,
             accountDeleteLoading = accountDeleteLoading,
@@ -127,7 +106,6 @@ fun MatchmakingHomeScreen(
         matchmakingBlockedByLimit = matchmakingBlockedByLimit,
         accountDeleteLoading = accountDeleteLoading,
         accountDeleteError = accountDeleteError,
-        hasActiveEngagements = hasActiveEngagements,
         onEnqueue = onEnqueue,
         onRefreshHome = onRefreshHome,
         onOpenFirstChat = onOpenFirstChat,
@@ -149,7 +127,6 @@ private fun MatchmakingIdleScreen(
     matchmakingBlockedByLimit: Boolean,
     accountDeleteLoading: Boolean,
     accountDeleteError: ApiError?,
-    hasActiveEngagements: Boolean,
     onEnqueue: (SearchLocationInput) -> Unit,
     onRefreshHome: () -> Unit,
     onOpenFirstChat: (matchId: String, chatId: String) -> Unit,
@@ -210,7 +187,7 @@ private fun MatchmakingIdleScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(modifier = Modifier.height(20.dp))
-        PendingInteractionsCard(
+        PendingActionsCard(
             homeState = homeState,
             busy = busy,
             onOpenFirstChat = onOpenFirstChat,
@@ -231,7 +208,7 @@ private fun MatchmakingIdleScreen(
                     text = "Vamos a usar tu ubicacion actual para encontrar personas compatibles cerca.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                EngagementSummary(homeState)
+                ActiveInteractionsSummary(homeState)
                 localError?.let { ErrorFeedback("No pudimos usar tu ubicacion", it) }
                 homeError?.let { ApiErrorFeedbackCard(it, ErrorContext.Home) }
                 homeMessage?.let { SuccessFeedback(it) }
@@ -378,26 +355,26 @@ private fun ConnectionPlaceholderItem(
 }
 
 @Composable
-private fun EngagementSummary(homeState: HomeState?) {
-    val summary = homeState?.engagementSummary ?: return
+private fun ActiveInteractionsSummary(homeState: HomeState?) {
+    val summary = homeState?.activeInteractionsSummary ?: return
     if (summary.activeMatchCount == 0 &&
         summary.activeConnectionCount == 0 &&
         summary.pendingSchedulingConnectionCount == 0
     ) return
 
     Text(
-        text = "Interacciones activas: " +
-            "${summary.activeMatchCount} ${if (summary.activeMatchCount == 1) "chat" else "chats"}, " +
-            "${summary.activeConnectionCount} ${if (summary.activeConnectionCount == 1) "conexion" else "conexiones"}.",
+        text = "Experiencias activas: " +
+            "${summary.activeMatchCount} ${if (summary.activeMatchCount == 1) "inicial" else "iniciales"}, " +
+            "${summary.activeConnectionCount} ${if (summary.activeConnectionCount == 1) "conexión" else "conexiones"}.",
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 
     if (summary.pendingSchedulingConnectionCount > 0) {
         Text(
             text = if (summary.pendingSchedulingConnectionCount == 1) {
-                "Tenes una coordinacion en preparacion. Se habilitara mas adelante."
+                "Tenés una coordinación en preparación. Se habilitará más adelante."
             } else {
-                "Tenes ${summary.pendingSchedulingConnectionCount} coordinaciones en preparacion. Se habilitaran mas adelante."
+                "Tenés ${summary.pendingSchedulingConnectionCount} coordinaciones en preparación. Se habilitarán más adelante."
             },
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

@@ -19,7 +19,7 @@ import com.reals.app.domain.model.HomeState
 import com.reals.app.ui.common.userLabel
 
 @Composable
-internal fun PendingInteractionsCard(
+internal fun PendingActionsCard(
     homeState: HomeState?,
     busy: Boolean,
     onOpenFirstChat: (matchId: String, chatId: String) -> Unit,
@@ -43,7 +43,7 @@ internal fun PendingInteractionsCard(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
-                text = "Interacciones pendientes",
+                text = "Acciones pendientes",
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )

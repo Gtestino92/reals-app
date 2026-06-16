@@ -18,9 +18,7 @@ import com.reals.app.domain.model.ChatContinueDecision
 import com.reals.app.domain.model.ChatDecisionState
 import com.reals.app.domain.model.ChatExitOutcome
 import com.reals.app.domain.model.ChatExitReason
-import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatExitRequestStatus
-import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.ConnectionState
 import com.reals.app.domain.model.CreateProfileInput
@@ -85,7 +83,8 @@ class RealsRootViewModel(
 
     fun refreshSession() {
         if (!authRepository.isConfigured()) {
-            _uiState.value = RealsRootUiState.MissingFirebase(FirebaseAuthRepository.firebaseMissingMessage)
+            _uiState.value =
+                RealsRootUiState.MissingFirebase(FirebaseAuthRepository.firebaseMissingMessage)
             return
         }
         if (!authRepository.hasSignedInUser()) {
@@ -464,6 +463,7 @@ class RealsRootViewModel(
                     locallyHiddenPendingChatMatchIds += current.matchId
                     routeAfterFirstChatClosed(current.session, result.matchState)
                 }
+
                 FirstChatRefreshResult.ExitResolved -> {
                     locallyHiddenPendingChatMatchIds += current.matchId
                     reenterMatchmakingOrLoadHome(current.session)
@@ -628,7 +628,8 @@ class RealsRootViewModel(
         viewModelScope.launch {
             val pending = current.copy(deciding = true, error = null, message = null)
             _uiState.value = pending
-            when (val result = visualApprovalCoordinator.submitDecision(current.matchId, decision)) {
+            when (val result =
+                visualApprovalCoordinator.submitDecision(current.matchId, decision)) {
                 is ApiResult.Success -> {
                     locallyHiddenVisualMatchIds += current.matchId
                     when (result.value.state) {
@@ -870,7 +871,8 @@ class RealsRootViewModel(
                 photos = cleared.photos.copy(addingPhoto = true),
             )
             _uiState.value = pending
-            when (val result = addProfilePhotoFileUseCase.invoke(fileUri = fileUri, position = position)) {
+            when (val result =
+                addProfilePhotoFileUseCase.invoke(fileUri = fileUri, position = position)) {
                 is ApiResult.Success -> refreshAfterPhotoMutation(
                     previous = pending,
                     successMessage = "Foto subida correctamente.",
@@ -956,7 +958,8 @@ class RealsRootViewModel(
                 photos = cleared.photos.copy(addingPhoto = true),
             )
             _uiState.value = pending
-            when (val result = replaceProfilePhotoFileUseCase.invoke(photoId = photoId, fileUri = fileUri)) {
+            when (val result =
+                replaceProfilePhotoFileUseCase.invoke(photoId = photoId, fileUri = fileUri)) {
                 is ApiResult.Success -> refreshAfterPhotoMutation(
                     previous = pending,
                     successMessage = "Foto reemplazada correctamente.",
@@ -1227,6 +1230,7 @@ class RealsRootViewModel(
         ConnectionState.SecondChatScheduled -> "Esperando segundo chat"
         ConnectionState.SecondChatAvailable,
         ConnectionState.SecondChat -> "Segundo chat pendiente"
+
         ConnectionState.Closed -> "Conexion cerrada"
         is ConnectionState.Unknown -> "Conexion no disponible"
     }
@@ -1236,10 +1240,13 @@ class RealsRootViewModel(
         return when (connection.connectionState) {
             ConnectionState.SchedulingPending ->
                 "Tenes una coordinacion en preparacion. Se habilitara mas adelante."
+
             ConnectionState.SchedulingPhase ->
                 "Tenes una conexion esperando coordinacion. Esta parte de la experiencia todavia no esta disponible en la app."
+
             ConnectionState.SecondChatScheduled ->
                 "Tenes un segundo chat programado. La pantalla de espera todavia no esta disponible en la app."
+
             ConnectionState.SecondChatAvailable,
             ConnectionState.SecondChat ->
                 if (secondChat == null) {
@@ -1247,25 +1254,21 @@ class RealsRootViewModel(
                 } else {
                     "Tenes un segundo chat pendiente. Esta pantalla todavia no esta disponible en la app."
                 }
+
             ConnectionState.Closed ->
                 "Esta conexion ya termino. Actualiza Home para ver que sigue."
+
             is ConnectionState.Unknown ->
                 "Esta conexion esta en un estado que todavia no podemos mostrar en la app."
         }
     }
 
-    private fun HomeState.withLocallyHiddenMatches(): HomeState = copy(
-        activeMatches = activeMatches.filterNot { match ->
-            (match.matchState == MatchState.ChatActive &&
-                match.matchId in locallyHiddenPendingChatMatchIds) ||
-                (match.matchState == MatchState.VisualPhase &&
-                    match.matchId in locallyHiddenVisualMatchIds)
-        },
-    )
-
     private fun HomeState.withLocallyHiddenMatchesAndPrunedState(): HomeState {
-        val stillChatActiveIds = activeMatches
-            .filter { it.matchState == MatchState.ChatActive }
+        val actionableChatActiveIds = activeMatches
+            .filter {
+                it.matchState == MatchState.ChatActive &&
+                        it.firstChat != null
+            }
             .map { it.matchId }
             .toSet()
 
@@ -1274,15 +1277,26 @@ class RealsRootViewModel(
             .map { it.matchId }
             .toSet()
 
-        locallyHiddenPendingChatMatchIds.retainAll(stillChatActiveIds)
+        locallyHiddenPendingChatMatchIds.retainAll(actionableChatActiveIds)
         locallyHiddenVisualMatchIds.retainAll(stillVisualPhaseIds)
 
         return copy(
             activeMatches = activeMatches.filterNot { match ->
-                match.matchState == MatchState.ChatActive &&
-                        match.matchId in locallyHiddenPendingChatMatchIds ||
-                        match.matchState == MatchState.VisualPhase &&
-                        match.matchId in locallyHiddenVisualMatchIds
+                val nonActionableFirstChat =
+                    match.matchState == MatchState.ChatActive &&
+                            match.firstChat == null
+
+                val locallyHiddenFirstChat =
+                    match.matchState == MatchState.ChatActive &&
+                            match.matchId in locallyHiddenPendingChatMatchIds
+
+                val locallyHiddenVisualReview =
+                    match.matchState == MatchState.VisualPhase &&
+                            match.matchId in locallyHiddenVisualMatchIds
+
+                nonActionableFirstChat ||
+                        locallyHiddenFirstChat ||
+                        locallyHiddenVisualReview
             }
         )
     }
@@ -1318,10 +1332,10 @@ class RealsRootViewModel(
                     ready = ready.copy(
                         home = ready.home.copy(
                             homeMessage = if (reachedLimit) {
-                            "Aprobaste el chat. Ya tenés el máximo de interacciones activas."
-                        } else {
-                            "Aprobaste el chat. No pudimos volver a iniciar la búsqueda automáticamente."
-                        },
+                                "Aprobaste el chat. Ya tenés el máximo de interacciones activas."
+                            } else {
+                                "Aprobaste el chat. No pudimos volver a iniciar la búsqueda automáticamente."
+                            },
                             matchmakingBlockedReason = enqueueResult.error,
                         ),
                     ),
@@ -1372,10 +1386,12 @@ class RealsRootViewModel(
                     val exitsResult = getChatExitRequestsUseCase(chat.id)
                     _uiState.value = pending.copy(
                         chat = (chatResult as? ApiResult.Success)?.value ?: pending.chat,
-                        exitRequests = (exitsResult as? ApiResult.Success)?.value ?: pending.exitRequests,
+                        exitRequests = (exitsResult as? ApiResult.Success)?.value
+                            ?: pending.exitRequests,
                         actionLoading = false,
                         message = "Listo, enviamos tu solicitud.",
-                        error = (chatResult as? ApiResult.Failure)?.error ?: (exitsResult as? ApiResult.Failure)?.error,
+                        error = (chatResult as? ApiResult.Failure)?.error
+                            ?: (exitsResult as? ApiResult.Failure)?.error,
                     )
                 }
 
@@ -1401,7 +1417,8 @@ class RealsRootViewModel(
             _uiState.value = RealsRootUiState.Login(loading = true)
             when (val result = action(cleanEmail, password)) {
                 AuthOperationResult.Success -> loadBackendSession()
-                is AuthOperationResult.Failure -> _uiState.value = RealsRootUiState.Login(error = result.message)
+                is AuthOperationResult.Failure -> _uiState.value =
+                    RealsRootUiState.Login(error = result.message)
             }
         }
     }
@@ -1412,9 +1429,10 @@ class RealsRootViewModel(
             when (val userResult = getMeUseCase()) {
                 is ApiResult.Success -> when (userResult.value.status) {
                     BackendUserStatus.Active -> loadBackendSessionForActiveUser(userResult.value)
-                    BackendUserStatus.Deleted -> _uiState.value = RealsRootUiState.AccountDeletionPending(
-                        user = userResult.value,
-                    )
+                    BackendUserStatus.Deleted -> _uiState.value =
+                        RealsRootUiState.AccountDeletionPending(
+                            user = userResult.value,
+                        )
 
                     is BackendUserStatus.Unknown -> _uiState.value = RealsRootUiState.Failure(
                         ApiError.Unexpected("No pudimos leer el estado de tu cuenta.")
@@ -1506,7 +1524,9 @@ class RealsRootViewModel(
     private suspend fun showAccountDeletionPendingFromBackend() {
         when (val userResult = getMeUseCase()) {
             is ApiResult.Success -> when (userResult.value.status) {
-                BackendUserStatus.Deleted -> _uiState.value = RealsRootUiState.AccountDeletionPending(userResult.value)
+                BackendUserStatus.Deleted -> _uiState.value =
+                    RealsRootUiState.AccountDeletionPending(userResult.value)
+
                 BackendUserStatus.Active -> loadBackendSessionForActiveUser(userResult.value)
                 is BackendUserStatus.Unknown -> _uiState.value = RealsRootUiState.Failure(
                     ApiError.Unexpected("No pudimos leer el estado de tu cuenta.")

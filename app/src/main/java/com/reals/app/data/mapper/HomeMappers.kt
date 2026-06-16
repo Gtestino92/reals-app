@@ -9,9 +9,9 @@ import com.reals.app.data.dto.HomeResponseDto
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.ChatType
 import com.reals.app.domain.model.ConnectionState
+import com.reals.app.domain.model.HomeActiveInteractionsSummary
 import com.reals.app.domain.model.HomeChat
 import com.reals.app.domain.model.HomeConnection
-import com.reals.app.domain.model.HomeEngagementSummary
 import com.reals.app.domain.model.HomeMatch
 import com.reals.app.domain.model.HomeQueueState
 import com.reals.app.domain.model.HomeState
@@ -26,8 +26,8 @@ fun HomeResponseDto.toDomain(): HomeState {
         queue = queue.toDomain(),
         activeMatches = domainActiveMatches,
         activeConnections = domainActiveConnections,
-        engagementSummary = engagementSummary?.toDomain()
-            ?: HomeEngagementSummary(
+        activeInteractionsSummary = engagementSummary?.toDomain()
+            ?: HomeActiveInteractionsSummary(
                 activeMatchCount = domainActiveMatches.size,
                 activeConnectionCount = domainActiveConnections.size,
                 pendingSchedulingConnectionCount = 0,
@@ -36,7 +36,7 @@ fun HomeResponseDto.toDomain(): HomeState {
     )
 }
 
-fun HomeEngagementSummaryResponseDto.toDomain(): HomeEngagementSummary = HomeEngagementSummary(
+fun HomeEngagementSummaryResponseDto.toDomain(): HomeActiveInteractionsSummary = HomeActiveInteractionsSummary(
     activeMatchCount = activeMatchCount,
     activeConnectionCount = activeConnectionCount,
     pendingSchedulingConnectionCount = pendingSchedulingConnectionCount,
