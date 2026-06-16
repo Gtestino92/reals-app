@@ -13,22 +13,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.reals.app.core.security.TextSafety
-import com.reals.app.domain.model.HomeConnection
-import com.reals.app.domain.model.HomeMatch
-import com.reals.app.domain.model.HomeState
-import com.reals.app.ui.common.userLabel
 
 @Composable
 internal fun PendingActionsCard(
-    homeState: HomeState?,
+    actions: List<HomeActionItem>,
     busy: Boolean,
     onOpenFirstChat: (matchId: String, chatId: String) -> Unit,
     onOpenVisualApproval: (matchId: String) -> Unit,
 ) {
-    val firstChatMatches = homeState.pendingFirstChatMatches()
-    val visualApprovals = homeState.pendingVisualApprovals()
-
-    if (firstChatMatches.isEmpty() && visualApprovals.isEmpty()) return
+    if (actions.isEmpty()) return
 
     Card(
         modifier = Modifier
@@ -47,19 +40,20 @@ internal fun PendingActionsCard(
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
-            firstChatMatches.forEach { match ->
-                FirstChatItem(
-                    match = match,
-                    busy = busy,
-                    onOpenFirstChat = onOpenFirstChat,
-                )
-            }
-            visualApprovals.forEach { match ->
-                VisualApprovalItem(
-                    match = match,
-                    busy = busy,
-                    onOpenVisualApproval = onOpenVisualApproval,
-                )
+            actions.forEach { action ->
+                when (action) {
+                    is HomeActionItem.FirstChat -> FirstChatItem(
+                        action = action,
+                        busy = busy,
+                        onOpenFirstChat = onOpenFirstChat,
+                    )
+
+                    is HomeActionItem.VisualReview -> VisualApprovalItem(
+                        action = action,
+                        busy = busy,
+                        onOpenVisualApproval = onOpenVisualApproval,
+                    )
+                }
             }
         }
     }
@@ -67,13 +61,11 @@ internal fun PendingActionsCard(
 
 @Composable
 internal fun NextStepCard(
-    homeState: HomeState?,
+    nextSteps: List<HomeNextStepItem>,
     busy: Boolean,
     onOpenPartnerProfile: (matchId: String) -> Unit,
 ) {
-    val connections = homeState.nextStepConnections()
-
-    if (connections.isEmpty()) return
+    if (nextSteps.isEmpty()) return
 
     Card(
         modifier = Modifier
@@ -93,9 +85,9 @@ internal fun NextStepCard(
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
 
-            connections.forEach { connection ->
-                ConnectionPlaceholderItem(
-                    connection = connection,
+            nextSteps.forEach { nextStep ->
+                NextStepItem(
+                    item = nextStep,
                     busy = busy,
                     onOpenPartnerProfile = onOpenPartnerProfile,
                 )
@@ -106,15 +98,14 @@ internal fun NextStepCard(
 
 @Composable
 private fun FirstChatItem(
-    match: HomeMatch,
+    action: HomeActionItem.FirstChat,
     busy: Boolean,
     onOpenFirstChat: (matchId: String, chatId: String) -> Unit,
 ) {
-    val firstChat = match.firstChat ?: return
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Chat inicial", style = MaterialTheme.typography.titleMedium)
-            val partnerName = firstChat.partner?.displayName
+            val partnerName = action.partnerDisplayName
                 ?.takeIf { it.isNotBlank() }
                 ?.let(TextSafety::safeDisplay)
 
@@ -123,15 +114,11 @@ private fun FirstChatItem(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                text = "Valido hasta ${formatBackendDateTime(firstChat.expiresAt)}",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = "Estado: ${firstChat.chatStatus.userLabel()}. Podes entrar cuando quieras.",
+                text = "Podes entrar cuando quieras.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Button(
-                onClick = { onOpenFirstChat(match.matchId, firstChat.chatId) },
+                onClick = { onOpenFirstChat(action.matchId, action.chatId) },
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -143,13 +130,13 @@ private fun FirstChatItem(
 
 @Composable
 private fun VisualApprovalItem(
-    match: HomeMatch,
+    action: HomeActionItem.VisualReview,
     busy: Boolean,
     onOpenVisualApproval: (matchId: String) -> Unit,
 ) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            val partnerName = match.partnerDisplayName?.takeIf { it.isNotBlank() }
+            val partnerName = action.partnerDisplayName?.takeIf { it.isNotBlank() }
 
             Text(
                 text = partnerName?.let { "Aprobacion visual con $it" }
@@ -160,7 +147,7 @@ private fun VisualApprovalItem(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Button(
-                onClick = { onOpenVisualApproval(match.matchId) },
+                onClick = { onOpenVisualApproval(action.matchId) },
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -171,12 +158,12 @@ private fun VisualApprovalItem(
 }
 
 @Composable
-private fun ConnectionPlaceholderItem(
-    connection: HomeConnection,
+private fun NextStepItem(
+    item: HomeNextStepItem,
     busy: Boolean,
     onOpenPartnerProfile: (matchId: String) -> Unit,
 ) {
-    val partnerName = connection.partnerDisplayName()
+    val partnerName = item.partnerDisplayName()
         ?.let(TextSafety::safeDisplay)
 
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
@@ -184,26 +171,54 @@ private fun ConnectionPlaceholderItem(
             modifier = Modifier.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text("Coordinacion pendiente", style = MaterialTheme.typography.titleMedium)
+            Text(item.title(), style = MaterialTheme.typography.titleMedium)
             Text(
                 text = partnerName?.let { "Con $it" } ?: "Con la otra persona",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                text = "Estado: ${connection.connectionState.userLabel()}",
+                text = item.body(),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                text = "Ya hubo aprobacion visual mutua. Falta implementar la coordinacion del proximo chat.",
+                text = "Ya hubo aprobacion visual mutua. Falta implementar esta parte de la experiencia en la app.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Button(
-                onClick = { onOpenPartnerProfile(connection.matchId) },
-                enabled = !busy,
+                onClick = { onOpenPartnerProfile(item.matchIdForProfile()) },
+                enabled = !busy && item.matchIdForProfile().isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("Ver perfil")
             }
         }
     }
+}
+
+private fun HomeNextStepItem.partnerDisplayName(): String? = when (this) {
+    is HomeNextStepItem.Scheduling -> partnerDisplayName
+    is HomeNextStepItem.SecondChatScheduled -> partnerDisplayName
+    is HomeNextStepItem.SecondChatAvailable -> partnerDisplayName
+    is HomeNextStepItem.Unknown -> partnerDisplayName
+}
+
+private fun HomeNextStepItem.matchIdForProfile(): String = when (this) {
+    is HomeNextStepItem.Scheduling -> matchId
+    is HomeNextStepItem.SecondChatScheduled -> matchId
+    is HomeNextStepItem.SecondChatAvailable -> matchId
+    is HomeNextStepItem.Unknown -> matchId.orEmpty()
+}
+
+private fun HomeNextStepItem.title(): String = when (this) {
+    is HomeNextStepItem.Scheduling -> "Coordinacion pendiente"
+    is HomeNextStepItem.SecondChatScheduled -> "Segundo chat programado"
+    is HomeNextStepItem.SecondChatAvailable -> "Segundo chat pendiente"
+    is HomeNextStepItem.Unknown -> "Conexion no disponible"
+}
+
+private fun HomeNextStepItem.body(): String = when (this) {
+    is HomeNextStepItem.Scheduling -> "Estado: coordinando proximo encuentro."
+    is HomeNextStepItem.SecondChatScheduled -> "Estado: segundo chat programado."
+    is HomeNextStepItem.SecondChatAvailable -> "Estado: segundo chat disponible."
+    is HomeNextStepItem.Unknown -> "Estado: $rawState."
 }

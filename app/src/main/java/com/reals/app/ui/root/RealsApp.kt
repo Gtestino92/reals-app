@@ -132,11 +132,10 @@ fun RealsApp(appContainer: AppContainer) {
                     } else {
                         MatchmakingHomeScreen(
                             profile = profile,
-                            homeState = current.homeState,
+                            screenModel = current.home.screenModel,
                             homeLoading = current.homeLoading,
                             homeError = current.homeError,
                             homeMessage = current.homeMessage,
-                            matchmakingBlockedReason = current.matchmakingBlockedReason,
                             accountDeleteLoading = current.deletingAccount,
                             accountDeleteError = current.accountDeleteError,
                             onEnqueue = viewModel::enqueueMatchmaking,
@@ -149,7 +148,6 @@ fun RealsApp(appContainer: AppContainer) {
                             onEditProfile = viewModel::openProfileManagement,
                             onSignOut = viewModel::signOut,
                             onDeleteAccount = viewModel::deleteAccount,
-                            hasLocallyHiddenInteractions = viewModel.hasLocallyHiddenInteractions,
                         )
                     }
                 }

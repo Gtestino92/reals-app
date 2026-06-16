@@ -11,6 +11,7 @@ import com.reals.app.domain.model.ProfileActivationResult
 import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.VisualProfile
+import com.reals.app.ui.matchmaking.HomeScreenModel
 
 sealed interface RealsRootUiState {
     data object Checking : RealsRootUiState
@@ -142,6 +143,7 @@ data class PhotoManagementUiState(
 
 data class HomeUiState(
     val homeState: HomeState? = null,
+    val screenModel: HomeScreenModel? = null,
     val homeLoading: Boolean = false,
     val homeError: ApiError? = null,
     val homeMessage: String? = null,
