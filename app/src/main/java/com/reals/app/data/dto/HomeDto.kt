@@ -8,6 +8,15 @@ data class HomeResponseDto(
     val queue: HomeQueueResponseDto,
     val activeMatches: List<HomeMatchResponseDto>,
     val activeConnections: List<HomeConnectionResponseDto>,
+    val engagementSummary: HomeEngagementSummaryResponseDto? = null,
+)
+
+@Serializable
+data class HomeEngagementSummaryResponseDto(
+    val activeMatchCount: Int = 0,
+    val activeConnectionCount: Int = 0,
+    val pendingSchedulingConnectionCount: Int = 0,
+    val actionableConnectionCount: Int = 0,
 )
 
 @Serializable

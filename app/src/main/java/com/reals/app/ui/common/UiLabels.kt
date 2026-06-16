@@ -60,6 +60,7 @@ fun ChatDecisionState.userLabel(): String = when (this) {
 }
 
 fun ConnectionState.userLabel(): String = when (this) {
+    ConnectionState.SchedulingPending -> "Coordinacion en preparacion"
     ConnectionState.SchedulingPhase -> "Coordinando proximo encuentro"
     ConnectionState.SecondChatScheduled -> "Segundo chat programado"
     ConnectionState.SecondChatAvailable -> "Segundo chat disponible"

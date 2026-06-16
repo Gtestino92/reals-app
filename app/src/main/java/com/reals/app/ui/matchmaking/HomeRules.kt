@@ -10,9 +10,12 @@ import com.reals.app.domain.model.MatchState
 internal fun ApiError?.isActiveMatchLimitReached(): Boolean =
     this is ApiError.Backend && code == "ACTIVE_MATCH_LIMIT_REACHED"
 
-internal fun HomeState?.hasBlockingEngagements(): Boolean {
+internal fun HomeState?.hasBlockingInteractions(): Boolean {
     if (this == null) return false
-    return activeMatches.any { it.matchState == MatchState.ChatActive }
+    return activeMatches.any {
+        it.matchState == MatchState.ChatActive &&
+                it.firstChat != null
+    }
 }
 
 internal fun HomeState?.shouldPollHome(hasLocallyHiddenInteractions: Boolean): Boolean {
@@ -38,25 +41,8 @@ internal fun HomeState?.pendingVisualApprovals(): List<HomeMatch> =
 
 internal fun HomeState?.nextStepConnections(): List<HomeConnection> =
     this?.activeConnections
-        ?.filter { it.connectionState != ConnectionState.Closed }
+        ?.filter { it.connectionState == ConnectionState.SchedulingPhase }
         .orEmpty()
-
-internal fun HomeState?.engagementCounts(): EngagementCounts {
-    if (this == null) return EngagementCounts()
-    return EngagementCounts(
-        firstChats = activeMatches.count { it.matchState == MatchState.ChatActive },
-        visualReviews = activeMatches.count { it.matchState == MatchState.VisualPhase },
-        connections = activeConnections.count { it.connectionState != ConnectionState.Closed },
-    )
-}
-
-internal data class EngagementCounts(
-    val firstChats: Int = 0,
-    val visualReviews: Int = 0,
-    val connections: Int = 0,
-) {
-    val total: Int = firstChats + visualReviews + connections
-}
 
 internal fun HomeConnection.partnerDisplayName(): String? =
     secondChat?.partner?.displayName?.takeIf { it.isNotBlank() }
