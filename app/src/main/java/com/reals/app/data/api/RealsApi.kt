@@ -1,16 +1,19 @@
 ﻿package com.reals.app.data.api
 
 import com.reals.app.data.dto.AddPhotoRequestDto
+import com.reals.app.data.dto.AddProposalRequestDto
 import com.reals.app.data.dto.ChatDecisionRequestDto
 import com.reals.app.data.dto.ChatExitOutcomeResponseDto
 import com.reals.app.data.dto.ChatExitRequestCreateRequestDto
 import com.reals.app.data.dto.ChatExitRequestResponseDto
 import com.reals.app.data.dto.ChatMessageResponseDto
 import com.reals.app.data.dto.ChatResponseDto
+import com.reals.app.data.dto.ConnectionResponseDto
 import com.reals.app.data.dto.CreateProfileRequestDto
 import com.reals.app.data.dto.EnqueueMatchmakingRequestDto
 import com.reals.app.data.dto.HomeResponseDto
 import com.reals.app.data.dto.MatchResponseDto
+import com.reals.app.data.dto.NegotiationResponseDto
 import com.reals.app.data.dto.PartnerPersonalMessageResponseDto
 import com.reals.app.data.dto.PersonalMessageRequestDto
 import com.reals.app.data.dto.PhotoResponseDto
@@ -18,6 +21,7 @@ import com.reals.app.data.dto.PingResponseDto
 import com.reals.app.data.dto.ProfileResponseDto
 import com.reals.app.data.dto.QueueStatusResponseDto
 import com.reals.app.data.dto.ReplacePhotoRequestDto
+import com.reals.app.data.dto.ScheduleProposalResponseDto
 import com.reals.app.data.dto.SendMessageRequestDto
 import com.reals.app.data.dto.UpdateMatchFiltersRequestDto
 import com.reals.app.data.dto.UpdateProfileRequestDto
@@ -259,4 +263,42 @@ interface RealsApi {
         @Path("chatId") chatId: String,
         @Body body: ChatExitRequestCreateRequestDto,
     ): Response<ChatExitOutcomeResponseDto>
+
+    @GET("api/connections/{connectionId}")
+    suspend fun getConnection(
+        @Header("Authorization") authorization: String,
+        @Path("connectionId") connectionId: String,
+    ): Response<ConnectionResponseDto>
+
+    @GET("api/connections/{connectionId}/negotiation")
+    suspend fun getConnectionNegotiation(
+        @Header("Authorization") authorization: String,
+        @Path("connectionId") connectionId: String,
+    ): Response<NegotiationResponseDto>
+
+    @GET("api/connections/{connectionId}/proposals")
+    suspend fun getConnectionProposals(
+        @Header("Authorization") authorization: String,
+        @Path("connectionId") connectionId: String,
+    ): Response<List<ScheduleProposalResponseDto>>
+
+    @POST("api/connections/{connectionId}/proposals")
+    suspend fun submitConnectionProposals(
+        @Header("Authorization") authorization: String,
+        @Path("connectionId") connectionId: String,
+        @Body body: AddProposalRequestDto,
+    ): Response<List<ScheduleProposalResponseDto>>
+
+    @POST("api/connections/{connectionId}/proposals/{proposalId}/acceptance")
+    suspend fun acceptConnectionProposal(
+        @Header("Authorization") authorization: String,
+        @Path("connectionId") connectionId: String,
+        @Path("proposalId") proposalId: String,
+    ): Response<NegotiationResponseDto>
+
+    @POST("api/connections/{connectionId}/negotiation/rejections")
+    suspend fun rejectConnectionNegotiationRound(
+        @Header("Authorization") authorization: String,
+        @Path("connectionId") connectionId: String,
+    ): Response<NegotiationResponseDto>
 }

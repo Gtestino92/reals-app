@@ -74,6 +74,7 @@ class RealsRootViewModel(
     private val getVisualProfileUseCase = dependencies.visualApproval.getVisualProfile
     private val firstChatCoordinator = FirstChatCoordinator(dependencies.firstChat)
     private val visualApprovalCoordinator = VisualApprovalCoordinator(dependencies.visualApproval)
+    private val schedulingCoordinator = SchedulingCoordinator(dependencies.scheduling)
     private val homeUiMapper = HomeUiMapper()
     private val homeRouter = HomeRouter()
     private val _uiState = MutableStateFlow<RealsRootUiState>(RealsRootUiState.Checking)
@@ -424,14 +425,92 @@ class RealsRootViewModel(
         }
     }
 
+    fun openScheduling(
+        connectionId: String,
+        matchId: String,
+        partnerName: String? = null,
+    ) {
+        val session = when (val current = _uiState.value) {
+            is RealsRootUiState.Ready -> current.session
+            is RealsRootUiState.Scheduling -> current.session
+            else -> return
+        }
+        val cleanConnectionId = connectionId.trim()
+        val cleanMatchId = matchId.trim()
+        if (cleanConnectionId.isBlank() || cleanMatchId.isBlank()) return
+
+        viewModelScope.launch {
+            _uiState.value = schedulingCoordinator.load(
+                session = session,
+                connectionId = cleanConnectionId,
+                matchId = cleanMatchId,
+                partnerName = partnerName,
+            )
+        }
+    }
+
+    fun refreshScheduling(silent: Boolean = false) {
+        val current = _uiState.value as? RealsRootUiState.Scheduling ?: return
+        if (current.refreshing || current.submitting) return
+
+        viewModelScope.launch {
+            _uiState.value = schedulingCoordinator.refresh(current, silent)
+        }
+    }
+
+    fun submitSchedulingProposals(proposedDateTimes: List<String>) {
+        val current = _uiState.value as? RealsRootUiState.Scheduling ?: return
+        if (current.submitting) return
+
+        viewModelScope.launch {
+            _uiState.value = schedulingCoordinator.submitProposals(current, proposedDateTimes)
+        }
+    }
+
+    fun acceptSchedulingProposal(proposalId: String) {
+        val current = _uiState.value as? RealsRootUiState.Scheduling ?: return
+        val cleanProposalId = proposalId.trim()
+        if (current.submitting || cleanProposalId.isBlank()) return
+
+        viewModelScope.launch {
+            _uiState.value = schedulingCoordinator.acceptProposal(current, cleanProposalId)
+        }
+    }
+
+    fun rejectSchedulingRound() {
+        val current = _uiState.value as? RealsRootUiState.Scheduling ?: return
+        if (current.submitting) return
+
+        viewModelScope.launch {
+            _uiState.value = schedulingCoordinator.rejectRound(current)
+        }
+    }
+
+    fun closeScheduling() {
+        val current = _uiState.value as? RealsRootUiState.Scheduling ?: return
+        viewModelScope.launch {
+            loadHomeForReady(
+                ready = RealsRootUiState.Ready(
+                    session = current.session,
+                    home = HomeUiState(homeLoading = true),
+                ),
+                autoNavigateEngagements = false,
+            )
+        }
+    }
+
     fun openConnectionPartnerProfile(matchId: String) {
-        val current = _uiState.value as? RealsRootUiState.Ready ?: return
+        val session = when (val current = _uiState.value) {
+            is RealsRootUiState.Ready -> current.session
+            is RealsRootUiState.Scheduling -> current.session
+            else -> return
+        }
         val cleanMatchId = matchId.trim()
         if (cleanMatchId.isBlank()) return
 
         viewModelScope.launch {
             loadPartnerProfile(
-                session = current.session,
+                session = session,
                 matchId = cleanMatchId,
             )
         }

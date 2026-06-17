@@ -63,6 +63,7 @@ internal fun PendingActionsCard(
 internal fun NextStepCard(
     nextSteps: List<HomeNextStepItem>,
     busy: Boolean,
+    onOpenScheduling: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenPartnerProfile: (matchId: String) -> Unit,
 ) {
     if (nextSteps.isEmpty()) return
@@ -89,6 +90,7 @@ internal fun NextStepCard(
                 NextStepItem(
                     item = nextStep,
                     busy = busy,
+                    onOpenScheduling = onOpenScheduling,
                     onOpenPartnerProfile = onOpenPartnerProfile,
                 )
             }
@@ -161,6 +163,7 @@ private fun VisualApprovalItem(
 private fun NextStepItem(
     item: HomeNextStepItem,
     busy: Boolean,
+    onOpenScheduling: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenPartnerProfile: (matchId: String) -> Unit,
 ) {
     val partnerName = item.partnerDisplayName()
@@ -180,10 +183,21 @@ private fun NextStepItem(
                 text = item.body(),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Text(
-                text = "Ya hubo aprobacion visual mutua. Falta implementar esta parte de la experiencia en la app.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (item is HomeNextStepItem.Scheduling) {
+                Button(
+                    onClick = {
+                        onOpenScheduling(
+                            item.connectionId,
+                            item.matchId,
+                            item.partnerDisplayName,
+                        )
+                    },
+                    enabled = !busy && item.connectionId.isNotBlank() && item.matchId.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Coordinar horarios")
+                }
+            }
             Button(
                 onClick = { onOpenPartnerProfile(item.matchIdForProfile()) },
                 enabled = !busy && item.matchIdForProfile().isNotBlank(),
