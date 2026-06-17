@@ -20,9 +20,8 @@ import com.reals.app.domain.model.ChatExitOutcome
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatStatus
-import com.reals.app.domain.model.ConnectionState
 import com.reals.app.domain.model.CreateProfileInput
-import com.reals.app.domain.model.HomeConnection
+import com.reals.app.domain.model.HomePendingAction
 import com.reals.app.domain.model.HomeState
 import com.reals.app.domain.model.Match
 import com.reals.app.domain.model.MatchState
@@ -34,6 +33,10 @@ import com.reals.app.domain.model.SearchLocationInput
 import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.UpdateProfileInput
 import com.reals.app.domain.model.VisualDecision
+import com.reals.app.ui.matchmaking.HomeRouter
+import com.reals.app.ui.matchmaking.HomeRoute
+import com.reals.app.ui.matchmaking.HomeUiMapper
+import com.reals.app.ui.matchmaking.LocalHiddenInteractions
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -71,6 +74,8 @@ class RealsRootViewModel(
     private val getVisualProfileUseCase = dependencies.visualApproval.getVisualProfile
     private val firstChatCoordinator = FirstChatCoordinator(dependencies.firstChat)
     private val visualApprovalCoordinator = VisualApprovalCoordinator(dependencies.visualApproval)
+    private val homeUiMapper = HomeUiMapper()
+    private val homeRouter = HomeRouter()
     private val _uiState = MutableStateFlow<RealsRootUiState>(RealsRootUiState.Checking)
     val uiState: StateFlow<RealsRootUiState> = _uiState.asStateFlow()
     private var lastSearchLocation: SearchLocationInput? = null
@@ -168,7 +173,7 @@ class RealsRootViewModel(
                         homeMessage = null,
                     ),
                 ),
-                autoNavigateEngagements = current.homeState?.queue?.inQueue == true,
+                autoNavigateEngagements = current.home.screenModel?.matchmaking?.inQueue == true,
             )
         }
     }
@@ -180,15 +185,21 @@ class RealsRootViewModel(
             when (val homeResult = getHomeUseCase()) {
                 is ApiResult.Success -> {
                     val latest = _uiState.value as? RealsRootUiState.Ready ?: return@launch
+                    pruneLocalHiddenInteractions(homeResult.value)
+                    val screenModel = buildHomeScreenModel(
+                        home = homeResult.value,
+                        localMatchmakingBlockedReason = latest.home.matchmakingBlockedReason,
+                    )
 
-                    routeFromHomeState(
+                    routeFromHomeScreenModel(
                         ready = latest.copy(
                             home = latest.home.copy(
-                                homeState = homeResult.value.withLocallyHiddenMatchesAndPrunedState(),
+                                homeState = homeResult.value,
+                                screenModel = screenModel,
                                 homeLoading = false,
                             ),
                         ),
-                        autoNavigateEngagements = latest.homeState?.queue?.inQueue == true,
+                        autoNavigateEngagements = latest.home.screenModel?.matchmaking?.inQueue == true,
                     )
                 }
 
@@ -224,15 +235,20 @@ class RealsRootViewModel(
                     autoNavigateEngagements = true,
                 )
 
-                is ApiResult.Failure -> _uiState.value = pending.copy(
-                    home = pending.home.copy(
-                        homeLoading = false,
-                        homeError = result.error,
-                        matchmakingBlockedReason = result.error.takeIf {
-                            it is ApiError.Backend && it.code == "ACTIVE_MATCH_LIMIT_REACHED"
-                        },
-                    ),
-                )
+                is ApiResult.Failure -> {
+                    val blockedReason = result.error.takeIf { it.isActiveInteractionLimitError() }
+                    _uiState.value = pending.copy(
+                        home = pending.home.copy(
+                            screenModel = buildHomeScreenModel(
+                                home = pending.home.homeState,
+                                localMatchmakingBlockedReason = blockedReason,
+                            ),
+                            homeLoading = false,
+                            homeError = result.error,
+                            matchmakingBlockedReason = blockedReason,
+                        ),
+                    )
+                }
             }
         }
     }
@@ -361,7 +377,7 @@ class RealsRootViewModel(
         }
         val cleanMatchId = matchId.trim()
         if (cleanMatchId.isBlank()) return
-        if (cleanMatchId in locallyHiddenVisualMatchIds) {
+        if (cleanMatchId in localHiddenSnapshot().hiddenVisualMatchIds) {
             viewModelScope.launch {
                 loadHomeForReady(
                     ready = RealsRootUiState.Ready(
@@ -460,12 +476,12 @@ class RealsRootViewModel(
                 is FirstChatRefreshResult.Show -> _uiState.value = result.state
                 is FirstChatRefreshResult.Reopen -> openFirstChat(result.matchId, result.chatId)
                 is FirstChatRefreshResult.Closed -> {
-                    locallyHiddenPendingChatMatchIds += current.matchId
+                    hideFirstChatLocally(current.matchId)
                     routeAfterFirstChatClosed(current.session, result.matchState)
                 }
 
                 FirstChatRefreshResult.ExitResolved -> {
-                    locallyHiddenPendingChatMatchIds += current.matchId
+                    hideFirstChatLocally(current.matchId)
                     reenterMatchmakingOrLoadHome(current.session)
                 }
             }
@@ -517,7 +533,7 @@ class RealsRootViewModel(
                     when (val state = result.value.state) {
                         MatchState.ChatActive -> {
                             if (decision == ChatContinueDecision.Approved) {
-                                locallyHiddenPendingChatMatchIds += current.matchId
+                                hideFirstChatLocally(current.matchId)
                                 loadHomeForReady(
                                     ready = RealsRootUiState.Ready(
                                         session = current.session,
@@ -543,7 +559,7 @@ class RealsRootViewModel(
                         MatchState.Expired,
                         MatchState.VisualApproved,
                         MatchState.VisualRejected -> {
-                            locallyHiddenPendingChatMatchIds += current.matchId
+                            hideFirstChatLocally(current.matchId)
                             routeAfterFirstChatClosed(current.session, state)
                         }
 
@@ -641,7 +657,7 @@ class RealsRootViewModel(
             when (val result =
                 visualApprovalCoordinator.submitDecision(current.matchId, decision)) {
                 is ApiResult.Success -> {
-                    locallyHiddenVisualMatchIds += current.matchId
+                    hideVisualReviewLocally(current.matchId)
                     when (result.value.state) {
                         MatchState.VisualPhase -> loadHomeForReady(
                             ready = RealsRootUiState.Ready(
@@ -987,10 +1003,6 @@ class RealsRootViewModel(
         }
     }
 
-    val hasLocallyHiddenInteractions: Boolean
-        get() = locallyHiddenPendingChatMatchIds.isNotEmpty() ||
-                locallyHiddenVisualMatchIds.isNotEmpty()
-
     fun deleteProfilePhoto(photoId: String, position: Int) {
         val current = _uiState.value as? RealsRootUiState.Ready ?: return
         viewModelScope.launch {
@@ -1111,7 +1123,7 @@ class RealsRootViewModel(
                 matchId = matchId,
                 initialMatch = initialMatch,
                 previous = previous,
-                locallyHidden = matchId in locallyHiddenVisualMatchIds,
+                locallyHidden = matchId in localHiddenSnapshot().hiddenVisualMatchIds,
             )
         ) {
             is VisualApprovalLoadResult.Show -> _uiState.value = result.state
@@ -1160,7 +1172,6 @@ class RealsRootViewModel(
         ready: RealsRootUiState.Ready,
         publishLoadingState: Boolean = true,
         autoNavigateEngagements: Boolean = false,
-        matchmakingBlockedReason: Boolean = false
     ) {
         if (publishLoadingState) {
             _uiState.value = ready.copy(
@@ -1173,12 +1184,17 @@ class RealsRootViewModel(
 
         when (val homeResult = getHomeUseCase()) {
             is ApiResult.Success -> {
-                val visibleHomeState = homeResult.value.withLocallyHiddenMatchesAndPrunedState()
+                pruneLocalHiddenInteractions(homeResult.value)
+                val screenModel = buildHomeScreenModel(
+                    home = homeResult.value,
+                    localMatchmakingBlockedReason = ready.home.matchmakingBlockedReason,
+                )
 
-                routeFromHomeState(
+                routeFromHomeScreenModel(
                     ready = ready.copy(
                         home = ready.home.copy(
-                            homeState = visibleHomeState,
+                            homeState = homeResult.value,
+                            screenModel = screenModel,
                             homeLoading = false,
                             homeError = null,
                         ),
@@ -1199,7 +1215,7 @@ class RealsRootViewModel(
         }
     }
 
-    private suspend fun routeFromHomeState(
+    private suspend fun routeFromHomeScreenModel(
         ready: RealsRootUiState.Ready,
         autoNavigateEngagements: Boolean,
     ) {
@@ -1213,118 +1229,79 @@ class RealsRootViewModel(
             return
         }
 
-        if (!autoNavigateEngagements) {
-            _uiState.value = ready
-            return
-        }
-
-        val firstChatMatch = home.activeMatches.firstOrNull {
-            it.matchState == MatchState.ChatActive && it.firstChat != null
-        }
-
-        if (firstChatMatch?.firstChat != null) {
-            openFirstChat(
-                session = ready.session,
-                matchId = firstChatMatch.matchId,
-                chatId = firstChatMatch.firstChat.chatId,
+        when (
+            val route = homeRouter.resolve(
+                screenModel = ready.home.screenModel ?: buildHomeScreenModel(
+                    home = home,
+                    localMatchmakingBlockedReason = ready.home.matchmakingBlockedReason,
+                ),
+                autoNavigate = autoNavigateEngagements,
             )
-            return
-        }
-
-        _uiState.value = ready
-    }
-
-    private fun pendingConnectionTitle(state: ConnectionState): String = when (state) {
-        ConnectionState.SchedulingPending -> "Coordinacion en preparacion"
-        ConnectionState.SchedulingPhase -> "Coordinacion pendiente"
-        ConnectionState.SecondChatScheduled -> "Esperando segundo chat"
-        ConnectionState.SecondChatAvailable,
-        ConnectionState.SecondChat -> "Segundo chat pendiente"
-
-        ConnectionState.Closed -> "Conexion cerrada"
-        is ConnectionState.Unknown -> "Conexion no disponible"
-    }
-
-    private fun pendingConnectionBody(connection: HomeConnection): String {
-        val secondChat = connection.secondChat
-        return when (connection.connectionState) {
-            ConnectionState.SchedulingPending ->
-                "Tenes una coordinacion en preparacion. Se habilitara mas adelante."
-
-            ConnectionState.SchedulingPhase ->
-                "Tenes una conexion esperando coordinacion. Esta parte de la experiencia todavia no esta disponible en la app."
-
-            ConnectionState.SecondChatScheduled ->
-                "Tenes un segundo chat programado. La pantalla de espera todavia no esta disponible en la app."
-
-            ConnectionState.SecondChatAvailable,
-            ConnectionState.SecondChat ->
-                if (secondChat == null) {
-                    "Tu segundo chat esta casi listo. Esta parte de la experiencia todavia no esta disponible en la app."
-                } else {
-                    "Tenes un segundo chat pendiente. Esta pantalla todavia no esta disponible en la app."
-                }
-
-            ConnectionState.Closed ->
-                "Esta conexion ya termino. Actualiza Home para ver que sigue."
-
-            is ConnectionState.Unknown ->
-                "Esta conexion esta en un estado que todavia no podemos mostrar en la app."
+        ) {
+            HomeRoute.StayHome -> _uiState.value = ready
+            is HomeRoute.OpenFirstChat -> openFirstChat(
+                session = ready.session,
+                matchId = route.matchId,
+                chatId = route.chatId,
+            )
         }
     }
 
-    private fun HomeState.withLocallyHiddenMatchesAndPrunedState(): HomeState {
-        val actionableChatActiveIds = activeMatches
-            .filter {
-                it.matchState == MatchState.ChatActive &&
-                        it.firstChat != null
-            }
+    private fun localHiddenSnapshot(): LocalHiddenInteractions = LocalHiddenInteractions(
+        hiddenFirstChatMatchIds = locallyHiddenPendingChatMatchIds.toSet(),
+        hiddenVisualMatchIds = locallyHiddenVisualMatchIds.toSet(),
+    )
+
+    private fun buildHomeScreenModel(
+        home: HomeState?,
+        localMatchmakingBlockedReason: ApiError?,
+    ) = homeUiMapper.toScreenModel(
+        home = home,
+        localHidden = localHiddenSnapshot(),
+        localMatchmakingBlockedReason = localMatchmakingBlockedReason,
+    )
+
+    private fun hideFirstChatLocally(matchId: String) {
+        locallyHiddenPendingChatMatchIds += matchId
+    }
+
+    private fun hideVisualReviewLocally(matchId: String) {
+        locallyHiddenVisualMatchIds += matchId
+    }
+
+    private fun pruneLocalHiddenInteractions(home: HomeState) {
+        val actionableChatActiveIds = home.pendingActions
+            .filterIsInstance<HomePendingAction.FirstChat>()
             .map { it.matchId }
             .toSet()
 
-        val stillVisualPhaseIds = activeMatches
-            .filter { it.matchState == MatchState.VisualPhase }
+        val stillVisualPhaseIds = home.pendingActions
+            .filterIsInstance<HomePendingAction.VisualReview>()
             .map { it.matchId }
             .toSet()
 
         locallyHiddenPendingChatMatchIds.retainAll(actionableChatActiveIds)
         locallyHiddenVisualMatchIds.retainAll(stillVisualPhaseIds)
-
-        return copy(
-            activeMatches = activeMatches.filterNot { match ->
-                val nonActionableFirstChat =
-                    match.matchState == MatchState.ChatActive &&
-                            match.firstChat == null
-
-                val locallyHiddenFirstChat =
-                    match.matchState == MatchState.ChatActive &&
-                            match.matchId in locallyHiddenPendingChatMatchIds
-
-                val locallyHiddenVisualReview =
-                    match.matchState == MatchState.VisualPhase &&
-                            match.matchId in locallyHiddenVisualMatchIds
-
-                nonActionableFirstChat ||
-                        locallyHiddenFirstChat ||
-                        locallyHiddenVisualReview
-            }
-        )
     }
 
     private suspend fun reenterMatchmakingOrLoadHome(session: ProvisionedSession) {
         val location = lastSearchLocation
-        val ready = RealsRootUiState.Ready(
-            session = session,
-            home = HomeUiState(homeLoading = true),
-        )
 
         if (location == null) {
             loadHomeForReady(
-                ready = ready,
+                ready = RealsRootUiState.Ready(
+                    session = session,
+                    home = HomeUiState(homeLoading = true),
+                ),
                 autoNavigateEngagements = false,
             )
             return
         }
+
+        val ready = RealsRootUiState.Ready(
+            session = session,
+            home = HomeUiState(homeLoading = false),
+        )
 
         when (val enqueueResult = enqueueMatchmakingUseCase(location)) {
             is ApiResult.Success -> loadHomeForReady(
@@ -1334,12 +1311,12 @@ class RealsRootViewModel(
                         homeMessage = "Aprobaste el chat. Te avisaremos si la otra persona también aprueba.",
                     ),
                 ),
-                autoNavigateEngagements = false,
+                publishLoadingState = false,
+                autoNavigateEngagements = true,
             )
 
             is ApiResult.Failure -> {
-                val reachedLimit = enqueueResult.error is ApiError.Backend &&
-                        enqueueResult.error.code == "ACTIVE_MATCH_LIMIT_REACHED"
+                val reachedLimit = enqueueResult.error.isActiveInteractionLimitError()
 
                 loadHomeForReady(
                     ready = ready.copy(
@@ -1352,6 +1329,7 @@ class RealsRootViewModel(
                             matchmakingBlockedReason = enqueueResult.error,
                         ),
                     ),
+                    publishLoadingState = false,
                     autoNavigateEngagements = false,
                 )
             }
@@ -1390,7 +1368,7 @@ class RealsRootViewModel(
                 is ApiResult.Success -> {
                     val outcome = result.value as? ChatExitOutcome
                     if (closeOnSuccess || (outcome != null && outcome.chat.status != ChatStatus.Active)) {
-                        locallyHiddenPendingChatMatchIds += current.matchId
+                        hideFirstChatLocally(current.matchId)
                         routeAfterFirstChatClosed(current.session, null)
                         return@launch
                     }
@@ -1559,6 +1537,10 @@ class RealsRootViewModel(
         if (this == null) return false
         return statusCode == 404 || statusCode == 403
     }
+
+    private fun ApiError.isActiveInteractionLimitError(): Boolean =
+        this is ApiError.Backend &&
+            (code == "ACTIVE_MATCH_LIMIT_REACHED" || code == "ACTIVE_CONNECTION_LIMIT_REACHED")
 }
 
 class RealsRootViewModelFactory(

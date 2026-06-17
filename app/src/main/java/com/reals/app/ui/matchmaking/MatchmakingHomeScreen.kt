@@ -30,14 +30,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
-import com.reals.app.core.security.TextSafety
-import com.reals.app.domain.model.HomeConnection
-import com.reals.app.domain.model.HomeMatch
-import com.reals.app.domain.model.HomeState
+import com.reals.app.domain.model.HomeActiveInteractionsSummary
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.SearchLocationInput
 import com.reals.app.ui.common.ApiErrorFeedbackCard
-import com.reals.app.ui.common.userLabel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
@@ -45,11 +41,10 @@ import kotlin.time.Duration.Companion.milliseconds
 @Composable
 fun MatchmakingHomeScreen(
     profile: Profile,
-    homeState: HomeState?,
+    screenModel: HomeScreenModel?,
     homeLoading: Boolean,
     homeError: ApiError?,
     homeMessage: String?,
-    matchmakingBlockedReason: ApiError?,
     accountDeleteLoading: Boolean,
     accountDeleteError: ApiError?,
     onEnqueue: (SearchLocationInput) -> Unit,
@@ -62,18 +57,15 @@ fun MatchmakingHomeScreen(
     onEditProfile: () -> Unit,
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit,
-    hasLocallyHiddenInteractions: Boolean,
 ) {
-    val hasActiveInteractions = homeState.hasBlockingInteractions()
-    val inQueue = homeState?.queue?.inQueue == true
-    val matchmakingBlockedByLimit = matchmakingBlockedReason.isActiveMatchLimitReached()
-
-    if (homeState == null && homeLoading) {
+    if (screenModel == null && homeLoading) {
         LoadingHomeStateScreen()
         return
     }
 
-    if (inQueue && !hasActiveInteractions) {
+    val model = screenModel ?: emptyHomeScreenModel()
+
+    if (model.matchmaking.inQueue) {
         SearchingChatScreen(
             homeError = homeError,
             accountDeleteLoading = accountDeleteLoading,
@@ -84,11 +76,12 @@ fun MatchmakingHomeScreen(
         return
     }
 
-    if (homeState.shouldPollHome(hasLocallyHiddenInteractions)) {
+    if (model.shouldPollHome()) {
         LaunchedEffect(
-            homeState?.queue?.inQueue,
-            homeState?.activeMatches?.size,
-            homeState?.activeConnections?.size,
+            model.matchmaking.inQueue,
+            model.pendingActions.size,
+            model.nextSteps.size,
+            model.passiveNotices.size,
         ) {
             while (true) {
                 delay(10_000.milliseconds)
@@ -99,11 +92,10 @@ fun MatchmakingHomeScreen(
 
     MatchmakingIdleScreen(
         profile = profile,
-        homeState = homeState,
+        screenModel = model,
         homeLoading = homeLoading,
         homeError = homeError,
         homeMessage = homeMessage,
-        matchmakingBlockedByLimit = matchmakingBlockedByLimit,
         accountDeleteLoading = accountDeleteLoading,
         accountDeleteError = accountDeleteError,
         onEnqueue = onEnqueue,
@@ -120,11 +112,10 @@ fun MatchmakingHomeScreen(
 @Composable
 private fun MatchmakingIdleScreen(
     profile: Profile,
-    homeState: HomeState?,
+    screenModel: HomeScreenModel,
     homeLoading: Boolean,
     homeError: ApiError?,
     homeMessage: String?,
-    matchmakingBlockedByLimit: Boolean,
     accountDeleteLoading: Boolean,
     accountDeleteError: ApiError?,
     onEnqueue: (SearchLocationInput) -> Unit,
@@ -145,6 +136,8 @@ private fun MatchmakingIdleScreen(
     var longitude by rememberSaveable(profile.id) { mutableStateOf("-58.3816") }
     var accuracy by rememberSaveable(profile.id) { mutableStateOf("50") }
     val busy = homeLoading || accountDeleteLoading || locating
+    val canSearch = screenModel.matchmaking.canSearch
+    val blockedReason = screenModel.matchmaking.blockedReason
 
     fun enqueueWithDeviceLocation() {
         scope.launch {
@@ -154,7 +147,10 @@ private fun MatchmakingIdleScreen(
             locating = false
             result
                 .onSuccess(onEnqueue)
-                .onFailure { localError = it.message ?: "No se pudo obtener la ubicacion del dispositivo." }
+                .onFailure {
+                    localError = it.message
+                        ?: "No se pudo obtener la ubicacion del dispositivo."
+                }
         }
     }
 
@@ -165,7 +161,8 @@ private fun MatchmakingIdleScreen(
             localError = null
             enqueueWithDeviceLocation()
         } else {
-            localError = "Necesitamos ubicacion para buscar personas cerca. Podes habilitar permisos o usar el fallback manual de desarrollo."
+            localError = "Necesitamos ubicacion para buscar personas cerca. " +
+                "Podes habilitar permisos o usar el fallback manual de desarrollo."
             manualExpanded = true
         }
     }
@@ -189,13 +186,13 @@ private fun MatchmakingIdleScreen(
         )
         Spacer(modifier = Modifier.height(20.dp))
         PendingActionsCard(
-            homeState = homeState,
+            actions = screenModel.pendingActions,
             busy = busy,
             onOpenFirstChat = onOpenFirstChat,
             onOpenVisualApproval = onOpenVisualApproval,
         )
         NextStepCard(
-            homeState = homeState,
+            nextSteps = screenModel.nextSteps,
             busy = busy,
             onOpenPartnerProfile = onOpenConnectionPartnerProfile,
         )
@@ -209,15 +206,19 @@ private fun MatchmakingIdleScreen(
                     text = "Vamos a usar tu ubicacion actual para encontrar personas compatibles cerca.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                ActiveInteractionsSummary(homeState)
+                ActiveInteractionsSummary(
+                    summary = screenModel.activeInteractionsSummary,
+                    passiveNotices = screenModel.passiveNotices,
+                )
                 if (!locating) {
                     localError?.let { ErrorFeedback("No pudimos usar tu ubicacion", it) }
                 }
                 homeError?.let { ApiErrorFeedbackCard(it, ErrorContext.Home) }
                 homeMessage?.let { SuccessFeedback(it) }
-                if (matchmakingBlockedByLimit) {
+                if (!canSearch && blockedReason != null) {
                     Text(
-                        text = "Ya tenés el máximo de interacciones activas. Resolvé alguna pendiente antes de buscar otro chat.",
+                        text = blockedReason.matchmakingBlockedMessage()
+                            ?: "No pudimos iniciar la busqueda. Revisa tu perfil e intenta nuevamente.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -235,17 +236,14 @@ private fun MatchmakingIdleScreen(
                             )
                         }
                     },
-                    enabled = !busy && !matchmakingBlockedByLimit,
+                    enabled = !busy && canSearch,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(if (locating || homeLoading) "Preparando busqueda..." else "Buscar chat")
                 }
-                OutlinedButton(onClick = onEditProfile, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                    Text("Editar perfil y filtros")
-                }
                 OutlinedButton(
                     onClick = { manualExpanded = !manualExpanded },
-                    enabled = !busy && !matchmakingBlockedByLimit,
+                    enabled = !busy && canSearch,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(if (manualExpanded) "Ocultar fallback manual" else "Fallback manual dev")
@@ -255,20 +253,24 @@ private fun MatchmakingIdleScreen(
                         latitude = latitude,
                         longitude = longitude,
                         accuracy = accuracy,
-                        enabled = !busy && !matchmakingBlockedByLimit,
+                        enabled = !busy && canSearch,
                         onLatitudeChange = { latitude = signedDecimalInput(it) },
                         onLongitudeChange = { longitude = signedDecimalInput(it) },
                         onAccuracyChange = { accuracy = it.filter { char -> char.isDigit() } },
                         onSubmit = {
                             val location = validateLocation(latitude, longitude, accuracy)
                             if (location == null) {
-                                localError = "Ubicacion invalida. Latitud -90..90, longitud -180..180, precision 0..100000."
+                                localError = "Ubicacion invalida. Latitud -90..90, " +
+                                    "longitud -180..180, precision 0..100000."
                             } else {
                                 localError = null
                                 onEnqueue(location)
                             }
                         },
                     )
+                }
+                OutlinedButton(onClick = onEditProfile, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                    Text("Editar perfil y filtros")
                 }
                 if (homeError != null) {
                     OutlinedButton(onClick = onRefreshHome, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
@@ -287,100 +289,36 @@ private fun MatchmakingIdleScreen(
         )
     }
 }
-
 @Composable
-private fun VisualApprovalItem(
-    match: HomeMatch,
-    busy: Boolean,
-    onOpenVisualApproval: (matchId: String) -> Unit,
+private fun ActiveInteractionsSummary(
+    summary: HomeActiveInteractionsSummary?,
+    passiveNotices: List<HomePassiveNoticeItem>,
 ) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            val partnerName = match.partnerDisplayName?.takeIf { it.isNotBlank() }
-
-            Text(
-                text = partnerName?.let { "Aprobación visual con $it" }
-                    ?: "Aprobación visual pendiente"
-            )
-            Text(
-                text = "Revisa el perfil visual y decidi si queres continuar.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Button(
-                onClick = { onOpenVisualApproval(match.matchId) },
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Abrir aprobacion visual")
-            }
-        }
-    }
-}
-
-@Composable
-private fun ConnectionPlaceholderItem(
-    connection: HomeConnection,
-    busy: Boolean,
-    onOpenPartnerProfile: (matchId: String) -> Unit,
-) {
-    val partnerName = connection.partnerDisplayName()
-        ?.let(TextSafety::safeDisplay)
-
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Text("Coordinación pendiente", style = MaterialTheme.typography.titleMedium)
-
-            Text(
-                text = partnerName?.let { "Con $it" } ?: "Con la otra persona",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            Text(
-                text = "Estado: ${connection.connectionState.userLabel()}",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Button(
-                onClick = { onOpenPartnerProfile(connection.matchId) },
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Ver perfil")
-            }
-
-            Text(
-                text = "Ya hubo aprobación visual mutua. Falta implementar la coordinación del próximo chat.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun ActiveInteractionsSummary(homeState: HomeState?) {
-    val summary = homeState?.activeInteractionsSummary ?: return
-    if (summary.activeMatchCount == 0 &&
+    if (summary == null) return
+    if (summary.activeInitialCount == 0 &&
         summary.activeConnectionCount == 0 &&
-        summary.pendingSchedulingConnectionCount == 0
+        passiveNotices.isEmpty()
     ) return
 
     Text(
         text = "Experiencias activas: " +
-            "${summary.activeMatchCount} ${if (summary.activeMatchCount == 1) "inicial" else "iniciales"}, " +
-            "${summary.activeConnectionCount} ${if (summary.activeConnectionCount == 1) "conexión" else "conexiones"}.",
+            "${summary.activeInitialCount} ${if (summary.activeInitialCount == 1) "inicial" else "iniciales"}, " +
+            "${summary.activeConnectionCount} ${if (summary.activeConnectionCount == 1) "conexion" else "conexiones"}.",
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 
-    if (summary.pendingSchedulingConnectionCount > 0) {
-        Text(
-            text = if (summary.pendingSchedulingConnectionCount == 1) {
-                "Tenés una coordinación en preparación. Se habilitará más adelante."
-            } else {
-                "Tenés ${summary.pendingSchedulingConnectionCount} coordinaciones en preparación. Se habilitarán más adelante."
-            },
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    passiveNotices.forEach { notice ->
+        when (notice) {
+            is HomePassiveNoticeItem.SchedulingPreparing -> Text(
+                text = if (notice.count == 1) {
+                    "Tenes una coordinacion en preparacion. Se habilitara mas adelante."
+                } else {
+                    "Tenes ${notice.count} coordinaciones en preparacion. Se habilitaran mas adelante."
+                },
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            is HomePassiveNoticeItem.Unknown -> Unit
+        }
     }
 }

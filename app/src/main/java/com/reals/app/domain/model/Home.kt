@@ -2,37 +2,81 @@ package com.reals.app.domain.model
 
 data class HomeState(
     val profileStatus: ProfileStatus?,
-    val queue: HomeQueueState,
-    val activeMatches: List<HomeMatch>,
-    val activeConnections: List<HomeConnection>,
+    val matchmaking: HomeMatchmaking,
     val activeInteractionsSummary: HomeActiveInteractionsSummary,
+    val pendingActions: List<HomePendingAction>,
+    val nextSteps: List<HomeNextStep>,
+    val passiveNotices: List<HomePassiveNotice>,
+)
+
+data class HomeMatchmaking(
+    val inQueue: Boolean,
+    val canSearch: Boolean,
+    val blockedReason: HomeMatchmakingBlockedReason?,
+)
+
+data class HomeMatchmakingBlockedReason(
+    val code: String,
+    val message: String,
 )
 
 data class HomeActiveInteractionsSummary(
-    val activeMatchCount: Int,
+    val activeInitialCount: Int,
     val activeConnectionCount: Int,
     val pendingSchedulingConnectionCount: Int,
     val actionableConnectionCount: Int,
 )
 
-data class HomeQueueState(
-    val inQueue: Boolean,
-)
+sealed interface HomePendingAction {
+    data class FirstChat(
+        val matchId: String,
+        val chatId: String,
+        val partner: ChatPartner?,
+    ) : HomePendingAction
 
-data class HomeMatch(
-    val matchId: String,
-    val matchState: MatchState,
-    val firstChat: HomeChat?,
-    val partnerDisplayName: String?,
-)
+    data class VisualReview(
+        val matchId: String,
+        val partner: ChatPartner?,
+    ) : HomePendingAction
 
-data class HomeConnection(
-    val connectionId: String,
-    val matchId: String,
-    val connectionState: ConnectionState,
-    val secondChat: HomeChat?,
-    val partner: ChatPartner?,
-)
+    data class Unknown(
+        val rawType: String,
+    ) : HomePendingAction
+}
+
+sealed interface HomeNextStep {
+    data class Scheduling(
+        val connectionId: String,
+        val matchId: String,
+        val partner: ChatPartner?,
+    ) : HomeNextStep
+
+    data class SecondChatScheduled(
+        val connectionId: String,
+        val matchId: String,
+        val partner: ChatPartner?,
+        val secondChat: HomeChat?,
+    ) : HomeNextStep
+
+    data class SecondChatAvailable(
+        val connectionId: String,
+        val matchId: String,
+        val partner: ChatPartner?,
+        val secondChat: HomeChat?,
+    ) : HomeNextStep
+
+    data class Unknown(
+        val rawType: String,
+        val connectionId: String?,
+        val matchId: String?,
+        val partner: ChatPartner?,
+    ) : HomeNextStep
+}
+
+sealed interface HomePassiveNotice {
+    data class SchedulingPreparing(val count: Int) : HomePassiveNotice
+    data class Unknown(val rawType: String, val count: Int?) : HomePassiveNotice
+}
 
 data class HomeChat(
     val chatId: String,
@@ -41,45 +85,3 @@ data class HomeChat(
     val expiresAt: String?,
     val partner: ChatPartner?,
 )
-
-sealed interface ConnectionState {
-    val rawValue: String
-
-    data object SchedulingPending : ConnectionState {
-        override val rawValue = "SCHEDULING_PENDING"
-    }
-
-    data object SchedulingPhase : ConnectionState {
-        override val rawValue = "SCHEDULING_PHASE"
-    }
-
-    data object SecondChatScheduled : ConnectionState {
-        override val rawValue = "SECOND_CHAT_SCHEDULED"
-    }
-
-    data object SecondChatAvailable : ConnectionState {
-        override val rawValue = "SECOND_CHAT_AVAILABLE"
-    }
-
-    data object SecondChat : ConnectionState {
-        override val rawValue = "SECOND_CHAT"
-    }
-
-    data object Closed : ConnectionState {
-        override val rawValue = "CLOSED"
-    }
-
-    data class Unknown(override val rawValue: String) : ConnectionState
-
-    companion object {
-        fun fromBackend(value: String): ConnectionState = when (value.uppercase()) {
-            SchedulingPending.rawValue -> SchedulingPending
-            SchedulingPhase.rawValue -> SchedulingPhase
-            SecondChatScheduled.rawValue -> SecondChatScheduled
-            SecondChatAvailable.rawValue -> SecondChatAvailable
-            SecondChat.rawValue -> SecondChat
-            Closed.rawValue -> Closed
-            else -> Unknown(value)
-        }
-    }
-}
