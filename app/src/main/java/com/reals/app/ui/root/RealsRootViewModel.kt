@@ -1286,18 +1286,22 @@ class RealsRootViewModel(
 
     private suspend fun reenterMatchmakingOrLoadHome(session: ProvisionedSession) {
         val location = lastSearchLocation
-        val ready = RealsRootUiState.Ready(
-            session = session,
-            home = HomeUiState(homeLoading = true),
-        )
 
         if (location == null) {
             loadHomeForReady(
-                ready = ready,
+                ready = RealsRootUiState.Ready(
+                    session = session,
+                    home = HomeUiState(homeLoading = true),
+                ),
                 autoNavigateEngagements = false,
             )
             return
         }
+
+        val ready = RealsRootUiState.Ready(
+            session = session,
+            home = HomeUiState(homeLoading = false),
+        )
 
         when (val enqueueResult = enqueueMatchmakingUseCase(location)) {
             is ApiResult.Success -> loadHomeForReady(
@@ -1307,7 +1311,8 @@ class RealsRootViewModel(
                         homeMessage = "Aprobaste el chat. Te avisaremos si la otra persona también aprueba.",
                     ),
                 ),
-                autoNavigateEngagements = false,
+                publishLoadingState = false,
+                autoNavigateEngagements = true,
             )
 
             is ApiResult.Failure -> {
@@ -1324,6 +1329,7 @@ class RealsRootViewModel(
                             matchmakingBlockedReason = enqueueResult.error,
                         ),
                     ),
+                    publishLoadingState = false,
                     autoNavigateEngagements = false,
                 )
             }
