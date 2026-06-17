@@ -25,6 +25,7 @@ import com.reals.app.ui.matchmaking.MatchmakingHomeScreen
 import com.reals.app.ui.profile.CreateProfileScreen
 import com.reals.app.ui.profile.ProfileActivationResultScreen
 import com.reals.app.ui.profile.ProfileStatusScreen
+import com.reals.app.ui.scheduling.SchedulingScreen
 
 @Composable
 fun RealsApp(appContainer: AppContainer) {
@@ -144,6 +145,7 @@ fun RealsApp(appContainer: AppContainer) {
                             onPollHome = viewModel::pollHomeStateSilently,
                             onOpenFirstChat = { matchId, chatId -> viewModel.openFirstChat(matchId, chatId) },
                             onOpenVisualApproval = viewModel::openVisualApproval,
+                            onOpenScheduling = viewModel::openScheduling,
                             onOpenConnectionPartnerProfile = viewModel::openConnectionPartnerProfile,
                             onEditProfile = viewModel::openProfileManagement,
                             onSignOut = viewModel::signOut,
@@ -163,6 +165,7 @@ fun RealsApp(appContainer: AppContainer) {
                 loading = current.loading,
                 sending = current.sending,
                 actionLoading = current.actionLoading,
+                actionLoadingLabel = current.actionLoadingLabel,
                 error = current.error,
                 message = current.message,
                 onRefresh = { viewModel.refreshFirstChat(silent = true) },
@@ -186,6 +189,7 @@ fun RealsApp(appContainer: AppContainer) {
                 refreshing = current.refreshing,
                 writingMessage = current.writingMessage,
                 deciding = current.deciding,
+                decidingLabel = current.decidingLabel,
                 error = current.error,
                 message = current.message,
                 onRefresh = viewModel::refreshVisualApproval,
@@ -193,6 +197,26 @@ fun RealsApp(appContainer: AppContainer) {
                 onApprove = { viewModel.submitVisualDecision(VisualDecision.Approved) },
                 onReject = { viewModel.submitVisualDecision(VisualDecision.Rejected) },
                 onBackHome = viewModel::closeVisualApproval,
+            )
+
+            is RealsRootUiState.Scheduling -> SchedulingScreen(
+                connectionId = current.connectionId,
+                partnerName = current.partnerName,
+                loading = current.loading,
+                refreshing = current.refreshing,
+                submitting = current.submitting,
+                submittingLabel = current.submittingLabel,
+                negotiation = current.negotiation,
+                proposals = current.proposals,
+                currentUserId = current.session.user.id,
+                error = current.error,
+                message = current.message,
+                onRefresh = { viewModel.refreshScheduling(silent = true) },
+                onSubmitProposals = viewModel::submitSchedulingProposals,
+                onAcceptProposal = viewModel::acceptSchedulingProposal,
+                onRejectRound = viewModel::rejectSchedulingRound,
+                onOpenPartnerProfile = { viewModel.openConnectionPartnerProfile(current.matchId) },
+                onBackHome = viewModel::closeScheduling,
             )
 
             is RealsRootUiState.PartnerProfile -> PartnerProfileScreen(

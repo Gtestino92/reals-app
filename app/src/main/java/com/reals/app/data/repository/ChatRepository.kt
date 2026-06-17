@@ -71,8 +71,12 @@ class ChatRepository(
         authorizedCall { authorization -> api.acceptChatExitRequest(authorization, chatId, exitRequestId) }
             .map { it.toDomain() }
 
-    suspend fun rejectExitRequest(chatId: String, exitRequestId: String): ApiResult<ChatExitRequest> =
+    suspend fun rejectExitRequest(chatId: String, exitRequestId: String): ApiResult<ChatExitOutcome> =
         authorizedCall { authorization -> api.rejectChatExitRequest(authorization, chatId, exitRequestId) }
+            .map { it.toDomain() }
+
+    suspend fun timeoutExitRequest(chatId: String, exitRequestId: String): ApiResult<ChatExitOutcome> =
+        authorizedCall { authorization -> api.timeoutChatExitRequest(authorization, chatId, exitRequestId) }
             .map { it.toDomain() }
 
     suspend fun cancelChat(

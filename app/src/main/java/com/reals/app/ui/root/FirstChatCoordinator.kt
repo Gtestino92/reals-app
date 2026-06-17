@@ -104,6 +104,10 @@ internal class FirstChatCoordinator(
             return FirstChatRefreshResult.Closed(updatedMatch?.state)
         }
 
+        if (updatedChat != null && updatedChat.myDecision != ChatDecisionState.Pending) {
+            return FirstChatRefreshResult.Closed(updatedMatch?.state)
+        }
+
         if (updatedExitRequests.latestExitRequest()?.status.isResolvedExitStatus()) {
             return FirstChatRefreshResult.ExitResolved
         }

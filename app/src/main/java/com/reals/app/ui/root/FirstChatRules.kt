@@ -23,12 +23,14 @@ internal fun List<ChatExitRequest>.latestExitRequest(): ChatExitRequest? =
     maxByOrNull { it.createdAt }
 
 internal fun ChatExitRequestStatus?.isResolvedExitStatus(): Boolean =
-    this == ChatExitRequestStatus.Accepted || this == ChatExitRequestStatus.Rejected
+    this == ChatExitRequestStatus.Accepted ||
+        this == ChatExitRequestStatus.Rejected ||
+        this == ChatExitRequestStatus.TimedOut
 
 internal fun firstChatDecisionMessage(state: MatchState): String = when (state) {
     MatchState.ChatActive -> "Guardamos tu decision. Esperamos la respuesta de la otra persona."
     MatchState.VisualPhase -> "Ambas personas aprobaron. La revision visual ya esta pendiente."
-    MatchState.ChatRejected -> "Buscando una nueva conversacion."
+    MatchState.ChatRejected -> "El chat fue rechazado. Actualizamos tu Home."
     MatchState.Expired -> "El chat expiro. Actualizamos tu Home."
     MatchState.VisualApproved -> "La revision ya fue aprobada. Actualizamos tu Home."
     MatchState.VisualRejected -> "La revision visual quedo cerrada. Actualizamos tu Home."
@@ -37,7 +39,7 @@ internal fun firstChatDecisionMessage(state: MatchState): String = when (state) 
 
 internal fun firstChatExitMessage(state: MatchState?): String = when (state) {
     MatchState.VisualPhase -> "El chat paso a revision visual. Actualizamos tu lista."
-    MatchState.ChatRejected -> "Buscando una nueva conversacion."
+    MatchState.ChatRejected -> "El chat fue rechazado. Actualizamos tu Home."
     MatchState.Expired -> "El chat expiro. Actualizamos tu Home."
     MatchState.VisualApproved -> "La revision ya fue aprobada. Actualizamos tu Home."
     MatchState.VisualRejected -> "La revision visual quedo cerrada. Actualizamos tu Home."

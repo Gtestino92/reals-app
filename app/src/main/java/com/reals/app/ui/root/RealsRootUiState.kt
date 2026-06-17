@@ -10,6 +10,8 @@ import com.reals.app.domain.model.Match
 import com.reals.app.domain.model.ProfileActivationResult
 import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.ProvisionedSession
+import com.reals.app.domain.model.SchedulingNegotiation
+import com.reals.app.domain.model.SchedulingProposal
 import com.reals.app.domain.model.VisualProfile
 import com.reals.app.ui.matchmaking.HomeScreenModel
 
@@ -77,6 +79,7 @@ sealed interface RealsRootUiState {
         val refreshing: Boolean = false,
         val sending: Boolean = false,
         val actionLoading: Boolean = false,
+        val actionLoadingLabel: String? = null,
         val error: ApiError? = null,
         val message: String? = null,
     ) : RealsRootUiState
@@ -92,6 +95,22 @@ sealed interface RealsRootUiState {
         val refreshing: Boolean = false,
         val writingMessage: Boolean = false,
         val deciding: Boolean = false,
+        val decidingLabel: String? = null,
+        val error: ApiError? = null,
+        val message: String? = null,
+    ) : RealsRootUiState
+
+    data class Scheduling(
+        val session: ProvisionedSession,
+        val connectionId: String,
+        val matchId: String,
+        val partnerName: String? = null,
+        val loading: Boolean = false,
+        val refreshing: Boolean = false,
+        val submitting: Boolean = false,
+        val submittingLabel: String? = null,
+        val negotiation: SchedulingNegotiation? = null,
+        val proposals: List<SchedulingProposal> = emptyList(),
         val error: ApiError? = null,
         val message: String? = null,
     ) : RealsRootUiState

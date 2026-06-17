@@ -2,6 +2,7 @@ package com.reals.app.di
 
 import com.reals.app.data.repository.FirebaseAuthRepository
 import com.reals.app.domain.usecase.AcceptChatExitRequestUseCase
+import com.reals.app.domain.usecase.AcceptSchedulingProposalUseCase
 import com.reals.app.domain.usecase.ActivateProfileUseCase
 import com.reals.app.domain.usecase.AddMockProfilePhotoUseCase
 import com.reals.app.domain.usecase.AddProfilePhotoFileUseCase
@@ -18,19 +19,24 @@ import com.reals.app.domain.usecase.GetMatchUseCase
 import com.reals.app.domain.usecase.GetMeUseCase
 import com.reals.app.domain.usecase.GetPartnerPersonalMessageUseCase
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
+import com.reals.app.domain.usecase.GetSchedulingNegotiationUseCase
+import com.reals.app.domain.usecase.GetSchedulingProposalsUseCase
 import com.reals.app.domain.usecase.GetVisualProfileUseCase
 import com.reals.app.domain.usecase.LeaveQueueUseCase
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
 import com.reals.app.domain.usecase.PutMyPersonalMessageUseCase
 import com.reals.app.domain.usecase.ReactivateAccountUseCase
 import com.reals.app.domain.usecase.RejectChatExitRequestUseCase
+import com.reals.app.domain.usecase.RejectSchedulingRoundUseCase
 import com.reals.app.domain.usecase.ReplaceMockProfilePhotoUseCase
 import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
 import com.reals.app.domain.usecase.SafetyCancelChatUseCase
 import com.reals.app.domain.usecase.SendChatMessageUseCase
 import com.reals.app.domain.usecase.SubmitChatDecisionUseCase
+import com.reals.app.domain.usecase.SubmitSchedulingProposalsUseCase
 import com.reals.app.domain.usecase.SubmitVisualDecisionUseCase
+import com.reals.app.domain.usecase.TimeoutChatExitRequestUseCase
 import com.reals.app.domain.usecase.UpdateMatchFiltersUseCase
 import com.reals.app.domain.usecase.UpdateProfileUseCase
 
@@ -41,6 +47,7 @@ data class RealsRootDependencies(
     val home: HomeFeatureDependencies,
     val firstChat: FirstChatFeatureDependencies,
     val visualApproval: VisualApprovalFeatureDependencies,
+    val scheduling: SchedulingFeatureDependencies,
 )
 
 data class SessionFeatureDependencies(
@@ -83,6 +90,7 @@ data class FirstChatFeatureDependencies(
     val requestMutualChatExit: RequestMutualChatExitUseCase,
     val acceptChatExitRequest: AcceptChatExitRequestUseCase,
     val rejectChatExitRequest: RejectChatExitRequestUseCase,
+    val timeoutChatExitRequest: TimeoutChatExitRequestUseCase,
     val cancelChat: CancelChatUseCase,
     val safetyCancelChat: SafetyCancelChatUseCase,
 )
@@ -93,4 +101,12 @@ data class VisualApprovalFeatureDependencies(
     val submitVisualDecision: SubmitVisualDecisionUseCase,
     val putMyPersonalMessage: PutMyPersonalMessageUseCase,
     val getPartnerPersonalMessage: GetPartnerPersonalMessageUseCase,
+)
+
+data class SchedulingFeatureDependencies(
+    val getNegotiation: GetSchedulingNegotiationUseCase,
+    val getProposals: GetSchedulingProposalsUseCase,
+    val submitProposals: SubmitSchedulingProposalsUseCase,
+    val acceptProposal: AcceptSchedulingProposalUseCase,
+    val rejectRound: RejectSchedulingRoundUseCase,
 )

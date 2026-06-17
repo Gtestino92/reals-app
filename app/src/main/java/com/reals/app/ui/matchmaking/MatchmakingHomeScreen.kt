@@ -53,6 +53,7 @@ fun MatchmakingHomeScreen(
     onPollHome: () -> Unit,
     onOpenFirstChat: (matchId: String, chatId: String) -> Unit,
     onOpenVisualApproval: (matchId: String) -> Unit,
+    onOpenScheduling: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenConnectionPartnerProfile: (matchId: String) -> Unit,
     onEditProfile: () -> Unit,
     onSignOut: () -> Unit,
@@ -82,6 +83,10 @@ fun MatchmakingHomeScreen(
             model.pendingActions.size,
             model.nextSteps.size,
             model.passiveNotices.size,
+            model.activeInteractionsSummary?.activeInitialCount,
+            model.activeInteractionsSummary?.activeConnectionCount,
+            model.activeInteractionsSummary?.pendingSchedulingConnectionCount,
+            model.activeInteractionsSummary?.actionableConnectionCount,
         ) {
             while (true) {
                 delay(10_000.milliseconds)
@@ -102,6 +107,7 @@ fun MatchmakingHomeScreen(
         onRefreshHome = onRefreshHome,
         onOpenFirstChat = onOpenFirstChat,
         onOpenVisualApproval = onOpenVisualApproval,
+        onOpenScheduling = onOpenScheduling,
         onOpenConnectionPartnerProfile = onOpenConnectionPartnerProfile,
         onEditProfile = onEditProfile,
         onSignOut = onSignOut,
@@ -122,6 +128,7 @@ private fun MatchmakingIdleScreen(
     onRefreshHome: () -> Unit,
     onOpenFirstChat: (matchId: String, chatId: String) -> Unit,
     onOpenVisualApproval: (matchId: String) -> Unit,
+    onOpenScheduling: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenConnectionPartnerProfile: (matchId: String) -> Unit,
     onEditProfile: () -> Unit,
     onSignOut: () -> Unit,
@@ -194,6 +201,7 @@ private fun MatchmakingIdleScreen(
         NextStepCard(
             nextSteps = screenModel.nextSteps,
             busy = busy,
+            onOpenScheduling = onOpenScheduling,
             onOpenPartnerProfile = onOpenConnectionPartnerProfile,
         )
         Card(
