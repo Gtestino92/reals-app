@@ -50,6 +50,7 @@ fun SchedulingScreen(
     loading: Boolean,
     refreshing: Boolean,
     submitting: Boolean,
+    submittingLabel: String?,
     negotiation: SchedulingNegotiation?,
     proposals: List<SchedulingProposal>,
     currentUserId: String,
@@ -128,6 +129,7 @@ fun SchedulingScreen(
             SchedulingStage.Loading -> LoadingCard()
             SchedulingStage.WaitingForMyProposals -> ProposalSelectorCard(
                 submitting = submitting,
+                submittingLabel = submittingLabel,
                 onSubmitProposals = onSubmitProposals,
             )
 
@@ -136,6 +138,7 @@ fun SchedulingScreen(
                 myProposals = myProposals,
                 partnerProposals = partnerProposals,
                 submitting = submitting,
+                submittingLabel = submittingLabel,
                 onAcceptProposal = onAcceptProposal,
                 onRejectRound = onRejectRound,
             )
@@ -182,7 +185,7 @@ fun SchedulingScreen(
             enabled = !loading && !submitting,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Volver a Home")
+            Text(if (submitting) submittingLabel ?: "Procesando..." else "Volver a Home")
         }
     }
 }
@@ -233,6 +236,7 @@ private fun LoadingCard() {
 @Composable
 private fun ProposalSelectorCard(
     submitting: Boolean,
+    submittingLabel: String?,
     onSubmitProposals: (List<String>) -> Unit,
 ) {
     var selected by rememberSaveable { mutableStateOf(emptyList<String>()) }
@@ -294,7 +298,7 @@ private fun ProposalSelectorCard(
                 enabled = !submitting,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (submitting) "Enviando..." else "Enviar horarios")
+                Text(if (submitting) submittingLabel ?: "Enviando..." else "Enviar horarios")
             }
         }
     }
@@ -319,6 +323,7 @@ private fun ReviewProposalsCard(
     myProposals: List<SchedulingProposal>,
     partnerProposals: List<SchedulingProposal>,
     submitting: Boolean,
+    submittingLabel: String?,
     onAcceptProposal: (String) -> Unit,
     onRejectRound: () -> Unit,
 ) {
@@ -335,7 +340,13 @@ private fun ReviewProposalsCard(
                         enabled = !submitting,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text("Aceptar ${formatBackendDateTime(proposal.proposedDateTime)}")
+                        Text(
+                            if (submitting) {
+                                submittingLabel ?: "Procesando..."
+                            } else {
+                                "Aceptar ${formatBackendDateTime(proposal.proposedDateTime)}"
+                            }
+                        )
                     }
                 }
             OutlinedButton(
@@ -343,7 +354,7 @@ private fun ReviewProposalsCard(
                 enabled = !submitting,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (submitting) "Procesando..." else "Rechazar ronda")
+                Text(if (submitting) submittingLabel ?: "Procesando..." else "Rechazar ronda")
             }
         }
     }

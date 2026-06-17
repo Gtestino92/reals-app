@@ -67,12 +67,14 @@ internal class SchedulingCoordinator(
         return when (submitResult) {
             is ApiResult.Success -> refreshed.copy(
                 submitting = false,
+                submittingLabel = null,
                 error = refreshed.error,
                 message = "Enviamos tus horarios.",
             )
 
             is ApiResult.Failure -> refreshed.copy(
                 submitting = false,
+                submittingLabel = null,
                 error = submitResult.error,
                 message = "Actualizamos la coordinacion con el estado actual.",
             )
@@ -90,11 +92,13 @@ internal class SchedulingCoordinator(
                 silent = false,
             ).copy(
                 submitting = false,
+                submittingLabel = null,
                 message = "Aceptamos el horario.",
             )
 
             is ApiResult.Failure -> refresh(pending, silent = false).copy(
                 submitting = false,
+                submittingLabel = null,
                 error = acceptResult.error,
             )
         }
@@ -108,11 +112,13 @@ internal class SchedulingCoordinator(
                 silent = false,
             ).copy(
                 submitting = false,
+                submittingLabel = null,
                 message = "Abrimos una nueva ronda de horarios.",
             )
 
             is ApiResult.Failure -> refresh(pending, silent = false).copy(
                 submitting = false,
+                submittingLabel = null,
                 error = rejectResult.error,
             )
         }

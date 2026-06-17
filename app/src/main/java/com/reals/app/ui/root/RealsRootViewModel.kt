@@ -463,7 +463,10 @@ class RealsRootViewModel(
         if (current.submitting) return
 
         viewModelScope.launch {
-            _uiState.value = schedulingCoordinator.submitProposals(current, proposedDateTimes)
+            _uiState.value = schedulingCoordinator.submitProposals(
+                current.copy(submittingLabel = "Enviando horarios..."),
+                proposedDateTimes,
+            )
         }
     }
 
@@ -473,7 +476,10 @@ class RealsRootViewModel(
         if (current.submitting || cleanProposalId.isBlank()) return
 
         viewModelScope.launch {
-            _uiState.value = schedulingCoordinator.acceptProposal(current, cleanProposalId)
+            _uiState.value = schedulingCoordinator.acceptProposal(
+                current.copy(submittingLabel = "Aceptando horario..."),
+                cleanProposalId,
+            )
         }
     }
 
@@ -482,7 +488,9 @@ class RealsRootViewModel(
         if (current.submitting) return
 
         viewModelScope.launch {
-            _uiState.value = schedulingCoordinator.rejectRound(current)
+            _uiState.value = schedulingCoordinator.rejectRound(
+                current.copy(submittingLabel = "Rechazando ronda..."),
+            )
         }
     }
 
@@ -757,7 +765,16 @@ class RealsRootViewModel(
     fun submitVisualDecision(decision: VisualDecision) {
         val current = _uiState.value as? RealsRootUiState.VisualApproval ?: return
         viewModelScope.launch {
-            val pending = current.copy(deciding = true, error = null, message = null)
+            val pending = current.copy(
+                deciding = true,
+                decidingLabel = if (decision == VisualDecision.Approved) {
+                    "Aprobando..."
+                } else {
+                    "Rechazando..."
+                },
+                error = null,
+                message = null,
+            )
             _uiState.value = pending
             when (val result =
                 visualApprovalCoordinator.submitDecision(current.matchId, decision)) {
@@ -794,6 +811,7 @@ class RealsRootViewModel(
                         is MatchState.Unknown -> _uiState.value = pending.copy(
                             match = result.value,
                             deciding = false,
+                            decidingLabel = null,
                             message = "Guardamos tu decision.",
                         )
                     }
@@ -801,6 +819,7 @@ class RealsRootViewModel(
 
                 is ApiResult.Failure -> _uiState.value = pending.copy(
                     deciding = false,
+                    decidingLabel = null,
                     error = result.error,
                 )
             }

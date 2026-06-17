@@ -45,6 +45,7 @@ fun VisualApprovalScreen(
     refreshing: Boolean,
     writingMessage: Boolean,
     deciding: Boolean,
+    decidingLabel: String?,
     error: ApiError?,
     message: String?,
     onRefresh: () -> Unit,
@@ -154,10 +155,10 @@ fun VisualApprovalScreen(
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(onClick = onApprove, enabled = !busy && profile != null, modifier = Modifier.weight(1f)) {
-                        Text("Aprobar")
+                        Text(if (deciding) decidingLabel ?: "Procesando..." else "Aprobar")
                     }
                     OutlinedButton(onClick = onReject, enabled = !busy && profile != null, modifier = Modifier.weight(1f)) {
-                        Text("Rechazar")
+                        Text(if (deciding) decidingLabel ?: "Procesando..." else "Rechazar")
                     }
                 }
             }

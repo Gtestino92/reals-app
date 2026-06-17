@@ -95,6 +95,7 @@ sealed interface RealsRootUiState {
         val refreshing: Boolean = false,
         val writingMessage: Boolean = false,
         val deciding: Boolean = false,
+        val decidingLabel: String? = null,
         val error: ApiError? = null,
         val message: String? = null,
     ) : RealsRootUiState
@@ -107,6 +108,7 @@ sealed interface RealsRootUiState {
         val loading: Boolean = false,
         val refreshing: Boolean = false,
         val submitting: Boolean = false,
+        val submittingLabel: String? = null,
         val negotiation: SchedulingNegotiation? = null,
         val proposals: List<SchedulingProposal> = emptyList(),
         val error: ApiError? = null,
