@@ -21,6 +21,7 @@ import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.CreateProfileInput
+import com.reals.app.domain.model.HomePendingAction
 import com.reals.app.domain.model.HomeState
 import com.reals.app.domain.model.Match
 import com.reals.app.domain.model.MatchState
@@ -187,7 +188,7 @@ class RealsRootViewModel(
                     pruneLocalHiddenInteractions(homeResult.value)
                     val screenModel = buildHomeScreenModel(
                         home = homeResult.value,
-                        matchmakingBlockedReason = latest.home.matchmakingBlockedReason,
+                        localMatchmakingBlockedReason = latest.home.matchmakingBlockedReason,
                     )
 
                     routeFromHomeScreenModel(
@@ -235,14 +236,12 @@ class RealsRootViewModel(
                 )
 
                 is ApiResult.Failure -> {
-                    val blockedReason = result.error.takeIf {
-                        it is ApiError.Backend && it.code == "ACTIVE_MATCH_LIMIT_REACHED"
-                    }
+                    val blockedReason = result.error.takeIf { it.isActiveInteractionLimitError() }
                     _uiState.value = pending.copy(
                         home = pending.home.copy(
                             screenModel = buildHomeScreenModel(
                                 home = pending.home.homeState,
-                                matchmakingBlockedReason = blockedReason,
+                                localMatchmakingBlockedReason = blockedReason,
                             ),
                             homeLoading = false,
                             homeError = result.error,
@@ -1188,7 +1187,7 @@ class RealsRootViewModel(
                 pruneLocalHiddenInteractions(homeResult.value)
                 val screenModel = buildHomeScreenModel(
                     home = homeResult.value,
-                    matchmakingBlockedReason = ready.home.matchmakingBlockedReason,
+                    localMatchmakingBlockedReason = ready.home.matchmakingBlockedReason,
                 )
 
                 routeFromHomeScreenModel(
@@ -1234,7 +1233,7 @@ class RealsRootViewModel(
             val route = homeRouter.resolve(
                 screenModel = ready.home.screenModel ?: buildHomeScreenModel(
                     home = home,
-                    matchmakingBlockedReason = ready.home.matchmakingBlockedReason,
+                    localMatchmakingBlockedReason = ready.home.matchmakingBlockedReason,
                 ),
                 autoNavigate = autoNavigateEngagements,
             )
@@ -1255,11 +1254,11 @@ class RealsRootViewModel(
 
     private fun buildHomeScreenModel(
         home: HomeState?,
-        matchmakingBlockedReason: ApiError?,
+        localMatchmakingBlockedReason: ApiError?,
     ) = homeUiMapper.toScreenModel(
         home = home,
         localHidden = localHiddenSnapshot(),
-        matchmakingBlockedReason = matchmakingBlockedReason,
+        localMatchmakingBlockedReason = localMatchmakingBlockedReason,
     )
 
     private fun hideFirstChatLocally(matchId: String) {
@@ -1271,16 +1270,13 @@ class RealsRootViewModel(
     }
 
     private fun pruneLocalHiddenInteractions(home: HomeState) {
-        val actionableChatActiveIds = home.activeMatches
-            .filter {
-                it.matchState == MatchState.ChatActive &&
-                        it.firstChat != null
-            }
+        val actionableChatActiveIds = home.pendingActions
+            .filterIsInstance<HomePendingAction.FirstChat>()
             .map { it.matchId }
             .toSet()
 
-        val stillVisualPhaseIds = home.activeMatches
-            .filter { it.matchState == MatchState.VisualPhase }
+        val stillVisualPhaseIds = home.pendingActions
+            .filterIsInstance<HomePendingAction.VisualReview>()
             .map { it.matchId }
             .toSet()
 
@@ -1315,8 +1311,7 @@ class RealsRootViewModel(
             )
 
             is ApiResult.Failure -> {
-                val reachedLimit = enqueueResult.error is ApiError.Backend &&
-                        enqueueResult.error.code == "ACTIVE_MATCH_LIMIT_REACHED"
+                val reachedLimit = enqueueResult.error.isActiveInteractionLimitError()
 
                 loadHomeForReady(
                     ready = ready.copy(
@@ -1536,6 +1531,10 @@ class RealsRootViewModel(
         if (this == null) return false
         return statusCode == 404 || statusCode == 403
     }
+
+    private fun ApiError.isActiveInteractionLimitError(): Boolean =
+        this is ApiError.Backend &&
+            (code == "ACTIVE_MATCH_LIMIT_REACHED" || code == "ACTIVE_CONNECTION_LIMIT_REACHED")
 }
 
 class RealsRootViewModelFactory(

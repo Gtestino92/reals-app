@@ -2,14 +2,12 @@ package com.reals.app.ui.matchmaking
 
 import com.reals.app.core.network.ApiError
 import com.reals.app.domain.model.HomeActiveInteractionsSummary
-import com.reals.app.domain.model.HomeQueueState
 
 data class HomeScreenModel(
-    val queue: HomeQueueState,
     val pendingActions: List<HomeActionItem>,
     val nextSteps: List<HomeNextStepItem>,
     val activeInteractionsSummary: HomeActiveInteractionsSummary?,
-    val passiveNotices: List<HomePassiveNotice>,
+    val passiveNotices: List<HomePassiveNoticeItem>,
     val matchmaking: HomeMatchmakingUiState,
 )
 
@@ -53,8 +51,9 @@ sealed interface HomeNextStepItem {
     ) : HomeNextStepItem
 }
 
-sealed interface HomePassiveNotice {
-    data class SchedulingPreparing(val count: Int) : HomePassiveNotice
+sealed interface HomePassiveNoticeItem {
+    data class SchedulingPreparing(val count: Int) : HomePassiveNoticeItem
+    data class Unknown(val rawType: String, val count: Int?) : HomePassiveNoticeItem
 }
 
 data class HomeMatchmakingUiState(
@@ -62,4 +61,3 @@ data class HomeMatchmakingUiState(
     val canSearch: Boolean,
     val blockedReason: ApiError?,
 )
-

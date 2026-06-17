@@ -148,11 +148,7 @@ data class HomeUiState(
     val homeError: ApiError? = null,
     val homeMessage: String? = null,
     val matchmakingBlockedReason: ApiError? = null,
-) {
-    val matchmakingBlockedByLimit: Boolean
-        get() = matchmakingBlockedReason is ApiError.Backend &&
-            matchmakingBlockedReason.code == "ACTIVE_MATCH_LIMIT_REACHED"
-}
+)
 
 data class AccountUiState(
     val deletingAccount: Boolean = false,

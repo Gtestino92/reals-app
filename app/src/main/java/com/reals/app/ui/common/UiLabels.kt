@@ -5,7 +5,6 @@ import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatExitRequestType
 import com.reals.app.domain.model.ChatDecisionState
 import com.reals.app.domain.model.ChatStatus
-import com.reals.app.domain.model.ConnectionState
 import com.reals.app.domain.model.MatchState
 import com.reals.app.domain.model.ProfileStatus
 
@@ -57,16 +56,6 @@ fun ChatDecisionState.userLabel(): String = when (this) {
     ChatDecisionState.Rejected -> "Rechazado"
     ChatDecisionState.Abandoned -> "Abandonado"
     is ChatDecisionState.Unknown -> "Estado no disponible"
-}
-
-fun ConnectionState.userLabel(): String = when (this) {
-    ConnectionState.SchedulingPending -> "Coordinacion en preparacion"
-    ConnectionState.SchedulingPhase -> "Coordinando proximo encuentro"
-    ConnectionState.SecondChatScheduled -> "Segundo chat programado"
-    ConnectionState.SecondChatAvailable -> "Segundo chat disponible"
-    ConnectionState.SecondChat -> "Segundo chat en curso"
-    ConnectionState.Closed -> "Conexion cerrada"
-    is ConnectionState.Unknown -> "Estado no disponible"
 }
 
 fun ChatExitRequestType.userLabel(): String = when (this) {

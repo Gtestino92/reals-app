@@ -65,7 +65,7 @@ fun MatchmakingHomeScreen(
 
     val model = screenModel ?: emptyHomeScreenModel()
 
-    if (model.isSearchingOnly()) {
+    if (model.matchmaking.inQueue) {
         SearchingChatScreen(
             homeError = homeError,
             accountDeleteLoading = accountDeleteLoading,
@@ -137,7 +137,7 @@ private fun MatchmakingIdleScreen(
     var accuracy by rememberSaveable(profile.id) { mutableStateOf("50") }
     val busy = homeLoading || accountDeleteLoading || locating
     val canSearch = screenModel.matchmaking.canSearch
-    val matchmakingBlockedByLimit = screenModel.matchmaking.blockedReason.isActiveMatchLimitReached()
+    val blockedReason = screenModel.matchmaking.blockedReason
 
     fun enqueueWithDeviceLocation() {
         scope.launch {
@@ -215,10 +215,10 @@ private fun MatchmakingIdleScreen(
                 }
                 homeError?.let { ApiErrorFeedbackCard(it, ErrorContext.Home) }
                 homeMessage?.let { SuccessFeedback(it) }
-                if (matchmakingBlockedByLimit) {
+                if (!canSearch && blockedReason != null) {
                     Text(
-                        text = "Ya tenes el maximo de interacciones activas. " +
-                            "Resolve alguna pendiente antes de buscar otro chat.",
+                        text = blockedReason.matchmakingBlockedMessage()
+                            ?: "No pudimos iniciar la busqueda. Revisa tu perfil e intenta nuevamente.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -240,9 +240,6 @@ private fun MatchmakingIdleScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(if (locating || homeLoading) "Preparando busqueda..." else "Buscar chat")
-                }
-                OutlinedButton(onClick = onEditProfile, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                    Text("Editar perfil y filtros")
                 }
                 OutlinedButton(
                     onClick = { manualExpanded = !manualExpanded },
@@ -272,6 +269,9 @@ private fun MatchmakingIdleScreen(
                         },
                     )
                 }
+                OutlinedButton(onClick = onEditProfile, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                    Text("Editar perfil y filtros")
+                }
                 if (homeError != null) {
                     OutlinedButton(onClick = onRefreshHome, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
                         Text(if (homeLoading) "Actualizando..." else "Reintentar estado")
@@ -292,24 +292,24 @@ private fun MatchmakingIdleScreen(
 @Composable
 private fun ActiveInteractionsSummary(
     summary: HomeActiveInteractionsSummary?,
-    passiveNotices: List<HomePassiveNotice>,
+    passiveNotices: List<HomePassiveNoticeItem>,
 ) {
     if (summary == null) return
-    if (summary.activeMatchCount == 0 &&
+    if (summary.activeInitialCount == 0 &&
         summary.activeConnectionCount == 0 &&
         passiveNotices.isEmpty()
     ) return
 
     Text(
         text = "Experiencias activas: " +
-            "${summary.activeMatchCount} ${if (summary.activeMatchCount == 1) "inicial" else "iniciales"}, " +
+            "${summary.activeInitialCount} ${if (summary.activeInitialCount == 1) "inicial" else "iniciales"}, " +
             "${summary.activeConnectionCount} ${if (summary.activeConnectionCount == 1) "conexion" else "conexiones"}.",
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 
     passiveNotices.forEach { notice ->
         when (notice) {
-            is HomePassiveNotice.SchedulingPreparing -> Text(
+            is HomePassiveNoticeItem.SchedulingPreparing -> Text(
                 text = if (notice.count == 1) {
                     "Tenes una coordinacion en preparacion. Se habilitara mas adelante."
                 } else {
@@ -317,6 +317,8 @@ private fun ActiveInteractionsSummary(
                 },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
+            is HomePassiveNoticeItem.Unknown -> Unit
         }
     }
 }
