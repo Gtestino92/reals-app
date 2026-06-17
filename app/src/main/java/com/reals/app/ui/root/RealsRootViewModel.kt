@@ -18,7 +18,6 @@ import com.reals.app.domain.model.ChatContinueDecision
 import com.reals.app.domain.model.ChatDecisionState
 import com.reals.app.domain.model.ChatExitOutcome
 import com.reals.app.domain.model.ChatExitReason
-import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.CreateProfileInput
 import com.reals.app.domain.model.HomePendingAction
@@ -69,6 +68,7 @@ class RealsRootViewModel(
     private val requestMutualChatExitUseCase = dependencies.firstChat.requestMutualChatExit
     private val acceptChatExitRequestUseCase = dependencies.firstChat.acceptChatExitRequest
     private val rejectChatExitRequestUseCase = dependencies.firstChat.rejectChatExitRequest
+    private val timeoutChatExitRequestUseCase = dependencies.firstChat.timeoutChatExitRequest
     private val cancelChatUseCase = dependencies.firstChat.cancelChat
     private val safetyCancelChatUseCase = dependencies.firstChat.safetyCancelChat
     private val getVisualProfileUseCase = dependencies.visualApproval.getVisualProfile
@@ -561,7 +561,10 @@ class RealsRootViewModel(
 
                 FirstChatRefreshResult.ExitResolved -> {
                     hideFirstChatLocally(current.matchId)
-                    reenterMatchmakingOrLoadHome(current.session)
+                    returnHomeAfterFirstChatExit(
+                        session = current.session,
+                        message = "El chat fue cerrado.",
+                    )
                 }
             }
         }
@@ -605,7 +608,16 @@ class RealsRootViewModel(
             return
         }
         viewModelScope.launch {
-            val pending = current.copy(actionLoading = true, error = null, message = null)
+            val pending = current.copy(
+                actionLoading = true,
+                actionLoadingLabel = if (decision == ChatContinueDecision.Approved) {
+                    "Aprobando..."
+                } else {
+                    "Rechazando..."
+                },
+                error = null,
+                message = null,
+            )
             _uiState.value = pending
             when (val result = submitChatDecisionUseCase(current.matchId, decision)) {
                 is ApiResult.Success -> {
@@ -622,12 +634,14 @@ class RealsRootViewModel(
                                             matchmakingBlockedReason = null,
                                         ),
                                     ),
+                                    publishLoadingState = false,
                                     autoNavigateEngagements = false,
                                 )
                             } else {
                                 _uiState.value = pending.copy(
                                     match = result.value,
                                     actionLoading = false,
+                                    actionLoadingLabel = null,
                                     message = firstChatDecisionMessage(state),
                                 )
                             }
@@ -645,6 +659,7 @@ class RealsRootViewModel(
                         is MatchState.Unknown -> _uiState.value = pending.copy(
                             match = result.value,
                             actionLoading = false,
+                            actionLoadingLabel = null,
                             message = firstChatDecisionMessage(state),
                         )
                     }
@@ -652,6 +667,7 @@ class RealsRootViewModel(
 
                 is ApiResult.Failure -> _uiState.value = pending.copy(
                     actionLoading = false,
+                    actionLoadingLabel = null,
                     error = result.error,
                 )
             }
@@ -659,13 +675,19 @@ class RealsRootViewModel(
     }
 
     fun requestMutualChatExit() {
-        runChatExitAction { chatId ->
+        runChatExitAction(
+            successMessage = "Enviamos tu solicitud de salida consensuada.",
+            loadingLabel = "Solicitando salida...",
+        ) { chatId ->
             requestMutualChatExitUseCase(chatId, ChatExitReason.NoLongerInterested, null)
         }
     }
 
     fun cancelChatUnilaterally() {
-        runChatExitAction { chatId ->
+        runChatExitAction(
+            successMessage = "Cerraste el chat.",
+            loadingLabel = "Cerrando chat...",
+        ) { chatId ->
             cancelChatUseCase(chatId, ChatExitReason.NoLongerInterested, null)
         }
     }
@@ -680,34 +702,38 @@ class RealsRootViewModel(
             )
             return
         }
-        runChatExitAction { chatId ->
+        runChatExitAction(
+            successMessage = "Cerraste el chat por seguridad.",
+            loadingLabel = "Enviando reporte...",
+        ) { chatId ->
             safetyCancelChatUseCase(chatId, ChatExitReason.InappropriateBehavior, cleanDetails)
         }
     }
 
     fun acceptChatExitRequest(exitRequestId: String) {
-        runChatExitAction { chatId ->
+        runChatExitAction(
+            successMessage = "Aceptaste la salida consensuada.",
+            loadingLabel = "Aceptando salida...",
+        ) { chatId ->
             acceptChatExitRequestUseCase(chatId, exitRequestId)
         }
     }
 
     fun rejectChatExitRequest(exitRequestId: String) {
-        runChatExitAction(closeOnSuccess = true) { chatId ->
+        runChatExitAction(
+            successMessage = "Rechazaste la salida consensuada.",
+            loadingLabel = "Rechazando salida...",
+        ) { chatId ->
             rejectChatExitRequestUseCase(chatId, exitRequestId)
         }
     }
 
     fun timeoutChatExitRequest(exitRequestId: String) {
-        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
-        val request = current.exitRequests.firstOrNull {
-            it.id == exitRequestId && it.status == ChatExitRequestStatus.Pending
-        } ?: return
-        runChatExitAction(closeOnSuccess = true) { chatId ->
-            cancelChatUseCase(
-                chatId = chatId,
-                reason = request.reason ?: ChatExitReason.NoLongerInterested,
-                details = "Solicitud de salida consensuada sin respuesta.",
-            )
+        runChatExitAction(
+            successMessage = "La solicitud de salida vencio.",
+            loadingLabel = "Cerrando por timeout...",
+        ) { chatId ->
+            timeoutChatExitRequestUseCase(chatId, exitRequestId)
         }
     }
 
@@ -1416,37 +1442,49 @@ class RealsRootViewModel(
     }
 
     private suspend fun routeAfterFirstChatClosed(session: ProvisionedSession, state: MatchState?) {
-        if (state == MatchState.VisualPhase) {
-            loadHomeForReady(
-                ready = RealsRootUiState.Ready(
-                    session = session,
-                    home = HomeUiState(
-                        homeLoading = true,
-                        homeMessage = firstChatExitMessage(state),
-                    ),
-                ),
-                autoNavigateEngagements = false,
-            )
-            return
-        }
+        returnHomeAfterFirstChatExit(
+            session = session,
+            message = firstChatExitMessage(state),
+        )
+    }
 
-        reenterMatchmakingOrLoadHome(session)
+    private suspend fun returnHomeAfterFirstChatExit(
+        session: ProvisionedSession,
+        message: String? = null,
+    ) {
+        loadHomeForReady(
+            ready = RealsRootUiState.Ready(
+                session = session,
+                home = HomeUiState(
+                    homeLoading = true,
+                    homeMessage = message,
+                ),
+            ),
+            publishLoadingState = false,
+            autoNavigateEngagements = false,
+        )
     }
 
     private fun runChatExitAction(
-        closeOnSuccess: Boolean = false,
+        successMessage: String = "Actualizamos el estado del chat.",
+        loadingLabel: String = "Procesando...",
         action: suspend (chatId: String) -> ApiResult<*>,
     ) {
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
         val chat = current.chat ?: return
 
         viewModelScope.launch {
-            val pending = current.copy(actionLoading = true, error = null, message = null)
+            val pending = current.copy(
+                actionLoading = true,
+                actionLoadingLabel = loadingLabel,
+                error = null,
+                message = null,
+            )
             _uiState.value = pending
             when (val result = action(chat.id)) {
                 is ApiResult.Success -> {
                     val outcome = result.value as? ChatExitOutcome
-                    if (closeOnSuccess || (outcome != null && outcome.chat.status != ChatStatus.Active)) {
+                    if (outcome != null && outcome.chat.status != ChatStatus.Active) {
                         hideFirstChatLocally(current.matchId)
                         routeAfterFirstChatClosed(current.session, null)
                         return@launch
@@ -1459,7 +1497,8 @@ class RealsRootViewModel(
                         exitRequests = (exitsResult as? ApiResult.Success)?.value
                             ?: pending.exitRequests,
                         actionLoading = false,
-                        message = "Listo, enviamos tu solicitud.",
+                        actionLoadingLabel = null,
+                        message = successMessage,
                         error = (chatResult as? ApiResult.Failure)?.error
                             ?: (exitsResult as? ApiResult.Failure)?.error,
                     )
@@ -1467,6 +1506,7 @@ class RealsRootViewModel(
 
                 is ApiResult.Failure -> _uiState.value = pending.copy(
                     actionLoading = false,
+                    actionLoadingLabel = null,
                     error = result.error,
                 )
             }

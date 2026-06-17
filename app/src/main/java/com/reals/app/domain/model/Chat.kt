@@ -197,6 +197,10 @@ sealed interface ChatExitRequestStatus {
         override val rawValue = "REJECTED"
     }
 
+    data object TimedOut : ChatExitRequestStatus {
+        override val rawValue = "TIMED_OUT"
+    }
+
     data class Unknown(override val rawValue: String) : ChatExitRequestStatus
 
     companion object {
@@ -204,6 +208,7 @@ sealed interface ChatExitRequestStatus {
             Pending.rawValue -> Pending
             Accepted.rawValue -> Accepted
             Rejected.rawValue -> Rejected
+            TimedOut.rawValue -> TimedOut
             else -> Unknown(value)
         }
     }

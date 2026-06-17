@@ -36,6 +36,7 @@ import com.reals.app.domain.usecase.SendChatMessageUseCase
 import com.reals.app.domain.usecase.SubmitChatDecisionUseCase
 import com.reals.app.domain.usecase.SubmitSchedulingProposalsUseCase
 import com.reals.app.domain.usecase.SubmitVisualDecisionUseCase
+import com.reals.app.domain.usecase.TimeoutChatExitRequestUseCase
 import com.reals.app.domain.usecase.UpdateMatchFiltersUseCase
 import com.reals.app.domain.usecase.UpdateProfileUseCase
 
@@ -89,6 +90,7 @@ data class FirstChatFeatureDependencies(
     val requestMutualChatExit: RequestMutualChatExitUseCase,
     val acceptChatExitRequest: AcceptChatExitRequestUseCase,
     val rejectChatExitRequest: RejectChatExitRequestUseCase,
+    val timeoutChatExitRequest: TimeoutChatExitRequestUseCase,
     val cancelChat: CancelChatUseCase,
     val safetyCancelChat: SafetyCancelChatUseCase,
 )

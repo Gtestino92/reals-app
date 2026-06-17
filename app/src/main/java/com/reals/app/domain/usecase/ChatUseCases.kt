@@ -57,8 +57,15 @@ class AcceptChatExitRequestUseCase(
 class RejectChatExitRequestUseCase(
     private val chatRepository: ChatRepository,
 ) {
-    suspend operator fun invoke(chatId: String, exitRequestId: String): ApiResult<ChatExitRequest> =
+    suspend operator fun invoke(chatId: String, exitRequestId: String): ApiResult<ChatExitOutcome> =
         chatRepository.rejectExitRequest(chatId, exitRequestId)
+}
+
+class TimeoutChatExitRequestUseCase(
+    private val chatRepository: ChatRepository,
+) {
+    suspend operator fun invoke(chatId: String, exitRequestId: String): ApiResult<ChatExitOutcome> =
+        chatRepository.timeoutExitRequest(chatId, exitRequestId)
 }
 
 class CancelChatUseCase(

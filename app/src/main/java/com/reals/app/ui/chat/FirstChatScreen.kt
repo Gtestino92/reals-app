@@ -64,6 +64,7 @@ fun FirstChatScreen(
     loading: Boolean,
     sending: Boolean,
     actionLoading: Boolean,
+    actionLoadingLabel: String?,
     error: ApiError?,
     message: String?,
     onRefresh: () -> Unit,
@@ -124,6 +125,8 @@ fun FirstChatScreen(
             canChat = canChat,
             busy = busy,
             sending = sending,
+            actionLoading = actionLoading,
+            actionLoadingLabel = actionLoadingLabel,
             canDecide = canDecide,
             currentUserId = currentUserId,
             activeExitRequest = pendingExitRequest,
@@ -267,6 +270,8 @@ private fun ChatComposer(
     canChat: Boolean,
     busy: Boolean,
     sending: Boolean,
+    actionLoading: Boolean,
+    actionLoadingLabel: String?,
     canDecide: Boolean,
     currentUserId: String,
     activeExitRequest: ChatExitRequest?,
@@ -289,6 +294,7 @@ private fun ChatComposer(
                     currentUserId = currentUserId,
                     request = request,
                     busy = busy,
+                    actionLoadingLabel = actionLoadingLabel,
                     onAcceptExitRequest = onAcceptExitRequest,
                     onRejectExitRequest = onRejectExitRequest,
                     onExitRequestTimeout = onExitRequestTimeout,
@@ -319,18 +325,18 @@ private fun ChatComposer(
                 }
                 OutlinedButton(
                     onClick = onShowActions,
-                    enabled = !busy && canOpenActions,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("Mas acciones")
-                }
+                enabled = !busy && canOpenActions,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(if (actionLoading) actionLoadingLabel ?: "Procesando..." else "Mas acciones")
+            }
             }
             Button(
                 onClick = onApprove,
                 enabled = !busy && canDecide,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Aprobar chat")
+                Text(if (actionLoading) actionLoadingLabel ?: "Procesando..." else "Aprobar chat")
             }
         }
     }
@@ -341,6 +347,7 @@ private fun TimedExitRequestCard(
     currentUserId: String,
     request: ChatExitRequest,
     busy: Boolean,
+    actionLoadingLabel: String?,
     onAcceptExitRequest: (String) -> Unit,
     onRejectExitRequest: (String) -> Unit,
     onExitRequestTimeout: (String) -> Unit,
@@ -387,14 +394,14 @@ private fun TimedExitRequestCard(
                         enabled = !busy,
                         modifier = Modifier.weight(1f),
                     ) {
-                        Text("Aceptar")
+                        Text(if (busy) actionLoadingLabel ?: "Procesando..." else "Aceptar")
                     }
                     OutlinedButton(
                         onClick = { onRejectExitRequest(request.id) },
                         enabled = !busy,
                         modifier = Modifier.weight(1f),
                     ) {
-                        Text("Rechazar")
+                        Text(if (busy) actionLoadingLabel ?: "Procesando..." else "Rechazar")
                     }
                 }
             }

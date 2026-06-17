@@ -165,6 +165,7 @@ fun RealsApp(appContainer: AppContainer) {
                 loading = current.loading,
                 sending = current.sending,
                 actionLoading = current.actionLoading,
+                actionLoadingLabel = current.actionLoadingLabel,
                 error = current.error,
                 message = current.message,
                 onRefresh = { viewModel.refreshFirstChat(silent = true) },

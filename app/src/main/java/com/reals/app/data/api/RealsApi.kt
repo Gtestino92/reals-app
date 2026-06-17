@@ -248,7 +248,14 @@ interface RealsApi {
         @Header("Authorization") authorization: String,
         @Path("chatId") chatId: String,
         @Path("exitRequestId") exitRequestId: String,
-    ): Response<ChatExitRequestResponseDto>
+    ): Response<ChatExitOutcomeResponseDto>
+
+    @POST("api/chats/{chatId}/exit-requests/{exitRequestId}/timeout")
+    suspend fun timeoutChatExitRequest(
+        @Header("Authorization") authorization: String,
+        @Path("chatId") chatId: String,
+        @Path("exitRequestId") exitRequestId: String,
+    ): Response<ChatExitOutcomeResponseDto>
 
     @POST("api/chats/{chatId}/cancellations")
     suspend fun cancelChat(

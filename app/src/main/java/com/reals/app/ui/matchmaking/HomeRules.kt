@@ -35,4 +35,13 @@ internal fun HomeScreenModel.shouldPollHome(): Boolean =
     matchmaking.inQueue ||
         pendingActions.isNotEmpty() ||
         nextSteps.isNotEmpty() ||
-        passiveNotices.isNotEmpty()
+        passiveNotices.isNotEmpty() ||
+        activeInteractionsSummary.hasActiveInteractions()
+
+private fun com.reals.app.domain.model.HomeActiveInteractionsSummary?.hasActiveInteractions(): Boolean {
+    if (this == null) return false
+    return activeInitialCount > 0 ||
+        activeConnectionCount > 0 ||
+        pendingSchedulingConnectionCount > 0 ||
+        actionableConnectionCount > 0
+}

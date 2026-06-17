@@ -83,6 +83,10 @@ fun MatchmakingHomeScreen(
             model.pendingActions.size,
             model.nextSteps.size,
             model.passiveNotices.size,
+            model.activeInteractionsSummary?.activeInitialCount,
+            model.activeInteractionsSummary?.activeConnectionCount,
+            model.activeInteractionsSummary?.pendingSchedulingConnectionCount,
+            model.activeInteractionsSummary?.actionableConnectionCount,
         ) {
             while (true) {
                 delay(10_000.milliseconds)

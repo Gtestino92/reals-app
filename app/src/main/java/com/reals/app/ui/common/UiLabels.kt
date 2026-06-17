@@ -69,6 +69,7 @@ fun ChatExitRequestStatus.userLabel(): String = when (this) {
     ChatExitRequestStatus.Pending -> "Pendiente"
     ChatExitRequestStatus.Accepted -> "Aceptada"
     ChatExitRequestStatus.Rejected -> "Rechazada"
+    ChatExitRequestStatus.TimedOut -> "Vencida"
     is ChatExitRequestStatus.Unknown -> "Estado no disponible"
 }
 

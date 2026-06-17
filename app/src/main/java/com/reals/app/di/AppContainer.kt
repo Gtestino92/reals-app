@@ -49,6 +49,7 @@ import com.reals.app.domain.usecase.SendChatMessageUseCase
 import com.reals.app.domain.usecase.SubmitChatDecisionUseCase
 import com.reals.app.domain.usecase.SubmitSchedulingProposalsUseCase
 import com.reals.app.domain.usecase.SubmitVisualDecisionUseCase
+import com.reals.app.domain.usecase.TimeoutChatExitRequestUseCase
 import com.reals.app.domain.usecase.UpdateMatchFiltersUseCase
 import com.reals.app.domain.usecase.UpdateProfileUseCase
 import kotlinx.serialization.json.Json
@@ -105,6 +106,7 @@ class AppContainer(context: Context) {
     val requestMutualChatExitUseCase = RequestMutualChatExitUseCase(chatRepository)
     val acceptChatExitRequestUseCase = AcceptChatExitRequestUseCase(chatRepository)
     val rejectChatExitRequestUseCase = RejectChatExitRequestUseCase(chatRepository)
+    val timeoutChatExitRequestUseCase = TimeoutChatExitRequestUseCase(chatRepository)
     val cancelChatUseCase = CancelChatUseCase(chatRepository)
     val safetyCancelChatUseCase = SafetyCancelChatUseCase(chatRepository)
     val getSchedulingNegotiationUseCase = GetSchedulingNegotiationUseCase(schedulingRepository)
@@ -150,6 +152,7 @@ class AppContainer(context: Context) {
             requestMutualChatExit = requestMutualChatExitUseCase,
             acceptChatExitRequest = acceptChatExitRequestUseCase,
             rejectChatExitRequest = rejectChatExitRequestUseCase,
+            timeoutChatExitRequest = timeoutChatExitRequestUseCase,
             cancelChat = cancelChatUseCase,
             safetyCancelChat = safetyCancelChatUseCase,
         ),

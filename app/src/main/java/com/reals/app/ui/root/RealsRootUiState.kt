@@ -79,6 +79,7 @@ sealed interface RealsRootUiState {
         val refreshing: Boolean = false,
         val sending: Boolean = false,
         val actionLoading: Boolean = false,
+        val actionLoadingLabel: String? = null,
         val error: ApiError? = null,
         val message: String? = null,
     ) : RealsRootUiState
