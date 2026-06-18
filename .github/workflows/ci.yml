@@ -41,6 +41,17 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
+      - name: Run local unit tests
+        run: ./gradlew :app:testLocalDebugUnitTest --no-daemon --console=plain
+
+      - name: Upload unit test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reals-app-unit-test-reports
+          path: app/build/reports/tests/testLocalDebugUnitTest
+          if-no-files-found: ignore
+
       - name: Validate Kotlin compilation
         run: ./gradlew :app:compileLocalDebugKotlin --no-daemon --console=plain
 
