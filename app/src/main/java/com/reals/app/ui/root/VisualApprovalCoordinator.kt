@@ -1,5 +1,6 @@
 package com.reals.app.ui.root
 
+import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ApiResult
 import com.reals.app.di.VisualApprovalFeatureDependencies
 import com.reals.app.domain.model.Match
@@ -39,13 +40,16 @@ internal class VisualApprovalCoordinator(
         }
 
         val profileResult = dependencies.getVisualProfile(matchId)
+        val profile = (profileResult as? ApiResult.Success)?.value
         val partnerMessageResult = dependencies.getPartnerPersonalMessage(matchId)
         return VisualApprovalLoadResult.Show(
             loadingState.copy(
                 match = match,
-                profile = (profileResult as? ApiResult.Success)?.value ?: loadingState.profile,
+                profile = profile ?: loadingState.profile,
                 partnerMessage = (partnerMessageResult as? ApiResult.Success)?.value ?: loadingState.partnerMessage,
                 partnerMessageLoaded = partnerMessageResult is ApiResult.Success || loadingState.partnerMessageLoaded,
+                myPersonalMessageSubmitted = profile?.myPersonalMessageSubmitted
+                    ?: loadingState.myPersonalMessageSubmitted,
                 loading = false,
                 refreshing = false,
                 error = (matchResult as? ApiResult.Failure)?.error
@@ -63,19 +67,31 @@ internal class VisualApprovalCoordinator(
         return when (val result = dependencies.putMyPersonalMessage(current.matchId, cleanMessage)) {
             is ApiResult.Success -> pending.copy(
                 writingMessage = false,
+                myPersonalMessageSubmitted = true,
                 message = "Guardamos tu mensaje personal.",
             )
 
-            is ApiResult.Failure -> pending.copy(
-                writingMessage = false,
-                error = result.error,
-            )
+            is ApiResult.Failure -> if (result.error.isDomainConflict()) {
+                pending.copy(
+                    writingMessage = false,
+                    myPersonalMessageSubmitted = true,
+                    message = "Ya habias guardado tu mensaje personal.",
+                )
+            } else {
+                pending.copy(
+                    writingMessage = false,
+                    error = result.error,
+                )
+            }
         }
     }
 
     suspend fun submitDecision(matchId: String, decision: VisualDecision): ApiResult<Match> =
         dependencies.submitVisualDecision(matchId, decision)
 }
+
+private fun ApiError.isDomainConflict(): Boolean =
+    this is ApiError.Backend && code == "DOMAIN_CONFLICT"
 
 internal sealed interface VisualApprovalLoadResult {
     data class Show(val state: RealsRootUiState.VisualApproval) : VisualApprovalLoadResult

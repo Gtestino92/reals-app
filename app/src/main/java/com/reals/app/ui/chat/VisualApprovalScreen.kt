@@ -41,6 +41,7 @@ fun VisualApprovalScreen(
     profile: VisualProfile?,
     partnerMessage: String?,
     partnerMessageLoaded: Boolean,
+    myPersonalMessageSubmitted: Boolean,
     loading: Boolean,
     refreshing: Boolean,
     writingMessage: Boolean,
@@ -117,28 +118,30 @@ fun VisualApprovalScreen(
         ) {
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Mi mensaje personal", style = MaterialTheme.typography.titleMedium)
-                Text(
-                    text = "Opcional para esta version, pero si lo escribis solo se puede guardar una vez.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                OutlinedTextField(
-                    value = personalMessage,
-                    onValueChange = { personalMessage = it.take(280) },
-                    label = { Text("Mensaje personal") },
-                    enabled = !busy,
-                    minLines = 2,
-                    supportingText = { Text("${personalMessage.length}/280") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedButton(
-                    onClick = {
-                        onSavePersonalMessage(personalMessage)
-                        personalMessage = ""
-                    },
-                    enabled = !busy && personalMessage.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(if (writingMessage) "Guardando..." else "Guardar mensaje")
+                if (myPersonalMessageSubmitted) {
+                    Text(
+                        text = "Ya guardaste tu mensaje personal. No se puede modificar.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    OutlinedTextField(
+                        value = personalMessage,
+                        onValueChange = { personalMessage = it.take(280) },
+                        label = { Text("Mensaje personal") },
+                        enabled = !busy,
+                        minLines = 2,
+                        supportingText = { Text("${personalMessage.length}/280") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            onSavePersonalMessage(personalMessage)
+                        },
+                        enabled = !busy && personalMessage.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(if (writingMessage) "Guardando..." else "Guardar mensaje")
+                    }
                 }
             }
         }

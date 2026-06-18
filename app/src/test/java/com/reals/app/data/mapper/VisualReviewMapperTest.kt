@@ -13,6 +13,7 @@ class VisualReviewMapperTest {
             displayName = "Alex",
             age = 29,
             bio = "Bio",
+            myPersonalMessageSubmitted = true,
             photos = listOf(
                 PhotoResponseDto(
                     id = "photo-2",
@@ -38,6 +39,7 @@ class VisualReviewMapperTest {
         assertEquals("profile-1", domain.profileId)
         assertEquals("Alex", domain.displayName)
         assertEquals(29, domain.age)
+        assertEquals(true, domain.myPersonalMessageSubmitted)
         assertEquals(listOf("photo-1", "photo-2"), domain.photos.map { it.id })
     }
 }

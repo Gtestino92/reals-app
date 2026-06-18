@@ -6,6 +6,7 @@ data class VisualProfile(
     val age: Int,
     val bio: String?,
     val photos: List<ProfilePhoto>,
+    val myPersonalMessageSubmitted: Boolean,
 )
 
 enum class VisualDecision(val backendValue: String) {
