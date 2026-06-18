@@ -35,11 +35,10 @@ import com.reals.app.domain.model.SchedulingProposal
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
+import com.reals.app.ui.common.formatBackendDateTime
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.OffsetDateTime
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 
@@ -551,12 +550,3 @@ private fun validateSelectedSlots(values: List<String>): String? {
     return null
 }
 
-private fun formatBackendDateTime(value: String?): String {
-    if (value.isNullOrBlank()) return "-"
-    return runCatching {
-        OffsetDateTime.parse(value)
-            .format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm", Locale.getDefault()))
-    }.getOrElse {
-        value.replace("T", " ").substringBeforeLast(":")
-    }
-}

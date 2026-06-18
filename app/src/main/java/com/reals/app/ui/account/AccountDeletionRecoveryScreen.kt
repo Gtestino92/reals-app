@@ -20,6 +20,7 @@ import com.reals.app.domain.model.BackendUser
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
+import com.reals.app.ui.common.formatBackendDate
 
 @Composable
 fun AccountDeletionRecoveryScreen(
@@ -90,6 +91,3 @@ private fun recoveryMessage(deletionFinalizesAt: String?): String {
         "pero deberas activar el perfil nuevamente. Tus conexiones activas anteriores no se restauraran."
 }
 
-fun formatBackendDate(value: String): String {
-    return value.substringBefore("T").ifBlank { value }
-}
