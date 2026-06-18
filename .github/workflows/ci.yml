@@ -12,6 +12,9 @@ on:
       - master
       - development
 
+permissions:
+  contents: read
+
 jobs:
   android-build:
     name: Build Android APK
@@ -52,6 +55,17 @@ jobs:
           path: app/build/reports/tests/testLocalDebugUnitTest
           if-no-files-found: ignore
 
+      - name: Run Android lint
+        run: ./gradlew :app:lintLocalDebug --no-daemon --console=plain
+
+      - name: Upload lint reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reals-app-lint-reports
+          path: app/build/reports/lint-results-localDebug.*
+          if-no-files-found: ignore
+
       - name: Validate Kotlin compilation
         run: ./gradlew :app:compileLocalDebugKotlin --no-daemon --console=plain
 
@@ -69,6 +83,9 @@ jobs:
     name: Validate Docker build
     runs-on: ubuntu-latest
     needs: android-build
+    env:
+      TRIVY_DISABLE_VEX_NOTICE: "true"
+      TRIVY_SKIP_VERSION_CHECK: "true"
 
     steps:
       - name: Checkout
@@ -82,6 +99,56 @@ jobs:
             --build-arg IMAGE_REVISION="${GITHUB_SHA}" \
             -t reals-app:ci \
             .
+
+      - name: Scan Android builder image for critical vulnerabilities
+        id: trivy_dev
+        if: github.ref_name != 'master' && github.ref_name != 'main' && github.base_ref != 'master' && github.base_ref != 'main'
+        uses: aquasecurity/trivy-action@v0.36.0
+        continue-on-error: true
+        with:
+          image-ref: reals-app:ci
+          format: table
+          exit-code: "1"
+          scanners: vuln
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL
+          output: trivy-results.txt
+
+      - name: Scan Android builder image for high and critical vulnerabilities
+        id: trivy_prod
+        if: github.ref_name == 'master' || github.ref_name == 'main' || github.base_ref == 'master' || github.base_ref == 'main'
+        uses: aquasecurity/trivy-action@v0.36.0
+        continue-on-error: true
+        with:
+          image-ref: reals-app:ci
+          format: table
+          exit-code: "1"
+          scanners: vuln
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          output: trivy-results.txt
+
+      - name: Publish Trivy summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f trivy-results.txt ]; then
+            {
+              echo "### Trivy Android builder image scan"
+              echo
+              echo '```text'
+              cat trivy-results.txt
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Enforce Trivy policy
+        if: steps.trivy_dev.outcome == 'failure' || steps.trivy_prod.outcome == 'failure'
+        run: |
+          echo "Trivy image scan failed. See the job summary for the vulnerability table."
+          exit 1
 
       - name: Extract APK from image
         run: |
