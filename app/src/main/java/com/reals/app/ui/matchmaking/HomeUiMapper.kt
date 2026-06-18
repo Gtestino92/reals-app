@@ -1,6 +1,7 @@
 package com.reals.app.ui.matchmaking
 
 import com.reals.app.core.network.ApiError
+import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.HomeMatchmaking
 import com.reals.app.domain.model.HomeNextStep
 import com.reals.app.domain.model.HomePassiveNotice
@@ -63,7 +64,7 @@ class HomeUiMapper {
     private fun HomeState?.nextStepItems(): List<HomeNextStepItem> {
         if (this == null) return emptyList()
 
-        return nextSteps.map { nextStep ->
+        return nextSteps.mapNotNull { nextStep ->
             when (nextStep) {
                 is HomeNextStep.Scheduling -> HomeNextStepItem.Scheduling(
                     connectionId = nextStep.connectionId,
@@ -71,17 +72,27 @@ class HomeUiMapper {
                     partnerDisplayName = nextStep.partner?.displayName?.takeIf { it.isNotBlank() },
                 )
 
-                is HomeNextStep.SecondChatScheduled -> HomeNextStepItem.SecondChatScheduled(
-                    connectionId = nextStep.connectionId,
-                    matchId = nextStep.matchId,
-                    partnerDisplayName = nextStep.partnerDisplayName(),
-                )
+                is HomeNextStep.SecondChatScheduled ->
+                    if (nextStep.secondChat?.chatStatus.isClosedSecondChatStatus()) {
+                        null
+                    } else {
+                        HomeNextStepItem.SecondChatScheduled(
+                            connectionId = nextStep.connectionId,
+                            matchId = nextStep.matchId,
+                            partnerDisplayName = nextStep.partnerDisplayName(),
+                        )
+                    }
 
-                is HomeNextStep.SecondChatAvailable -> HomeNextStepItem.SecondChatAvailable(
-                    connectionId = nextStep.connectionId,
-                    matchId = nextStep.matchId,
-                    partnerDisplayName = nextStep.partnerDisplayName(),
-                )
+                is HomeNextStep.SecondChatAvailable ->
+                    if (nextStep.secondChat?.chatStatus.isClosedSecondChatStatus()) {
+                        null
+                    } else {
+                        HomeNextStepItem.SecondChatAvailable(
+                            connectionId = nextStep.connectionId,
+                            matchId = nextStep.matchId,
+                            partnerDisplayName = nextStep.partnerDisplayName(),
+                        )
+                    }
 
                 is HomeNextStep.Unknown -> HomeNextStepItem.Unknown(
                     connectionId = nextStep.connectionId.orEmpty(),
@@ -141,4 +152,11 @@ class HomeUiMapper {
     private fun HomeNextStep.SecondChatAvailable.partnerDisplayName(): String? =
         secondChat?.partner?.displayName?.takeIf { it.isNotBlank() }
             ?: partner?.displayName?.takeIf { it.isNotBlank() }
+
+    private fun ChatStatus?.isClosedSecondChatStatus(): Boolean =
+        this == ChatStatus.Cancelled ||
+            this == ChatStatus.Expired ||
+            this == ChatStatus.Abandoned ||
+            this == ChatStatus.Closed ||
+            this == ChatStatus.Finished
 }

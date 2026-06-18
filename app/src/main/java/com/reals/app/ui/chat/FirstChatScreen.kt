@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
 import com.reals.app.core.security.TextSafety
+import com.reals.app.core.time.remainingExitSeconds
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatDecisionState
 import com.reals.app.domain.model.ChatExitRequest
@@ -46,8 +47,6 @@ import com.reals.app.ui.common.FeedbackTone
 import com.reals.app.ui.common.formatBackendDateTime
 import com.reals.app.ui.common.formatBackendTime
 import com.reals.app.ui.common.userLabel
-import java.time.Instant
-import java.time.OffsetDateTime
 import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -355,7 +354,11 @@ private fun TimedExitRequestCard(
 ) {
     var nowMillis by rememberSaveable(request.id) { mutableStateOf(System.currentTimeMillis()) }
     var timeoutHandled by rememberSaveable(request.id) { mutableStateOf(false) }
-    val remainingSeconds = request.remainingExitSeconds(nowMillis)
+    val remainingSeconds = remainingExitSeconds(
+        createdAt = request.createdAt,
+        nowMillis = nowMillis,
+        timeoutSeconds = MUTUAL_EXIT_TIMEOUT_SECONDS,
+    )
     val requestedByMe = request.requesterUserId == currentUserId
 
     LaunchedEffect(request.id) {
@@ -549,16 +552,6 @@ private fun SafetyReportDialog(
 @Composable
 private fun SuccessFeedback(message: String, modifier: Modifier = Modifier) {
     FeedbackCard(title = "Listo", message = message, tone = FeedbackTone.Success, modifier = modifier)
-}
-
-private fun ChatExitRequest.remainingExitSeconds(nowMillis: Long): Long {
-    val createdAtMillis = runCatching {
-        OffsetDateTime.parse(createdAt).toInstant().toEpochMilli()
-    }.getOrElse {
-        Instant.now().toEpochMilli()
-    }
-    val elapsedSeconds = ((nowMillis - createdAtMillis).coerceAtLeast(0L)) / 1_000L
-    return (MUTUAL_EXIT_TIMEOUT_SECONDS - elapsedSeconds).coerceAtLeast(0L)
 }
 
 private fun chatDecisionSummary(

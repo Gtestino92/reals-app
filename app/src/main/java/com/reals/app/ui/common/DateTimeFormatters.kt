@@ -5,43 +5,46 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private val backendDateFormatter: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.getDefault())
-
-private val backendDateTimeFormatter: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm", Locale.getDefault())
-
-private val backendTimeFormatter: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("HH:mm", Locale.getDefault())
-
-fun formatBackendDate(value: String?): String {
+fun formatBackendDate(
+    value: String?,
+    zoneId: ZoneId = ZoneId.systemDefault(),
+    locale: Locale = Locale.getDefault(),
+): String {
     if (value.isNullOrBlank()) return "-"
     return runCatching {
         OffsetDateTime.parse(value)
-            .atZoneSameInstant(ZoneId.systemDefault())
-            .format(backendDateFormatter)
+            .atZoneSameInstant(zoneId)
+            .format(DateTimeFormatter.ofPattern("dd/MM/yyyy", locale))
     }.getOrElse {
         value.substringBefore("T").ifBlank { value }
     }
 }
 
-fun formatBackendDateTime(value: String?): String {
+fun formatBackendDateTime(
+    value: String?,
+    zoneId: ZoneId = ZoneId.systemDefault(),
+    locale: Locale = Locale.getDefault(),
+): String {
     if (value.isNullOrBlank()) return "-"
     return runCatching {
         OffsetDateTime.parse(value)
-            .atZoneSameInstant(ZoneId.systemDefault())
-            .format(backendDateTimeFormatter)
+            .atZoneSameInstant(zoneId)
+            .format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm", locale))
     }.getOrElse {
         value.replace("T", " ").substringBeforeLast(":")
     }
 }
 
-fun formatBackendTime(value: String?): String {
+fun formatBackendTime(
+    value: String?,
+    zoneId: ZoneId = ZoneId.systemDefault(),
+    locale: Locale = Locale.getDefault(),
+): String {
     if (value.isNullOrBlank()) return "-"
     return runCatching {
         OffsetDateTime.parse(value)
-            .atZoneSameInstant(ZoneId.systemDefault())
-            .format(backendTimeFormatter)
+            .atZoneSameInstant(zoneId)
+            .format(DateTimeFormatter.ofPattern("HH:mm", locale))
     }.getOrElse {
         value.substringAfter("T", value).take(5).ifBlank { "-" }
     }

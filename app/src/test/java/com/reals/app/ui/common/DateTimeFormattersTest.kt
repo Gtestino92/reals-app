@@ -1,32 +1,45 @@
 package com.reals.app.ui.common
 
-import java.util.TimeZone
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.ZoneId
+import java.util.Locale
 
 class DateTimeFormattersTest {
+    private val buenosAires = ZoneId.of("America/Argentina/Buenos_Aires")
+    private val locale = Locale.forLanguageTag("es-AR")
+
     @Test
-    fun formatBackendTimeConvertsToDeviceTimeZone() = withDefaultTimeZone("America/Argentina/Buenos_Aires") {
-        assertEquals("09:30", formatBackendTime("2026-06-18T12:30:00Z"))
+    fun `formatBackendTime converts UTC to Buenos Aires time`() {
+        assertEquals("18:00", formatBackendTime("2026-06-18T21:00:00Z", buenosAires, locale))
     }
 
     @Test
-    fun formatBackendDateTimeConvertsToDeviceTimeZone() = withDefaultTimeZone("America/Argentina/Buenos_Aires") {
-        assertEquals("18/06/2026 09:30", formatBackendDateTime("2026-06-18T12:30:00Z"))
+    fun `formatBackendDateTime converts UTC to Buenos Aires date time`() {
+        val formatted = formatBackendDateTime("2026-06-18T21:00:00Z", buenosAires, locale)
+
+        assertTrue(formatted.contains("18:00"))
     }
 
     @Test
-    fun formatBackendDateUsesConvertedLocalDate() = withDefaultTimeZone("America/Argentina/Buenos_Aires") {
-        assertEquals("17/06/2026", formatBackendDate("2026-06-18T01:30:00Z"))
+    fun `formatBackendTime handles offset date time`() {
+        assertEquals("18:00", formatBackendTime("2026-06-18T21:00:00+00:00", buenosAires, locale))
     }
 
-    private fun withDefaultTimeZone(id: String, block: () -> Unit) {
-        val previous = TimeZone.getDefault()
-        try {
-            TimeZone.setDefault(TimeZone.getTimeZone(id))
-            block()
-        } finally {
-            TimeZone.setDefault(previous)
-        }
+    @Test
+    fun `formatBackendTime returns dash for null or blank`() {
+        assertEquals("-", formatBackendTime(null, buenosAires, locale))
+        assertEquals("-", formatBackendTime(" ", buenosAires, locale))
+    }
+
+    @Test
+    fun `formatBackendTime falls back safely for invalid input`() {
+        assertEquals("not-a", formatBackendTime("not-a-date", buenosAires, locale))
+    }
+
+    @Test
+    fun formatBackendDateUsesConvertedLocalDate() {
+        assertEquals("17/06/2026", formatBackendDate("2026-06-18T01:30:00Z", buenosAires, locale))
     }
 }

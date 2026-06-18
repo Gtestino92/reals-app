@@ -52,10 +52,12 @@ class ApiExecutor(private val json: Json) {
         val parsed = rawBody?.let { body ->
             runCatching { json.decodeFromString<ErrorResponseDto>(body) }.getOrNull()
         }
-        Log.w(
-            "RealsApi",
-            "HTTP ${response.code()} code=${parsed?.code} error=${parsed?.error} message=${parsed?.message ?: response.message()}",
-        )
+        runCatching {
+            Log.w(
+                "RealsApi",
+                "HTTP ${response.code()} code=${parsed?.code} error=${parsed?.error} message=${parsed?.message ?: response.message()}",
+            )
+        }
         return ApiError.Backend(
             statusCode = response.code(),
             code = parsed?.code,
