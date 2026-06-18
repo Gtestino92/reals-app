@@ -747,6 +747,14 @@ class RealsRootViewModel(
 
     fun saveMyVisualPersonalMessage(message: String) {
         val current = _uiState.value as? RealsRootUiState.VisualApproval ?: return
+        if (current.myPersonalMessageSubmitted) {
+            _uiState.value = current.copy(
+                writingMessage = false,
+                error = null,
+                message = "Ya habias guardado tu mensaje personal.",
+            )
+            return
+        }
         val cleanMessage = TextSafety.normalizeMultiline(message, maxLength = 280)
         if (cleanMessage.isBlank() || TextSafety.containsHtmlLikeMarkup(cleanMessage)) {
             _uiState.value = current.copy(
@@ -1506,6 +1514,14 @@ class RealsRootViewModel(
                     if (outcome != null && outcome.chat.status != ChatStatus.Active) {
                         hideFirstChatLocally(current.matchId)
                         routeAfterFirstChatClosed(current.session, null)
+                        return@launch
+                    }
+                    if (outcome?.exitRequest?.status.isResolvedExitStatus()) {
+                        hideFirstChatLocally(current.matchId)
+                        returnHomeAfterFirstChatExit(
+                            session = current.session,
+                            message = "El chat fue cerrado.",
+                        )
                         return@launch
                     }
 

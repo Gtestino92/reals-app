@@ -185,6 +185,7 @@ fun RealsApp(appContainer: AppContainer) {
                 profile = current.profile,
                 partnerMessage = current.partnerMessage,
                 partnerMessageLoaded = current.partnerMessageLoaded,
+                myPersonalMessageSubmitted = current.myPersonalMessageSubmitted,
                 loading = current.loading,
                 refreshing = current.refreshing,
                 writingMessage = current.writingMessage,

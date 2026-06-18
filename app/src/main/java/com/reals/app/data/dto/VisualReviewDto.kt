@@ -9,6 +9,7 @@ data class VisualProfileResponseDto(
     val age: Int,
     val bio: String? = null,
     val photos: List<PhotoResponseDto>,
+    val myPersonalMessageSubmitted: Boolean = false,
 )
 
 @Serializable
