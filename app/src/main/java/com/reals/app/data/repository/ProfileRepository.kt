@@ -26,7 +26,7 @@ import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 
 class ProfileRepository(
-    private val context: Context,
+    private val context: Context?,
     private val api: RealsApi,
     tokenProvider: AuthTokenProvider,
     apiExecutor: ApiExecutor,
@@ -130,7 +130,7 @@ class ProfileRepository(
             .map { it.toDomain() }
 
     private fun filePart(uri: Uri): MultipartBody.Part {
-        val resolver = context.contentResolver
+        val resolver = requireNotNull(context) { "Context is required for file uploads." }.contentResolver
         val contentType = resolver.getType(uri)
             ?.toMediaTypeOrNull()
             ?: "application/octet-stream".toMediaType()
@@ -144,7 +144,7 @@ class ProfileRepository(
     }
 
     private fun displayName(uri: Uri): String {
-        val resolver = context.contentResolver
+        val resolver = requireNotNull(context) { "Context is required for file uploads." }.contentResolver
         resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
             val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
             if (nameIndex >= 0 && cursor.moveToFirst()) {

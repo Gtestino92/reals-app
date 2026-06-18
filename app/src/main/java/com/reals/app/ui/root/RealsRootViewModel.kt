@@ -415,6 +415,7 @@ class RealsRootViewModel(
 
     fun refreshVisualApproval() {
         val current = _uiState.value as? RealsRootUiState.VisualApproval ?: return
+        if (current.loading || current.refreshing || current.writingMessage || current.deciding) return
         viewModelScope.launch {
             loadVisualApprovalState(
                 session = current.session,
@@ -554,12 +555,24 @@ class RealsRootViewModel(
         if (current.chat == null) return openFirstChat(current.matchId, current.chatId)
 
         viewModelScope.launch {
-            _uiState.value = current.copy(
-                refreshing = true,
-                error = if (silent) current.error else null,
-                message = if (silent) current.message else null,
-            )
-            when (val result = firstChatCoordinator.refresh(current, silent)) {
+            if (!silent) {
+                _uiState.value = current.copy(
+                    refreshing = true,
+                    error = null,
+                    message = null,
+                )
+            }
+            val result = firstChatCoordinator.refresh(current, silent)
+            val latest = _uiState.value as? RealsRootUiState.FirstChat ?: return@launch
+            if (silent && (
+                    latest.matchId != current.matchId ||
+                        latest.sending ||
+                        latest.actionLoading
+                    )
+            ) {
+                return@launch
+            }
+            when (result) {
                 is FirstChatRefreshResult.Show -> _uiState.value = result.state
                 is FirstChatRefreshResult.Reopen -> openFirstChat(result.matchId, result.chatId)
                 is FirstChatRefreshResult.Closed -> {
@@ -589,6 +602,7 @@ class RealsRootViewModel(
 
     fun sendFirstChatMessage(content: String) {
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        if (current.loading || current.refreshing || current.sending || current.actionLoading) return
         if (current.chat == null) return
         val cleanContent = TextSafety.normalizeMultiline(content, maxLength = 1_000)
         if (cleanContent.isBlank() || TextSafety.containsHtmlLikeMarkup(cleanContent)) {
@@ -607,6 +621,7 @@ class RealsRootViewModel(
 
     fun submitFirstChatDecision(decision: ChatContinueDecision) {
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        if (current.loading || current.refreshing || current.sending || current.actionLoading) return
         val chat = current.chat
         if (chat != null && chat.myDecision != ChatDecisionState.Pending) {
             _uiState.value = current.copy(
@@ -642,7 +657,7 @@ class RealsRootViewModel(
                                             matchmakingBlockedReason = null,
                                         ),
                                     ),
-                                    publishLoadingState = false,
+                                    publishLoadingState = true,
                                     autoNavigateEngagements = false,
                                 )
                             } else {
@@ -661,7 +676,22 @@ class RealsRootViewModel(
                         MatchState.VisualApproved,
                         MatchState.VisualRejected -> {
                             hideFirstChatLocally(current.matchId)
-                            routeAfterFirstChatClosed(current.session, state)
+                            if (decision == ChatContinueDecision.Approved) {
+                                loadHomeForReady(
+                                    ready = RealsRootUiState.Ready(
+                                        session = current.session,
+                                        home = HomeUiState(
+                                            homeLoading = true,
+                                            homeMessage = firstChatExitMessage(state),
+                                            matchmakingBlockedReason = null,
+                                        ),
+                                    ),
+                                    publishLoadingState = true,
+                                    autoNavigateEngagements = false,
+                                )
+                            } else {
+                                routeAfterFirstChatClosed(current.session, state)
+                            }
                         }
 
                         is MatchState.Unknown -> _uiState.value = pending.copy(
@@ -747,6 +777,7 @@ class RealsRootViewModel(
 
     fun saveMyVisualPersonalMessage(message: String) {
         val current = _uiState.value as? RealsRootUiState.VisualApproval ?: return
+        if (current.writingMessage || current.deciding) return
         if (current.myPersonalMessageSubmitted) {
             _uiState.value = current.copy(
                 writingMessage = false,
@@ -772,6 +803,7 @@ class RealsRootViewModel(
 
     fun submitVisualDecision(decision: VisualDecision) {
         val current = _uiState.value as? RealsRootUiState.VisualApproval ?: return
+        if (current.deciding || current.writingMessage) return
         viewModelScope.launch {
             val pending = current.copy(
                 deciding = true,
@@ -1487,7 +1519,7 @@ class RealsRootViewModel(
                     homeMessage = message,
                 ),
             ),
-            publishLoadingState = false,
+            publishLoadingState = true,
             autoNavigateEngagements = false,
         )
     }
@@ -1498,6 +1530,7 @@ class RealsRootViewModel(
         action: suspend (chatId: String) -> ApiResult<*>,
     ) {
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        if (current.loading || current.refreshing || current.sending || current.actionLoading) return
         val chat = current.chat ?: return
 
         viewModelScope.launch {

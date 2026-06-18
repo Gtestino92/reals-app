@@ -15,12 +15,12 @@ import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.VisualDecision
 import com.reals.app.ui.account.AccountDeletionRecoveryScreen
-import com.reals.app.ui.account.formatBackendDate
 import com.reals.app.ui.auth.LoginScreen
 import com.reals.app.ui.chat.FirstChatScreen
 import com.reals.app.ui.chat.PartnerProfileScreen
 import com.reals.app.ui.chat.VisualApprovalScreen
 import com.reals.app.ui.common.FullScreenMessage
+import com.reals.app.ui.common.formatBackendDate
 import com.reals.app.ui.matchmaking.MatchmakingHomeScreen
 import com.reals.app.ui.profile.CreateProfileScreen
 import com.reals.app.ui.profile.ProfileActivationResultScreen
@@ -163,6 +163,7 @@ fun RealsApp(appContainer: AppContainer) {
                 messages = current.messages,
                 exitRequests = current.exitRequests,
                 loading = current.loading,
+                refreshing = current.refreshing,
                 sending = current.sending,
                 actionLoading = current.actionLoading,
                 actionLoadingLabel = current.actionLoadingLabel,

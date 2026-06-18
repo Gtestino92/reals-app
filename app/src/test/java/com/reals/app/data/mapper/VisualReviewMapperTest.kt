@@ -7,7 +7,7 @@ import org.junit.Test
 
 class VisualReviewMapperTest {
     @Test
-    fun visualProfileMapsAndSortsPhotosByPosition() {
+    fun `VisualProfileResponseDto maps myPersonalMessageSubmitted`() {
         val dto = VisualProfileResponseDto(
             profileId = "profile-1",
             displayName = "Alex",
@@ -41,5 +41,20 @@ class VisualReviewMapperTest {
         assertEquals(29, domain.age)
         assertEquals(true, domain.myPersonalMessageSubmitted)
         assertEquals(listOf("photo-1", "photo-2"), domain.photos.map { it.id })
+    }
+
+    @Test
+    fun `VisualProfileResponseDto defaults myPersonalMessageSubmitted to false`() {
+        val dto = VisualProfileResponseDto(
+            profileId = "profile-1",
+            displayName = "Alex",
+            age = 29,
+            bio = null,
+            photos = emptyList(),
+        )
+
+        val domain = dto.toDomain()
+
+        assertEquals(false, domain.myPersonalMessageSubmitted)
     }
 }
