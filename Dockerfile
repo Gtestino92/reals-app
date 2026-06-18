@@ -15,6 +15,12 @@ ENV IMAGE_REPOSITORY="${IMAGE_REPOSITORY}" \
     IMAGE_REVISION="${IMAGE_REVISION}" \
     GRADLE_USER_HOME="/home/gradle/.gradle"
 
+USER root
+
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /workspace
 
 COPY gradle gradle
