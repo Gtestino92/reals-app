@@ -1,0 +1,140 @@
+package com.reals.app.ui.scheduling
+
+import java.time.LocalDate
+import java.time.OffsetDateTime
+import java.time.ZoneId
+import java.util.Locale
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class SchedulingSlotOptionsTest {
+    private val zoneId = ZoneId.of("America/Argentina/Buenos_Aires")
+    private val now = OffsetDateTime.parse("2026-06-18T10:31:00-03:00")
+
+    @Test
+    fun `day options include today and next six days`() {
+        val options = schedulingDayOptions(now, Locale.forLanguageTag("es-AR"))
+
+        assertEquals(7, options.size)
+        assertEquals(LocalDate.parse("2026-06-18"), options.first().date)
+        assertEquals(LocalDate.parse("2026-06-24"), options.last().date)
+        assertEquals("Hoy", options[0].label)
+        assertEquals("Mañana", options[1].label)
+    }
+
+    @Test
+    fun `available hours hide elapsed hours for today`() {
+        val hours = availableSchedulingHours(now.toLocalDate(), now, zoneId)
+
+        assertEquals((11..23).toList(), hours)
+    }
+
+    @Test
+    fun `available hours allow full range for future days`() {
+        val hours = availableSchedulingHours(now.toLocalDate().plusDays(1), now, zoneId)
+
+        assertEquals((0..23).toList(), hours)
+    }
+
+    @Test
+    fun `available hours include current hour when next half hour is future`() {
+        val afternoonNow = OffsetDateTime.parse("2026-06-18T15:07:00-03:00")
+
+        assertEquals((15..23).toList(), availableSchedulingHours(afternoonNow.toLocalDate(), afternoonNow, zoneId))
+        assertEquals(listOf(30), availableSchedulingMinutes(afternoonNow.toLocalDate(), 15, afternoonNow, zoneId))
+    }
+
+    @Test
+    fun `available hours require at least twenty minutes lead time`() {
+        val afternoonNow = OffsetDateTime.parse("2026-06-18T15:25:00-03:00")
+
+        assertEquals((16..23).toList(), availableSchedulingHours(afternoonNow.toLocalDate(), afternoonNow, zoneId))
+        assertEquals(emptyList<Int>(), availableSchedulingMinutes(afternoonNow.toLocalDate(), 15, afternoonNow, zoneId))
+    }
+
+    @Test
+    fun `available minutes only allow future half hour slots`() {
+        assertEquals(emptyList<Int>(), availableSchedulingMinutes(now.toLocalDate(), 10, now, zoneId))
+        assertEquals(listOf(0, 30), availableSchedulingMinutes(now.toLocalDate(), 11, now, zoneId))
+        assertEquals(listOf(0, 30), availableSchedulingMinutes(now.toLocalDate().plusDays(1), 8, now, zoneId))
+    }
+
+    @Test
+    fun `first available selection skips past options`() {
+        val selection = firstAvailableSchedulingSelection(now, zoneId)
+
+        assertEquals(SchedulingSlotSelection(now.toLocalDate(), 11, 0), selection)
+    }
+
+    @Test
+    fun `buildSchedulingSlot creates local OffsetDateTime with clean seconds and nanos`() {
+        val slot = buildSchedulingSlot(
+            SchedulingSlotSelection(
+                date = LocalDate.parse("2026-06-18"),
+                hour = 21,
+                minute = 30,
+            ),
+            ZoneId.of("America/Argentina/Buenos_Aires"),
+        )
+
+        assertEquals("2026-06-18T21:30-03:00", slot.toString())
+        assertEquals(0, slot.second)
+        assertEquals(0, slot.nano)
+    }
+
+    @Test
+    fun `validateSelectedSlots accepts one to three future aligned unique values`() {
+        val values = listOf(
+            "2026-06-18T11:00:00-03:00",
+            "2026-06-18T11:30:00-03:00",
+            "2026-06-19T08:00:00-03:00",
+        )
+
+        assertEquals(null, validateSelectedSlots(values, now))
+    }
+
+    @Test
+    fun `validateSelectedSlots rejects empty too many duplicate past invalid and unaligned values`() {
+        assertEquals("Selecciona al menos un horario.", validateSelectedSlots(emptyList(), now))
+        assertEquals(
+            "Podes elegir hasta 3 horarios.",
+            validateSelectedSlots(
+                listOf(
+                    "2026-06-18T11:00:00-03:00",
+                    "2026-06-18T11:30:00-03:00",
+                    "2026-06-18T12:00:00-03:00",
+                    "2026-06-18T12:30:00-03:00",
+                ),
+                now,
+            ),
+        )
+        assertEquals(
+            "Los horarios no pueden repetirse.",
+            validateSelectedSlots(
+                listOf("2026-06-18T11:00:00-03:00", "2026-06-18T11:00:00-03:00"),
+                now,
+            ),
+        )
+        assertEquals("Hay un horario con formato invalido.", validateSelectedSlots(listOf("not-a-date"), now))
+        assertEquals(
+            "Todos los horarios tienen que ser futuros.",
+            validateSelectedSlots(listOf("2026-06-18T10:30:00-03:00"), now),
+        )
+        assertEquals(
+            "Los horarios tienen que tener al menos 20 minutos de margen.",
+            validateSelectedSlots(listOf("2026-06-18T10:45:00-03:00"), now),
+        )
+        assertEquals(
+            "Los horarios tienen que estar alineados a media hora.",
+            validateSelectedSlots(listOf("2026-06-18T11:15:00-03:00"), now),
+        )
+    }
+
+    @Test
+    fun `day labels use readable weekday for later days`() {
+        val labels = schedulingDayOptions(now, Locale.forLanguageTag("es-AR")).map { it.label }
+
+        assertTrue(labels[2].contains("20"))
+    }
+}

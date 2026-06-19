@@ -21,6 +21,13 @@ Optional but useful later:
 - `docs/testing.md`: CI/test strategy and smoke-check context.
 - `docs/dev-deployment.md`: image/deploy shape once a dev runtime exists.
 
+## Local Validation Preference
+
+For small Android frontend iterations, especially scheduling UI tweaks, validate
+with `./gradlew :app:compileLocalDebugKotlin --no-daemon --console=plain`.
+Do not run Android lint by default during these iterations unless explicitly
+requested; CI remains responsible for the full lint gate.
+
 ## Backend State Relevant To Android
 
 - Backend is a stateless HTTP API.

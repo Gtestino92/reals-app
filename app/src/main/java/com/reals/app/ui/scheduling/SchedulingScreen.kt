@@ -2,17 +2,24 @@ package com.reals.app.ui.scheduling
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -23,7 +30,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
@@ -36,9 +45,8 @@ import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
 import com.reals.app.ui.common.formatBackendDateTime
-import java.time.LocalDate
-import java.time.LocalTime
 import java.time.OffsetDateTime
+import java.time.ZoneId
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 
@@ -63,18 +71,15 @@ fun SchedulingScreen(
     onBackHome: () -> Unit,
 ) {
     val partnerDisplayName = partnerName?.takeIf { it.isNotBlank() }?.let(TextSafety::safeDisplay)
-    val currentRound = negotiation?.roundNumber
-    val currentRoundProposals = proposals
-        .filter { currentRound != null && it.roundNumber == currentRound }
-        .sortedWith(compareBy<SchedulingProposal> { it.userId != currentUserId }.thenBy { it.preferenceOrder })
-    val myProposals = currentRoundProposals.filter { it.userId == currentUserId }
-    val partnerProposals = currentRoundProposals.filter { it.userId != currentUserId }
-    val stage = deriveSchedulingStage(
+    val roundState = deriveSchedulingRoundState(
         loading = loading,
         negotiation = negotiation,
-        myProposals = myProposals,
-        partnerProposals = partnerProposals,
+        proposals = proposals,
+        currentUserId = currentUserId,
     )
+    val stage = roundState.stage
+    val myProposals = roundState.myProposals
+    val partnerProposals = roundState.partnerProposals
 
     LaunchedEffect(connectionId, negotiation?.status?.rawValue) {
         while (negotiation?.status == NegotiationStatus.Pending) {
@@ -201,7 +206,7 @@ private fun StatusCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Negociacion", style = MaterialTheme.typography.titleMedium)
+            Text("Ronda actual", style = MaterialTheme.typography.titleMedium)
             Text(
                 text = if (loading) {
                     "Cargando..."
@@ -211,7 +216,7 @@ private fun StatusCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                text = "Ronda: ${negotiation?.roundNumber ?: "-"}",
+                text = "Numero de ronda: ${negotiation?.roundNumber ?: "-"}",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (refreshing) {
@@ -240,7 +245,40 @@ private fun ProposalSelectorCard(
 ) {
     var selected by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var validationError by rememberSaveable { mutableStateOf<String?>(null) }
-    val presets = rememberSchedulingPresets()
+    val zoneId = remember { ZoneId.systemDefault() }
+    val now = remember(zoneId) { OffsetDateTime.now(zoneId) }
+    val dayOptions = remember(now) { schedulingDayOptions(now) }
+    val initialSelection = remember(now, zoneId) { firstAvailableSchedulingSelection(now, zoneId) }
+    var selectedDate by rememberSaveable {
+        mutableStateOf(initialSelection?.date?.toString() ?: now.toLocalDate().toString())
+    }
+    var selectedHour by rememberSaveable { mutableStateOf(initialSelection?.hour ?: 8) }
+    var selectedMinute by rememberSaveable { mutableStateOf(initialSelection?.minute ?: 0) }
+    val selectedLocalDate = runCatching { java.time.LocalDate.parse(selectedDate) }
+        .getOrDefault(now.toLocalDate())
+    val availableHours = availableSchedulingHours(selectedLocalDate, now, zoneId)
+    val effectiveHour = if (selectedHour in availableHours) {
+        selectedHour
+    } else {
+        availableHours.firstOrNull() ?: selectedHour
+    }
+    val availableMinutes = availableSchedulingMinutes(selectedLocalDate, effectiveHour, now, zoneId)
+    val effectiveMinute = if (selectedMinute in availableMinutes) {
+        selectedMinute
+    } else {
+        availableMinutes.firstOrNull() ?: selectedMinute
+    }
+    val candidateSelection = if (effectiveHour in availableHours && effectiveMinute in availableMinutes) {
+        SchedulingSlotSelection(
+            date = selectedLocalDate,
+            hour = effectiveHour,
+            minute = effectiveMinute,
+        )
+    } else {
+        null
+    }
+    val candidateValue = candidateSelection?.let { buildSchedulingSlot(it, zoneId).toString() }
+    val selectedLabels = selected.sortedBy { runCatching { OffsetDateTime.parse(it).toInstant() }.getOrNull() }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -252,52 +290,256 @@ private fun ProposalSelectorCard(
                 text = "Selecciona entre 1 y 3 opciones futuras.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            presets.forEach { preset ->
-                val isSelected = preset.value in selected
-                if (isSelected) {
-                    Button(
-                        onClick = {
-                            selected = selected.filterNot { it == preset.value }
-                            validationError = null
-                        },
-                        enabled = !submitting,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(preset.label)
+
+            WheelPickerColumn(
+                title = "Dia",
+                options = dayOptions,
+                selected = dayOptions.firstOrNull { it.date == selectedLocalDate },
+                enabled = !submitting,
+                optionLabel = { it.label },
+                isOptionEnabled = { day -> availableSchedulingHours(day.date, now, zoneId).isNotEmpty() },
+                onSelected = { day ->
+                    selectedDate = day.date.toString()
+                    val nextHour = availableSchedulingHours(day.date, now, zoneId).firstOrNull()
+                    if (nextHour != null) {
+                        selectedHour = nextHour
+                        selectedMinute = availableSchedulingMinutes(day.date, nextHour, now, zoneId).firstOrNull() ?: 0
                     }
-                } else {
-                    OutlinedButton(
-                        onClick = {
-                            if (selected.size < 3) {
-                                selected = selected + preset.value
-                                validationError = null
-                            } else {
-                                validationError = "Podes elegir hasta 3 horarios."
-                            }
-                        },
-                        enabled = !submitting,
+                    validationError = null
+                },
+                modifier = Modifier.fillMaxWidth(),
+                pickerHeight = 132.dp,
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                WheelPickerColumn(
+                    title = "Hora",
+                    options = availableHours,
+                    selected = effectiveHour.takeIf { it in availableHours },
+                    enabled = !submitting,
+                    optionLabel = { it.toString().padStart(2, '0') },
+                    onSelected = { hour ->
+                        selectedHour = hour
+                        selectedMinute = availableSchedulingMinutes(
+                            selectedLocalDate,
+                            hour,
+                            now,
+                            zoneId,
+                        ).firstOrNull() ?: selectedMinute
+                        validationError = null
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+                MinutePickerColumn(
+                    minutes = listOf(0, 30),
+                    selected = effectiveMinute.takeIf { it in availableMinutes },
+                    enabled = !submitting,
+                    enabledMinutes = availableMinutes,
+                    onSelected = { minute ->
+                        selectedMinute = minute
+                        validationError = null
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
+            Button(
+                onClick = {
+                    val value = candidateValue
+                    val currentNow = OffsetDateTime.now(zoneId)
+                    val validation = value?.let { validateSelectedSlots(selected + it, currentNow) }
+                    when {
+                        value == null -> validationError = "Selecciona un horario valido."
+                        value in selected -> validationError = "Ese horario ya esta en la lista."
+                        selected.size >= 3 -> validationError = "Podes elegir hasta 3 horarios."
+                        validation != null -> validationError = validation
+                        else -> {
+                            selected = (selected + value).sortedBy { OffsetDateTime.parse(it).toInstant() }
+                            validationError = null
+                        }
+                    }
+                },
+                enabled = !submitting && selected.size < 3 && candidateValue != null,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Agregar opcion")
+            }
+
+            Text("Opciones elegidas", style = MaterialTheme.typography.titleSmall)
+            if (selectedLabels.isEmpty()) {
+                Text(
+                    text = "Todavia no agregaste horarios.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                selectedLabels.forEach { value ->
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(preset.label)
+                        Text(
+                            text = formatBackendDateTime(value),
+                            modifier = Modifier.weight(1f),
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                selected = selected.filterNot { it == value }
+                                validationError = null
+                            },
+                            enabled = !submitting,
+                        ) {
+                            Text("Quitar")
+                        }
                     }
                 }
             }
+
             validationError?.let {
                 Text(it, color = MaterialTheme.colorScheme.error)
             }
             Button(
                 onClick = {
-                    val validation = validateSelectedSlots(selected)
+                    val validation = validateSelectedSlots(selected, OffsetDateTime.now(zoneId))
                     if (validation == null) {
                         onSubmitProposals(selected)
                     } else {
                         validationError = validation
                     }
                 },
-                enabled = !submitting,
+                enabled = !submitting && selected.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (submitting) submittingLabel ?: "Enviando..." else "Enviar horarios")
+                if (submitting) {
+                    Row(
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(submittingLabel ?: "Enviando...")
+                    }
+                } else {
+                    Text("Enviar opciones")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun <T> WheelPickerColumn(
+    title: String,
+    options: List<T>,
+    selected: T?,
+    enabled: Boolean,
+    optionLabel: (T) -> String,
+    onSelected: (T) -> Unit,
+    modifier: Modifier = Modifier,
+    pickerHeight: Dp = 156.dp,
+    isOptionEnabled: (T) -> Boolean = { true },
+) {
+    val listState = rememberLazyListState()
+    val selectedIndex = options.indexOf(selected)
+
+    LaunchedEffect(Unit) {
+        if (selectedIndex >= 0) {
+            listState.scrollToItem(selectedIndex)
+        }
+    }
+
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(title, style = MaterialTheme.typography.titleSmall)
+        Text(
+            text = "^",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelMedium,
+        )
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(pickerHeight),
+            state = listState,
+            contentPadding = PaddingValues(vertical = 0.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            itemsIndexed(options) { _, option ->
+                val optionEnabled = enabled && isOptionEnabled(option)
+                val isSelected = option == selected
+                if (isSelected) {
+                    Button(
+                        onClick = { onSelected(option) },
+                        enabled = optionEnabled,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(optionLabel(option))
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = { onSelected(option) },
+                        enabled = optionEnabled,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(optionLabel(option))
+                    }
+                }
+            }
+        }
+        Text(
+            text = "v",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelMedium,
+        )
+    }
+}
+
+@Composable
+private fun MinutePickerColumn(
+    minutes: List<Int>,
+    selected: Int?,
+    enabled: Boolean,
+    enabledMinutes: List<Int>,
+    onSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text("Min", style = MaterialTheme.typography.titleSmall)
+        Column(
+            modifier = Modifier.height(186.dp),
+            verticalArrangement = Arrangement.Center,
+        ) {
+            minutes.forEach { minute ->
+                val optionEnabled = enabled && minute in enabledMinutes
+                val label = minute.toString().padStart(2, '0')
+                if (minute == selected && optionEnabled) {
+                    Button(
+                        onClick = { onSelected(minute) },
+                        enabled = optionEnabled,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(label)
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = { onSelected(minute) },
+                        enabled = optionEnabled,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(label)
+                    }
+                }
             }
         }
     }
@@ -307,9 +549,9 @@ private fun ProposalSelectorCard(
 private fun WaitingPartnerCard(myProposals: List<SchedulingProposal>) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Esperando respuesta", style = MaterialTheme.typography.titleMedium)
+            Text("Esperando propuestas de la otra persona", style = MaterialTheme.typography.titleMedium)
             Text(
-                text = "Ya enviamos tus horarios. Estamos esperando a la otra persona.",
+                text = "Ya enviamos tus horarios de esta ronda. Te avisamos cuando haya opciones para revisar.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             ProposalList("Tus horarios", myProposals)
@@ -328,7 +570,7 @@ private fun ReviewProposalsCard(
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Revisar horarios", style = MaterialTheme.typography.titleMedium)
+            Text("Revisa las opciones recibidas", style = MaterialTheme.typography.titleMedium)
             ProposalList("Tus horarios", myProposals)
             ProposalList("Horarios de la otra persona", partnerProposals)
             partnerProposals
@@ -366,9 +608,9 @@ private fun ScheduledCard(confirmedDateTime: String?) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Segundo chat programado", style = MaterialTheme.typography.titleMedium)
+            Text("Horario confirmado", style = MaterialTheme.typography.titleMedium)
             Text(
-                text = "Segundo chat programado para ${formatBackendDateTime(confirmedDateTime)}.",
+                text = "Quedo confirmado para ${formatBackendDateTime(confirmedDateTime)}.",
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
         }
@@ -379,7 +621,7 @@ private fun ScheduledCard(confirmedDateTime: String?) {
 private fun FailedCard() {
     Card(modifier = Modifier.fillMaxWidth()) {
         Text(
-            text = "La coordinacion ya no esta disponible.",
+            text = "No hubo acuerdo. La coordinacion ya no esta disponible.",
             modifier = Modifier.padding(16.dp),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -440,35 +682,6 @@ private fun ProposalRow(proposal: SchedulingProposal) {
     }
 }
 
-private fun deriveSchedulingStage(
-    loading: Boolean,
-    negotiation: SchedulingNegotiation?,
-    myProposals: List<SchedulingProposal>,
-    partnerProposals: List<SchedulingProposal>,
-): SchedulingStage = when {
-    loading -> SchedulingStage.Loading
-    negotiation == null -> SchedulingStage.Unknown
-    negotiation.status == NegotiationStatus.Confirmed -> SchedulingStage.Scheduled
-    negotiation.status == NegotiationStatus.Failed -> SchedulingStage.Failed
-    negotiation.status is NegotiationStatus.Unknown -> SchedulingStage.Unknown
-    negotiation.status == NegotiationStatus.Pending && partnerProposals.isNotEmpty() ->
-        SchedulingStage.ReviewPartnerProposals
-    negotiation.status == NegotiationStatus.Pending && myProposals.isEmpty() ->
-        SchedulingStage.WaitingForMyProposals
-    negotiation.status == NegotiationStatus.Pending -> SchedulingStage.WaitingForPartnerProposals
-    else -> SchedulingStage.Unknown
-}
-
-private enum class SchedulingStage {
-    Loading,
-    WaitingForMyProposals,
-    WaitingForPartnerProposals,
-    ReviewPartnerProposals,
-    Scheduled,
-    Failed,
-    Unknown,
-}
-
 private fun SchedulingStage.userLabel(): String = when (this) {
     SchedulingStage.Loading -> "Cargando"
     SchedulingStage.WaitingForMyProposals -> "Esperando tus horarios"
@@ -491,62 +704,5 @@ private fun ProposalStatus.userLabel(): String = when (this) {
     ProposalStatus.Accepted -> "Aceptado"
     ProposalStatus.Rejected -> "Rechazado"
     is ProposalStatus.Unknown -> "Estado no disponible"
-}
-
-private data class SchedulingPreset(
-    val label: String,
-    val value: String,
-)
-
-@Composable
-private fun rememberSchedulingPresets(): List<SchedulingPreset> =
-    remember {
-        val now = OffsetDateTime.now()
-        val tomorrow = LocalDate.now().plusDays(1)
-        listOf(
-            roundUpToHalfHour(now.plusHours(1)),
-            roundUpToHalfHour(now.plusHours(2)),
-            roundUpToHalfHour(now.plusHours(3)),
-            OffsetDateTime.of(tomorrow, LocalTime.of(20, 0), now.offset),
-            OffsetDateTime.of(tomorrow, LocalTime.of(20, 30), now.offset),
-            OffsetDateTime.of(tomorrow, LocalTime.of(21, 0), now.offset),
-            OffsetDateTime.of(tomorrow, LocalTime.of(21, 30), now.offset),
-        )
-            .distinctBy { it.toInstant() }
-            .map { slot ->
-                SchedulingPreset(
-                    label = formatBackendDateTime(slot.toString()),
-                    value = slot.toString(),
-                )
-            }
-    }
-
-private fun roundUpToHalfHour(value: OffsetDateTime): OffsetDateTime {
-    val clean = value.withSecond(0).withNano(0)
-    return when {
-        clean.minute == 0 || clean.minute == 30 -> clean
-        clean.minute < 30 -> clean.withMinute(30)
-        else -> clean.plusHours(1).withMinute(0)
-    }
-}
-
-private fun validateSelectedSlots(values: List<String>): String? {
-    if (values.isEmpty()) return "Selecciona al menos un horario."
-    if (values.size > 3) return "Podes elegir hasta 3 horarios."
-    val parsed = values.map { value ->
-        runCatching { OffsetDateTime.parse(value) }.getOrNull()
-            ?: return "Hay un horario con formato invalido."
-    }
-    if (parsed.distinctBy { it.toInstant() }.size != parsed.size) {
-        return "Los horarios no pueden repetirse."
-    }
-    val now = OffsetDateTime.now()
-    if (parsed.any { !it.isAfter(now) }) {
-        return "Todos los horarios tienen que ser futuros."
-    }
-    if (parsed.any { it.minute !in listOf(0, 30) || it.second != 0 || it.nano != 0 }) {
-        return "Los horarios tienen que estar alineados a media hora."
-    }
-    return null
 }
 
