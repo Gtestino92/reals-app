@@ -23,9 +23,11 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -138,14 +140,24 @@ fun SchedulingScreen(
             )
 
             SchedulingStage.WaitingForPartnerProposals -> WaitingPartnerCard(myProposals)
-            SchedulingStage.ReviewPartnerProposals -> ReviewProposalsCard(
-                myProposals = myProposals,
-                partnerProposals = partnerProposals,
-                submitting = submitting,
-                submittingLabel = submittingLabel,
-                onAcceptProposal = onAcceptProposal,
-                onRejectRound = onRejectRound,
-            )
+            SchedulingStage.ReviewPartnerProposals -> {
+                if (myProposals.isEmpty()) {
+                    ProposalSelectorCard(
+                        submitting = submitting,
+                        submittingLabel = submittingLabel,
+                        onSubmitProposals = onSubmitProposals,
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+                ReviewProposalsCard(
+                    myProposals = myProposals,
+                    partnerProposals = partnerProposals,
+                    submitting = submitting,
+                    submittingLabel = submittingLabel,
+                    onAcceptProposal = onAcceptProposal,
+                    onRejectRound = onRejectRound,
+                )
+            }
 
             SchedulingStage.Scheduled -> ScheduledCard(negotiation?.confirmedDateTime)
             SchedulingStage.Failed -> FailedCard()
@@ -254,6 +266,7 @@ private fun ProposalSelectorCard(
     }
     var selectedHour by rememberSaveable { mutableStateOf(initialSelection?.hour ?: 8) }
     var selectedMinute by rememberSaveable { mutableStateOf(initialSelection?.minute ?: 0) }
+    var hourScrollKey by rememberSaveable { mutableStateOf(0) }
     val selectedLocalDate = runCatching { java.time.LocalDate.parse(selectedDate) }
         .getOrDefault(now.toLocalDate())
     val availableHours = availableSchedulingHours(selectedLocalDate, now, zoneId)
@@ -300,10 +313,18 @@ private fun ProposalSelectorCard(
                 isOptionEnabled = { day -> availableSchedulingHours(day.date, now, zoneId).isNotEmpty() },
                 onSelected = { day ->
                     selectedDate = day.date.toString()
-                    val nextHour = availableSchedulingHours(day.date, now, zoneId).firstOrNull()
+                    val nextHours = availableSchedulingHours(day.date, now, zoneId)
+                    val nextHour = selectedHour.takeIf { it in nextHours }
+                        ?: nextHours.firstOrNull()
                     if (nextHour != null) {
-                        selectedHour = nextHour
-                        selectedMinute = availableSchedulingMinutes(day.date, nextHour, now, zoneId).firstOrNull() ?: 0
+                        if (nextHour != selectedHour) {
+                            selectedHour = nextHour
+                            hourScrollKey += 1
+                        }
+                        val nextMinutes = availableSchedulingMinutes(day.date, nextHour, now, zoneId)
+                        selectedMinute = selectedMinute.takeIf { it in nextMinutes }
+                            ?: nextMinutes.firstOrNull()
+                            ?: selectedMinute
                     }
                     validationError = null
                 },
@@ -319,24 +340,28 @@ private fun ProposalSelectorCard(
                 WheelPickerColumn(
                     title = "Hora",
                     options = availableHours,
-                    selected = effectiveHour.takeIf { it in availableHours },
+                    selected = selectedHour.takeIf { it in availableHours },
                     enabled = !submitting,
                     optionLabel = { it.toString().padStart(2, '0') },
+                    scrollKey = hourScrollKey,
                     onSelected = { hour ->
                         selectedHour = hour
-                        selectedMinute = availableSchedulingMinutes(
+                        val nextMinutes = availableSchedulingMinutes(
                             selectedLocalDate,
                             hour,
                             now,
                             zoneId,
-                        ).firstOrNull() ?: selectedMinute
+                        )
+                        selectedMinute = selectedMinute.takeIf { it in nextMinutes }
+                            ?: nextMinutes.firstOrNull()
+                            ?: selectedMinute
                         validationError = null
                     },
                     modifier = Modifier.weight(1f),
                 )
                 MinutePickerColumn(
                     minutes = listOf(0, 30),
-                    selected = effectiveMinute.takeIf { it in availableMinutes },
+                    selected = selectedMinute.takeIf { it in availableMinutes },
                     enabled = !submitting,
                     enabledMinutes = availableMinutes,
                     onSelected = { minute ->
@@ -441,16 +466,16 @@ private fun <T> WheelPickerColumn(
     onSelected: (T) -> Unit,
     modifier: Modifier = Modifier,
     pickerHeight: Dp = 156.dp,
+    scrollKey: Any? = Unit,
     isOptionEnabled: (T) -> Boolean = { true },
 ) {
-    val listState = rememberLazyListState()
     val selectedIndex = options.indexOf(selected)
-
-    LaunchedEffect(Unit) {
-        if (selectedIndex >= 0) {
-            listState.scrollToItem(selectedIndex)
-        }
-    }
+    val previousOption = options
+        .take(selectedIndex.coerceAtLeast(0))
+        .lastOrNull(isOptionEnabled)
+    val nextOption = options
+        .drop((selectedIndex + 1).coerceAtLeast(0))
+        .firstOrNull(isOptionEnabled)
 
     Column(
         modifier = modifier,
@@ -458,46 +483,61 @@ private fun <T> WheelPickerColumn(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(title, style = MaterialTheme.typography.titleSmall)
-        Text(
-            text = "^",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.labelMedium,
-        )
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(pickerHeight),
-            state = listState,
-            contentPadding = PaddingValues(vertical = 0.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+        TextButton(
+            onClick = { previousOption?.let(onSelected) },
+            enabled = enabled && previousOption != null,
         ) {
-            itemsIndexed(options) { _, option ->
-                val optionEnabled = enabled && isOptionEnabled(option)
-                val isSelected = option == selected
-                if (isSelected) {
-                    Button(
-                        onClick = { onSelected(option) },
-                        enabled = optionEnabled,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(optionLabel(option))
-                    }
-                } else {
-                    OutlinedButton(
-                        onClick = { onSelected(option) },
-                        enabled = optionEnabled,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(optionLabel(option))
+            Text(
+                text = "^",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelMedium,
+            )
+        }
+        key(scrollKey, options.size) {
+            val listState = rememberLazyListState(
+                initialFirstVisibleItemIndex = selectedIndex.coerceAtLeast(0),
+            )
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(pickerHeight),
+                state = listState,
+                contentPadding = PaddingValues(vertical = 0.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                itemsIndexed(options) { _, option ->
+                    val optionEnabled = enabled && isOptionEnabled(option)
+                    val isSelected = option == selected
+                    if (isSelected) {
+                        Button(
+                            onClick = { onSelected(option) },
+                            enabled = optionEnabled,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(optionLabel(option))
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = { onSelected(option) },
+                            enabled = optionEnabled,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(optionLabel(option))
+                        }
                     }
                 }
             }
         }
-        Text(
-            text = "v",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.labelMedium,
-        )
+        TextButton(
+            onClick = { nextOption?.let(onSelected) },
+            enabled = enabled && nextOption != null,
+        ) {
+            Text(
+                text = "v",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelMedium,
+            )
+        }
     }
 }
 
