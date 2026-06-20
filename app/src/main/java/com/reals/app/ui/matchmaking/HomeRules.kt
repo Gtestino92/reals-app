@@ -71,13 +71,14 @@ private fun com.reals.app.domain.model.HomeActiveInteractionsSummary?.hasActiveI
 
 private fun HomeNextStepItem.needsSecondChatAvailabilityPolling(nowMillis: Long): Boolean {
     val availableAt = secondChatAvailableAtInstant() ?: return false
+    if (isStaleExpiredSecondChat(nowMillis)) return false
     val millisUntilAvailable = availableAt.toEpochMilli() - nowMillis
     val isNearOrDue = millisUntilAvailable <= SECOND_CHAT_NEAR_WINDOW_MILLIS
     if (!isNearOrDue) return false
 
     return when (this) {
         is HomeNextStepItem.SecondChatScheduled -> true
-        is HomeNextStepItem.SecondChatAvailable -> !hasOpenableSecondChatReference()
+        is HomeNextStepItem.SecondChatAvailable -> !hasAvailableSecondChatReference()
         else -> false
     }
 }
@@ -90,8 +91,25 @@ private fun HomeNextStepItem.secondChatAvailableAtInstant(): Instant? =
         else -> null
     }
 
-private fun HomeNextStepItem.SecondChatAvailable.hasOpenableSecondChatReference(): Boolean =
+private fun HomeNextStepItem.SecondChatAvailable.hasAvailableSecondChatReference(): Boolean =
     chatId?.isNotBlank() == true && (chatStatus == "AVAILABLE" || chatStatus == "ACTIVE")
+
+private fun HomeNextStepItem.isStaleExpiredSecondChat(nowMillis: Long): Boolean {
+    val expiresAt = when (this) {
+        is HomeNextStepItem.SecondChatScheduled -> expiresAt
+        is HomeNextStepItem.SecondChatAvailable -> expiresAt
+        else -> null
+    }.toInstantOrNull() ?: return false
+
+    return !hasAnySecondChatReference() && !Instant.ofEpochMilli(nowMillis).isBefore(expiresAt)
+}
+
+private fun HomeNextStepItem.hasAnySecondChatReference(): Boolean =
+    when (this) {
+        is HomeNextStepItem.SecondChatAvailable -> hasAvailableSecondChatReference()
+        is HomeNextStepItem.SecondChatReadOnly -> chatId?.isNotBlank() == true && chatStatus == "EXPIRED"
+        else -> false
+    }
 
 private fun String?.toInstantOrNull(): Instant? =
     this?.let { value ->

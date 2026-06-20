@@ -264,25 +264,35 @@ private fun HomeNextStepItem.connectionIdForSecondChat(): String = when (this) {
     else -> ""
 }
 
-private fun HomeNextStepItem.title(): String = when (this) {
-    is HomeNextStepItem.Scheduling -> "Coordinacion pendiente"
-    is HomeNextStepItem.SecondChatScheduled -> "Segundo chat programado"
-    is HomeNextStepItem.SecondChatAvailable -> "Segundo chat pendiente"
-    is HomeNextStepItem.SecondChatReadOnly -> "Segundo chat vencido"
-    is HomeNextStepItem.Unknown -> "Conexion no disponible"
-}
+private fun HomeNextStepItem.title(): String =
+    if (isStaleExpiredSecondChat()) {
+        "Segundo chat vencido"
+    } else {
+        when (this) {
+            is HomeNextStepItem.Scheduling -> "Coordinacion pendiente"
+            is HomeNextStepItem.SecondChatScheduled -> "Segundo chat programado"
+            is HomeNextStepItem.SecondChatAvailable -> "Segundo chat pendiente"
+            is HomeNextStepItem.SecondChatReadOnly -> "Segundo chat vencido"
+            is HomeNextStepItem.Unknown -> "Conexion no disponible"
+        }
+    }
 
-private fun HomeNextStepItem.body(): String = when (this) {
-    is HomeNextStepItem.Scheduling -> "Estado: coordinando proximo encuentro."
-    is HomeNextStepItem.SecondChatScheduled ->
-        "Programado para ${formatBackendDateTime(availableAt)}. Duracion maxima: ${durationLabel()}."
-    is HomeNextStepItem.SecondChatAvailable ->
-        "Disponible desde ${formatBackendDateTime(availableAt)}. Duracion maxima: ${durationLabel()}."
-    is HomeNextStepItem.SecondChatReadOnly ->
-        readOnlyUntil?.let { "Disponible solo para lectura hasta ${formatBackendDateTime(it)}." }
-            ?: "Disponible solo para lectura."
-    is HomeNextStepItem.Unknown -> "Estado: $rawState."
-}
+private fun HomeNextStepItem.body(): String =
+    if (isStaleExpiredSecondChat()) {
+        "El horario ya vencio y el segundo chat no esta disponible."
+    } else {
+        when (this) {
+            is HomeNextStepItem.Scheduling -> "Estado: coordinando proximo encuentro."
+            is HomeNextStepItem.SecondChatScheduled ->
+                "Programado para ${formatBackendDateTime(availableAt)}. Duracion maxima: ${durationLabel()}."
+            is HomeNextStepItem.SecondChatAvailable ->
+                "Disponible desde ${formatBackendDateTime(availableAt)}. Duracion maxima: ${durationLabel()}."
+            is HomeNextStepItem.SecondChatReadOnly ->
+                readOnlyUntil?.let { "Disponible solo para lectura hasta ${formatBackendDateTime(it)}." }
+                    ?: "Disponible solo para lectura."
+            is HomeNextStepItem.Unknown -> "Estado: $rawState."
+        }
+    }
 
 private fun HomeNextStepItem.canOpenSecondChat(nowMillis: Long = System.currentTimeMillis()): Boolean =
     when (this) {
@@ -301,6 +311,7 @@ private fun HomeNextStepItem.secondChatCtaLabel(canOpenSecondChat: Boolean, nowM
     } else {
         val availableInstant = secondChatAvailableAt().toInstantOrNull()
         when {
+            isStaleExpiredSecondChat() -> "Segundo chat vencido"
             availableInstant != null && !Instant.ofEpochMilli(nowMillis).isBefore(availableInstant) ->
                 "Preparando segundo chat..."
             else -> secondChatAvailableAt()?.let { "Disponible a las ${formatBackendTime(it)}" }
@@ -333,6 +344,16 @@ private fun HomeNextStepItem.hasSecondChatReference(): Boolean =
             chatId?.isNotBlank() == true && chatStatus == "EXPIRED"
         else -> false
     }
+
+private fun HomeNextStepItem.isStaleExpiredSecondChat(nowMillis: Long = System.currentTimeMillis()): Boolean {
+    val expiresAt = when (this) {
+        is HomeNextStepItem.SecondChatScheduled -> expiresAt
+        is HomeNextStepItem.SecondChatAvailable -> expiresAt
+        else -> null
+    }.toInstantOrNull() ?: return false
+
+    return !hasSecondChatReference() && !Instant.ofEpochMilli(nowMillis).isBefore(expiresAt)
+}
 
 private fun HomeNextStepItem.durationLabel(): String {
     val minutes = when (this) {
