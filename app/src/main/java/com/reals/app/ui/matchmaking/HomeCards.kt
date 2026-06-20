@@ -13,6 +13,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.reals.app.core.security.TextSafety
+import com.reals.app.ui.common.formatBackendDateTime
+import com.reals.app.ui.common.formatBackendTime
+import java.time.Instant
+import java.time.OffsetDateTime
+import java.time.format.DateTimeParseException
 
 @Composable
 internal fun PendingActionsCard(
@@ -63,7 +68,9 @@ internal fun PendingActionsCard(
 internal fun NextStepCard(
     nextSteps: List<HomeNextStepItem>,
     busy: Boolean,
+    nowMillis: Long,
     onOpenScheduling: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
+    onOpenSecondChat: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenPartnerProfile: (matchId: String) -> Unit,
 ) {
     if (nextSteps.isEmpty()) return
@@ -90,7 +97,9 @@ internal fun NextStepCard(
                 NextStepItem(
                     item = nextStep,
                     busy = busy,
+                    nowMillis = nowMillis,
                     onOpenScheduling = onOpenScheduling,
+                    onOpenSecondChat = onOpenSecondChat,
                     onOpenPartnerProfile = onOpenPartnerProfile,
                 )
             }
@@ -163,7 +172,9 @@ private fun VisualApprovalItem(
 private fun NextStepItem(
     item: HomeNextStepItem,
     busy: Boolean,
+    nowMillis: Long,
     onOpenScheduling: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
+    onOpenSecondChat: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenPartnerProfile: (matchId: String) -> Unit,
 ) {
     val partnerName = item.partnerDisplayName()
@@ -198,12 +209,37 @@ private fun NextStepItem(
                     Text("Coordinar horarios")
                 }
             }
-            Button(
-                onClick = { onOpenPartnerProfile(item.matchIdForProfile()) },
-                enabled = !busy && item.matchIdForProfile().isNotBlank(),
-                modifier = Modifier.fillMaxWidth(),
+            if (
+                item is HomeNextStepItem.SecondChatScheduled ||
+                item is HomeNextStepItem.SecondChatAvailable ||
+                item is HomeNextStepItem.SecondChatReadOnly
             ) {
-                Text("Ver perfil")
+                val canOpenSecondChat = item.canOpenSecondChat(nowMillis)
+                Button(
+                    onClick = {
+                        onOpenSecondChat(
+                            item.connectionIdForSecondChat(),
+                            item.matchIdForProfile(),
+                            item.partnerDisplayName(),
+                        )
+                    },
+                    enabled = !busy &&
+                        canOpenSecondChat &&
+                        item.connectionIdForSecondChat().isNotBlank() &&
+                        item.matchIdForProfile().isNotBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(item.secondChatCtaLabel(canOpenSecondChat, nowMillis))
+                }
+            }
+            if (item.canShowPartnerProfile(nowMillis)) {
+                Button(
+                    onClick = { onOpenPartnerProfile(item.matchIdForProfile()) },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Ver perfil")
+                }
             }
         }
     }
@@ -213,6 +249,7 @@ private fun HomeNextStepItem.partnerDisplayName(): String? = when (this) {
     is HomeNextStepItem.Scheduling -> partnerDisplayName
     is HomeNextStepItem.SecondChatScheduled -> partnerDisplayName
     is HomeNextStepItem.SecondChatAvailable -> partnerDisplayName
+    is HomeNextStepItem.SecondChatReadOnly -> partnerDisplayName
     is HomeNextStepItem.Unknown -> partnerDisplayName
 }
 
@@ -220,19 +257,130 @@ private fun HomeNextStepItem.matchIdForProfile(): String = when (this) {
     is HomeNextStepItem.Scheduling -> matchId
     is HomeNextStepItem.SecondChatScheduled -> matchId
     is HomeNextStepItem.SecondChatAvailable -> matchId
+    is HomeNextStepItem.SecondChatReadOnly -> matchId
     is HomeNextStepItem.Unknown -> matchId.orEmpty()
 }
 
-private fun HomeNextStepItem.title(): String = when (this) {
-    is HomeNextStepItem.Scheduling -> "Coordinacion pendiente"
-    is HomeNextStepItem.SecondChatScheduled -> "Segundo chat programado"
-    is HomeNextStepItem.SecondChatAvailable -> "Segundo chat pendiente"
-    is HomeNextStepItem.Unknown -> "Conexion no disponible"
+private fun HomeNextStepItem.canShowPartnerProfile(nowMillis: Long = System.currentTimeMillis()): Boolean {
+    if (matchIdForProfile().isBlank()) return false
+
+    return when (this) {
+        is HomeNextStepItem.SecondChatReadOnly -> false
+        is HomeNextStepItem.SecondChatScheduled,
+        is HomeNextStepItem.SecondChatAvailable -> !isUnavailableSecondChat(nowMillis)
+        else -> true
+    }
 }
 
-private fun HomeNextStepItem.body(): String = when (this) {
-    is HomeNextStepItem.Scheduling -> "Estado: coordinando proximo encuentro."
-    is HomeNextStepItem.SecondChatScheduled -> "Estado: segundo chat programado."
-    is HomeNextStepItem.SecondChatAvailable -> "Estado: segundo chat disponible."
-    is HomeNextStepItem.Unknown -> "Estado: $rawState."
+private fun HomeNextStepItem.connectionIdForSecondChat(): String = when (this) {
+    is HomeNextStepItem.SecondChatScheduled -> connectionId
+    is HomeNextStepItem.SecondChatAvailable -> connectionId
+    is HomeNextStepItem.SecondChatReadOnly -> connectionId
+    else -> ""
+}
+
+private fun HomeNextStepItem.title(): String =
+    if (isStaleExpiredSecondChat()) {
+        "Segundo chat vencido"
+    } else {
+        when (this) {
+            is HomeNextStepItem.Scheduling -> "Coordinacion pendiente"
+            is HomeNextStepItem.SecondChatScheduled -> "Segundo chat programado"
+            is HomeNextStepItem.SecondChatAvailable -> "Segundo chat pendiente"
+            is HomeNextStepItem.SecondChatReadOnly -> "Segundo chat vencido"
+            is HomeNextStepItem.Unknown -> "Conexion no disponible"
+        }
+    }
+
+private fun HomeNextStepItem.body(): String =
+    if (isStaleExpiredSecondChat()) {
+        "El horario ya vencio y el segundo chat no esta disponible."
+    } else {
+        when (this) {
+            is HomeNextStepItem.Scheduling -> "Estado: coordinando proximo encuentro."
+            is HomeNextStepItem.SecondChatScheduled ->
+                "Programado para ${formatBackendDateTime(availableAt)}. Duracion maxima: ${durationLabel()}."
+            is HomeNextStepItem.SecondChatAvailable ->
+                "Disponible desde ${formatBackendDateTime(availableAt)}. Duracion maxima: ${durationLabel()}."
+            is HomeNextStepItem.SecondChatReadOnly ->
+                readOnlyUntil?.let { "Disponible solo para lectura hasta ${formatBackendDateTime(it)}." }
+                    ?: "Disponible solo para lectura."
+            is HomeNextStepItem.Unknown -> "Estado: $rawState."
+        }
+    }
+
+private fun HomeNextStepItem.canOpenSecondChat(nowMillis: Long = System.currentTimeMillis()): Boolean =
+    canOpenSecondChatNow(nowMillis)
+
+private fun HomeNextStepItem.secondChatCtaLabel(canOpenSecondChat: Boolean, nowMillis: Long): String =
+    if (canOpenSecondChat) {
+        if (this is HomeNextStepItem.SecondChatReadOnly) "Ver segundo chat" else "Entrar al segundo chat"
+    } else {
+        val availableInstant = secondChatAvailableAt().toInstantOrNull()
+        when {
+            isStaleExpiredSecondChat() -> "Segundo chat vencido"
+            availableInstant != null && !Instant.ofEpochMilli(nowMillis).isBefore(availableInstant) ->
+                "Preparando segundo chat..."
+            else -> secondChatAvailableAt()?.let { "Disponible a las ${formatBackendTime(it)}" }
+                ?: "Segundo chat pendiente"
+        }
+    }
+
+private fun HomeNextStepItem.secondChatAvailableAt(): String? =
+    when (this) {
+        is HomeNextStepItem.SecondChatScheduled -> availableAt
+        is HomeNextStepItem.SecondChatAvailable -> availableAt
+        is HomeNextStepItem.SecondChatReadOnly -> availableAt
+        else -> null
+    }
+
+private fun String?.toInstantOrNull(): Instant? =
+    this?.let { value ->
+        try {
+            OffsetDateTime.parse(value).toInstant()
+        } catch (_: DateTimeParseException) {
+            null
+        }
+    }
+
+private fun HomeNextStepItem.hasSecondChatReference(): Boolean =
+    when (this) {
+        is HomeNextStepItem.SecondChatAvailable ->
+            chatId?.isNotBlank() == true && (chatStatus == "AVAILABLE" || chatStatus == "ACTIVE")
+        is HomeNextStepItem.SecondChatReadOnly ->
+            chatId?.isNotBlank() == true && chatStatus == "EXPIRED"
+        else -> false
+    }
+
+private fun HomeNextStepItem.isStaleExpiredSecondChat(nowMillis: Long = System.currentTimeMillis()): Boolean {
+    val expiresAt = when (this) {
+        is HomeNextStepItem.SecondChatScheduled -> expiresAt
+        is HomeNextStepItem.SecondChatAvailable -> expiresAt
+        else -> null
+    }.toInstantOrNull() ?: return false
+
+    return !hasSecondChatReference() && !Instant.ofEpochMilli(nowMillis).isBefore(expiresAt)
+}
+
+private fun HomeNextStepItem.isUnavailableSecondChat(nowMillis: Long = System.currentTimeMillis()): Boolean {
+    if (isStaleExpiredSecondChat(nowMillis)) return true
+    val availableAt = secondChatAvailableAt().toInstantOrNull() ?: return false
+
+    return !hasSecondChatReference() && !Instant.ofEpochMilli(nowMillis).isBefore(availableAt)
+}
+
+private fun HomeNextStepItem.durationLabel(): String {
+    val minutes = when (this) {
+        is HomeNextStepItem.SecondChatScheduled -> durationMinutes
+        is HomeNextStepItem.SecondChatAvailable -> durationMinutes
+        is HomeNextStepItem.SecondChatReadOnly -> durationMinutes
+        else -> null
+    } ?: return "2 horas"
+
+    return if (minutes % 60L == 0L) {
+        val hours = minutes / 60L
+        "$hours ${if (hours == 1L) "hora" else "horas"}"
+    } else {
+        "$minutes minutos"
+    }
 }

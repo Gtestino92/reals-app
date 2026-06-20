@@ -369,6 +369,12 @@ class FakeRealsApi : RealsApi {
     ): Response<ConnectionResponseDto> =
         record("getConnection", authorization, connectionId) { connectionResponse }
 
+    override suspend fun getSecondChatForConnection(
+        authorization: String,
+        connectionId: String,
+    ): Response<ChatResponseDto> =
+        record("getSecondChatForConnection", authorization, connectionId) { nextChatResponse() }
+
     override suspend fun getConnectionNegotiation(
         authorization: String,
         connectionId: String,

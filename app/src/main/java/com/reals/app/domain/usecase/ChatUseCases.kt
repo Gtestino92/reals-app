@@ -15,6 +15,13 @@ class GetChatUseCase(
         chatRepository.getChat(chatId)
 }
 
+class GetSecondChatForConnectionUseCase(
+    private val chatRepository: ChatRepository,
+) {
+    suspend operator fun invoke(connectionId: String): ApiResult<Chat> =
+        chatRepository.getSecondChatForConnection(connectionId)
+}
+
 class GetChatMessagesUseCase(
     private val chatRepository: ChatRepository,
 ) {

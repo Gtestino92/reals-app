@@ -277,6 +277,12 @@ interface RealsApi {
         @Path("connectionId") connectionId: String,
     ): Response<ConnectionResponseDto>
 
+    @GET("api/connections/{connectionId}/chat")
+    suspend fun getSecondChatForConnection(
+        @Header("Authorization") authorization: String,
+        @Path("connectionId") connectionId: String,
+    ): Response<ChatResponseDto>
+
     @GET("api/connections/{connectionId}/negotiation")
     suspend fun getConnectionNegotiation(
         @Header("Authorization") authorization: String,

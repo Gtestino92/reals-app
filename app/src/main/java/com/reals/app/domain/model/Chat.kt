@@ -15,6 +15,7 @@ data class Chat(
     val myDecision: ChatDecisionState,
     val partnerDecision: ChatDecisionState,
     val endedAt: String?,
+    val readOnlyUntil: String?,
     val lastMessageAt: String?,
 )
 

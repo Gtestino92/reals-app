@@ -13,6 +13,7 @@ import com.reals.app.domain.usecase.DeleteProfilePhotoUseCase
 import com.reals.app.domain.usecase.EnqueueMatchmakingUseCase
 import com.reals.app.domain.usecase.GetChatExitRequestsUseCase
 import com.reals.app.domain.usecase.GetChatMessagesUseCase
+import com.reals.app.domain.usecase.GetChatUseCase
 import com.reals.app.domain.usecase.GetFirstChatForMatchUseCase
 import com.reals.app.domain.usecase.GetHomeUseCase
 import com.reals.app.domain.usecase.GetMatchUseCase
@@ -21,6 +22,7 @@ import com.reals.app.domain.usecase.GetPartnerPersonalMessageUseCase
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
 import com.reals.app.domain.usecase.GetSchedulingNegotiationUseCase
 import com.reals.app.domain.usecase.GetSchedulingProposalsUseCase
+import com.reals.app.domain.usecase.GetSecondChatForConnectionUseCase
 import com.reals.app.domain.usecase.GetVisualProfileUseCase
 import com.reals.app.domain.usecase.LeaveQueueUseCase
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
@@ -82,7 +84,9 @@ data class HomeFeatureDependencies(
 
 data class FirstChatFeatureDependencies(
     val getMatch: GetMatchUseCase,
+    val getChat: GetChatUseCase,
     val getFirstChatForMatch: GetFirstChatForMatchUseCase,
+    val getSecondChatForConnection: GetSecondChatForConnectionUseCase,
     val submitChatDecision: SubmitChatDecisionUseCase,
     val getChatMessages: GetChatMessagesUseCase,
     val sendChatMessage: SendChatMessageUseCase,

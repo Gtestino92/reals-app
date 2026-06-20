@@ -87,6 +87,13 @@ fun HomeNextStepResponseDto.toDomain(): HomeNextStep = when (type.uppercase()) {
         secondChat = secondChat?.toDomain(),
     )
 
+    "SECOND_CHAT_READ_ONLY" -> HomeNextStep.SecondChatReadOnly(
+        connectionId = connectionId,
+        matchId = matchId,
+        partner = partner?.toDomain(),
+        secondChat = secondChat?.toDomain(),
+    )
+
     else -> HomeNextStep.Unknown(
         rawType = type,
         connectionId = connectionId,
@@ -102,8 +109,11 @@ fun HomePassiveNoticeResponseDto.toDomain(): HomePassiveNotice = when (type.uppe
 
 fun HomeChatResponseDto.toDomain(): HomeChat = HomeChat(
     chatId = chatId,
-    chatType = ChatType.fromBackend(chatType),
-    chatStatus = ChatStatus.fromBackend(chatStatus),
+    chatType = chatType?.let { ChatType.fromBackend(it) },
+    chatStatus = chatStatus?.let { ChatStatus.fromBackend(it) },
+    availableAt = availableAt,
     expiresAt = expiresAt,
+    readOnlyUntil = readOnlyUntil,
+    durationMinutes = durationMinutes,
     partner = partner?.toDomain(),
 )

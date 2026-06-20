@@ -35,12 +35,34 @@ sealed interface HomeNextStepItem {
         val connectionId: String,
         val matchId: String,
         val partnerDisplayName: String?,
+        val chatId: String?,
+        val chatStatus: String?,
+        val availableAt: String?,
+        val expiresAt: String?,
+        val durationMinutes: Long?,
     ) : HomeNextStepItem
 
     data class SecondChatAvailable(
         val connectionId: String,
         val matchId: String,
         val partnerDisplayName: String?,
+        val chatId: String?,
+        val chatStatus: String?,
+        val availableAt: String?,
+        val expiresAt: String?,
+        val durationMinutes: Long?,
+    ) : HomeNextStepItem
+
+    data class SecondChatReadOnly(
+        val connectionId: String,
+        val matchId: String,
+        val partnerDisplayName: String?,
+        val chatId: String?,
+        val chatStatus: String?,
+        val availableAt: String?,
+        val expiresAt: String?,
+        val readOnlyUntil: String?,
+        val durationMinutes: Long?,
     ) : HomeNextStepItem
 
     data class Unknown(

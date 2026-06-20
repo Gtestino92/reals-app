@@ -9,8 +9,10 @@ import com.reals.app.domain.usecase.AcceptChatExitRequestUseCase
 import com.reals.app.domain.usecase.CancelChatUseCase
 import com.reals.app.domain.usecase.GetChatExitRequestsUseCase
 import com.reals.app.domain.usecase.GetChatMessagesUseCase
+import com.reals.app.domain.usecase.GetChatUseCase
 import com.reals.app.domain.usecase.GetFirstChatForMatchUseCase
 import com.reals.app.domain.usecase.GetMatchUseCase
+import com.reals.app.domain.usecase.GetSecondChatForConnectionUseCase
 import com.reals.app.domain.usecase.RejectChatExitRequestUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
 import com.reals.app.domain.usecase.SafetyCancelChatUseCase
@@ -104,7 +106,9 @@ class FirstChatCoordinatorTest {
         val chatRepository = ChatRepository(api, testJson, tokenProvider, testApiExecutor())
         return FirstChatFeatureDependencies(
             getMatch = GetMatchUseCase(matchRepository),
+            getChat = GetChatUseCase(chatRepository),
             getFirstChatForMatch = GetFirstChatForMatchUseCase(matchRepository),
+            getSecondChatForConnection = GetSecondChatForConnectionUseCase(chatRepository),
             submitChatDecision = SubmitChatDecisionUseCase(matchRepository),
             getChatMessages = GetChatMessagesUseCase(chatRepository),
             sendChatMessage = SendChatMessageUseCase(chatRepository),

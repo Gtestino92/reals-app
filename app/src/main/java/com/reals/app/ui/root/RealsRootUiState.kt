@@ -84,6 +84,24 @@ sealed interface RealsRootUiState {
         val message: String? = null,
     ) : RealsRootUiState
 
+    data class SecondChat(
+        val session: ProvisionedSession,
+        val connectionId: String,
+        val matchId: String,
+        val partnerName: String? = null,
+        val chatId: String? = null,
+        val chat: Chat? = null,
+        val messages: List<ChatMessage> = emptyList(),
+        val exitRequests: List<ChatExitRequest> = emptyList(),
+        val loading: Boolean = false,
+        val refreshing: Boolean = false,
+        val sending: Boolean = false,
+        val actionLoading: Boolean = false,
+        val actionLoadingLabel: String? = null,
+        val error: ApiError? = null,
+        val message: String? = null,
+    ) : RealsRootUiState
+
     data class VisualApproval(
         val session: ProvisionedSession,
         val matchId: String,

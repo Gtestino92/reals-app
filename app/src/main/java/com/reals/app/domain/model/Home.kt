@@ -65,6 +65,13 @@ sealed interface HomeNextStep {
         val secondChat: HomeChat?,
     ) : HomeNextStep
 
+    data class SecondChatReadOnly(
+        val connectionId: String,
+        val matchId: String,
+        val partner: ChatPartner?,
+        val secondChat: HomeChat?,
+    ) : HomeNextStep
+
     data class Unknown(
         val rawType: String,
         val connectionId: String?,
@@ -79,9 +86,12 @@ sealed interface HomePassiveNotice {
 }
 
 data class HomeChat(
-    val chatId: String,
-    val chatType: ChatType,
-    val chatStatus: ChatStatus,
-    val expiresAt: String?,
+    val chatId: String?,
+    val chatType: ChatType?,
+    val chatStatus: ChatStatus?,
+    val availableAt: String,
+    val expiresAt: String,
+    val readOnlyUntil: String?,
+    val durationMinutes: Long,
     val partner: ChatPartner?,
 )

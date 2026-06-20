@@ -55,6 +55,9 @@ class HomeMappersTest {
                         chatId = "chat-second",
                         chatType = "SECOND_CHAT",
                         chatStatus = "AVAILABLE",
+                        availableAt = "2026-06-20T18:00:00-03:00",
+                        expiresAt = "2026-06-20T20:00:00-03:00",
+                        durationMinutes = 120,
                         partner = partnerDto("second-partner"),
                     ),
                 ),
@@ -83,8 +86,38 @@ class HomeMappersTest {
         val secondChat = home.nextSteps[1] as HomeNextStep.SecondChatAvailable
         assertEquals(ChatType.SecondChat, secondChat.secondChat?.chatType)
         assertEquals(ChatStatus.Available, secondChat.secondChat?.chatStatus)
+        assertEquals("2026-06-20T18:00:00-03:00", secondChat.secondChat?.availableAt)
+        assertEquals(120L, secondChat.secondChat?.durationMinutes)
 
         assertEquals(HomePassiveNotice.SchedulingPreparing(2), home.passiveNotices.single())
+    }
+
+    @Test
+    fun `Home DTO maps second chat read only metadata`() {
+        val home = minimalHome(
+            nextSteps = listOf(
+                HomeNextStepResponseDto(
+                    type = "SECOND_CHAT_READ_ONLY",
+                    connectionId = "connection-read-only",
+                    matchId = "match-read-only",
+                    secondChat = HomeChatResponseDto(
+                        chatId = "chat-read-only",
+                        chatType = "SECOND_CHAT",
+                        chatStatus = "EXPIRED",
+                        availableAt = "2026-06-20T18:00:00-03:00",
+                        expiresAt = "2026-06-20T20:00:00-03:00",
+                        readOnlyUntil = "2026-06-21T20:00:00-03:00",
+                        durationMinutes = 120,
+                    ),
+                ),
+            ),
+        ).toDomain()
+
+        val readOnly = home.nextSteps.single() as HomeNextStep.SecondChatReadOnly
+
+        assertEquals("connection-read-only", readOnly.connectionId)
+        assertEquals(ChatStatus.Expired, readOnly.secondChat?.chatStatus)
+        assertEquals("2026-06-21T20:00:00-03:00", readOnly.secondChat?.readOnlyUntil)
     }
 
     @Test
