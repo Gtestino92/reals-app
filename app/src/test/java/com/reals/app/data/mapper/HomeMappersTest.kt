@@ -87,7 +87,7 @@ class HomeMappersTest {
         assertEquals(ChatType.SecondChat, secondChat.secondChat?.chatType)
         assertEquals(ChatStatus.Available, secondChat.secondChat?.chatStatus)
         assertEquals("2026-06-20T18:00:00-03:00", secondChat.secondChat?.availableAt)
-        assertEquals(120, secondChat.secondChat?.durationMinutes)
+        assertEquals(120L, secondChat.secondChat?.durationMinutes)
 
         assertEquals(HomePassiveNotice.SchedulingPreparing(2), home.passiveNotices.single())
     }
