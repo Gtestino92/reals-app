@@ -230,12 +230,14 @@ private fun NextStepItem(
                     Text(item.secondChatCtaLabel(canOpenSecondChat, nowMillis))
                 }
             }
-            Button(
-                onClick = { onOpenPartnerProfile(item.matchIdForProfile()) },
-                enabled = !busy && item.matchIdForProfile().isNotBlank(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Ver perfil")
+            if (item.canShowPartnerProfile()) {
+                Button(
+                    onClick = { onOpenPartnerProfile(item.matchIdForProfile()) },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Ver perfil")
+                }
             }
         }
     }
@@ -255,6 +257,17 @@ private fun HomeNextStepItem.matchIdForProfile(): String = when (this) {
     is HomeNextStepItem.SecondChatAvailable -> matchId
     is HomeNextStepItem.SecondChatReadOnly -> matchId
     is HomeNextStepItem.Unknown -> matchId.orEmpty()
+}
+
+private fun HomeNextStepItem.canShowPartnerProfile(nowMillis: Long = System.currentTimeMillis()): Boolean {
+    if (matchIdForProfile().isBlank()) return false
+
+    return when (this) {
+        is HomeNextStepItem.SecondChatReadOnly -> false
+        is HomeNextStepItem.SecondChatScheduled,
+        is HomeNextStepItem.SecondChatAvailable -> !isUnavailableSecondChat(nowMillis)
+        else -> true
+    }
 }
 
 private fun HomeNextStepItem.connectionIdForSecondChat(): String = when (this) {
@@ -353,6 +366,13 @@ private fun HomeNextStepItem.isStaleExpiredSecondChat(nowMillis: Long = System.c
     }.toInstantOrNull() ?: return false
 
     return !hasSecondChatReference() && !Instant.ofEpochMilli(nowMillis).isBefore(expiresAt)
+}
+
+private fun HomeNextStepItem.isUnavailableSecondChat(nowMillis: Long = System.currentTimeMillis()): Boolean {
+    if (isStaleExpiredSecondChat(nowMillis)) return true
+    val availableAt = secondChatAvailableAt().toInstantOrNull() ?: return false
+
+    return !hasSecondChatReference() && !Instant.ofEpochMilli(nowMillis).isBefore(availableAt)
 }
 
 private fun HomeNextStepItem.durationLabel(): String {
