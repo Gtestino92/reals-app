@@ -308,14 +308,7 @@ private fun HomeNextStepItem.body(): String =
     }
 
 private fun HomeNextStepItem.canOpenSecondChat(nowMillis: Long = System.currentTimeMillis()): Boolean =
-    when (this) {
-        is HomeNextStepItem.SecondChatAvailable ->
-            availableAt.toInstantOrNull()?.let { !Instant.ofEpochMilli(nowMillis).isBefore(it) } == true
-        is HomeNextStepItem.SecondChatReadOnly -> hasSecondChatReference()
-        is HomeNextStepItem.SecondChatScheduled -> false
-
-        else -> false
-    }
+    canOpenSecondChatNow(nowMillis)
 
 private fun HomeNextStepItem.secondChatCtaLabel(canOpenSecondChat: Boolean, nowMillis: Long): String =
     if (canOpenSecondChat) {
