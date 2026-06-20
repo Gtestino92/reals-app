@@ -101,6 +101,7 @@ Rules:
 - each user submits one proposal list per round
 - each list must contain 1 to `scheduling.max-proposals-per-round` unique future slots
 - slots must be aligned to half-hour boundaries
+- Android only offers proposal slots at least 20 minutes in the future, to leave time for the other participant to review and confirm
 - user must belong to the connection
 - user cannot accept their own proposal
 - a participant can accept a partner proposal without first submitting their own list

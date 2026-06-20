@@ -2,7 +2,9 @@ package com.reals.app.ui.root
 
 import com.reals.app.core.network.ApiResult
 import com.reals.app.di.SchedulingFeatureDependencies
+import com.reals.app.domain.model.NegotiationStatus
 import com.reals.app.domain.model.ProvisionedSession
+import com.reals.app.domain.model.SchedulingNegotiation
 
 internal class SchedulingCoordinator(
     private val dependencies: SchedulingFeatureDependencies,
@@ -69,7 +71,10 @@ internal class SchedulingCoordinator(
                 submitting = false,
                 submittingLabel = null,
                 error = refreshed.error,
-                message = "Enviamos tus horarios.",
+                message = schedulingActionMessage(
+                    negotiation = refreshed.negotiation,
+                    pendingMessage = "Enviamos tus horarios.",
+                ),
             )
 
             is ApiResult.Failure -> refreshed.copy(
@@ -87,14 +92,20 @@ internal class SchedulingCoordinator(
     ): RealsRootUiState.Scheduling {
         val pending = current.copy(submitting = true, error = null, message = null)
         return when (val acceptResult = dependencies.acceptProposal(current.connectionId, proposalId)) {
-            is ApiResult.Success -> refresh(
-                pending.copy(negotiation = acceptResult.value),
-                silent = false,
-            ).copy(
-                submitting = false,
-                submittingLabel = null,
-                message = "Aceptamos el horario.",
-            )
+            is ApiResult.Success -> {
+                val refreshed = refresh(
+                    pending.copy(negotiation = acceptResult.value),
+                    silent = false,
+                )
+                refreshed.copy(
+                    submitting = false,
+                    submittingLabel = null,
+                    message = schedulingActionMessage(
+                        negotiation = refreshed.negotiation,
+                        pendingMessage = "Aceptamos el horario.",
+                    ),
+                )
+            }
 
             is ApiResult.Failure -> refresh(pending, silent = false).copy(
                 submitting = false,
@@ -106,15 +117,19 @@ internal class SchedulingCoordinator(
 
     suspend fun rejectRound(current: RealsRootUiState.Scheduling): RealsRootUiState.Scheduling {
         val pending = current.copy(submitting = true, error = null, message = null)
+        val previousRound = current.negotiation?.roundNumber
         return when (val rejectResult = dependencies.rejectRound(current.connectionId)) {
-            is ApiResult.Success -> refresh(
-                pending.copy(negotiation = rejectResult.value),
-                silent = false,
-            ).copy(
-                submitting = false,
-                submittingLabel = null,
-                message = "Abrimos una nueva ronda de horarios.",
-            )
+            is ApiResult.Success -> {
+                val refreshed = refresh(
+                    pending.copy(negotiation = rejectResult.value),
+                    silent = false,
+                )
+                refreshed.copy(
+                    submitting = false,
+                    submittingLabel = null,
+                    message = rejectRoundMessage(previousRound, refreshed.negotiation),
+                )
+            }
 
             is ApiResult.Failure -> refresh(pending, silent = false).copy(
                 submitting = false,
@@ -123,4 +138,27 @@ internal class SchedulingCoordinator(
             )
         }
     }
+}
+
+private fun schedulingActionMessage(
+    negotiation: SchedulingNegotiation?,
+    pendingMessage: String,
+): String = when (negotiation?.status) {
+    NegotiationStatus.Confirmed -> "Horario confirmado."
+    NegotiationStatus.Failed -> "No hubo acuerdo."
+    else -> pendingMessage
+}
+
+private fun rejectRoundMessage(
+    previousRound: Int?,
+    negotiation: SchedulingNegotiation?,
+): String = when (negotiation?.status) {
+    NegotiationStatus.Confirmed -> "Horario confirmado."
+    NegotiationStatus.Failed -> "No hubo acuerdo."
+    NegotiationStatus.Pending -> if (previousRound != null && negotiation.roundNumber > previousRound) {
+        "Ronda rechazada, se abrio una nueva ronda."
+    } else {
+        "Ronda rechazada."
+    }
+    else -> "Ronda rechazada."
 }

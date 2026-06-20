@@ -1,6 +1,7 @@
 package com.reals.app.ui.root
 
 import com.reals.app.di.SchedulingFeatureDependencies
+import com.reals.app.data.mapper.toDomain
 import com.reals.app.domain.model.NegotiationStatus
 import com.reals.app.domain.usecase.AcceptSchedulingProposalUseCase
 import com.reals.app.domain.usecase.GetSchedulingNegotiationUseCase
@@ -55,7 +56,7 @@ class SchedulingCoordinatorTest {
         val state = coordinator.acceptProposal(baseState(), "proposal-1")
 
         assertEquals(false, state.submitting)
-        assertEquals("Aceptamos el horario.", state.message)
+        assertEquals("Horario confirmado.", state.message)
         assertEquals(NegotiationStatus.Confirmed, state.negotiation?.status)
     }
 
@@ -66,8 +67,24 @@ class SchedulingCoordinatorTest {
         val state = coordinator.rejectRound(baseState())
 
         assertEquals(false, state.submitting)
-        assertEquals("Abrimos una nueva ronda de horarios.", state.message)
+        assertEquals("No hubo acuerdo.", state.message)
         assertEquals(NegotiationStatus.Failed, state.negotiation?.status)
+    }
+
+    @Test
+    fun `reject round pending next round updates state`() = runBlocking {
+        api.negotiationResponse = Response.success(TestDtos.negotiation("PENDING").copy(roundNumber = 3))
+        val current = baseState().copy(
+            negotiation = TestDtos.negotiation("PENDING").copy(roundNumber = 2).toDomain(),
+        )
+
+        val state = coordinator.rejectRound(current)
+
+        assertEquals(false, state.submitting)
+        assertEquals("Ronda rechazada, se abrio una nueva ronda.", state.message)
+        assertEquals(3, state.negotiation?.roundNumber)
+        assertEquals(NegotiationStatus.Pending, state.negotiation?.status)
+        assertEquals(listOf("rejectConnectionNegotiationRound", "getConnectionNegotiation", "getConnectionProposals"), api.calls)
     }
 
     private fun baseState() = RealsRootUiState.Scheduling(
