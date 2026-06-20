@@ -90,8 +90,18 @@ fun MatchmakingHomeScreen(
             model.activeInteractionsSummary?.actionableConnectionCount,
         ) {
             while (true) {
-                delay(10_000.milliseconds)
+                delay(60_000.milliseconds)
                 onPollHome()
+            }
+        }
+    }
+
+    if (model.shouldPollSecondChatAvailability()) {
+        LaunchedEffect(model.nextSteps) {
+            while (true) {
+                delay(model.nextSecondChatPollDelayMillis().milliseconds)
+                onPollHome()
+                if (!model.shouldPollSecondChatAvailability()) break
             }
         }
     }
@@ -207,7 +217,6 @@ private fun MatchmakingIdleScreen(
             onOpenScheduling = onOpenScheduling,
             onOpenSecondChat = onOpenSecondChat,
             onOpenPartnerProfile = onOpenConnectionPartnerProfile,
-            onRefreshHome = onRefreshHome,
         )
         Card(
             modifier = Modifier.fillMaxWidth(),

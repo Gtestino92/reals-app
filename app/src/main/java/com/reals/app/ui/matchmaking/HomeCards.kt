@@ -10,11 +10,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.reals.app.core.security.TextSafety
@@ -23,8 +18,6 @@ import com.reals.app.ui.common.formatBackendTime
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.format.DateTimeParseException
-import kotlinx.coroutines.delay
-import kotlin.time.Duration.Companion.seconds
 
 @Composable
 internal fun PendingActionsCard(
@@ -78,7 +71,6 @@ internal fun NextStepCard(
     onOpenScheduling: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenSecondChat: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenPartnerProfile: (matchId: String) -> Unit,
-    onRefreshHome: () -> Unit,
 ) {
     if (nextSteps.isEmpty()) return
 
@@ -107,7 +99,6 @@ internal fun NextStepCard(
                     onOpenScheduling = onOpenScheduling,
                     onOpenSecondChat = onOpenSecondChat,
                     onOpenPartnerProfile = onOpenPartnerProfile,
-                    onRefreshHome = onRefreshHome,
                 )
             }
         }
@@ -182,21 +173,10 @@ private fun NextStepItem(
     onOpenScheduling: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenSecondChat: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenPartnerProfile: (matchId: String) -> Unit,
-    onRefreshHome: () -> Unit,
 ) {
     val partnerName = item.partnerDisplayName()
         ?.let(TextSafety::safeDisplay)
-    val secondChatAvailableAt = item.secondChatAvailableAt()
-    var nowMillis by remember(secondChatAvailableAt) { mutableStateOf(System.currentTimeMillis()) }
-
-    LaunchedEffect(secondChatAvailableAt) {
-        val target = secondChatAvailableAt.toInstantOrNull() ?: return@LaunchedEffect
-        while (Instant.ofEpochMilli(nowMillis).isBefore(target)) {
-            delay(1.seconds)
-            nowMillis = System.currentTimeMillis()
-        }
-        onRefreshHome()
-    }
+    val nowMillis = System.currentTimeMillis()
 
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(
@@ -247,7 +227,7 @@ private fun NextStepItem(
                         item.matchIdForProfile().isNotBlank(),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(item.secondChatCtaLabel(canOpenSecondChat))
+                    Text(item.secondChatCtaLabel(canOpenSecondChat, nowMillis))
                 }
             }
             Button(
@@ -307,20 +287,25 @@ private fun HomeNextStepItem.body(): String = when (this) {
 private fun HomeNextStepItem.canOpenSecondChat(nowMillis: Long = System.currentTimeMillis()): Boolean =
     when (this) {
         is HomeNextStepItem.SecondChatAvailable ->
-            availableAt.toInstantOrNull()?.let { !Instant.ofEpochMilli(nowMillis).isBefore(it) } == true
-        is HomeNextStepItem.SecondChatReadOnly -> chatId?.isNotBlank() == true || chatStatus == "EXPIRED"
-        is HomeNextStepItem.SecondChatScheduled ->
-            availableAt.toInstantOrNull()?.let { !Instant.ofEpochMilli(nowMillis).isBefore(it) } == true
+            hasSecondChatReference() &&
+                availableAt.toInstantOrNull()?.let { !Instant.ofEpochMilli(nowMillis).isBefore(it) } == true
+        is HomeNextStepItem.SecondChatReadOnly -> hasSecondChatReference()
+        is HomeNextStepItem.SecondChatScheduled -> false
 
         else -> false
     }
 
-private fun HomeNextStepItem.secondChatCtaLabel(canOpenSecondChat: Boolean): String =
+private fun HomeNextStepItem.secondChatCtaLabel(canOpenSecondChat: Boolean, nowMillis: Long): String =
     if (canOpenSecondChat) {
         if (this is HomeNextStepItem.SecondChatReadOnly) "Ver segundo chat" else "Entrar al segundo chat"
     } else {
-        secondChatAvailableAt()?.let { "Disponible a las ${formatBackendTime(it)}" }
-            ?: "Segundo chat pendiente"
+        val availableInstant = secondChatAvailableAt().toInstantOrNull()
+        when {
+            availableInstant != null && !Instant.ofEpochMilli(nowMillis).isBefore(availableInstant) ->
+                "Preparando segundo chat..."
+            else -> secondChatAvailableAt()?.let { "Disponible a las ${formatBackendTime(it)}" }
+                ?: "Segundo chat pendiente"
+        }
     }
 
 private fun HomeNextStepItem.secondChatAvailableAt(): String? =
@@ -338,6 +323,15 @@ private fun String?.toInstantOrNull(): Instant? =
         } catch (_: DateTimeParseException) {
             null
         }
+    }
+
+private fun HomeNextStepItem.hasSecondChatReference(): Boolean =
+    when (this) {
+        is HomeNextStepItem.SecondChatAvailable ->
+            chatId?.isNotBlank() == true && (chatStatus == "AVAILABLE" || chatStatus == "ACTIVE")
+        is HomeNextStepItem.SecondChatReadOnly ->
+            chatId?.isNotBlank() == true && chatStatus == "EXPIRED"
+        else -> false
     }
 
 private fun HomeNextStepItem.durationLabel(): String {
