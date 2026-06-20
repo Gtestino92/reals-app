@@ -528,7 +528,7 @@ private fun ChatActionsDialog(
                     onClick = onShowSafety,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Reportar seguridad")
+                    Text("Reportar y cerrar chat")
                 }
                 TextButton(enabled = !actionLoading, onClick = onDismiss) {
                     Text("Cerrar")
@@ -548,10 +548,10 @@ private fun SafetyReportDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Reporte de seguridad") },
+        title = { Text("Reportar y cerrar chat") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Describe que paso. Este reporte cierra el chat por seguridad.")
+                Text("Describi que paso. Este reporte cerrara el chat por seguridad y sera revisado.")
                 OutlinedTextField(
                     value = details,
                     onValueChange = onDetailsChange,

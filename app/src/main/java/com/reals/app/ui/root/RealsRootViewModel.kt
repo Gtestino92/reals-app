@@ -836,7 +836,7 @@ class RealsRootViewModel(
             return
         }
         runChatExitAction(
-            successMessage = "Cerraste el chat por seguridad.",
+            successMessage = "Reporte enviado. Cerramos esta conversacion por seguridad.",
             loadingLabel = "Enviando reporte...",
         ) { chatId ->
             safetyCancelChatUseCase(chatId, ChatExitReason.InappropriateBehavior, cleanDetails)
@@ -1641,7 +1641,10 @@ class RealsRootViewModel(
                     val outcome = result.value as? ChatExitOutcome
                     if (outcome != null && outcome.chat.status != ChatStatus.Active) {
                         hideFirstChatLocally(current.matchId)
-                        routeAfterFirstChatClosed(current.session, null)
+                        returnHomeAfterFirstChatExit(
+                            session = current.session,
+                            message = successMessage,
+                        )
                         return@launch
                     }
                     if (outcome?.exitRequest?.status.isResolvedExitStatus()) {
