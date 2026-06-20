@@ -207,6 +207,7 @@ private fun MatchmakingIdleScreen(
             onOpenScheduling = onOpenScheduling,
             onOpenSecondChat = onOpenSecondChat,
             onOpenPartnerProfile = onOpenConnectionPartnerProfile,
+            onRefreshHome = onRefreshHome,
         )
         Card(
             modifier = Modifier.fillMaxWidth(),

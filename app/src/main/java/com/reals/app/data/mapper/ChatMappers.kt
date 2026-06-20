@@ -32,6 +32,7 @@ fun ChatResponseDto.toDomain(): Chat = Chat(
     myDecision = ChatDecisionState.fromBackend(myDecision),
     partnerDecision = ChatDecisionState.fromBackend(partnerDecision),
     endedAt = endedAt,
+    readOnlyUntil = readOnlyUntil,
     lastMessageAt = lastMessageAt,
 )
 

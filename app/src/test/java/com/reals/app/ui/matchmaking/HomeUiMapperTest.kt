@@ -112,6 +112,12 @@ class HomeUiMapperTest {
                         partner = null,
                         secondChat = homeChat("available-chat", ChatStatus.Available, "Jordan"),
                     ),
+                    HomeNextStep.SecondChatReadOnly(
+                        connectionId = "connection-read-only",
+                        matchId = "match-read-only",
+                        partner = null,
+                        secondChat = homeChat("read-only-chat", ChatStatus.Expired, "Riley"),
+                    ),
                 ),
             ),
             localHidden = noHiddenInteractions(),
@@ -122,6 +128,8 @@ class HomeUiMapperTest {
         assertEquals("Taylor", (model.nextSteps[0] as HomeNextStepItem.SecondChatScheduled).partnerDisplayName)
         assertTrue(model.nextSteps[1] is HomeNextStepItem.SecondChatAvailable)
         assertEquals("Jordan", (model.nextSteps[1] as HomeNextStepItem.SecondChatAvailable).partnerDisplayName)
+        assertTrue(model.nextSteps[2] is HomeNextStepItem.SecondChatReadOnly)
+        assertEquals("Riley", (model.nextSteps[2] as HomeNextStepItem.SecondChatReadOnly).partnerDisplayName)
     }
 
     @Test
@@ -182,7 +190,10 @@ class HomeUiMapperTest {
         chatId = chatId,
         chatType = ChatType.SecondChat,
         chatStatus = status,
-        expiresAt = null,
+        availableAt = "2026-06-20T18:00:00-03:00",
+        expiresAt = "2026-06-20T20:00:00-03:00",
+        readOnlyUntil = "2026-06-21T20:00:00-03:00",
+        durationMinutes = 120,
         partner = partner(partnerName),
     )
 

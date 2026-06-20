@@ -18,6 +18,7 @@ data class ChatResponseDto(
     val myDecision: String? = null,
     val partnerDecision: String? = null,
     val endedAt: String? = null,
+    val readOnlyUntil: String? = null,
     val lastMessageAt: String? = null,
 )
 

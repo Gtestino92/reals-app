@@ -71,6 +71,7 @@ fun ChatScreen(
     showDecisionActions: Boolean = true,
     showExitActions: Boolean = true,
     allowAvailableChat: Boolean = false,
+    onBackHome: (() -> Unit)? = null,
     onRefresh: () -> Unit,
     onSendMessage: (String) -> Unit,
     onApprove: () -> Unit,
@@ -123,6 +124,15 @@ fun ChatScreen(
         )
         error?.let { ApiErrorFeedbackCard(it, ErrorContext.Chat) }
         message?.let { SuccessFeedback(it) }
+        onBackHome?.let { back ->
+            OutlinedButton(
+                onClick = back,
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Volver a Home")
+            }
+        }
         MessageList(
             currentUserId = currentUserId,
             messages = messages,

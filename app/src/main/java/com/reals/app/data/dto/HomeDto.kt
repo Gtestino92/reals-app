@@ -58,9 +58,12 @@ data class HomePassiveNoticeResponseDto(
 
 @Serializable
 data class HomeChatResponseDto(
-    val chatId: String,
-    val chatType: String,
-    val chatStatus: String,
-    val expiresAt: String? = null,
+    val chatId: String? = null,
+    val chatType: String? = null,
+    val chatStatus: String? = null,
+    val availableAt: String,
+    val expiresAt: String,
+    val readOnlyUntil: String? = null,
+    val durationMinutes: Long,
     val partner: ChatPartnerResponseDto? = null,
 )

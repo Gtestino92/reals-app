@@ -199,6 +199,7 @@ fun RealsApp(appContainer: AppContainer) {
                 showDecisionActions = false,
                 showExitActions = false,
                 allowAvailableChat = true,
+                onBackHome = viewModel::closeSecondChat,
                 onRefresh = { viewModel.refreshSecondChat(silent = true) },
                 onSendMessage = viewModel::sendSecondChatMessage,
                 onApprove = {},

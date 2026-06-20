@@ -82,7 +82,9 @@ class HomeUiMapper {
                             partnerDisplayName = nextStep.partnerDisplayName(),
                             chatId = nextStep.secondChat?.chatId,
                             chatStatus = nextStep.secondChat?.chatStatus?.rawValue,
+                            availableAt = nextStep.secondChat?.availableAt,
                             expiresAt = nextStep.secondChat?.expiresAt,
+                            durationMinutes = nextStep.secondChat?.durationMinutes,
                         )
                     }
 
@@ -96,7 +98,26 @@ class HomeUiMapper {
                             partnerDisplayName = nextStep.partnerDisplayName(),
                             chatId = nextStep.secondChat?.chatId,
                             chatStatus = nextStep.secondChat?.chatStatus?.rawValue,
+                            availableAt = nextStep.secondChat?.availableAt,
                             expiresAt = nextStep.secondChat?.expiresAt,
+                            durationMinutes = nextStep.secondChat?.durationMinutes,
+                        )
+                    }
+
+                is HomeNextStep.SecondChatReadOnly ->
+                    if (nextStep.secondChat?.chatStatus.isClosedSecondChatStatus()) {
+                        null
+                    } else {
+                        HomeNextStepItem.SecondChatReadOnly(
+                            connectionId = nextStep.connectionId,
+                            matchId = nextStep.matchId,
+                            partnerDisplayName = nextStep.partnerDisplayName(),
+                            chatId = nextStep.secondChat?.chatId,
+                            chatStatus = nextStep.secondChat?.chatStatus?.rawValue,
+                            availableAt = nextStep.secondChat?.availableAt,
+                            expiresAt = nextStep.secondChat?.expiresAt,
+                            readOnlyUntil = nextStep.secondChat?.readOnlyUntil,
+                            durationMinutes = nextStep.secondChat?.durationMinutes,
                         )
                     }
 
@@ -159,9 +180,12 @@ class HomeUiMapper {
         secondChat?.partner?.displayName?.takeIf { it.isNotBlank() }
             ?: partner?.displayName?.takeIf { it.isNotBlank() }
 
+    private fun HomeNextStep.SecondChatReadOnly.partnerDisplayName(): String? =
+        secondChat?.partner?.displayName?.takeIf { it.isNotBlank() }
+            ?: partner?.displayName?.takeIf { it.isNotBlank() }
+
     private fun ChatStatus?.isClosedSecondChatStatus(): Boolean =
         this == ChatStatus.Cancelled ||
-            this == ChatStatus.Expired ||
             this == ChatStatus.Abandoned ||
             this == ChatStatus.Closed ||
             this == ChatStatus.Finished
