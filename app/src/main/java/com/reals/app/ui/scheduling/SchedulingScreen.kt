@@ -291,7 +291,7 @@ private fun ProposalSelectorCard(
         null
     }
     val candidateValue = candidateSelection?.let { buildSchedulingSlot(it, zoneId).toString() }
-    val selectedLabels = selected.sortedBy { runCatching { OffsetDateTime.parse(it).toInstant() }.getOrNull() }
+    val selectedLabels = selected
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -300,7 +300,7 @@ private fun ProposalSelectorCard(
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Elegir horarios", style = MaterialTheme.typography.titleMedium)
             Text(
-                text = "Selecciona entre 1 y 3 opciones futuras.",
+                text = "Selecciona entre 1 y 3 opciones futuras. El orden en que las agregas marca tu prioridad.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
@@ -383,7 +383,7 @@ private fun ProposalSelectorCard(
                         selected.size >= 3 -> validationError = "Podes elegir hasta 3 horarios."
                         validation != null -> validationError = validation
                         else -> {
-                            selected = (selected + value).sortedBy { OffsetDateTime.parse(it).toInstant() }
+                            selected = selected + value
                             validationError = null
                         }
                     }
@@ -394,7 +394,7 @@ private fun ProposalSelectorCard(
                 Text("Agregar opcion")
             }
 
-            Text("Opciones elegidas", style = MaterialTheme.typography.titleSmall)
+            Text("Opciones elegidas por prioridad", style = MaterialTheme.typography.titleSmall)
             if (selectedLabels.isEmpty()) {
                 Text(
                     text = "Todavia no agregaste horarios.",
@@ -402,13 +402,14 @@ private fun ProposalSelectorCard(
                 )
             } else {
                 selectedLabels.forEach { value ->
+                    val priority = selectedLabels.indexOf(value) + 1
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = formatBackendDateTime(value),
+                            text = "Prioridad $priority: ${formatBackendDateTime(value)}",
                             modifier = Modifier.weight(1f),
                         )
                         OutlinedButton(
@@ -591,10 +592,10 @@ private fun WaitingPartnerCard(myProposals: List<SchedulingProposal>) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Esperando propuestas de la otra persona", style = MaterialTheme.typography.titleMedium)
             Text(
-                text = "Ya enviamos tus horarios de esta ronda. Te avisamos cuando haya opciones para revisar.",
+                text = "Ya enviamos tus horarios de esta ronda en orden de prioridad. Te avisamos cuando haya opciones para revisar.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            ProposalList("Tus horarios", myProposals)
+            ProposalList("Tus horarios por prioridad", myProposals)
         }
     }
 }
@@ -611,8 +612,12 @@ private fun ReviewProposalsCard(
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Revisa las opciones recibidas", style = MaterialTheme.typography.titleMedium)
-            ProposalList("Tus horarios", myProposals)
-            ProposalList("Horarios de la otra persona", partnerProposals)
+            Text(
+                text = "Las opciones aparecen en orden de prioridad. Prioridad 1 es la preferida.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            ProposalList("Tus horarios por prioridad", myProposals)
+            ProposalList("Horarios de la otra persona por prioridad", partnerProposals)
             partnerProposals
                 .filter { it.status == ProposalStatus.Pending }
                 .forEach { proposal ->
@@ -688,6 +693,12 @@ private fun ProposalListCard(
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
+            if (proposals.isNotEmpty()) {
+                Text(
+                    text = "Ordenadas por prioridad. Prioridad 1 es la preferida.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             if (proposals.isEmpty()) {
                 Text(emptyMessage, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
@@ -714,7 +725,7 @@ private fun ProposalList(title: String, proposals: List<SchedulingProposal>) {
 @Composable
 private fun ProposalRow(proposal: SchedulingProposal) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(formatBackendDateTime(proposal.proposedDateTime))
+        Text("Prioridad ${proposal.preferenceOrder}: ${formatBackendDateTime(proposal.proposedDateTime)}")
         Text(
             proposal.status.userLabel(),
             color = MaterialTheme.colorScheme.onSurfaceVariant,

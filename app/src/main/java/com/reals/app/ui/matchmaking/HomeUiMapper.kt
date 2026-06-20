@@ -80,6 +80,9 @@ class HomeUiMapper {
                             connectionId = nextStep.connectionId,
                             matchId = nextStep.matchId,
                             partnerDisplayName = nextStep.partnerDisplayName(),
+                            chatId = nextStep.secondChat?.chatId,
+                            chatStatus = nextStep.secondChat?.chatStatus?.rawValue,
+                            expiresAt = nextStep.secondChat?.expiresAt,
                         )
                     }
 
@@ -91,6 +94,9 @@ class HomeUiMapper {
                             connectionId = nextStep.connectionId,
                             matchId = nextStep.matchId,
                             partnerDisplayName = nextStep.partnerDisplayName(),
+                            chatId = nextStep.secondChat?.chatId,
+                            chatStatus = nextStep.secondChat?.chatStatus?.rawValue,
+                            expiresAt = nextStep.secondChat?.expiresAt,
                         )
                     }
 

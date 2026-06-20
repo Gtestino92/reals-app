@@ -16,7 +16,7 @@ import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.VisualDecision
 import com.reals.app.ui.account.AccountDeletionRecoveryScreen
 import com.reals.app.ui.auth.LoginScreen
-import com.reals.app.ui.chat.FirstChatScreen
+import com.reals.app.ui.chat.ChatScreen
 import com.reals.app.ui.chat.PartnerProfileScreen
 import com.reals.app.ui.chat.VisualApprovalScreen
 import com.reals.app.ui.common.FullScreenMessage
@@ -146,6 +146,7 @@ fun RealsApp(appContainer: AppContainer) {
                             onOpenFirstChat = { matchId, chatId -> viewModel.openFirstChat(matchId, chatId) },
                             onOpenVisualApproval = viewModel::openVisualApproval,
                             onOpenScheduling = viewModel::openScheduling,
+                            onOpenSecondChat = viewModel::openSecondChat,
                             onOpenConnectionPartnerProfile = viewModel::openConnectionPartnerProfile,
                             onEditProfile = viewModel::openProfileManagement,
                             onSignOut = viewModel::signOut,
@@ -155,7 +156,7 @@ fun RealsApp(appContainer: AppContainer) {
                 }
             }
 
-            is RealsRootUiState.FirstChat -> FirstChatScreen(
+            is RealsRootUiState.FirstChat -> ChatScreen(
                 currentUserId = current.session.user.id,
                 matchId = current.matchId,
                 match = current.match,
@@ -178,6 +179,35 @@ fun RealsApp(appContainer: AppContainer) {
                 onAcceptExitRequest = viewModel::acceptChatExitRequest,
                 onRejectExitRequest = viewModel::rejectChatExitRequest,
                 onExitRequestTimeout = viewModel::timeoutChatExitRequest,
+            )
+
+            is RealsRootUiState.SecondChat -> ChatScreen(
+                currentUserId = current.session.user.id,
+                matchId = current.matchId,
+                match = null,
+                chat = current.chat,
+                messages = current.messages,
+                exitRequests = current.exitRequests,
+                loading = current.loading,
+                refreshing = current.refreshing,
+                sending = current.sending,
+                actionLoading = current.actionLoading,
+                actionLoadingLabel = current.actionLoadingLabel,
+                error = current.error,
+                message = current.message,
+                chatTitlePrefix = "Segundo chat",
+                showDecisionActions = false,
+                showExitActions = false,
+                allowAvailableChat = true,
+                onRefresh = { viewModel.refreshSecondChat(silent = true) },
+                onSendMessage = viewModel::sendSecondChatMessage,
+                onApprove = {},
+                onReject = {},
+                onRequestMutualExit = {},
+                onSafetyCancel = {},
+                onAcceptExitRequest = {},
+                onRejectExitRequest = {},
+                onExitRequestTimeout = {},
             )
 
             is RealsRootUiState.VisualApproval -> VisualApprovalScreen(

@@ -53,7 +53,7 @@ import kotlin.time.Duration.Companion.milliseconds
 private const val MUTUAL_EXIT_TIMEOUT_SECONDS = 20L
 
 @Composable
-fun FirstChatScreen(
+fun ChatScreen(
     currentUserId: String,
     matchId: String,
     match: Match?,
@@ -67,6 +67,10 @@ fun FirstChatScreen(
     actionLoadingLabel: String?,
     error: ApiError?,
     message: String?,
+    chatTitlePrefix: String = "Chat",
+    showDecisionActions: Boolean = true,
+    showExitActions: Boolean = true,
+    allowAvailableChat: Boolean = false,
     onRefresh: () -> Unit,
     onSendMessage: (String) -> Unit,
     onApprove: () -> Unit,
@@ -82,12 +86,14 @@ fun FirstChatScreen(
     var showingSafetyDialog by rememberSaveable(chat?.id) { mutableStateOf(false) }
     var showingActionsDialog by rememberSaveable(chat?.id) { mutableStateOf(false) }
     val busy = loading || sending || actionLoading
-    val canChat = chat?.status == ChatStatus.Active
+    val canChat = chat?.status == ChatStatus.Active ||
+        (allowAvailableChat && chat?.status == ChatStatus.Available)
     val pendingExitRequest = exitRequests
         .filter { it.status == ChatExitRequestStatus.Pending }
         .maxByOrNull { it.createdAt }
     val exitFlowLocked = pendingExitRequest != null
-    val canDecide = match?.state == MatchState.ChatActive &&
+    val canDecide = showDecisionActions &&
+        match?.state == MatchState.ChatActive &&
         chat?.status == ChatStatus.Active &&
         chat.myDecision == ChatDecisionState.Pending &&
         !exitFlowLocked
@@ -108,10 +114,12 @@ fun FirstChatScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         ChatHeader(
+            titlePrefix = chatTitlePrefix,
             partnerName = partnerDisplayName,
             expiresAt = chat?.expiresAt,
             myDecision = chat?.myDecision,
             partnerDecision = chat?.partnerDecision,
+            showDecisionSummary = showDecisionActions,
         )
         error?.let { ApiErrorFeedbackCard(it, ErrorContext.Chat) }
         message?.let { SuccessFeedback(it) }
@@ -129,8 +137,10 @@ fun FirstChatScreen(
             actionLoadingLabel = actionLoadingLabel,
             canDecide = canDecide,
             currentUserId = currentUserId,
-            activeExitRequest = pendingExitRequest,
+            activeExitRequest = if (showExitActions) pendingExitRequest else null,
             canOpenActions = !exitFlowLocked,
+            showDecisionActions = showDecisionActions,
+            showExitActions = showExitActions,
             onDraftChange = { draft = it.take(1_000) },
             onSend = {
                 onSendMessage(draft)
@@ -144,7 +154,7 @@ fun FirstChatScreen(
         )
     }
 
-    if (showingSafetyDialog) {
+    if (showingSafetyDialog && showExitActions) {
         SafetyReportDialog(
             details = safetyDetails,
             actionLoading = actionLoading,
@@ -160,7 +170,7 @@ fun FirstChatScreen(
         )
     }
 
-    if (showingActionsDialog) {
+    if (showingActionsDialog && showExitActions) {
         ChatActionsDialog(
             actionLoading = actionLoading,
             canChat = canChat,
@@ -187,10 +197,12 @@ fun FirstChatScreen(
 
 @Composable
 private fun ChatHeader(
+    titlePrefix: String,
     partnerName: String?,
     expiresAt: String?,
     myDecision: ChatDecisionState?,
     partnerDecision: ChatDecisionState?,
+    showDecisionSummary: Boolean,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -203,7 +215,8 @@ private fun ChatHeader(
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
-                text = partnerName?.let { "Chat con ${TextSafety.safeDisplay(it)}" } ?: "Cargando chat",
+                text = partnerName?.let { "$titlePrefix con ${TextSafety.safeDisplay(it)}" }
+                    ?: "Cargando $titlePrefix",
                 style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.primary,
             )
@@ -211,7 +224,7 @@ private fun ChatHeader(
                 text = "Valido hasta ${formatBackendDateTime(expiresAt)}",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            chatDecisionSummary(myDecision, partnerDecision, partnerName)?.let {
+            if (showDecisionSummary) chatDecisionSummary(myDecision, partnerDecision, partnerName)?.let {
                 Text(
                     text = it,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -276,6 +289,8 @@ private fun ChatComposer(
     currentUserId: String,
     activeExitRequest: ChatExitRequest?,
     canOpenActions: Boolean,
+    showDecisionActions: Boolean,
+    showExitActions: Boolean,
     onDraftChange: (String) -> Unit,
     onSend: () -> Unit,
     onApprove: () -> Unit,
@@ -323,20 +338,24 @@ private fun ChatComposer(
                 ) {
                     Text(if (sending) "Enviando..." else "Enviar")
                 }
-                OutlinedButton(
-                    onClick = onShowActions,
-                enabled = !busy && canOpenActions,
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(if (actionLoading) actionLoadingLabel ?: "Procesando..." else "Mas acciones")
+                if (showExitActions) {
+                    OutlinedButton(
+                        onClick = onShowActions,
+                        enabled = !busy && canOpenActions,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(if (actionLoading) actionLoadingLabel ?: "Procesando..." else "Mas acciones")
+                    }
+                }
             }
-            }
-            Button(
-                onClick = onApprove,
-                enabled = !busy && canDecide,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(if (actionLoading) actionLoadingLabel ?: "Procesando..." else "Aprobar chat")
+            if (showDecisionActions) {
+                Button(
+                    onClick = onApprove,
+                    enabled = !busy && canDecide,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (actionLoading) actionLoadingLabel ?: "Procesando..." else "Aprobar chat")
+                }
             }
         }
     }

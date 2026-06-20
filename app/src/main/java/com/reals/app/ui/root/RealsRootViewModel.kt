@@ -73,6 +73,7 @@ class RealsRootViewModel(
     private val safetyCancelChatUseCase = dependencies.firstChat.safetyCancelChat
     private val getVisualProfileUseCase = dependencies.visualApproval.getVisualProfile
     private val firstChatCoordinator = FirstChatCoordinator(dependencies.firstChat)
+    private val secondChatCoordinator = SecondChatCoordinator(dependencies.firstChat)
     private val visualApprovalCoordinator = VisualApprovalCoordinator(dependencies.visualApproval)
     private val schedulingCoordinator = SchedulingCoordinator(dependencies.scheduling)
     private val homeUiMapper = HomeUiMapper()
@@ -367,6 +368,100 @@ class RealsRootViewModel(
             home = HomeUiState(homeLoading = true),
         )
         refreshHomeState()
+    }
+
+    fun openSecondChat(
+        connectionId: String,
+        matchId: String,
+        partnerName: String? = null,
+    ) {
+        val session = when (val current = _uiState.value) {
+            is RealsRootUiState.Ready -> current.session
+            is RealsRootUiState.SecondChat -> current.session
+            else -> return
+        }
+        val cleanConnectionId = connectionId.trim()
+        val cleanMatchId = matchId.trim()
+        if (cleanConnectionId.isBlank() || cleanMatchId.isBlank()) return
+
+        viewModelScope.launch {
+            _uiState.value = RealsRootUiState.SecondChat(
+                session = session,
+                connectionId = cleanConnectionId,
+                matchId = cleanMatchId,
+                partnerName = partnerName,
+                loading = true,
+            )
+            _uiState.value = secondChatCoordinator.load(
+                session = session,
+                connectionId = cleanConnectionId,
+                matchId = cleanMatchId,
+                partnerName = partnerName,
+            )
+        }
+    }
+
+    fun refreshSecondChat(silent: Boolean = false) {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        if (current.refreshing || current.sending || current.actionLoading) return
+        if (current.chat == null) return openSecondChat(
+            connectionId = current.connectionId,
+            matchId = current.matchId,
+            partnerName = current.partnerName,
+        )
+
+        viewModelScope.launch {
+            if (!silent) {
+                _uiState.value = current.copy(
+                    refreshing = true,
+                    error = null,
+                    message = null,
+                )
+            }
+            val result = secondChatCoordinator.refresh(current, silent)
+            val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return@launch
+            if (silent && (
+                    latest.connectionId != current.connectionId ||
+                        latest.sending ||
+                        latest.actionLoading
+                    )
+            ) {
+                return@launch
+            }
+            _uiState.value = result
+        }
+    }
+
+    fun sendSecondChatMessage(content: String) {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        if (current.loading || current.refreshing || current.sending || current.actionLoading) return
+        if (current.chat == null) return
+        val cleanContent = TextSafety.normalizeMultiline(content, maxLength = 1_000)
+        if (cleanContent.isBlank() || TextSafety.containsHtmlLikeMarkup(cleanContent)) {
+            _uiState.value = current.copy(
+                error = ApiError.Unexpected("El mensaje no es valido."),
+                message = null,
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.value = current.copy(sending = true, error = null, message = null)
+            _uiState.value = secondChatCoordinator.sendMessage(current, cleanContent)
+        }
+    }
+
+    fun closeSecondChat() {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        viewModelScope.launch {
+            loadHomeForReady(
+                ready = RealsRootUiState.Ready(
+                    session = current.session,
+                    home = HomeUiState(homeLoading = true),
+                ),
+                autoNavigateEngagements = false,
+            )
+        }
     }
 
     fun openVisualApproval(matchId: String) {

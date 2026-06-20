@@ -34,6 +34,7 @@ import com.reals.app.domain.usecase.GetProfilePhotosUseCase
 import com.reals.app.domain.usecase.GetQueueStatusUseCase
 import com.reals.app.domain.usecase.GetSchedulingNegotiationUseCase
 import com.reals.app.domain.usecase.GetSchedulingProposalsUseCase
+import com.reals.app.domain.usecase.GetSecondChatForConnectionUseCase
 import com.reals.app.domain.usecase.GetVisualProfileUseCase
 import com.reals.app.domain.usecase.LeaveQueueUseCase
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
@@ -100,6 +101,7 @@ class AppContainer(context: Context) {
     val putMyPersonalMessageUseCase = PutMyPersonalMessageUseCase(matchRepository)
     val getPartnerPersonalMessageUseCase = GetPartnerPersonalMessageUseCase(matchRepository)
     val getChatUseCase = GetChatUseCase(chatRepository)
+    val getSecondChatForConnectionUseCase = GetSecondChatForConnectionUseCase(chatRepository)
     val getChatMessagesUseCase = GetChatMessagesUseCase(chatRepository)
     val sendChatMessageUseCase = SendChatMessageUseCase(chatRepository)
     val getChatExitRequestsUseCase = GetChatExitRequestsUseCase(chatRepository)
@@ -144,7 +146,9 @@ class AppContainer(context: Context) {
         ),
         firstChat = FirstChatFeatureDependencies(
             getMatch = getMatchUseCase,
+            getChat = getChatUseCase,
             getFirstChatForMatch = getFirstChatForMatchUseCase,
+            getSecondChatForConnection = getSecondChatForConnectionUseCase,
             submitChatDecision = submitChatDecisionUseCase,
             getChatMessages = getChatMessagesUseCase,
             sendChatMessage = sendChatMessageUseCase,

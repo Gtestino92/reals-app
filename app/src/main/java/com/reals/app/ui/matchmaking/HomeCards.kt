@@ -13,6 +13,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.reals.app.core.security.TextSafety
+import com.reals.app.ui.common.formatBackendTime
+import java.time.Duration
+import java.time.Instant
+import java.time.OffsetDateTime
+import java.time.format.DateTimeParseException
+
+private val SECOND_CHAT_DURATION = Duration.ofHours(2)
+private val SECOND_CHAT_ENTRY_TOLERANCE = Duration.ofMinutes(10)
 
 @Composable
 internal fun PendingActionsCard(
@@ -64,6 +72,7 @@ internal fun NextStepCard(
     nextSteps: List<HomeNextStepItem>,
     busy: Boolean,
     onOpenScheduling: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
+    onOpenSecondChat: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenPartnerProfile: (matchId: String) -> Unit,
 ) {
     if (nextSteps.isEmpty()) return
@@ -91,6 +100,7 @@ internal fun NextStepCard(
                     item = nextStep,
                     busy = busy,
                     onOpenScheduling = onOpenScheduling,
+                    onOpenSecondChat = onOpenSecondChat,
                     onOpenPartnerProfile = onOpenPartnerProfile,
                 )
             }
@@ -164,6 +174,7 @@ private fun NextStepItem(
     item: HomeNextStepItem,
     busy: Boolean,
     onOpenScheduling: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
+    onOpenSecondChat: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenPartnerProfile: (matchId: String) -> Unit,
 ) {
     val partnerName = item.partnerDisplayName()
@@ -198,6 +209,25 @@ private fun NextStepItem(
                     Text("Coordinar horarios")
                 }
             }
+            if (item is HomeNextStepItem.SecondChatScheduled || item is HomeNextStepItem.SecondChatAvailable) {
+                val canOpenSecondChat = item.canOpenSecondChat()
+                Button(
+                    onClick = {
+                        onOpenSecondChat(
+                            item.connectionIdForSecondChat(),
+                            item.matchIdForProfile(),
+                            item.partnerDisplayName(),
+                        )
+                    },
+                    enabled = !busy &&
+                        canOpenSecondChat &&
+                        item.connectionIdForSecondChat().isNotBlank() &&
+                        item.matchIdForProfile().isNotBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(item.secondChatCtaLabel(canOpenSecondChat))
+                }
+            }
             Button(
                 onClick = { onOpenPartnerProfile(item.matchIdForProfile()) },
                 enabled = !busy && item.matchIdForProfile().isNotBlank(),
@@ -223,6 +253,12 @@ private fun HomeNextStepItem.matchIdForProfile(): String = when (this) {
     is HomeNextStepItem.Unknown -> matchId.orEmpty()
 }
 
+private fun HomeNextStepItem.connectionIdForSecondChat(): String = when (this) {
+    is HomeNextStepItem.SecondChatScheduled -> connectionId
+    is HomeNextStepItem.SecondChatAvailable -> connectionId
+    else -> ""
+}
+
 private fun HomeNextStepItem.title(): String = when (this) {
     is HomeNextStepItem.Scheduling -> "Coordinacion pendiente"
     is HomeNextStepItem.SecondChatScheduled -> "Segundo chat programado"
@@ -232,7 +268,40 @@ private fun HomeNextStepItem.title(): String = when (this) {
 
 private fun HomeNextStepItem.body(): String = when (this) {
     is HomeNextStepItem.Scheduling -> "Estado: coordinando proximo encuentro."
-    is HomeNextStepItem.SecondChatScheduled -> "Estado: segundo chat programado."
-    is HomeNextStepItem.SecondChatAvailable -> "Estado: segundo chat disponible."
+    is HomeNextStepItem.SecondChatScheduled -> "Estado: segundo chat programado. Duracion maxima: 2 horas."
+    is HomeNextStepItem.SecondChatAvailable -> "Estado: segundo chat disponible. Duracion maxima: 2 horas."
     is HomeNextStepItem.Unknown -> "Estado: $rawState."
 }
+
+private fun HomeNextStepItem.canOpenSecondChat(nowMillis: Long = System.currentTimeMillis()): Boolean =
+    when (this) {
+        is HomeNextStepItem.SecondChatAvailable -> true
+        is HomeNextStepItem.SecondChatScheduled -> {
+            chatStatus == "AVAILABLE" ||
+                chatStatus == "ACTIVE" ||
+                inferredEntryOpensAt()?.let { !Instant.ofEpochMilli(nowMillis).isBefore(it) } == true
+        }
+
+        else -> false
+    }
+
+private fun HomeNextStepItem.secondChatCtaLabel(canOpenSecondChat: Boolean): String =
+    if (canOpenSecondChat) {
+        "Entrar al segundo chat"
+    } else {
+        val opensAt = (this as? HomeNextStepItem.SecondChatScheduled)?.inferredEntryOpensAt()
+        opensAt?.let { "Disponible a las ${formatBackendTime(it.toString())}" }
+            ?: "Segundo chat pendiente"
+    }
+
+private fun HomeNextStepItem.SecondChatScheduled.inferredEntryOpensAt(): Instant? =
+    expiresAt?.let { value ->
+        try {
+            OffsetDateTime.parse(value)
+                .toInstant()
+                .minus(SECOND_CHAT_DURATION)
+                .minus(SECOND_CHAT_ENTRY_TOLERANCE)
+        } catch (_: DateTimeParseException) {
+            null
+        }
+    }

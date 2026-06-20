@@ -54,6 +54,7 @@ fun MatchmakingHomeScreen(
     onOpenFirstChat: (matchId: String, chatId: String) -> Unit,
     onOpenVisualApproval: (matchId: String) -> Unit,
     onOpenScheduling: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
+    onOpenSecondChat: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenConnectionPartnerProfile: (matchId: String) -> Unit,
     onEditProfile: () -> Unit,
     onSignOut: () -> Unit,
@@ -108,6 +109,7 @@ fun MatchmakingHomeScreen(
         onOpenFirstChat = onOpenFirstChat,
         onOpenVisualApproval = onOpenVisualApproval,
         onOpenScheduling = onOpenScheduling,
+        onOpenSecondChat = onOpenSecondChat,
         onOpenConnectionPartnerProfile = onOpenConnectionPartnerProfile,
         onEditProfile = onEditProfile,
         onSignOut = onSignOut,
@@ -129,6 +131,7 @@ private fun MatchmakingIdleScreen(
     onOpenFirstChat: (matchId: String, chatId: String) -> Unit,
     onOpenVisualApproval: (matchId: String) -> Unit,
     onOpenScheduling: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
+    onOpenSecondChat: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenConnectionPartnerProfile: (matchId: String) -> Unit,
     onEditProfile: () -> Unit,
     onSignOut: () -> Unit,
@@ -202,6 +205,7 @@ private fun MatchmakingIdleScreen(
             nextSteps = screenModel.nextSteps,
             busy = busy,
             onOpenScheduling = onOpenScheduling,
+            onOpenSecondChat = onOpenSecondChat,
             onOpenPartnerProfile = onOpenConnectionPartnerProfile,
         )
         Card(
