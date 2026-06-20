@@ -68,6 +68,7 @@ internal fun PendingActionsCard(
 internal fun NextStepCard(
     nextSteps: List<HomeNextStepItem>,
     busy: Boolean,
+    nowMillis: Long,
     onOpenScheduling: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenSecondChat: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenPartnerProfile: (matchId: String) -> Unit,
@@ -96,6 +97,7 @@ internal fun NextStepCard(
                 NextStepItem(
                     item = nextStep,
                     busy = busy,
+                    nowMillis = nowMillis,
                     onOpenScheduling = onOpenScheduling,
                     onOpenSecondChat = onOpenSecondChat,
                     onOpenPartnerProfile = onOpenPartnerProfile,
@@ -170,13 +172,13 @@ private fun VisualApprovalItem(
 private fun NextStepItem(
     item: HomeNextStepItem,
     busy: Boolean,
+    nowMillis: Long,
     onOpenScheduling: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenSecondChat: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenPartnerProfile: (matchId: String) -> Unit,
 ) {
     val partnerName = item.partnerDisplayName()
         ?.let(TextSafety::safeDisplay)
-    val nowMillis = System.currentTimeMillis()
 
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(
@@ -230,7 +232,7 @@ private fun NextStepItem(
                     Text(item.secondChatCtaLabel(canOpenSecondChat, nowMillis))
                 }
             }
-            if (item.canShowPartnerProfile()) {
+            if (item.canShowPartnerProfile(nowMillis)) {
                 Button(
                     onClick = { onOpenPartnerProfile(item.matchIdForProfile()) },
                     enabled = !busy,

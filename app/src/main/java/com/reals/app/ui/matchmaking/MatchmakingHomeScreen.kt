@@ -21,7 +21,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -66,6 +68,7 @@ fun MatchmakingHomeScreen(
     }
 
     val model = screenModel ?: emptyHomeScreenModel()
+    var nowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     if (model.matchmaking.inQueue) {
         SearchingChatScreen(
@@ -91,17 +94,20 @@ fun MatchmakingHomeScreen(
         ) {
             while (true) {
                 delay(60_000.milliseconds)
+                nowMillis = System.currentTimeMillis()
                 onPollHome()
             }
         }
     }
 
-    if (model.shouldPollSecondChatAvailability()) {
+    if (model.shouldPollSecondChatAvailability(nowMillis)) {
         LaunchedEffect(model.nextSteps) {
             while (true) {
-                delay(model.nextSecondChatPollDelayMillis().milliseconds)
+                delay(model.nextSecondChatPollDelayMillis(System.currentTimeMillis()).milliseconds)
+                val currentNowMillis = System.currentTimeMillis()
+                nowMillis = currentNowMillis
                 onPollHome()
-                if (!model.shouldPollSecondChatAvailability()) break
+                if (!model.shouldPollSecondChatAvailability(currentNowMillis)) break
             }
         }
     }
@@ -112,6 +118,7 @@ fun MatchmakingHomeScreen(
         homeLoading = homeLoading,
         homeError = homeError,
         homeMessage = homeMessage,
+        nowMillis = nowMillis,
         accountDeleteLoading = accountDeleteLoading,
         accountDeleteError = accountDeleteError,
         onEnqueue = onEnqueue,
@@ -134,6 +141,7 @@ private fun MatchmakingIdleScreen(
     homeLoading: Boolean,
     homeError: ApiError?,
     homeMessage: String?,
+    nowMillis: Long,
     accountDeleteLoading: Boolean,
     accountDeleteError: ApiError?,
     onEnqueue: (SearchLocationInput) -> Unit,
@@ -214,6 +222,7 @@ private fun MatchmakingIdleScreen(
         NextStepCard(
             nextSteps = screenModel.nextSteps,
             busy = busy,
+            nowMillis = nowMillis,
             onOpenScheduling = onOpenScheduling,
             onOpenSecondChat = onOpenSecondChat,
             onOpenPartnerProfile = onOpenConnectionPartnerProfile,
