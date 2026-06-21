@@ -10,6 +10,7 @@ import com.reals.app.data.dto.ChatExitRequestCreateRequestDto
 import com.reals.app.data.dto.ChatExitRequestResponseDto
 import com.reals.app.data.dto.ChatMessageResponseDto
 import com.reals.app.data.dto.ChatResponseDto
+import com.reals.app.data.dto.ConnectionDismissalResponseDto
 import com.reals.app.data.dto.ConnectionResponseDto
 import com.reals.app.data.dto.CreateProfileRequestDto
 import com.reals.app.data.dto.EnqueueMatchmakingRequestDto
@@ -118,6 +119,8 @@ class FakeRealsApi : RealsApi {
     var exitRequestsResponse: Response<List<ChatExitRequestResponseDto>> = Response.success(listOf(TestDtos.exitRequest()))
     var exitOutcomeResponse: Response<ChatExitOutcomeResponseDto> = Response.success(TestDtos.exitOutcome())
     var connectionResponse: Response<ConnectionResponseDto> = Response.success(TestDtos.connection())
+    var connectionDismissalResponse: Response<ConnectionDismissalResponseDto> =
+        Response.success(ConnectionDismissalResponseDto(dismissed = true))
     var negotiationResponse: Response<NegotiationResponseDto> = Response.success(TestDtos.negotiation())
     var proposalsResponse: Response<List<ScheduleProposalResponseDto>> = Response.success(listOf(TestDtos.proposal()))
 
@@ -374,6 +377,12 @@ class FakeRealsApi : RealsApi {
         connectionId: String,
     ): Response<ChatResponseDto> =
         record("getSecondChatForConnection", authorization, connectionId) { nextChatResponse() }
+
+    override suspend fun dismissSecondChatForConnection(
+        authorization: String,
+        connectionId: String,
+    ): Response<ConnectionDismissalResponseDto> =
+        record("dismissSecondChatForConnection", authorization, connectionId) { connectionDismissalResponse }
 
     override suspend fun getConnectionNegotiation(
         authorization: String,

@@ -8,6 +8,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -72,6 +73,7 @@ internal fun NextStepCard(
     onOpenScheduling: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenSecondChat: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenPartnerProfile: (matchId: String) -> Unit,
+    onDismissSecondChat: (connectionId: String) -> Unit,
 ) {
     if (nextSteps.isEmpty()) return
 
@@ -101,6 +103,7 @@ internal fun NextStepCard(
                     onOpenScheduling = onOpenScheduling,
                     onOpenSecondChat = onOpenSecondChat,
                     onOpenPartnerProfile = onOpenPartnerProfile,
+                    onDismissSecondChat = onDismissSecondChat,
                 )
             }
         }
@@ -176,6 +179,7 @@ private fun NextStepItem(
     onOpenScheduling: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenSecondChat: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenPartnerProfile: (matchId: String) -> Unit,
+    onDismissSecondChat: (connectionId: String) -> Unit,
 ) {
     val partnerName = item.partnerDisplayName()
         ?.let(TextSafety::safeDisplay)
@@ -241,6 +245,15 @@ private fun NextStepItem(
                     Text("Ver perfil")
                 }
             }
+            if (item.canDismissSecondChat(nowMillis)) {
+                OutlinedButton(
+                    onClick = { onDismissSecondChat(item.connectionIdForSecondChat()) },
+                    enabled = !busy && item.connectionIdForSecondChat().isNotBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Eliminar")
+                }
+            }
         }
     }
 }
@@ -271,6 +284,23 @@ private fun HomeNextStepItem.canShowPartnerProfile(nowMillis: Long = System.curr
         else -> true
     }
 }
+
+private fun HomeNextStepItem.canDismissSecondChat(nowMillis: Long = System.currentTimeMillis()): Boolean =
+    when (this) {
+        is HomeNextStepItem.SecondChatReadOnly -> connectionId.isNotBlank()
+        is HomeNextStepItem.SecondChatScheduled,
+        is HomeNextStepItem.SecondChatAvailable -> connectionIdForSecondChat().isNotBlank() &&
+            (isExpiredSecondChatStatus() || isStaleExpiredSecondChat(nowMillis))
+        else -> false
+    }
+
+private fun HomeNextStepItem.isExpiredSecondChatStatus(): Boolean =
+    when (this) {
+        is HomeNextStepItem.SecondChatScheduled -> chatStatus == "EXPIRED"
+        is HomeNextStepItem.SecondChatAvailable -> chatStatus == "EXPIRED"
+        is HomeNextStepItem.SecondChatReadOnly -> chatStatus == "EXPIRED"
+        else -> false
+    }
 
 private fun HomeNextStepItem.connectionIdForSecondChat(): String = when (this) {
     is HomeNextStepItem.SecondChatScheduled -> connectionId
@@ -359,7 +389,7 @@ private fun HomeNextStepItem.isStaleExpiredSecondChat(nowMillis: Long = System.c
         else -> null
     }.toInstantOrNull() ?: return false
 
-    return !hasSecondChatReference() && !Instant.ofEpochMilli(nowMillis).isBefore(expiresAt)
+    return !Instant.ofEpochMilli(nowMillis).isBefore(expiresAt)
 }
 
 private fun HomeNextStepItem.isUnavailableSecondChat(nowMillis: Long = System.currentTimeMillis()): Boolean {

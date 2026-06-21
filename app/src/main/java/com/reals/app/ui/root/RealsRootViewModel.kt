@@ -62,6 +62,7 @@ class RealsRootViewModel(
     private val enqueueMatchmakingUseCase = dependencies.home.enqueueMatchmaking
     private val getHomeUseCase = dependencies.home.getHome
     private val leaveQueueUseCase = dependencies.home.leaveQueue
+    private val dismissSecondChatUseCase = dependencies.home.dismissSecondChat
     private val getFirstChatForMatchUseCase = dependencies.firstChat.getFirstChatForMatch
     private val submitChatDecisionUseCase = dependencies.firstChat.submitChatDecision
     private val getChatExitRequestsUseCase = dependencies.firstChat.getChatExitRequests
@@ -288,6 +289,42 @@ class RealsRootViewModel(
         }
     }
 
+    fun dismissSecondChatFromHome(connectionId: String) {
+        val current = _uiState.value as? RealsRootUiState.Ready ?: return
+        val cleanConnectionId = connectionId.trim()
+        if (cleanConnectionId.isBlank()) return
+
+        viewModelScope.launch {
+            val pending = current.copy(
+                home = current.home.copy(
+                    homeLoading = true,
+                    homeError = null,
+                    homeMessage = null,
+                ),
+            )
+            _uiState.value = pending
+
+            when (val result = dismissSecondChatUseCase(cleanConnectionId)) {
+                is ApiResult.Success -> loadHomeForReady(
+                    ready = pending.copy(
+                        home = pending.home.copy(
+                            homeLoading = true,
+                            homeMessage = "Eliminamos este segundo chat de tu Home.",
+                        ),
+                    ),
+                    autoNavigateEngagements = false,
+                )
+
+                is ApiResult.Failure -> _uiState.value = pending.copy(
+                    home = pending.home.copy(
+                        homeLoading = false,
+                        homeError = result.error,
+                    ),
+                )
+            }
+        }
+    }
+
     fun openProfileManagement() {
         val current = _uiState.value as? RealsRootUiState.Ready ?: return
         _uiState.value = current.copy(editingActiveProfile = true)
@@ -448,6 +485,53 @@ class RealsRootViewModel(
         viewModelScope.launch {
             _uiState.value = current.copy(sending = true, error = null, message = null)
             _uiState.value = secondChatCoordinator.sendMessage(current, cleanContent)
+        }
+    }
+
+    fun safetyCancelSecondChat(details: String) {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        if (current.loading || current.refreshing || current.sending || current.actionLoading) return
+        val chat = current.chat ?: return
+        val cleanDetails = TextSafety.normalizeMultiline(details, maxLength = 1_000)
+        if (cleanDetails.isBlank() || TextSafety.containsHtmlLikeMarkup(cleanDetails)) {
+            _uiState.value = current.copy(
+                error = ApiError.Unexpected("El detalle del reporte no es valido."),
+                message = null,
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            val pending = current.copy(
+                actionLoading = true,
+                actionLoadingLabel = "Enviando reporte...",
+                error = null,
+                message = null,
+            )
+            _uiState.value = pending
+
+            when (val result = safetyCancelChatUseCase(
+                chat.id,
+                ChatExitReason.InappropriateBehavior,
+                cleanDetails,
+            )) {
+                is ApiResult.Success -> loadHomeForReady(
+                    ready = RealsRootUiState.Ready(
+                        session = current.session,
+                        home = HomeUiState(
+                            homeLoading = true,
+                            homeMessage = "Reporte enviado. Cerramos esta conversacion por seguridad.",
+                        ),
+                    ),
+                    autoNavigateEngagements = false,
+                )
+
+                is ApiResult.Failure -> _uiState.value = pending.copy(
+                    actionLoading = false,
+                    actionLoadingLabel = null,
+                    error = result.error,
+                )
+            }
         }
     }
 

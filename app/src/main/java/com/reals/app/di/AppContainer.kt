@@ -21,6 +21,7 @@ import com.reals.app.domain.usecase.CancelChatUseCase
 import com.reals.app.domain.usecase.CreateProfileUseCase
 import com.reals.app.domain.usecase.DeleteAccountUseCase
 import com.reals.app.domain.usecase.DeleteProfilePhotoUseCase
+import com.reals.app.domain.usecase.DismissSecondChatForConnectionUseCase
 import com.reals.app.domain.usecase.EnqueueMatchmakingUseCase
 import com.reals.app.domain.usecase.GetChatExitRequestsUseCase
 import com.reals.app.domain.usecase.GetChatMessagesUseCase
@@ -102,6 +103,7 @@ class AppContainer(context: Context) {
     val getPartnerPersonalMessageUseCase = GetPartnerPersonalMessageUseCase(matchRepository)
     val getChatUseCase = GetChatUseCase(chatRepository)
     val getSecondChatForConnectionUseCase = GetSecondChatForConnectionUseCase(chatRepository)
+    val dismissSecondChatForConnectionUseCase = DismissSecondChatForConnectionUseCase(chatRepository)
     val getChatMessagesUseCase = GetChatMessagesUseCase(chatRepository)
     val sendChatMessageUseCase = SendChatMessageUseCase(chatRepository)
     val getChatExitRequestsUseCase = GetChatExitRequestsUseCase(chatRepository)
@@ -143,6 +145,7 @@ class AppContainer(context: Context) {
             enqueueMatchmaking = enqueueMatchmakingUseCase,
             getHome = getHomeUseCase,
             leaveQueue = leaveQueueUseCase,
+            dismissSecondChat = dismissSecondChatForConnectionUseCase,
         ),
         firstChat = FirstChatFeatureDependencies(
             getMatch = getMatchUseCase,
