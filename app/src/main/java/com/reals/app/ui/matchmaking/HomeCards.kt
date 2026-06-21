@@ -290,7 +290,15 @@ private fun HomeNextStepItem.canDismissSecondChat(nowMillis: Long = System.curre
         is HomeNextStepItem.SecondChatReadOnly -> connectionId.isNotBlank()
         is HomeNextStepItem.SecondChatScheduled,
         is HomeNextStepItem.SecondChatAvailable -> connectionIdForSecondChat().isNotBlank() &&
-            isStaleExpiredSecondChat(nowMillis)
+            (isExpiredSecondChatStatus() || isStaleExpiredSecondChat(nowMillis))
+        else -> false
+    }
+
+private fun HomeNextStepItem.isExpiredSecondChatStatus(): Boolean =
+    when (this) {
+        is HomeNextStepItem.SecondChatScheduled -> chatStatus == "EXPIRED"
+        is HomeNextStepItem.SecondChatAvailable -> chatStatus == "EXPIRED"
+        is HomeNextStepItem.SecondChatReadOnly -> chatStatus == "EXPIRED"
         else -> false
     }
 
@@ -381,7 +389,7 @@ private fun HomeNextStepItem.isStaleExpiredSecondChat(nowMillis: Long = System.c
         else -> null
     }.toInstantOrNull() ?: return false
 
-    return !hasSecondChatReference() && !Instant.ofEpochMilli(nowMillis).isBefore(expiresAt)
+    return !Instant.ofEpochMilli(nowMillis).isBefore(expiresAt)
 }
 
 private fun HomeNextStepItem.isUnavailableSecondChat(nowMillis: Long = System.currentTimeMillis()): Boolean {

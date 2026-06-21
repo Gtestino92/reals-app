@@ -1,15 +1,24 @@
 package com.reals.app.ui.chat
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -26,7 +35,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ApiError
@@ -68,8 +79,10 @@ fun ChatScreen(
     error: ApiError?,
     message: String?,
     chatTitlePrefix: String = "Chat",
+    partnerNameFallback: String? = null,
     showDecisionActions: Boolean = true,
     showExitActions: Boolean = true,
+    showMutualExitActions: Boolean = true,
     allowAvailableChat: Boolean = false,
     onBackHome: (() -> Unit)? = null,
     onRefresh: () -> Unit,
@@ -100,6 +113,15 @@ fun ChatScreen(
         !exitFlowLocked
     val partnerDisplayName = chat?.partner?.displayName
         ?.takeIf { it.isNotBlank() }
+        ?: partnerNameFallback?.takeIf { it.isNotBlank() }
+
+    if (loading && chat == null) {
+        LoadingChatScreen(
+            title = "Cargando $chatTitlePrefix",
+            body = "Estamos preparando la conversacion.",
+        )
+        return
+    }
 
     LaunchedEffect(chat?.id, canChat) {
         while (canChat) {
@@ -124,15 +146,6 @@ fun ChatScreen(
         )
         error?.let { ApiErrorFeedbackCard(it, ErrorContext.Chat) }
         message?.let { SuccessFeedback(it) }
-        onBackHome?.let { back ->
-            OutlinedButton(
-                onClick = back,
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Volver a Home")
-            }
-        }
         MessageList(
             currentUserId = currentUserId,
             messages = messages,
@@ -151,6 +164,7 @@ fun ChatScreen(
             canOpenActions = !exitFlowLocked,
             showDecisionActions = showDecisionActions,
             showExitActions = showExitActions,
+            showMutualExitActions = showMutualExitActions,
             onDraftChange = { draft = it.take(1_000) },
             onSend = {
                 onSendMessage(draft)
@@ -162,6 +176,15 @@ fun ChatScreen(
             onRejectExitRequest = onRejectExitRequest,
             onExitRequestTimeout = onExitRequestTimeout,
         )
+        onBackHome?.let { back ->
+            OutlinedButton(
+                onClick = back,
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Volver a Home")
+            }
+        }
     }
 
     if (showingSafetyDialog && showExitActions) {
@@ -186,6 +209,7 @@ fun ChatScreen(
             canChat = canChat,
             canDecide = canDecide,
             exitRequests = exitRequests,
+            showMutualExitActions = showMutualExitActions,
             onDismiss = {
                 if (!actionLoading) showingActionsDialog = false
             },
@@ -201,6 +225,57 @@ fun ChatScreen(
                 showingActionsDialog = false
                 showingSafetyDialog = true
             },
+        )
+    }
+}
+
+@Composable
+private fun LoadingChatScreen(
+    title: String,
+    body: String,
+) {
+    val pulse = rememberInfiniteTransition(label = "chat-loading-pulse")
+    val scale by pulse.animateFloat(
+        initialValue = 0.85f,
+        targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1100),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "chat-loading-dot-scale",
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(28.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(112.dp)
+                .scale(scale)
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .background(MaterialTheme.colorScheme.primary, CircleShape),
+            )
+        }
+        Text(
+            text = title,
+            modifier = Modifier.padding(top = 28.dp),
+            style = MaterialTheme.typography.headlineLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = body,
+            modifier = Modifier.padding(top = 12.dp),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -301,6 +376,7 @@ private fun ChatComposer(
     canOpenActions: Boolean,
     showDecisionActions: Boolean,
     showExitActions: Boolean,
+    showMutualExitActions: Boolean,
     onDraftChange: (String) -> Unit,
     onSend: () -> Unit,
     onApprove: () -> Unit,
@@ -351,7 +427,7 @@ private fun ChatComposer(
                 if (showExitActions) {
                     OutlinedButton(
                         onClick = onShowActions,
-                        enabled = !busy && canOpenActions,
+                        enabled = !busy && (canOpenActions || !showMutualExitActions),
                         modifier = Modifier.weight(1f),
                     ) {
                         Text(if (actionLoading) actionLoadingLabel ?: "Procesando..." else "Mas acciones")
@@ -487,6 +563,7 @@ private fun ChatActionsDialog(
     canChat: Boolean,
     canDecide: Boolean,
     exitRequests: List<ChatExitRequest>,
+    showMutualExitActions: Boolean,
     onDismiss: () -> Unit,
     onRequestMutualExit: () -> Unit,
     onRejectChat: () -> Unit,
@@ -509,19 +586,21 @@ private fun ChatActionsDialog(
         },
         confirmButton = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(
-                    enabled = !actionLoading && canChat,
-                    onClick = onRequestMutualExit,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Salida consensuada")
-                }
-                OutlinedButton(
-                    enabled = !actionLoading && canDecide,
-                    onClick = onRejectChat,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Rechazar chat")
+                if (showMutualExitActions) {
+                    OutlinedButton(
+                        enabled = !actionLoading && canChat,
+                        onClick = onRequestMutualExit,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Salida consensuada")
+                    }
+                    OutlinedButton(
+                        enabled = !actionLoading && canDecide,
+                        onClick = onRejectChat,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Rechazar chat")
+                    }
                 }
                 OutlinedButton(
                     enabled = !actionLoading && canChat,

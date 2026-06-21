@@ -73,7 +73,7 @@ class HomeUiMapper {
                 )
 
                 is HomeNextStep.SecondChatScheduled ->
-                    if (nextStep.secondChat?.chatStatus.isClosedSecondChatStatus()) {
+                    if (nextStep.secondChat?.chatStatus.isDismissedSecondChatStatus()) {
                         null
                     } else {
                         HomeNextStepItem.SecondChatScheduled(
@@ -89,7 +89,7 @@ class HomeUiMapper {
                     }
 
                 is HomeNextStep.SecondChatAvailable ->
-                    if (nextStep.secondChat?.chatStatus.isClosedSecondChatStatus()) {
+                    if (nextStep.secondChat?.chatStatus.isDismissedSecondChatStatus()) {
                         null
                     } else {
                         HomeNextStepItem.SecondChatAvailable(
@@ -105,7 +105,7 @@ class HomeUiMapper {
                     }
 
                 is HomeNextStep.SecondChatReadOnly ->
-                    if (nextStep.secondChat?.chatStatus.isClosedSecondChatStatus()) {
+                    if (nextStep.secondChat?.chatStatus.isDismissedSecondChatStatus()) {
                         null
                     } else {
                         HomeNextStepItem.SecondChatReadOnly(
@@ -184,7 +184,7 @@ class HomeUiMapper {
         secondChat?.partner?.displayName?.takeIf { it.isNotBlank() }
             ?: partner?.displayName?.takeIf { it.isNotBlank() }
 
-    private fun ChatStatus?.isClosedSecondChatStatus(): Boolean =
+    private fun ChatStatus?.isDismissedSecondChatStatus(): Boolean =
         this == ChatStatus.Cancelled ||
             this == ChatStatus.Abandoned ||
             this == ChatStatus.Closed ||
