@@ -117,7 +117,8 @@ class ChatRepositoryTest {
         assertEquals("safetyCancelChat", api.calls.last())
         assertEquals("HARASSMENT", api.exitBody?.reason)
         assertEquals("safety", api.exitBody?.details)
-        assertEquals(true, outcome.penaltyApplied)
+        assertEquals(false, outcome.penaltyApplied)
+        assertEquals(null, outcome.penalizedUserId)
     }
 
     @Test

@@ -72,13 +72,13 @@ class ChatMappersTest {
     }
 
     @Test
-    fun `ChatExitOutcomeResponseDto maps cancelled chat and exit request`() {
+    fun `ChatExitOutcomeResponseDto maps cancelled safety report without immediate penalty`() {
         val outcome = TestDtos.exitOutcome().toDomain()
 
         assertEquals(ChatStatus.Cancelled, outcome.chat.status)
         assertEquals(ChatExitRequestStatus.Accepted, outcome.exitRequest.status)
-        assertEquals(true, outcome.penaltyApplied)
-        assertEquals("user-2", outcome.penalizedUserId)
+        assertEquals(false, outcome.penaltyApplied)
+        assertEquals(null, outcome.penalizedUserId)
     }
 
     @Test
