@@ -8,6 +8,7 @@ import com.reals.app.data.dto.ChatExitRequestCreateRequestDto
 import com.reals.app.data.dto.ChatExitRequestResponseDto
 import com.reals.app.data.dto.ChatMessageResponseDto
 import com.reals.app.data.dto.ChatResponseDto
+import com.reals.app.data.dto.ConnectionDismissalResponseDto
 import com.reals.app.data.dto.ConnectionResponseDto
 import com.reals.app.data.dto.CreateProfileRequestDto
 import com.reals.app.data.dto.EnqueueMatchmakingRequestDto
@@ -282,6 +283,12 @@ interface RealsApi {
         @Header("Authorization") authorization: String,
         @Path("connectionId") connectionId: String,
     ): Response<ChatResponseDto>
+
+    @POST("api/connections/{connectionId}/second-chat-dismissal")
+    suspend fun dismissSecondChatForConnection(
+        @Header("Authorization") authorization: String,
+        @Path("connectionId") connectionId: String,
+    ): Response<ConnectionDismissalResponseDto>
 
     @GET("api/connections/{connectionId}/negotiation")
     suspend fun getConnectionNegotiation(

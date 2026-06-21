@@ -58,6 +58,7 @@ fun MatchmakingHomeScreen(
     onOpenScheduling: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenSecondChat: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenConnectionPartnerProfile: (matchId: String) -> Unit,
+    onDismissSecondChat: (connectionId: String) -> Unit,
     onEditProfile: () -> Unit,
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit,
@@ -128,6 +129,7 @@ fun MatchmakingHomeScreen(
         onOpenScheduling = onOpenScheduling,
         onOpenSecondChat = onOpenSecondChat,
         onOpenConnectionPartnerProfile = onOpenConnectionPartnerProfile,
+        onDismissSecondChat = onDismissSecondChat,
         onEditProfile = onEditProfile,
         onSignOut = onSignOut,
         onDeleteAccount = onDeleteAccount,
@@ -151,6 +153,7 @@ private fun MatchmakingIdleScreen(
     onOpenScheduling: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenSecondChat: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenConnectionPartnerProfile: (matchId: String) -> Unit,
+    onDismissSecondChat: (connectionId: String) -> Unit,
     onEditProfile: () -> Unit,
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit,
@@ -226,6 +229,7 @@ private fun MatchmakingIdleScreen(
             onOpenScheduling = onOpenScheduling,
             onOpenSecondChat = onOpenSecondChat,
             onOpenPartnerProfile = onOpenConnectionPartnerProfile,
+            onDismissSecondChat = onDismissSecondChat,
         )
         Card(
             modifier = Modifier.fillMaxWidth(),

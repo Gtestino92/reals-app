@@ -34,6 +34,10 @@ class ChatRepository(
         authorizedCall { authorization -> api.getSecondChatForConnection(authorization, connectionId) }
             .map { it.toDomain() }
 
+    suspend fun dismissSecondChatForConnection(connectionId: String): ApiResult<Boolean> =
+        authorizedCall { authorization -> api.dismissSecondChatForConnection(authorization, connectionId) }
+            .map { it.dismissed }
+
     suspend fun getMessages(chatId: String, afterMessageId: String? = null): ApiResult<List<ChatMessage>> =
         authorizedCall { authorization ->
             api.getChatMessages(

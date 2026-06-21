@@ -62,6 +62,7 @@ class RealsRootViewModel(
     private val enqueueMatchmakingUseCase = dependencies.home.enqueueMatchmaking
     private val getHomeUseCase = dependencies.home.getHome
     private val leaveQueueUseCase = dependencies.home.leaveQueue
+    private val dismissSecondChatUseCase = dependencies.home.dismissSecondChat
     private val getFirstChatForMatchUseCase = dependencies.firstChat.getFirstChatForMatch
     private val submitChatDecisionUseCase = dependencies.firstChat.submitChatDecision
     private val getChatExitRequestsUseCase = dependencies.firstChat.getChatExitRequests
@@ -273,6 +274,42 @@ class RealsRootViewModel(
                         home = pending.home.copy(
                             homeLoading = true,
                             homeMessage = null,
+                        ),
+                    ),
+                    autoNavigateEngagements = false,
+                )
+
+                is ApiResult.Failure -> _uiState.value = pending.copy(
+                    home = pending.home.copy(
+                        homeLoading = false,
+                        homeError = result.error,
+                    ),
+                )
+            }
+        }
+    }
+
+    fun dismissSecondChatFromHome(connectionId: String) {
+        val current = _uiState.value as? RealsRootUiState.Ready ?: return
+        val cleanConnectionId = connectionId.trim()
+        if (cleanConnectionId.isBlank()) return
+
+        viewModelScope.launch {
+            val pending = current.copy(
+                home = current.home.copy(
+                    homeLoading = true,
+                    homeError = null,
+                    homeMessage = null,
+                ),
+            )
+            _uiState.value = pending
+
+            when (val result = dismissSecondChatUseCase(cleanConnectionId)) {
+                is ApiResult.Success -> loadHomeForReady(
+                    ready = pending.copy(
+                        home = pending.home.copy(
+                            homeLoading = true,
+                            homeMessage = "Eliminamos este segundo chat de tu Home.",
                         ),
                     ),
                     autoNavigateEngagements = false,

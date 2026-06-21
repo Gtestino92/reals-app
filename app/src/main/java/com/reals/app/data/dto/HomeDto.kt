@@ -67,3 +67,8 @@ data class HomeChatResponseDto(
     val durationMinutes: Long,
     val partner: ChatPartnerResponseDto? = null,
 )
+
+@Serializable
+data class ConnectionDismissalResponseDto(
+    val dismissed: Boolean,
+)

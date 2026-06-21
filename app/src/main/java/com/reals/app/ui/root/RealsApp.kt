@@ -148,6 +148,7 @@ fun RealsApp(appContainer: AppContainer) {
                             onOpenScheduling = viewModel::openScheduling,
                             onOpenSecondChat = viewModel::openSecondChat,
                             onOpenConnectionPartnerProfile = viewModel::openConnectionPartnerProfile,
+                            onDismissSecondChat = viewModel::dismissSecondChatFromHome,
                             onEditProfile = viewModel::openProfileManagement,
                             onSignOut = viewModel::signOut,
                             onDeleteAccount = viewModel::deleteAccount,
