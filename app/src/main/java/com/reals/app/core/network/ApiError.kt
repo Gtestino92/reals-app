@@ -20,6 +20,43 @@ sealed interface ApiError {
 
 }
 
+enum class BackendErrorCode(val raw: String) {
+    ProfileRequired("PROFILE_REQUIRED"),
+    ProfileNotActive("PROFILE_NOT_ACTIVE"),
+    ActivePenalty("ACTIVE_PENALTY"),
+    ActiveMatchLimitReached("ACTIVE_MATCH_LIMIT_REACHED"),
+    ActiveConnectionLimitReached("ACTIVE_CONNECTION_LIMIT_REACHED"),
+    InvalidSearchLocation("INVALID_SEARCH_LOCATION"),
+    ProfileAlreadyExists("PROFILE_ALREADY_EXISTS"),
+    ProfileNotFound("PROFILE_NOT_FOUND"),
+    ProfileNotActivatable("PROFILE_NOT_ACTIVATABLE"),
+    ProfilePhotosRequired("PROFILE_PHOTOS_REQUIRED"),
+    ProfilePersonPhotoRequired("PROFILE_PERSON_PHOTO_REQUIRED"),
+    ProfileFullBodyPhotoRequired("PROFILE_FULL_BODY_PHOTO_REQUIRED"),
+    ProfilePhotoLimitReached("PROFILE_PHOTO_LIMIT_REACHED"),
+    InvalidProfileBirthDate("INVALID_PROFILE_BIRTH_DATE"),
+    InvalidMatchFilters("INVALID_MATCH_FILTERS"),
+    PhotoPositionInvalid("PHOTO_POSITION_INVALID"),
+    PhotoPositionOccupied("PHOTO_POSITION_OCCUPIED"),
+    PhotoUrlInvalid("PHOTO_URL_INVALID"),
+    InvalidProfilePhoto("INVALID_PROFILE_PHOTO"),
+    ProfilePhotoNotFound("PROFILE_PHOTO_NOT_FOUND"),
+    AccountDeleted("ACCOUNT_DELETED"),
+    AccountDeletionFinalized("ACCOUNT_DELETION_FINALIZED"),
+    DomainConflict("DOMAIN_CONFLICT"),
+    SecondChatNotAvailable("SECOND_CHAT_NOT_AVAILABLE"),
+    SecondChatNotAvailableYet("SECOND_CHAT_NOT_AVAILABLE_YET"),
+    SecondChatExpired("SECOND_CHAT_EXPIRED"),
+    Unknown("UNKNOWN");
+
+    companion object {
+        fun fromRaw(value: String?): BackendErrorCode {
+            val rawValue = value?.takeIf { it.isNotBlank() } ?: return Unknown
+            return entries.firstOrNull { it.raw == rawValue } ?: Unknown
+        }
+    }
+}
+
 enum class ErrorContext {
     General,
     ProfileCreation,
@@ -36,12 +73,15 @@ enum class ErrorContext {
     Account,
 }
 
+val ApiError.Backend.backendErrorCode: BackendErrorCode
+    get() = BackendErrorCode.fromRaw(code)
+
 fun ApiError.isAccountDeleted(): Boolean {
-    return this is ApiError.Backend && code == "ACCOUNT_DELETED"
+    return this is ApiError.Backend && backendErrorCode == BackendErrorCode.AccountDeleted
 }
 
 fun ApiError.isAccountDeletionFinalized(): Boolean {
-    return this is ApiError.Backend && code == "ACCOUNT_DELETION_FINALIZED"
+    return this is ApiError.Backend && backendErrorCode == BackendErrorCode.AccountDeletionFinalized
 }
 
 enum class AuthFailureReason {
@@ -54,10 +94,10 @@ enum class AuthFailureReason {
 fun ApiError.toDisplayMessage(): String = toUserMessage()
 
 fun ApiError.toUserMessage(context: ErrorContext = ErrorContext.General): String = when (this) {
-    is ApiError.Backend -> if (code == "DOMAIN_CONFLICT" && message.isNotBlank()) {
+    is ApiError.Backend -> if (backendErrorCode == BackendErrorCode.DomainConflict && message.isNotBlank()) {
         message
     } else {
-        userMessageForBackendError(code, context)
+        userMessageForBackendError(backendErrorCode, context)
     }
     is ApiError.Network -> "No pudimos conectarnos. Revisa tu conexion e intenta nuevamente."
     is ApiError.Auth -> when (reason) {
@@ -85,34 +125,38 @@ fun ApiError.toUserTitle(context: ErrorContext = ErrorContext.General): String =
     ErrorContext.General -> "Algo salio mal"
 }
 
-private fun userMessageForBackendError(code: String?, context: ErrorContext): String = when (code) {
-    "PROFILE_REQUIRED" -> "Necesitas crear tu perfil antes de seguir."
-    "PROFILE_NOT_ACTIVE" -> "Tu perfil esta en borrador. Activa tu perfil para poder buscar chat."
-    "ACTIVE_PENALTY" -> "Por ahora no podes entrar a la busqueda. Intenta nuevamente mas adelante."
-    "ACTIVE_MATCH_LIMIT_REACHED" -> "Ya tenes conversaciones o experiencias activas. Termina una antes de buscar otra."
-    "INVALID_SEARCH_LOCATION" -> "No pudimos usar tu ubicacion actual. Revisa los permisos o intenta nuevamente."
-    "PROFILE_ALREADY_EXISTS" -> "Ya tenes un perfil creado."
-    "PROFILE_NOT_FOUND" -> "No encontramos tu perfil. Actualiza la sesion e intenta nuevamente."
-    "PROFILE_NOT_ACTIVATABLE" -> "Tu perfil necesita completarse antes de activarlo."
-    "PROFILE_PHOTOS_REQUIRED" -> "Subi mas fotos para poder activar tu perfil."
-    "PROFILE_PERSON_PHOTO_REQUIRED" -> "Necesitamos al menos una foto clara tuya para activar tu perfil."
-    "PROFILE_FULL_BODY_PHOTO_REQUIRED" -> "Necesitamos una foto de cuerpo completo para activar tu perfil."
-    "PROFILE_PHOTO_LIMIT_REACHED" -> "Ya llegaste al maximo de fotos permitidas."
-    "INVALID_PROFILE_BIRTH_DATE" -> "Revisa tu fecha de nacimiento."
-    "INVALID_MATCH_FILTERS" -> "Revisa las edades y la distancia. Hay algun valor fuera de rango."
-    "PHOTO_POSITION_INVALID" -> "Esa posicion de foto no esta disponible."
-    "PHOTO_POSITION_OCCUPIED" -> "Ya hay una foto en esa posicion. Podes reemplazarla o elegir otra."
-    "PHOTO_URL_INVALID" -> "La foto no tiene un formato valido."
-    "INVALID_PROFILE_PHOTO" -> "La foto no parece valida. Proba con otra imagen."
-    "PROFILE_PHOTO_NOT_FOUND" -> "No encontramos esa foto. Actualiza la lista e intenta nuevamente."
-    "ACCOUNT_DELETED" -> "Esta cuenta esta pendiente de eliminacion. Podes recuperarla si todavia esta dentro del plazo."
-    "ACCOUNT_DELETION_FINALIZED" -> "La cuenta ya no puede recuperarse. Podes crear una cuenta nueva."
-    "DOMAIN_CONFLICT" -> when (context) {
+private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorContext): String = when (code) {
+    BackendErrorCode.ProfileRequired -> "Necesitas crear tu perfil antes de seguir."
+    BackendErrorCode.ProfileNotActive -> "Tu perfil esta en borrador. Activa tu perfil para poder buscar chat."
+    BackendErrorCode.ActivePenalty -> "Por ahora no podes entrar a la busqueda. Intenta nuevamente mas adelante."
+    BackendErrorCode.ActiveMatchLimitReached,
+    BackendErrorCode.ActiveConnectionLimitReached -> "Ya tenes conversaciones o experiencias activas. Termina una antes de buscar otra."
+    BackendErrorCode.InvalidSearchLocation -> "No pudimos usar tu ubicacion actual. Revisa los permisos o intenta nuevamente."
+    BackendErrorCode.ProfileAlreadyExists -> "Ya tenes un perfil creado."
+    BackendErrorCode.ProfileNotFound -> "No encontramos tu perfil. Actualiza la sesion e intenta nuevamente."
+    BackendErrorCode.ProfileNotActivatable -> "Tu perfil necesita completarse antes de activarlo."
+    BackendErrorCode.ProfilePhotosRequired -> "Subi mas fotos para poder activar tu perfil."
+    BackendErrorCode.ProfilePersonPhotoRequired -> "Necesitamos al menos una foto clara tuya para activar tu perfil."
+    BackendErrorCode.ProfileFullBodyPhotoRequired -> "Necesitamos una foto de cuerpo completo para activar tu perfil."
+    BackendErrorCode.ProfilePhotoLimitReached -> "Ya llegaste al maximo de fotos permitidas."
+    BackendErrorCode.InvalidProfileBirthDate -> "Revisa tu fecha de nacimiento."
+    BackendErrorCode.InvalidMatchFilters -> "Revisa las edades y la distancia. Hay algun valor fuera de rango."
+    BackendErrorCode.PhotoPositionInvalid -> "Esa posicion de foto no esta disponible."
+    BackendErrorCode.PhotoPositionOccupied -> "Ya hay una foto en esa posicion. Podes reemplazarla o elegir otra."
+    BackendErrorCode.PhotoUrlInvalid -> "La foto no tiene un formato valido."
+    BackendErrorCode.InvalidProfilePhoto -> "La foto no parece valida. Proba con otra imagen."
+    BackendErrorCode.ProfilePhotoNotFound -> "No encontramos esa foto. Actualiza la lista e intenta nuevamente."
+    BackendErrorCode.AccountDeleted -> "Esta cuenta esta pendiente de eliminacion. Podes recuperarla si todavia esta dentro del plazo."
+    BackendErrorCode.AccountDeletionFinalized -> "La cuenta ya no puede recuperarse. Podes crear una cuenta nueva."
+    BackendErrorCode.DomainConflict -> when (context) {
         ErrorContext.Chat -> "La conversacion no cumple una regla del flujo todavia. Revisa el estado e intenta nuevamente."
         ErrorContext.VisualReview -> "La revision visual no cumple una regla del flujo todavia. Revisa el mensaje personal o actualiza el estado."
         else -> "Esta accion no esta disponible con el estado actual."
     }
-    else -> when (context) {
+    BackendErrorCode.SecondChatNotAvailable -> "El segundo chat todavia no esta disponible o ya no se puede abrir."
+    BackendErrorCode.SecondChatNotAvailableYet -> "El segundo chat todavia no esta disponible."
+    BackendErrorCode.SecondChatExpired -> "El segundo chat ya vencio."
+    BackendErrorCode.Unknown -> when (context) {
         ErrorContext.ProfileActivation -> "Revisa que tu perfil tenga la informacion y fotos necesarias."
         ErrorContext.PhotoUpload,
         ErrorContext.PhotoReplace -> "Proba con otra foto o intenta nuevamente en unos segundos."
