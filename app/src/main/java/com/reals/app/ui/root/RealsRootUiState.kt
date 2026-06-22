@@ -36,22 +36,22 @@ sealed interface RealsRootUiState {
 
     data class Ready(
         val session: ProvisionedSession,
-        val profile: ProfileUiState = ProfileUiState(),
+        val profileOp: ProfileManagementState = ProfileManagementState(),
         val photos: PhotoManagementUiState = PhotoManagementUiState(),
         val home: HomeUiState = HomeUiState(),
         val account: AccountUiState = AccountUiState(),
         val editingActiveProfile: Boolean = false,
     ) : RealsRootUiState {
-        val creatingProfile: Boolean get() = profile.creatingProfile
-        val profileCreateError: ApiError? get() = profile.profileCreateError
-        val updatingProfile: Boolean get() = profile.updatingProfile
-        val profileUpdateError: ApiError? get() = profile.profileUpdateError
-        val profileUpdateMessage: String? get() = profile.profileUpdateMessage
-        val updatingMatchFilters: Boolean get() = profile.updatingMatchFilters
-        val matchFiltersError: ApiError? get() = profile.matchFiltersError
-        val matchFiltersMessage: String? get() = profile.matchFiltersMessage
-        val activatingProfile: Boolean get() = profile.activatingProfile
-        val profileActivationError: ApiError? get() = profile.profileActivationError
+        val creatingProfile: Boolean get() = profileOp.creatingProfile
+        val profileCreateError: ApiError? get() = profileOp.profileCreateError
+        val updatingProfile: Boolean get() = profileOp.updatingProfile
+        val profileUpdateError: ApiError? get() = profileOp.profileUpdateError
+        val profileUpdateMessage: String? get() = profileOp.profileUpdateMessage
+        val updatingMatchFilters: Boolean get() = profileOp.updatingMatchFilters
+        val matchFiltersError: ApiError? get() = profileOp.matchFiltersError
+        val matchFiltersMessage: String? get() = profileOp.matchFiltersMessage
+        val activatingProfile: Boolean get() = profileOp.activatingProfile
+        val profileActivationError: ApiError? get() = profileOp.profileActivationError
         val loadingPhotos: Boolean get() = photos.loadingPhotos
         val profilePhotos: List<ProfilePhoto> get() = photos.profilePhotos
         val profilePhotosError: ApiError? get() = photos.profilePhotosError
@@ -157,7 +157,7 @@ sealed interface RealsRootUiState {
     data class Failure(val error: ApiError) : RealsRootUiState
 }
 
-data class ProfileUiState(
+data class ProfileManagementState(
     val creatingProfile: Boolean = false,
     val profileCreateError: ApiError? = null,
     val updatingProfile: Boolean = false,
@@ -194,7 +194,7 @@ data class AccountUiState(
 )
 
 fun RealsRootUiState.Ready.clearProfileFeedback(): RealsRootUiState.Ready = copy(
-    profile = profile.copy(
+    profileOp = profileOp.copy(
         profileUpdateError = null,
         profileUpdateMessage = null,
         matchFiltersError = null,

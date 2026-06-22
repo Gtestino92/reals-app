@@ -8,7 +8,6 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.reals.app.core.network.ErrorContext
-import com.reals.app.core.network.toUserMessage
 import com.reals.app.di.AppContainer
 import com.reals.app.domain.model.ChatContinueDecision
 import com.reals.app.domain.model.ProfileSnapshot
@@ -19,6 +18,7 @@ import com.reals.app.ui.auth.LoginScreen
 import com.reals.app.ui.chat.ChatScreen
 import com.reals.app.ui.chat.PartnerProfileScreen
 import com.reals.app.ui.chat.VisualApprovalScreen
+import com.reals.app.ui.common.ApiErrorScreen
 import com.reals.app.ui.common.FullScreenMessage
 import com.reals.app.ui.common.formatBackendDate
 import com.reals.app.ui.matchmaking.MatchmakingHomeScreen
@@ -280,13 +280,11 @@ fun RealsApp(appContainer: AppContainer) {
                 onSignOut = viewModel::signOut,
             )
 
-            is RealsRootUiState.Failure -> FullScreenMessage(
-                title = "No se pudo cargar Reals",
-                body = current.error.toUserMessage(ErrorContext.General),
-                primaryActionLabel = "Reintentar",
-                onPrimaryAction = viewModel::refreshSession,
-                secondaryActionLabel = "Cerrar sesion",
-                onSecondaryAction = viewModel::signOut,
+            is RealsRootUiState.Failure -> ApiErrorScreen(
+                error = current.error,
+                context = ErrorContext.General,
+                onRetry = viewModel::refreshSession,
+                onDismiss = viewModel::signOut,
             )
         }
     }

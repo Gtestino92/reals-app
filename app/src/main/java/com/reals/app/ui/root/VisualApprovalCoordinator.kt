@@ -2,6 +2,8 @@ package com.reals.app.ui.root
 
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ApiResult
+import com.reals.app.core.network.BackendErrorCode
+import com.reals.app.core.network.backendErrorCode
 import com.reals.app.di.VisualApprovalFeatureDependencies
 import com.reals.app.domain.model.Match
 import com.reals.app.domain.model.ProvisionedSession
@@ -91,7 +93,7 @@ internal class VisualApprovalCoordinator(
 }
 
 private fun ApiError.isDomainConflict(): Boolean =
-    this is ApiError.Backend && code == "DOMAIN_CONFLICT"
+    this is ApiError.Backend && backendErrorCode == BackendErrorCode.DomainConflict
 
 internal sealed interface VisualApprovalLoadResult {
     data class Show(val state: RealsRootUiState.VisualApproval) : VisualApprovalLoadResult

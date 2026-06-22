@@ -1,6 +1,8 @@
 package com.reals.app.ui.matchmaking
 
 import com.reals.app.core.network.ApiError
+import com.reals.app.core.network.BackendErrorCode
+import com.reals.app.core.network.backendErrorCode
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.format.DateTimeParseException
@@ -8,9 +10,14 @@ import java.time.format.DateTimeParseException
 private const val SECOND_CHAT_NEAR_WINDOW_MILLIS = 15 * 60 * 1000L
 private const val SECOND_CHAT_POLL_INTERVAL_MILLIS = 60 * 1000L
 
-internal fun ApiError?.isActiveMatchLimitReached(): Boolean =
-    this is ApiError.Backend &&
-        (code == "ACTIVE_MATCH_LIMIT_REACHED" || code == "ACTIVE_CONNECTION_LIMIT_REACHED")
+internal fun ApiError?.isActiveMatchLimitReached(): Boolean {
+    if (this !is ApiError.Backend) return false
+    return when (backendErrorCode) {
+        BackendErrorCode.ActiveMatchLimitReached,
+        BackendErrorCode.ActiveConnectionLimitReached -> true
+        else -> false
+    }
+}
 
 internal fun ApiError?.matchmakingBlockedMessage(): String? {
     if (this == null) return null

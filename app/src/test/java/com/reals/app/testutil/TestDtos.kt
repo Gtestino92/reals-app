@@ -149,8 +149,8 @@ object TestDtos {
     fun exitOutcome() = ChatExitOutcomeResponseDto(
         chat = chat(status = "CANCELLED"),
         exitRequest = exitRequest(status = "ACCEPTED"),
-        penaltyApplied = true,
-        penalizedUserId = "user-2",
+        penaltyApplied = false,
+        penalizedUserId = null,
     )
 
     fun visualProfile(myPersonalMessageSubmitted: Boolean = true) = VisualProfileResponseDto(

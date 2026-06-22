@@ -74,6 +74,6 @@ data class ChatExitRequestResponseDto(
 data class ChatExitOutcomeResponseDto(
     val chat: ChatResponseDto,
     val exitRequest: ChatExitRequestResponseDto,
-    val penaltyApplied: Boolean,
+    val penaltyApplied: Boolean = false,
     val penalizedUserId: String? = null,
 )
