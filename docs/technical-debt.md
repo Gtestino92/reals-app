@@ -1,90 +1,274 @@
-# Technical Debt And Product Decisions
+# Frontend Technical Debt And Product Decisions
 
-This file lists known pending or intentionally unimplemented behavior. Do not implement these implicitly while working on unrelated tasks.
+This file lists known pending or intentionally unimplemented frontend behavior for the Android app. Do not implement these implicitly while working on unrelated tasks.
 
 ## Product Decisions
 
-- Immediate pre-infrastructure objective: continue converting high-frequency frontend-facing generic failures into stable error codes where they are painful in the Android flow.
-- Guided first-chat questions or conversation starters.
-- Whether guided questions belong to frontend or backend.
-- Exact visibility rule for visual-review personal messages beyond current `VISUAL_APPROVED` enforcement.
-- Revisit a dedicated matchmaking worker process or external queue only if matchmaking volume, latency requirements or CPU cost make the scheduled DB-queue `MatchmakingJob` too expensive for app instances.
-- Profile location should eventually be validated against a canonical country/city cache instead of only accepting free-text `country` and `city`. Prefer a separate reference endpoint such as `GET /api/reference/countries` returning ISO-3166 alpha-2 country codes and display names, rather than embedding global reference data in `GET /api/me/profile`.
-- Decide where geolocation enters the product flow. The likely point is before first-chat matchmaking/search, using profile location plus future latitude/longitude, geohash or search radius fields.
-- Decide final visibility and UX timing for visual-review personal messages. Current behavior allows reading the partner message during visual review and requires reading it before approving if the partner already submitted one.
+* Keep email/password Firebase authentication as the MVP authentication path.
+* Defer Google Sign-In and other social providers until after MVP unless onboarding friction becomes a blocker.
+* Keep multipart profile-photo upload as the official frontend flow.
+* Do not add temporary `isPersonPhoto` / `isFullBody` flags to the Android multipart upload flow. For pre-MVP, let the backend use permissive validation defaults.
+* Keep Home polling and chat/scheduling polling as the pre-notification fallback behavior.
+* When push notifications are implemented, Home refresh remains the source of truth after notification taps.
+* Do not build a native Android admin/backoffice UI for MVP. Safety-report review can continue through backend/admin endpoints and Bruno or another external admin tool.
+* Keep manual/dev-only helpers available in local/dev builds only. Production UI should avoid exposing testing shortcuts.
+
+## Pre-MVP Frontend Tasks
+
+### 1. Complete RootViewModel refactor
+
+Status: in progress / assumed before continuing.
+
+Goal:
+
+* Keep `RealsRootViewModel` as orchestration only.
+* Move feature-specific logic into coordinators/handlers.
+* Preserve current behavior during the refactor.
+
+Expected structure:
+
+* Session/account handling.
+* Profile handling.
+* Home/matchmaking handling.
+* First chat handling.
+* Visual approval handling.
+* Scheduling handling.
+* Second chat handling.
+
+Acceptance criteria:
+
+* No behavior regression in login/provision/profile/home/chat/scheduling flows.
+* Home auto-routing still works after queue/match creation.
+* Silent polling still avoids overwriting visible UI errors.
+* Local hidden Home interactions are still pruned when no longer relevant.
+
+### 2. Hide manual location fallback outside local/dev
+
+The Home screen currently exposes a manual location fallback intended for development/testing.
+
+Pre-MVP requirement:
+
+* Hide the manual latitude/longitude fallback in production builds.
+* Keep it available only in local/debug/dev builds or behind a feature flag.
+* The user-facing production flow should use device location permission and current device location.
+
+Acceptance criteria:
+
+* Production UI does not show manual coordinate entry.
+* Local/dev builds can still manually enter coordinates for testing.
+* Device-location flow remains the default path for matchmaking.
+
+### 3. Configure real dev/prod API URLs
+
+Dev/prod base URLs must be configured before a real MVP build.
+
+Pre-MVP requirement:
+
+* Configure real dev/prod API URLs through Gradle properties or environment variables.
+* Confirm local build still uses emulator-compatible backend URL.
+* Confirm release builds do not allow cleartext traffic unless explicitly intended.
+
+Acceptance criteria:
+
+* Local flavor points to local backend.
+* Dev flavor points to real dev backend.
+* Prod flavor points to real prod backend.
+* Release build does not accidentally target placeholder URLs.
+
+### 4. Visual approval: require full visual review before approval
+
+The visual approval screen currently allows approval once the partner profile is loaded.
+
+If the product rule remains that users must actually review the visual profile before approving:
+
+* Track whether all required photos were displayed or scrolled through.
+* Disable the Approve action until the review condition is met.
+* Keep Reject available without requiring full review, if desired.
+* Add clear UI copy explaining why approval is blocked until review is complete.
+
+Acceptance criteria:
+
+* User cannot approve immediately without reviewing the visual profile.
+* UI explains the requirement.
+* The rule is local UI gating only; backend remains the final source of truth for match state.
+
+### 5. Push notification client setup
+
+Add the Android client-side foundation for push notifications.
+
+Scope:
+
+* Add Firebase Cloud Messaging dependency.
+* Add Android notification permission handling for Android 13+.
+* Add notification channel setup for Android 8+.
+* Add client token retrieval.
+* Add token refresh handling.
+* Add foreground/background notification handling.
+* Add notification tap routing.
+
+Acceptance criteria:
+
+* App can retrieve a current FCM registration token.
+* App can handle token refresh.
+* App can request notification permission contextually.
+* App can receive foreground/background notification payloads.
+* Notification taps can route to Home, first chat, visual approval, scheduling, or second chat.
+* Stale notification taps safely refresh Home and do not crash.
+
+### 6. Notification tap routing
+
+Notification taps should not blindly open old local state.
+
+Required behavior:
+
+* Parse notification payload type.
+* Open the app.
+* Refresh backend session/Home state.
+* Navigate only if the target entity is still actionable.
+* Fall back to Home if the target is expired, closed, dismissed, or no longer visible.
+
+Potential notification targets:
+
+* First chat created.
+* First chat message received.
+* Visual review available.
+* Visual approval mutual / connection created.
+* Scheduling available.
+* Partner submitted scheduling proposals.
+* Scheduling confirmed.
+* Second chat available.
+* Second chat message received.
+* Safety/report/penalty/account-state notifications if later needed.
+
+Acceptance criteria:
+
+* Expired notifications do not navigate to invalid screens.
+* Logged-out users are sent to login.
+* Deleted/pending-deletion accounts are handled through existing account states.
+* Unknown notification types fall back to Home.
+
+### 7. Polling strategy before push notifications
+
+Current frontend behavior relies on polling:
+
+* Home polling while there are actionable or pending states.
+* Chat polling while a chat is active.
+* Scheduling polling while negotiation is pending.
+* Second-chat availability polling near scheduled availability.
+
+Pre-MVP this is acceptable.
+
+When push notifications are implemented:
+
+* Keep polling as a fallback.
+* Avoid duplicate user-facing events when both polling and push update the same state.
+* Make Home refresh the source of truth after notification taps.
+* Reduce aggressive polling only after push notifications are reliable.
+
+Acceptance criteria:
+
+* The app still works without push notifications.
+* Notification taps refresh backend state before navigating.
+* Polling and push do not produce conflicting UI states.
+
+### 8. Remove or hide mock photo flows
+
+The Android app still contains mock photo use cases and UI wiring for test flows.
+
+Pre-MVP decision:
+
+* Keep multipart upload as the official app flow.
+* Hide or remove mock photo actions from production UI.
+* Keep mock photo utilities only if useful in local/dev builds.
+
+Acceptance criteria:
+
+* Production users only see real file upload actions.
+* Mock URLs are not exposed in production.
+* Local/dev testing remains possible if needed.
+
+### 9. Profile photo display robustness
+
+Profile and visual-review screens should handle stored image URLs robustly.
+
+Pre-MVP checks:
+
+* Confirm uploaded photos render correctly in local/dev/prod.
+* Confirm presigned/local URLs behave as expected on emulator and physical devices.
+* Confirm failed image loads do not break the screen.
+* Confirm visual profile photos are readable and ordered by position.
+
+Acceptance criteria:
+
+* Photos render in profile management.
+* Photos render in visual approval.
+* Broken/unreachable images show a safe fallback message.
+* Photo ordering is stable.
+
+### 10. Error copy and blocked states
+
+Review user-facing error messages before MVP.
+
+Focus areas:
+
+* Active penalty.
+* Active match limit.
+* Active connection limit.
+* Profile activation failures.
+* Photo upload failures.
+* Location permission denied.
+* Second chat not available yet.
+* Second chat expired.
+* Account pending deletion.
+* Account deletion finalized.
+
+Acceptance criteria:
+
+* Backend error codes are translated into understandable UI copy.
+* User knows what action is possible next.
+* Technical backend messages are not exposed when a clearer product message exists.
 
 ## Not Currently Implemented
 
-- Real-time chat via WebSocket or SSE.
-- Notification delivery.
-- Reveal quotas.
-- Advanced compatibility scoring. Current matching uses SQL hard-filtered candidate pairs plus a rule-based `CompatibilityScorer`; future work should add interest/affinity overlap without introducing popularity, attractiveness or ELO-style ranking.
-- Improve geographic matching with geohash, bounding boxes or database-supported spatial indexing if queue volume makes application-level Haversine filtering too expensive.
-- Decide how `accuracyMeters` should affect matchmaking. It is currently captured and validated with the queue search location, but does not reject imprecise locations or adjust the effective distance radius.
-- ML-based matching.
-- Popularity, attractiveness or ELO ranking.
-- Gamified reputation badges.
-- Production trust score based on real behavior. The current `DefaultTrustScoreEvaluator` is intentionally neutral and returns `TrustScore.NEUTRAL`, so penalty duration scaling is effectively disabled. A real implementation needs a product decision on inputs and weights, such as penalty count/recency/severity, abandonment rate from chat history and positive engagement signals like completed connections. Do not introduce popularity, attractiveness, ELO-style ranking or visible reputation badges.
-- Full moderation workflow for safety reports. Current implementation records safety cancellation and applies a penalty, but no manual review workflow exists yet.
-- Firebase/JWT backend wiring exists for `dev` and `prod`, but it still needs production service account configuration and operational validation before production use.
-- Firebase email verification is not enforced yet. Decide whether the backend should reject provisioning or profile activation when the Firebase token has `email_verified=false`, add a stable error such as `EMAIL_NOT_VERIFIED`, and define the frontend resend/refresh flow.
-- Media storage for profile photos now supports S3-compatible upload and presigned read URLs. Remaining production work includes object lifecycle rules, orphan cleanup, moderation/quarantine promotion, malware/content scanning and CDN/cache strategy.
-- Photo semantic flags (`isPersonPhoto`, `isFullBody`) currently come from the client so the frontend can unblock profile-photo flows. Before production trust is required, move these flags to a trusted source such as automatic media validation, moderation review or admin tooling, and restrict direct client overrides to local/dev/test flows.
-- Identity verification has a provider abstraction and a `none` provider that keeps `Profile.identityVerified=false`. Add a real provider integration, request/response mapping, audit trail and failure policy before requiring verified identity in production flows.
+### Push notifications
 
-## Infrastructure Gaps
+Push notifications are not implemented yet.
 
-- PostgreSQL is the only supported non-local database driver for now. Reintroduce another database driver only when a concrete environment needs it.
-- Local H2 profiles use file storage and disable Flyway. Keep this local-only; external environments should use PostgreSQL plus Flyway.
-- Keep Spring Boot on the latest stable `4.0.x` patch line until `4.1.x` is stable and the release notes have been reviewed.
-- Remove the temporary `tomcat.version` override once a Spring Boot 4.0.x patch manages Tomcat 11.0.22 or newer.
-- Add production release image tagging when a production environment exists. Dev should keep using moving `development` and immutable `sha-*` tags; production should publish immutable `v*` tags from Git tags, such as `v1.0.0`.
-- Helm-style values under `deploy/helm` are placeholders for app-specific deployment inputs. Decide whether the final chart/deploy config lives in this repository or a separate infrastructure repository once the first runtime platform is chosen.
-- Decide the first external development deploy target. Candidates to compare: Render, Fly.io, Railway, Google Cloud Run, AWS App Runner or ECS Fargate, and a managed PostgreSQL provider such as Neon, Supabase, Render PostgreSQL, Railway PostgreSQL or AWS RDS.
-- For the first dev environment, prefer a simple container platform plus managed PostgreSQL before Kubernetes. Kubernetes, Helm and Terraform/CDK become worthwhile when there are multiple services, networking rules, autoscaling needs or repeatable environment provisioning requirements.
-- Before enabling deploy automation, define the deployment model: runtime platform, managed PostgreSQL instance, Firebase service-account secret, environment variables, health check path, rollback strategy and which GHCR tag dev should track.
-- Wire the manual `Smoke check` GitHub Actions workflow into the eventual deploy pipeline once the dev runtime platform exists. The workflow is already aligned with the Docker image metadata exposed by `/actuator/info`.
-- Decide whether infrastructure should be represented as Infrastructure as Code. If the first provider is AWS, prefer Terraform or AWS CDK for repeatability; if the first provider is Render, Fly.io or Railway, start with their service config and document manual console steps until the shape stabilizes.
+Required later:
 
-## Observability And Error Handling
+* Firebase Cloud Messaging client dependency.
+* Notification permission flow.
+* Device token registration.
+* Token refresh handling.
+* Notification channel setup.
+* Foreground/background message handling.
+* Tap routing and state refresh.
 
-- Add metrics export before production. Actuator health/info is available, but metrics are intentionally disabled for now. Later track HTTP latency/statuses, auth failures by reason, scheduled job runs, processed/skipped/failed item counts and key state transitions.
-- Continue hardening scheduled jobs so one failing record does not abort an entire run. Scheduler jobs now log final processed/succeeded/skipped/failed summaries; future work should add metrics export once the backend chooses an observability stack.
-- Include exception stacktraces in job failure logs. Avoid logging only `ex.message` for unexpected scheduler failures.
-- Continue replacing generic `IllegalArgumentException` and `IllegalStateException` paths with explicit domain exception types and stable error codes where the frontend needs deterministic handling.
-- Add production log policy for sensitive fields. Do not log tokens, chat contents, personal messages, full emails, private media URLs or raw request bodies.
+### Social sign-in
 
-## Security Decisions
+Google Sign-In and other social providers are not implemented yet.
 
-- CSRF protection is intentionally disabled while Reals remains a stateless API authenticated with explicit `Authorization: Bearer ...` tokens and no cookie-based browser session. Re-enable and test CSRF protection before introducing cookie authentication, form login, browser-managed sessions or any credential automatically attached by the browser.
-- Never commit real Firebase Web API keys, Firebase test user passwords, ID tokens or service-account credentials. Bruno tracked environments must keep placeholders; real values belong only in local uncommitted environment state or deployment secrets.
-- Local Bruno environment files with real credentials must use ignored local files, not the tracked `local.template.bru`.
+MVP decision:
 
-## Multi-Instance Deployment Risks
+* Defer social sign-in until after MVP.
+* Keep email/password as the initial authentication path.
+* Revisit after measuring onboarding friction.
 
-- Scheduler jobs must remain safe when more than one app instance exists. ShedLock prevents most duplicate scheduled executions, but each job should still be idempotent: re-running it should not create duplicate chats, penalties, locks or state transitions.
-- State transitions that create dependent records need stronger concurrency protection before multi-instance production. Examples: mutual visual approval creating a `Connection`, scheduling confirmation creating/activating second-chat availability, unilateral cancellation creating penalties, and lock creation/release. Use database constraints, transactions and optimistic or pessimistic locking where needed.
-- Active engagement limits can race under concurrent requests. Counting current `ActiveEngagementLock` rows and then inserting new rows is not enough by itself if two app instances do it at the same time. Revisit with transactional locking or database-level constraints before real scale.
-- Matchmaking processing uses a scheduled DB-queue worker with PostgreSQL `SELECT ... FOR UPDATE SKIP LOCKED`. A focused PostgreSQL/Testcontainers concurrency test covers two simultaneous processors against the same queue; keep ShedLock enabled until parallel matchmaking workers are explicitly introduced.
-- Profile photo files must remain in shared object storage such as S3, R2, GCS, Firebase Storage or another external media service. They should not be stored on one backend instance's local disk, because another instance would not have the file.
-- Future real-time chat via WebSocket or SSE needs multi-instance routing. Options include sticky sessions, a shared pub/sub layer such as Redis, or managed realtime infrastructure. Plain in-memory connection state will not work across instances.
-- Add production observability before multi-instance rollout: structured logs with request/job identifiers, metrics for scheduled jobs and state transitions, and alerts for stuck negotiations, failed jobs or repeated retries.
+Future implementation notes:
 
-## Concurrency Hardening Tasks
+* Google Sign-In can still use Firebase Auth.
+* The backend should continue receiving Firebase ID tokens, independent of whether the Firebase user authenticated with email/password or Google.
+* Account-linking and duplicate-email behavior must be defined before enabling multiple auth providers.
 
-- Add explicit tests for concurrent mutual visual approval. Assert that only one `Connection` is created for a match, locks are upgraded once and repeated/competing approvals do not duplicate state.
-- Add explicit tests for concurrent scheduling confirmation and scheduled second-chat availability. Assert that only one second chat exists per connection and repeated job runs are idempotent.
-- Add explicit tests for concurrent chat cancellation/safety reports. Assert that penalties and `ChatExitRequest` rows are not duplicated for the same terminal chat transition.
-- Review and document lock acquisition order for operations that lock both users. Keep the current canonical order by user id and apply the same rule to future user-pair operations to reduce deadlock risk.
-- Convert expected concurrency failures such as optimistic-lock conflicts, duplicate-key conflicts and deadlocks into stable API responses or bounded job retries where the operation is idempotent.
-- Add database constraints where missing for one-per-domain invariants. Current examples already covered include one connection per match, one chat per match/type, one chat per connection/type and one queue row per user; revisit `ChatExitRequest`, penalties and schedule proposals before production traffic.
-- Extend job-level summaries with duplicate/idempotent no-op detail where a future job can distinguish that from generic skipped work. Keep metrics export as a later step if Prometheus or another metrics backend is introduced.
+### Real-time chat transport
 
-## Long-Term Scalability
+Real-time chat via WebSocket or SSE is not implemented in Android.
 
-- Parallel matchmaking workers are intentionally deferred. The current `MatchmakingJob` should remain ShedLock-protected so only one instance processes the queue. If matchmaking queue backlog or latency becomes a real bottleneck, revisit a worker model where multiple instances process the queue concurrently using PostgreSQL `FOR UPDATE SKIP LOCKED`, bounded per-worker limits, short transactions, database constraints and dedicated concurrency tests.
+Current behavior:
 
-## Code Notes To Revisit
+* Chat uses polling.
 
-- Some controller comments mention old or tentative behavior; prefer service implementation and these docs as the current source of truth.
-- `TECH_DEBT.md` recovered from the previous setup was empty.
+Future implementation:
+
+* Keep polling as fallback.
+* Replace or reduce polling only once real-time transport or push notifications are reliable.
