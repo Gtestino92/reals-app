@@ -22,22 +22,15 @@ import com.reals.app.domain.model.ChatExitOutcome
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.CreateProfileInput
-import com.reals.app.domain.model.HomePendingAction
-import com.reals.app.domain.model.HomeState
 import com.reals.app.domain.model.Match
 import com.reals.app.domain.model.MatchState
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.ProvisionedSession
-import com.reals.app.domain.model.SearchLocationInput
 import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.UpdateProfileInput
 import com.reals.app.domain.model.VisualDecision
-import com.reals.app.ui.matchmaking.HomeRouter
-import com.reals.app.ui.matchmaking.HomeRoute
-import com.reals.app.ui.matchmaking.HomeUiMapper
-import com.reals.app.ui.matchmaking.LocalHiddenInteractions
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -60,10 +53,6 @@ class RealsRootViewModel(
         provisionAndLoadProfile = dependencies.session.provisionAndLoadProfile,
         scope = viewModelScope,
     )
-    private val enqueueMatchmakingUseCase = dependencies.home.enqueueMatchmaking
-    private val getHomeUseCase = dependencies.home.getHome
-    private val leaveQueueUseCase = dependencies.home.leaveQueue
-    private val dismissSecondChatUseCase = dependencies.home.dismissSecondChat
     private val getFirstChatForMatchUseCase = dependencies.firstChat.getFirstChatForMatch
     private val submitChatDecisionUseCase = dependencies.firstChat.submitChatDecision
     private val getChatExitRequestsUseCase = dependencies.firstChat.getChatExitRequests
@@ -78,12 +67,14 @@ class RealsRootViewModel(
     private val secondChatCoordinator = SecondChatCoordinator(dependencies.firstChat)
     private val visualApprovalCoordinator = VisualApprovalCoordinator(dependencies.visualApproval)
     private val schedulingCoordinator = SchedulingCoordinator(dependencies.scheduling)
-    private val homeUiMapper = HomeUiMapper()
-    private val homeRouter = HomeRouter()
+    private val homeCoordinator = HomeCoordinator(
+        uiState = _uiState,
+        dependencies = dependencies.home,
+        scope = viewModelScope,
+        onOpenFirstChat = { session, matchId, chatId -> openFirstChat(session, matchId, chatId) },
+        onProvisionActiveSession = { user -> loadBackendSessionForActiveUser(user) },
+    )
     val uiState: StateFlow<RealsRootUiState> = _uiState.asStateFlow()
-    private var lastSearchLocation: SearchLocationInput? = null
-    private val locallyHiddenPendingChatMatchIds = mutableSetOf<String>()
-    private val locallyHiddenVisualMatchIds = mutableSetOf<String>()
 
     init {
         refreshSession()
@@ -155,7 +146,7 @@ class RealsRootViewModel(
         viewModelScope.launch {
             _uiState.value = current.copy(reactivating = true, error = null)
             when (val result = reactivateAccountUseCase()) {
-                is ApiResult.Success -> loadBackendSessionForActiveUser(result.value)
+                is ApiResult.Success -> homeCoordinator.reenterMatchmakingOrLoadHome(result.value)
                 is ApiResult.Failure -> _uiState.value = current.copy(
                     reactivating = false,
                     error = result.error,
@@ -165,164 +156,23 @@ class RealsRootViewModel(
     }
 
     fun refreshHomeState() {
-        val current = _uiState.value as? RealsRootUiState.Ready ?: return
-
-        viewModelScope.launch {
-            loadHomeForReady(
-                ready = current.copy(
-                    home = current.home.copy(
-                        homeLoading = true,
-                        homeError = null,
-                        homeMessage = null,
-                    ),
-                ),
-                autoNavigateEngagements = current.home.screenModel?.matchmaking?.inQueue == true,
-            )
-        }
+        homeCoordinator.refreshHomeState()
     }
 
     fun pollHomeStateSilently() {
-        val current = _uiState.value as? RealsRootUiState.Ready ?: return
-
-        viewModelScope.launch {
-            when (val homeResult = getHomeUseCase()) {
-                is ApiResult.Success -> {
-                    val latest = _uiState.value as? RealsRootUiState.Ready ?: return@launch
-                    pruneLocalHiddenInteractions(homeResult.value)
-                    val screenModel = buildHomeScreenModel(
-                        home = homeResult.value,
-                        localMatchmakingBlockedReason = latest.home.matchmakingBlockedReason,
-                    )
-
-                    routeFromHomeScreenModel(
-                        ready = latest.copy(
-                            home = latest.home.copy(
-                                homeState = homeResult.value,
-                                screenModel = screenModel,
-                                homeLoading = false,
-                            ),
-                        ),
-                        autoNavigateEngagements = latest.home.screenModel?.matchmaking?.inQueue == true,
-                    )
-                }
-
-                is ApiResult.Failure -> {
-                    // polling silencioso: no pisar UI
-                }
-            }
-        }
+        homeCoordinator.pollHomeStateSilently()
     }
 
     fun enqueueMatchmaking(location: SearchLocationInput) {
-        val current = _uiState.value as? RealsRootUiState.Ready ?: return
-
-        viewModelScope.launch {
-            lastSearchLocation = location
-            val pending = current.copy(
-                home = current.home.copy(
-                    homeLoading = true,
-                    homeError = null,
-                    homeMessage = null,
-                    matchmakingBlockedReason = null,
-                ),
-            )
-            _uiState.value = pending
-            when (val result = enqueueMatchmakingUseCase(location)) {
-                is ApiResult.Success -> loadHomeForReady(
-                    ready = pending.copy(
-                        home = pending.home.copy(
-                            homeLoading = true,
-                            homeMessage = null,
-                        ),
-                    ),
-                    autoNavigateEngagements = true,
-                )
-
-                is ApiResult.Failure -> {
-                    val blockedReason = result.error.takeIf { it.isActiveInteractionLimitError() }
-                    _uiState.value = pending.copy(
-                        home = pending.home.copy(
-                            screenModel = buildHomeScreenModel(
-                                home = pending.home.homeState,
-                                localMatchmakingBlockedReason = blockedReason,
-                            ),
-                            homeLoading = false,
-                            homeError = result.error,
-                            matchmakingBlockedReason = blockedReason,
-                        ),
-                    )
-                }
-            }
-        }
+        homeCoordinator.enqueueMatchmaking(location)
     }
 
     fun leaveMatchmakingQueue() {
-        val current = _uiState.value as? RealsRootUiState.Ready ?: return
-
-        viewModelScope.launch {
-            val pending = current.copy(
-                home = current.home.copy(
-                    homeLoading = true,
-                    homeError = null,
-                    homeMessage = null,
-                ),
-            )
-            _uiState.value = pending
-            when (val result = leaveQueueUseCase()) {
-                is ApiResult.Success -> loadHomeForReady(
-                    ready = pending.copy(
-                        home = pending.home.copy(
-                            homeLoading = true,
-                            homeMessage = null,
-                        ),
-                    ),
-                    autoNavigateEngagements = false,
-                )
-
-                is ApiResult.Failure -> _uiState.value = pending.copy(
-                    home = pending.home.copy(
-                        homeLoading = false,
-                        homeError = result.error,
-                    ),
-                )
-            }
-        }
+        homeCoordinator.leaveMatchmakingQueue()
     }
 
     fun dismissSecondChatFromHome(connectionId: String) {
-        val current = _uiState.value as? RealsRootUiState.Ready ?: return
-        val cleanConnectionId = connectionId.trim()
-        if (cleanConnectionId.isBlank()) return
-
-        viewModelScope.launch {
-            val pending = current.copy(
-                home = current.home.copy(
-                    homeLoading = true,
-                    homeError = null,
-                    homeMessage = null,
-                ),
-            )
-            _uiState.value = pending
-
-            when (val result = dismissSecondChatUseCase(cleanConnectionId)) {
-                is ApiResult.Success -> loadHomeForReady(
-                    ready = pending.copy(
-                        home = pending.home.copy(
-                            homeLoading = true,
-                            homeMessage = "Eliminamos este segundo chat de tu Home.",
-                        ),
-                    ),
-                    autoNavigateEngagements = false,
-                )
-
-                is ApiResult.Failure -> _uiState.value = pending.copy(
-                    home = pending.home.copy(
-                        homeLoading = false,
-                        homeError = result.error,
-                    ),
-                )
-            }
-        }
+        homeCoordinator.dismissSecondChatFromHome(connectionId)
     }
 
     fun openProfileManagement() {
@@ -336,7 +186,7 @@ class RealsRootViewModel(
         val profile = (current.session.profileSnapshot as? ProfileSnapshot.Found)?.profile
         if (profile?.status == ProfileStatus.Active) {
             viewModelScope.launch {
-                loadHomeForReady(
+                homeCoordinator.loadHomeForReady(
                     current.copy(
                         editingActiveProfile = false,
                         home = current.home.copy(
@@ -384,15 +234,9 @@ class RealsRootViewModel(
 
             when (val result = firstChatCoordinator.load(session, cleanMatchId, chatId)) {
                 is FirstChatLoadResult.Show -> _uiState.value = result.state
-                is FirstChatLoadResult.RouteHome -> loadHomeForReady(
-                    ready = RealsRootUiState.Ready(
-                        session = session,
-                        home = HomeUiState(
-                            homeLoading = true,
-                            homeMessage = result.message,
-                        ),
-                    ),
-                    autoNavigateEngagements = false,
+                is FirstChatLoadResult.RouteHome -> homeCoordinator.returnHome(
+                    session = session,
+                    message = result.message,
                 )
             }
         }
@@ -515,15 +359,9 @@ class RealsRootViewModel(
                 ChatExitReason.InappropriateBehavior,
                 cleanDetails,
             )) {
-                is ApiResult.Success -> loadHomeForReady(
-                    ready = RealsRootUiState.Ready(
-                        session = current.session,
-                        home = HomeUiState(
-                            homeLoading = true,
-                            homeMessage = "Reporte enviado. Cerramos esta conversacion por seguridad.",
-                        ),
-                    ),
-                    autoNavigateEngagements = false,
+                is ApiResult.Success -> homeCoordinator.returnHome(
+                    session = current.session,
+                    message = "Reporte enviado. Cerramos esta conversacion por seguridad.",
                 )
 
                 is ApiResult.Failure -> _uiState.value = pending.copy(
@@ -538,13 +376,7 @@ class RealsRootViewModel(
     fun closeSecondChat() {
         val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
         viewModelScope.launch {
-            loadHomeForReady(
-                ready = RealsRootUiState.Ready(
-                    session = current.session,
-                    home = HomeUiState(homeLoading = true),
-                ),
-                autoNavigateEngagements = false,
-            )
+            homeCoordinator.returnHome(current.session)
         }
     }
 
@@ -557,15 +389,9 @@ class RealsRootViewModel(
         }
         val cleanMatchId = matchId.trim()
         if (cleanMatchId.isBlank()) return
-        if (cleanMatchId in localHiddenSnapshot().hiddenVisualMatchIds) {
+        if (cleanMatchId in homeCoordinator.localHiddenSnapshot().hiddenVisualMatchIds) {
             viewModelScope.launch {
-                loadHomeForReady(
-                    ready = RealsRootUiState.Ready(
-                        session = session,
-                        home = HomeUiState(homeLoading = true),
-                    ),
-                    autoNavigateEngagements = false,
-                )
+                homeCoordinator.returnHome(session)
             }
             return
         }
@@ -582,13 +408,7 @@ class RealsRootViewModel(
     fun closeVisualApproval() {
         val current = _uiState.value as? RealsRootUiState.VisualApproval ?: return
         viewModelScope.launch {
-            loadHomeForReady(
-                ready = RealsRootUiState.Ready(
-                    session = current.session,
-                    home = HomeUiState(homeLoading = true),
-                ),
-                autoNavigateEngagements = false,
-            )
+            homeCoordinator.returnHome(current.session)
         }
     }
 
@@ -677,13 +497,7 @@ class RealsRootViewModel(
     fun closeScheduling() {
         val current = _uiState.value as? RealsRootUiState.Scheduling ?: return
         viewModelScope.launch {
-            loadHomeForReady(
-                ready = RealsRootUiState.Ready(
-                    session = current.session,
-                    home = HomeUiState(homeLoading = true),
-                ),
-                autoNavigateEngagements = false,
-            )
+            homeCoordinator.returnHome(current.session)
         }
     }
 
@@ -718,13 +532,7 @@ class RealsRootViewModel(
     fun closePartnerProfile() {
         val current = _uiState.value as? RealsRootUiState.PartnerProfile ?: return
         viewModelScope.launch {
-            loadHomeForReady(
-                ready = RealsRootUiState.Ready(
-                    session = current.session,
-                    home = HomeUiState(homeLoading = true),
-                ),
-                autoNavigateEngagements = false,
-            )
+            homeCoordinator.returnHome(current.session)
         }
     }
 
@@ -755,13 +563,16 @@ class RealsRootViewModel(
                 is FirstChatRefreshResult.Show -> _uiState.value = result.state
                 is FirstChatRefreshResult.Reopen -> openFirstChat(result.matchId, result.chatId)
                 is FirstChatRefreshResult.Closed -> {
-                    hideFirstChatLocally(current.matchId)
-                    routeAfterFirstChatClosed(current.session, result.matchState)
+                    homeCoordinator.hideFirstChatLocally(current.matchId)
+                    homeCoordinator.returnHome(
+                        session = current.session,
+                        message = firstChatExitMessage(result.matchState),
+                    )
                 }
 
                 FirstChatRefreshResult.ExitResolved -> {
-                    hideFirstChatLocally(current.matchId)
-                    returnHomeAfterFirstChatExit(
+                    homeCoordinator.hideFirstChatLocally(current.matchId)
+                    homeCoordinator.returnHome(
                         session = current.session,
                         message = "El chat fue cerrado.",
                     )
