@@ -1,6 +1,7 @@
 package com.reals.app.notifications
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -8,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -21,6 +23,8 @@ import com.reals.app.notifications.PushNotificationContract.VISUAL_REVIEW_CHANNE
 import com.reals.app.notifications.PushNotificationContract.VISUAL_REVIEW_NOTIFICATION_ID_BASE
 
 object NotificationHelper {
+    private const val TAG = "NotificationHelper"
+
     fun ensureChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
 
@@ -36,6 +40,7 @@ object NotificationHelper {
             ?.createNotificationChannel(channel)
     }
 
+    @SuppressLint("MissingPermission")
     fun showVisualReviewAvailable(context: Context, matchId: String?) {
         if (!canPostNotifications(context)) return
 
@@ -52,10 +57,14 @@ object NotificationHelper {
             .setContentIntent(visualReviewPendingIntent(context, matchId))
             .build()
 
-        NotificationManagerCompat.from(context).notify(
-            VISUAL_REVIEW_NOTIFICATION_ID_BASE + notificationSuffix(matchId),
-            notification,
-        )
+        try {
+            NotificationManagerCompat.from(context).notify(
+                VISUAL_REVIEW_NOTIFICATION_ID_BASE + notificationSuffix(matchId),
+                notification,
+            )
+        } catch (exception: SecurityException) {
+            Log.w(TAG, "Could not show visual review notification because permission was denied.", exception)
+        }
     }
 
     private fun visualReviewPendingIntent(context: Context, matchId: String?): PendingIntent {
