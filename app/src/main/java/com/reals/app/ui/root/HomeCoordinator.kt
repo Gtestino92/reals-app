@@ -16,6 +16,7 @@ import com.reals.app.ui.matchmaking.HomeRouter
 import com.reals.app.ui.matchmaking.HomeUiMapper
 import com.reals.app.ui.matchmaking.LocalHiddenInteractions
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
@@ -41,6 +42,8 @@ internal class HomeCoordinator(
     private val homeUiMapper = HomeUiMapper()
     private val homeRouter = HomeRouter()
     private var lastSearchLocation: SearchLocationInput? = null
+    private var searchAttemptId = 0
+    private var enqueueJob: Job? = null
     private val locallyHiddenPendingChatMatchIds = mutableSetOf<String>()
     private val locallyHiddenVisualMatchIds = mutableSetOf<String>()
 
@@ -48,6 +51,7 @@ internal class HomeCoordinator(
 
     fun beginMatchmakingLocationResolution() {
         val current = uiState.value as? RealsRootUiState.Ready ?: return
+        searchAttemptId += 1
         uiState.value = current.copy(
             home = current.home.copy(
                 matchmakingSearchPhase = MatchmakingSearchUiPhase.ResolvingLocation,
@@ -122,8 +126,23 @@ internal class HomeCoordinator(
 
     fun enqueueMatchmaking(location: SearchLocationInput) {
         val current = uiState.value as? RealsRootUiState.Ready ?: return
+        searchAttemptId += 1
+        enqueueMatchmakingForAttempt(current, location, searchAttemptId)
+    }
 
-        scope.launch {
+    fun enqueueMatchmakingFromResolvedDeviceLocation(location: SearchLocationInput) {
+        val current = uiState.value as? RealsRootUiState.Ready ?: return
+        if (current.home.matchmakingSearchPhase != MatchmakingSearchUiPhase.ResolvingLocation) return
+        enqueueMatchmakingForAttempt(current, location, searchAttemptId)
+    }
+
+    private fun enqueueMatchmakingForAttempt(
+        current: RealsRootUiState.Ready,
+        location: SearchLocationInput,
+        attemptId: Int,
+    ) {
+        enqueueJob?.cancel()
+        enqueueJob = scope.launch {
             lastSearchLocation = location
             val pending = current.copy(
                 home = current.home.copy(
@@ -136,18 +155,22 @@ internal class HomeCoordinator(
             )
             uiState.value = pending
             when (val result = dependencies.enqueueMatchmaking(location)) {
-                is ApiResult.Success -> loadHomeForReady(
-                    ready = pending.copy(
-                        home = pending.home.copy(
-                            homeLoading = true,
-                            homeMessage = null,
-                            matchmakingSearchPhase = MatchmakingSearchUiPhase.Searching,
+                is ApiResult.Success -> {
+                    if (attemptId != searchAttemptId) return@launch
+                    loadHomeForReady(
+                        ready = pending.copy(
+                            home = pending.home.copy(
+                                homeLoading = true,
+                                homeMessage = null,
+                                matchmakingSearchPhase = MatchmakingSearchUiPhase.Searching,
+                            ),
                         ),
-                    ),
-                    autoNavigateEngagements = true,
-                )
+                        autoNavigateEngagements = true,
+                    )
+                }
 
                 is ApiResult.Failure -> {
+                    if (attemptId != searchAttemptId) return@launch
                     val blockedReason = result.error.takeIf { it.isActiveInteractionLimitError() }
                     uiState.value = pending.copy(
                         home = pending.home.copy(
@@ -163,6 +186,34 @@ internal class HomeCoordinator(
                     )
                 }
             }
+        }
+    }
+
+    fun cancelMatchmakingSearch() {
+        val current = uiState.value as? RealsRootUiState.Ready ?: return
+        val inQueue = current.home.screenModel?.matchmaking?.inQueue == true ||
+            current.home.homeState?.matchmaking?.inQueue == true
+
+        if (inQueue || current.home.matchmakingSearchPhase == MatchmakingSearchUiPhase.Searching) {
+            searchAttemptId += 1
+            leaveMatchmakingQueue()
+            return
+        }
+
+        if (
+            current.home.matchmakingSearchPhase == MatchmakingSearchUiPhase.ResolvingLocation ||
+            current.home.matchmakingSearchPhase == MatchmakingSearchUiPhase.JoiningQueue
+        ) {
+            searchAttemptId += 1
+            enqueueJob?.cancel()
+            uiState.value = current.copy(
+                home = current.home.copy(
+                    homeLoading = false,
+                    homeError = null,
+                    homeMessage = null,
+                    matchmakingSearchPhase = MatchmakingSearchUiPhase.Idle,
+                ),
+            )
         }
     }
 

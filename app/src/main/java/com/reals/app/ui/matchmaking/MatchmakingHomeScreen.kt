@@ -44,6 +44,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration.Companion.milliseconds
 
+private const val LOCATION_RESOLUTION_TIMEOUT_MILLIS = 20_000L
+
 @Composable
 fun MatchmakingHomeScreen(
     profile: Profile,
@@ -55,7 +57,8 @@ fun MatchmakingHomeScreen(
     accountDeleteLoading: Boolean,
     accountDeleteError: ApiError?,
     onEnqueue: (SearchLocationInput) -> Unit,
-    onLeaveQueue: () -> Unit,
+    onDeviceLocationResolved: (SearchLocationInput) -> Unit,
+    onCancelSearch: () -> Unit,
     onBeginLocationResolution: () -> Unit,
     onFailSearchPreparation: () -> Unit,
     onRefreshHome: () -> Unit,
@@ -81,19 +84,28 @@ fun MatchmakingHomeScreen(
     var nowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var localError by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
     var manualExpanded by rememberSaveable(profile.id) { mutableStateOf(false) }
+    var locationAttemptId by rememberSaveable(profile.id) { mutableLongStateOf(0L) }
+    var pendingPermissionAttemptId by rememberSaveable(profile.id) { mutableLongStateOf(0L) }
 
-    fun enqueueWithDeviceLocation() {
+    fun enqueueWithDeviceLocation(attemptId: Long) {
         searchScope.launch {
             localError = null
             val result = runCatching {
-                withTimeoutOrNull(10_000.milliseconds) { currentSearchLocation(context) }
-                    ?: error("No hay ubicacion disponible todavia. Intenta nuevamente en unos segundos.")
+                withTimeoutOrNull(LOCATION_RESOLUTION_TIMEOUT_MILLIS.milliseconds) {
+                    currentSearchLocation(context)
+                } ?: error(
+                    "No hay ubicacion disponible todavia. Verifica que la ubicacion del telefono " +
+                        "este activada e intenta nuevamente."
+                )
             }
+            if (attemptId != locationAttemptId) return@launch
             result
                 .onSuccess { location ->
-                    onEnqueue(location)
+                    if (attemptId != locationAttemptId) return@launch
+                    onDeviceLocationResolved(location)
                 }
                 .onFailure {
+                    if (attemptId != locationAttemptId) return@launch
                     onFailSearchPreparation()
                     localError = it.message
                         ?: "No se pudo obtener la ubicacion del dispositivo."
@@ -105,9 +117,13 @@ fun MatchmakingHomeScreen(
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { grants ->
+        val attemptId = pendingPermissionAttemptId
+        pendingPermissionAttemptId = 0L
+        if (attemptId == 0L || attemptId != locationAttemptId) return@rememberLauncherForActivityResult
+
         if (grants.values.any { it }) {
             localError = null
-            enqueueWithDeviceLocation()
+            enqueueWithDeviceLocation(attemptId)
         } else {
             onFailSearchPreparation()
             localError = "Necesitamos ubicacion para buscar personas cerca. " +
@@ -121,11 +137,15 @@ fun MatchmakingHomeScreen(
             matchmakingSearchPhase == MatchmakingSearchUiPhase.JoiningQueue -> {
             SearchingChatScreen(
                 body = SEARCHING_CHAT_BODY,
-                canCancelSearch = false,
+                canCancelSearch = true,
                 homeError = null,
                 accountDeleteLoading = accountDeleteLoading,
                 onPollHome = {},
-                onLeaveQueue = {},
+                onLeaveQueue = {
+                    locationAttemptId += 1
+                    pendingPermissionAttemptId = 0L
+                    onCancelSearch()
+                },
             )
             return
         }
@@ -133,11 +153,15 @@ fun MatchmakingHomeScreen(
         matchmakingSearchPhase == MatchmakingSearchUiPhase.Searching ||
             model.matchmaking.inQueue -> {
             SearchingChatScreen(
-                canCancelSearch = model.matchmaking.inQueue,
+                canCancelSearch = true,
                 homeError = homeError,
                 accountDeleteLoading = accountDeleteLoading,
                 onPollHome = onPollHome,
-                onLeaveQueue = onLeaveQueue,
+                onLeaveQueue = {
+                    locationAttemptId += 1
+                    pendingPermissionAttemptId = 0L
+                    onCancelSearch()
+                },
             )
             return
         }
@@ -190,10 +214,13 @@ fun MatchmakingHomeScreen(
         onManualExpandedChange = { manualExpanded = it },
         onSearchWithDeviceLocation = {
             localError = null
+            locationAttemptId += 1
+            val attemptId = locationAttemptId
             onBeginLocationResolution()
             if (hasLocationPermission(context)) {
-                enqueueWithDeviceLocation()
+                enqueueWithDeviceLocation(attemptId)
             } else {
+                pendingPermissionAttemptId = attemptId
                 permissionLauncher.launch(
                     arrayOf(
                         Manifest.permission.ACCESS_FINE_LOCATION,
@@ -371,30 +398,20 @@ private fun ActiveInteractionsSummary(
     passiveNotices: List<HomePassiveNoticeItem>,
 ) {
     if (summary == null) return
-    if (summary.activeInitialCount == 0 &&
-        summary.activeConnectionCount == 0 &&
-        passiveNotices.isEmpty()
-    ) return
 
-    Text(
-        text = "Experiencias activas: " +
-            "${summary.activeInitialCount} ${if (summary.activeInitialCount == 1) "inicial" else "iniciales"}, " +
-            "${summary.activeConnectionCount} ${if (summary.activeConnectionCount == 1) "conexion" else "conexiones"}.",
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+    activeExperiencesSummaryText(summary)?.let { text ->
+        Text(
+            text = text,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 
     passiveNotices.forEach { notice ->
-        when (notice) {
-            is HomePassiveNoticeItem.SchedulingPreparing -> Text(
-                text = if (notice.count == 1) {
-                    "Tenes una coordinacion en preparacion. Se habilitara mas adelante."
-                } else {
-                    "Tenes ${notice.count} coordinaciones en preparacion. Se habilitaran mas adelante."
-                },
+        passiveNoticeText(notice)?.let { text ->
+            Text(
+                text = text,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-
-            is HomePassiveNoticeItem.Unknown -> Unit
         }
     }
 }
