@@ -84,8 +84,10 @@ fun MatchmakingHomeScreen(
     var nowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var localError by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
     var manualExpanded by rememberSaveable(profile.id) { mutableStateOf(false) }
+    var locationAttemptId by rememberSaveable(profile.id) { mutableLongStateOf(0L) }
+    var pendingPermissionAttemptId by rememberSaveable(profile.id) { mutableLongStateOf(0L) }
 
-    fun enqueueWithDeviceLocation() {
+    fun enqueueWithDeviceLocation(attemptId: Long) {
         searchScope.launch {
             localError = null
             val result = runCatching {
@@ -96,11 +98,14 @@ fun MatchmakingHomeScreen(
                         "este activada e intenta nuevamente."
                 )
             }
+            if (attemptId != locationAttemptId) return@launch
             result
                 .onSuccess { location ->
+                    if (attemptId != locationAttemptId) return@launch
                     onDeviceLocationResolved(location)
                 }
                 .onFailure {
+                    if (attemptId != locationAttemptId) return@launch
                     onFailSearchPreparation()
                     localError = it.message
                         ?: "No se pudo obtener la ubicacion del dispositivo."
@@ -112,9 +117,13 @@ fun MatchmakingHomeScreen(
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { grants ->
+        val attemptId = pendingPermissionAttemptId
+        pendingPermissionAttemptId = 0L
+        if (attemptId == 0L || attemptId != locationAttemptId) return@rememberLauncherForActivityResult
+
         if (grants.values.any { it }) {
             localError = null
-            enqueueWithDeviceLocation()
+            enqueueWithDeviceLocation(attemptId)
         } else {
             onFailSearchPreparation()
             localError = "Necesitamos ubicacion para buscar personas cerca. " +
@@ -132,7 +141,11 @@ fun MatchmakingHomeScreen(
                 homeError = null,
                 accountDeleteLoading = accountDeleteLoading,
                 onPollHome = {},
-                onLeaveQueue = onCancelSearch,
+                onLeaveQueue = {
+                    locationAttemptId += 1
+                    pendingPermissionAttemptId = 0L
+                    onCancelSearch()
+                },
             )
             return
         }
@@ -144,7 +157,11 @@ fun MatchmakingHomeScreen(
                 homeError = homeError,
                 accountDeleteLoading = accountDeleteLoading,
                 onPollHome = onPollHome,
-                onLeaveQueue = onCancelSearch,
+                onLeaveQueue = {
+                    locationAttemptId += 1
+                    pendingPermissionAttemptId = 0L
+                    onCancelSearch()
+                },
             )
             return
         }
@@ -197,10 +214,13 @@ fun MatchmakingHomeScreen(
         onManualExpandedChange = { manualExpanded = it },
         onSearchWithDeviceLocation = {
             localError = null
+            locationAttemptId += 1
+            val attemptId = locationAttemptId
             onBeginLocationResolution()
             if (hasLocationPermission(context)) {
-                enqueueWithDeviceLocation()
+                enqueueWithDeviceLocation(attemptId)
             } else {
+                pendingPermissionAttemptId = attemptId
                 permissionLauncher.launch(
                     arrayOf(
                         Manifest.permission.ACCESS_FINE_LOCATION,
