@@ -158,6 +158,24 @@ fun ChatScreen(
             )
             error?.let { ApiErrorFeedbackCard(it, ErrorContext.Chat) }
             message?.let { SuccessFeedback(it) }
+            ChatActionsPanel(
+                currentUserId = currentUserId,
+                activeExitRequest = if (showExitActions) pendingExitRequest else null,
+                loadingChatAction = loadingChatAction,
+                actionLoadingLabel = actionLoadingLabel,
+                canDecide = canDecide,
+                canOpenActions = !exitFlowLocked && canUseChatActions,
+                canUseNavigationActions = canUseNavigationActions,
+                showDecisionActions = showDecisionActions,
+                showExitActions = showExitActions,
+                showMutualExitActions = showMutualExitActions,
+                onBackHome = onBackHome,
+                onApprove = onApprove,
+                onShowActions = { showingActionsDialog = true },
+                onAcceptExitRequest = onAcceptExitRequest,
+                onRejectExitRequest = onRejectExitRequest,
+                onExitRequestTimeout = onExitRequestTimeout,
+            )
             MessageList(
                 currentUserId = currentUserId,
                 messages = messages,
@@ -178,44 +196,20 @@ fun ChatScreen(
                 modifier = Modifier.onSizeChanged { size ->
                     bottomBarHeight = with(density) { size.height.toDp() }
                 },
-                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                ChatComposer(
+                MessageComposer(
                     draft = draft,
                     canChat = canChat,
                     canEditDraft = canEditDraft,
                     sendingMessage = sendingMessage,
                     loadingChatAction = loadingChatAction,
-                    actionLoadingLabel = actionLoadingLabel,
-                    canDecide = canDecide,
-                    currentUserId = currentUserId,
-                    activeExitRequest = if (showExitActions) pendingExitRequest else null,
-                    canOpenActions = !exitFlowLocked && canUseChatActions,
-                    showDecisionActions = showDecisionActions,
-                    showExitActions = showExitActions,
-                    showMutualExitActions = showMutualExitActions,
                     onDraftChange = { draft = it.take(1_000) },
                     onSend = {
                         if (onSendMessage(draft)) {
                             draft = ""
                         }
                     },
-                    onApprove = onApprove,
-                    onShowActions = { showingActionsDialog = true },
-                    onAcceptExitRequest = onAcceptExitRequest,
-                    onRejectExitRequest = onRejectExitRequest,
-                    onExitRequestTimeout = onExitRequestTimeout,
                 )
-
-                onBackHome?.let { back ->
-                    OutlinedButton(
-                        onClick = back,
-                        enabled = canUseNavigationActions,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Volver a Home")
-                    }
-                }
             }
         }
     }
@@ -428,28 +422,33 @@ private sealed interface ChatMessageListItem {
 }
 
 @Composable
-private fun ChatComposer(
-    draft: String,
-    canChat: Boolean,
-    canEditDraft: Boolean,
-    sendingMessage: Boolean,
+private fun ChatActionsPanel(
+    currentUserId: String,
+    activeExitRequest: ChatExitRequest?,
     loadingChatAction: Boolean,
     actionLoadingLabel: String?,
     canDecide: Boolean,
-    currentUserId: String,
-    activeExitRequest: ChatExitRequest?,
     canOpenActions: Boolean,
+    canUseNavigationActions: Boolean,
     showDecisionActions: Boolean,
     showExitActions: Boolean,
     showMutualExitActions: Boolean,
-    onDraftChange: (String) -> Unit,
-    onSend: () -> Unit,
+    onBackHome: (() -> Unit)?,
     onApprove: () -> Unit,
     onShowActions: () -> Unit,
     onAcceptExitRequest: (String) -> Unit,
     onRejectExitRequest: (String) -> Unit,
     onExitRequestTimeout: (String) -> Unit,
 ) {
+    if (
+        activeExitRequest == null &&
+        !showExitActions &&
+        !showDecisionActions &&
+        onBackHome == null
+    ) {
+        return
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
@@ -469,6 +468,64 @@ private fun ChatComposer(
                     onExitRequestTimeout = onExitRequestTimeout,
                 )
             }
+            if (showExitActions || onBackHome != null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (showExitActions) {
+                        OutlinedButton(
+                            onClick = onShowActions,
+                            enabled = !loadingChatAction && (canOpenActions || !showMutualExitActions),
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(
+                                if (loadingChatAction) actionLoadingLabel
+                                    ?: "Procesando..." else "Mas acciones"
+                            )
+                        }
+                    }
+                    onBackHome?.let { back ->
+                        OutlinedButton(
+                            onClick = back,
+                            enabled = canUseNavigationActions,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text("Volver a Home")
+                        }
+                    }
+                }
+            }
+            if (showDecisionActions) {
+                Button(
+                    onClick = onApprove,
+                    enabled = !loadingChatAction && canDecide,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        if (loadingChatAction) actionLoadingLabel ?: "Procesando..." else "Aprobar chat"
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MessageComposer(
+    draft: String,
+    canChat: Boolean,
+    canEditDraft: Boolean,
+    sendingMessage: Boolean,
+    loadingChatAction: Boolean,
+    onDraftChange: (String) -> Unit,
+    onSend: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             if (!canChat) {
                 Text(
                     text = "Este chat no esta disponible para enviar mensajes.",
@@ -484,37 +541,12 @@ private fun ChatComposer(
                 maxLines = 4,
                 modifier = Modifier.fillMaxWidth(),
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(
-                    onClick = onSend,
-                    enabled = canChat && !sendingMessage && !loadingChatAction && draft.isNotBlank(),
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text(if (sendingMessage) "Enviando..." else "Enviar")
-                }
-                if (showExitActions) {
-                    OutlinedButton(
-                        onClick = onShowActions,
-                        enabled = !loadingChatAction && (canOpenActions || !showMutualExitActions),
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text(
-                            if (loadingChatAction) actionLoadingLabel
-                                ?: "Procesando..." else "Mas acciones"
-                        )
-                    }
-                }
-            }
-            if (showDecisionActions) {
-                Button(
-                    onClick = onApprove,
-                    enabled = !loadingChatAction && canDecide,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        if (loadingChatAction) actionLoadingLabel ?: "Procesando..." else "Aprobar chat"
-                    )
-                }
+            Button(
+                onClick = onSend,
+                enabled = canChat && !sendingMessage && !loadingChatAction && draft.isNotBlank(),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (sendingMessage) "Enviando..." else "Enviar")
             }
         }
     }
