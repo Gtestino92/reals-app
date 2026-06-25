@@ -371,30 +371,20 @@ private fun ActiveInteractionsSummary(
     passiveNotices: List<HomePassiveNoticeItem>,
 ) {
     if (summary == null) return
-    if (summary.activeInitialCount == 0 &&
-        summary.activeConnectionCount == 0 &&
-        passiveNotices.isEmpty()
-    ) return
 
-    Text(
-        text = "Experiencias activas: " +
-            "${summary.activeInitialCount} ${if (summary.activeInitialCount == 1) "inicial" else "iniciales"}, " +
-            "${summary.activeConnectionCount} ${if (summary.activeConnectionCount == 1) "conexion" else "conexiones"}.",
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+    activeExperiencesSummaryText(summary)?.let { text ->
+        Text(
+            text = text,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 
     passiveNotices.forEach { notice ->
-        when (notice) {
-            is HomePassiveNoticeItem.SchedulingPreparing -> Text(
-                text = if (notice.count == 1) {
-                    "Tenes una coordinacion en preparacion. Se habilitara mas adelante."
-                } else {
-                    "Tenes ${notice.count} coordinaciones en preparacion. Se habilitaran mas adelante."
-                },
+        passiveNoticeText(notice)?.let { text ->
+            Text(
+                text = text,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-
-            is HomePassiveNoticeItem.Unknown -> Unit
         }
     }
 }
