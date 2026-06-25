@@ -2,6 +2,7 @@ package com.reals.app.ui.chat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,11 +28,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
@@ -51,6 +57,8 @@ import com.reals.app.ui.common.SearchingDotsIndicator
 import com.reals.app.ui.common.formatBackendDateTime
 import com.reals.app.ui.common.formatBackendTime
 import com.reals.app.ui.common.userLabel
+import com.reals.app.ui.root.OptimisticOutgoingMessage
+import com.reals.app.ui.root.OutgoingMessageDeliveryState
 import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -59,13 +67,12 @@ private const val MUTUAL_EXIT_TIMEOUT_SECONDS = 20L
 @Composable
 fun ChatScreen(
     currentUserId: String,
-    matchId: String,
     match: Match?,
     chat: Chat?,
     messages: List<ChatMessage>,
+    optimisticMessages: List<OptimisticOutgoingMessage>,
     exitRequests: List<ChatExitRequest>,
     loading: Boolean,
-    refreshing: Boolean,
     sending: Boolean,
     actionLoading: Boolean,
     actionLoadingLabel: String?,
@@ -79,7 +86,8 @@ fun ChatScreen(
     allowAvailableChat: Boolean = false,
     onBackHome: (() -> Unit)? = null,
     onRefresh: () -> Unit,
-    onSendMessage: (String) -> Unit,
+    onSendMessage: (String) -> Boolean,
+    onRetryOptimisticMessage: (localId: String, content: String) -> Unit,
     onApprove: () -> Unit,
     onReject: () -> Unit,
     onRequestMutualExit: () -> Unit,
@@ -92,9 +100,13 @@ fun ChatScreen(
     var safetyDetails by rememberSaveable(chat?.id) { mutableStateOf("") }
     var showingSafetyDialog by rememberSaveable(chat?.id) { mutableStateOf(false) }
     var showingActionsDialog by rememberSaveable(chat?.id) { mutableStateOf(false) }
-    val busy = loading || sending || actionLoading
     val canChat = chat?.status == ChatStatus.Active ||
             (allowAvailableChat && chat?.status == ChatStatus.Available)
+    val sendingMessage = sending
+    val loadingChatAction = actionLoading
+    val canEditDraft = canChat && !loadingChatAction
+    val canUseChatActions = canChat && !loadingChatAction
+    val canUseNavigationActions = !loadingChatAction
     val pendingExitRequest = exitRequests
         .filter { it.status == ChatExitRequestStatus.Pending }
         .maxByOrNull { it.createdAt }
@@ -107,6 +119,9 @@ fun ChatScreen(
     val partnerDisplayName = chat?.partner?.displayName
         ?.takeIf { it.isNotBlank() }
         ?: partnerNameFallback?.takeIf { it.isNotBlank() }
+    var bottomBarHeight by remember { mutableStateOf(0.dp) }
+    val density = LocalDensity.current
+    val bottomContentPadding = bottomBarHeight.takeIf { it > 0.dp } ?: 180.dp
 
     if (loading && chat == null) {
         LoadingChatScreen(
@@ -123,64 +138,84 @@ fun ChatScreen(
         }
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .safeDrawingPadding()
             .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        ChatHeader(
-            titlePrefix = chatTitlePrefix,
-            partnerName = partnerDisplayName,
-            expiresAt = chat?.expiresAt,
-            myDecision = chat?.myDecision,
-            partnerDecision = chat?.partnerDecision,
-            showDecisionSummary = showDecisionActions,
-        )
-        error?.let { ApiErrorFeedbackCard(it, ErrorContext.Chat) }
-        message?.let { SuccessFeedback(it) }
-        MessageList(
-            currentUserId = currentUserId,
-            messages = messages,
-            modifier = Modifier.weight(1f),
-        )
-        Box(
-            modifier = Modifier.imePadding()
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            ChatComposer(
-                draft = draft,
-                canChat = canChat,
-                busy = busy,
-                sending = sending,
-                actionLoading = actionLoading,
-                actionLoadingLabel = actionLoadingLabel,
-                canDecide = canDecide,
+            ChatHeader(
+                titlePrefix = chatTitlePrefix,
+                partnerName = partnerDisplayName,
+                expiresAt = chat?.expiresAt,
+                myDecision = chat?.myDecision,
+                partnerDecision = chat?.partnerDecision,
+                showDecisionSummary = showDecisionActions,
+            )
+            error?.let { ApiErrorFeedbackCard(it, ErrorContext.Chat) }
+            message?.let { SuccessFeedback(it) }
+            MessageList(
                 currentUserId = currentUserId,
-                activeExitRequest = if (showExitActions) pendingExitRequest else null,
-                canOpenActions = !exitFlowLocked,
-                showDecisionActions = showDecisionActions,
-                showExitActions = showExitActions,
-                showMutualExitActions = showMutualExitActions,
-                onDraftChange = { draft = it.take(1_000) },
-                onSend = {
-                    onSendMessage(draft)
-                    draft = ""
-                },
-                onApprove = onApprove,
-                onShowActions = { showingActionsDialog = true },
-                onAcceptExitRequest = onAcceptExitRequest,
-                onRejectExitRequest = onRejectExitRequest,
-                onExitRequestTimeout = onExitRequestTimeout,
+                messages = messages,
+                optimisticMessages = optimisticMessages,
+                bottomContentPadding = bottomContentPadding + 12.dp,
+                modifier = Modifier.weight(1f),
+                onRetryOptimisticMessage = onRetryOptimisticMessage,
             )
         }
-        onBackHome?.let { back ->
-            OutlinedButton(
-                onClick = back,
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth(),
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .imePadding(),
+        ) {
+            Column(
+                modifier = Modifier.onSizeChanged { size ->
+                    bottomBarHeight = with(density) { size.height.toDp() }
+                },
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text("Volver a Home")
+                ChatComposer(
+                    draft = draft,
+                    canChat = canChat,
+                    canEditDraft = canEditDraft,
+                    sendingMessage = sendingMessage,
+                    loadingChatAction = loadingChatAction,
+                    actionLoadingLabel = actionLoadingLabel,
+                    canDecide = canDecide,
+                    currentUserId = currentUserId,
+                    activeExitRequest = if (showExitActions) pendingExitRequest else null,
+                    canOpenActions = !exitFlowLocked && canUseChatActions,
+                    showDecisionActions = showDecisionActions,
+                    showExitActions = showExitActions,
+                    showMutualExitActions = showMutualExitActions,
+                    onDraftChange = { draft = it.take(1_000) },
+                    onSend = {
+                        if (onSendMessage(draft)) {
+                            draft = ""
+                        }
+                    },
+                    onApprove = onApprove,
+                    onShowActions = { showingActionsDialog = true },
+                    onAcceptExitRequest = onAcceptExitRequest,
+                    onRejectExitRequest = onRejectExitRequest,
+                    onExitRequestTimeout = onExitRequestTimeout,
+                )
+
+                onBackHome?.let { back ->
+                    OutlinedButton(
+                        onClick = back,
+                        enabled = canUseNavigationActions,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Volver a Home")
+                    }
+                }
             }
         }
     }
@@ -303,14 +338,25 @@ private fun ChatHeader(
 private fun MessageList(
     currentUserId: String,
     messages: List<ChatMessage>,
+    optimisticMessages: List<OptimisticOutgoingMessage>,
+    bottomContentPadding: Dp,
     modifier: Modifier,
+    onRetryOptimisticMessage: (localId: String, content: String) -> Unit,
 ) {
     val sortedMessages = messages.sortedBy { it.sentAt }
+    val messageItems = sortedMessages.map { ChatMessageListItem.Backend(it) } +
+        optimisticMessages.sortedBy { it.createdAtMillis }.map { ChatMessageListItem.Optimistic(it) }
     val listState = rememberLazyListState()
+    val latestMessage = messageItems.lastOrNull()
+    val latestMessageId = latestMessage?.stableId
+    val latestMessageIsMine = latestMessage?.isMine(currentUserId) == true
 
-    LaunchedEffect(sortedMessages.size) {
-        if (sortedMessages.isNotEmpty()) {
-            listState.animateScrollToItem(sortedMessages.lastIndex)
+    LaunchedEffect(latestMessageId) {
+        if (latestMessageId == null) return@LaunchedEffect
+
+        val shouldScrollToBottom = latestMessageIsMine || listState.isNearBottom()
+        if (shouldScrollToBottom) {
+            listState.animateScrollToItem(messageItems.lastIndex)
         }
     }
 
@@ -320,12 +366,16 @@ private fun MessageList(
     ) {
         LazyColumn(
             state = listState,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(18.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = 18.dp,
+                top = 18.dp,
+                end = 18.dp,
+                bottom = bottomContentPadding,
+            ),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            if (messages.isEmpty()) {
+            if (messageItems.isEmpty()) {
                 item {
                     Text(
                         "Todavia no hay mensajes.",
@@ -333,14 +383,47 @@ private fun MessageList(
                     )
                 }
             } else {
-                items(sortedMessages, key = { it.id }) { item ->
-                    MessageBubble(
-                        message = item,
-                        mine = item.senderId == currentUserId,
-                    )
+                items(messageItems, key = { it.stableId }) { item ->
+                    when (item) {
+                        is ChatMessageListItem.Backend -> MessageBubble(
+                            message = item.message,
+                            mine = item.message.senderId == currentUserId,
+                        )
+
+                        is ChatMessageListItem.Optimistic -> OptimisticMessageBubble(
+                            message = item.message,
+                            onRetry = onRetryOptimisticMessage,
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+private fun LazyListState.isNearBottom(bufferItems: Int = 2): Boolean {
+    val totalItems = layoutInfo.totalItemsCount
+    if (totalItems == 0) return true
+
+    val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: return true
+    return lastVisibleIndex >= totalItems - 1 - bufferItems
+}
+
+private sealed interface ChatMessageListItem {
+    val stableId: String
+
+    fun isMine(currentUserId: String): Boolean
+
+    data class Backend(val message: ChatMessage) : ChatMessageListItem {
+        override val stableId: String = "backend-${message.id}"
+
+        override fun isMine(currentUserId: String): Boolean = message.senderId == currentUserId
+    }
+
+    data class Optimistic(val message: OptimisticOutgoingMessage) : ChatMessageListItem {
+        override val stableId: String = "optimistic-${message.localId}"
+
+        override fun isMine(currentUserId: String): Boolean = message.senderId == currentUserId
     }
 }
 
@@ -348,9 +431,9 @@ private fun MessageList(
 private fun ChatComposer(
     draft: String,
     canChat: Boolean,
-    busy: Boolean,
-    sending: Boolean,
-    actionLoading: Boolean,
+    canEditDraft: Boolean,
+    sendingMessage: Boolean,
+    loadingChatAction: Boolean,
     actionLoadingLabel: String?,
     canDecide: Boolean,
     currentUserId: String,
@@ -379,7 +462,7 @@ private fun ChatComposer(
                 TimedExitRequestCard(
                     currentUserId = currentUserId,
                     request = request,
-                    busy = busy,
+                    actionsDisabled = loadingChatAction,
                     actionLoadingLabel = actionLoadingLabel,
                     onAcceptExitRequest = onAcceptExitRequest,
                     onRejectExitRequest = onRejectExitRequest,
@@ -396,7 +479,7 @@ private fun ChatComposer(
                 value = draft,
                 onValueChange = onDraftChange,
                 label = { Text("Mensaje") },
-                enabled = canChat && !actionLoading,
+                enabled = canEditDraft,
                 minLines = 1,
                 maxLines = 4,
                 modifier = Modifier.fillMaxWidth(),
@@ -404,19 +487,19 @@ private fun ChatComposer(
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(
                     onClick = onSend,
-                    enabled = !busy && canChat && draft.isNotBlank(),
+                    enabled = canChat && !sendingMessage && !loadingChatAction && draft.isNotBlank(),
                     modifier = Modifier.weight(1f),
                 ) {
-                    Text(if (sending) "Enviando..." else "Enviar")
+                    Text(if (sendingMessage) "Enviando..." else "Enviar")
                 }
                 if (showExitActions) {
                     OutlinedButton(
                         onClick = onShowActions,
-                        enabled = !busy && (canOpenActions || !showMutualExitActions),
+                        enabled = !loadingChatAction && (canOpenActions || !showMutualExitActions),
                         modifier = Modifier.weight(1f),
                     ) {
                         Text(
-                            if (actionLoading) actionLoadingLabel
+                            if (loadingChatAction) actionLoadingLabel
                                 ?: "Procesando..." else "Mas acciones"
                         )
                     }
@@ -425,11 +508,11 @@ private fun ChatComposer(
             if (showDecisionActions) {
                 Button(
                     onClick = onApprove,
-                    enabled = !busy && canDecide,
+                    enabled = !loadingChatAction && canDecide,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
-                        if (actionLoading) actionLoadingLabel ?: "Procesando..." else "Aprobar chat"
+                        if (loadingChatAction) actionLoadingLabel ?: "Procesando..." else "Aprobar chat"
                     )
                 }
             }
@@ -441,7 +524,7 @@ private fun ChatComposer(
 private fun TimedExitRequestCard(
     currentUserId: String,
     request: ChatExitRequest,
-    busy: Boolean,
+    actionsDisabled: Boolean,
     actionLoadingLabel: String?,
     onAcceptExitRequest: (String) -> Unit,
     onRejectExitRequest: (String) -> Unit,
@@ -493,17 +576,17 @@ private fun TimedExitRequestCard(
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(
                         onClick = { onAcceptExitRequest(request.id) },
-                        enabled = !busy,
+                        enabled = !actionsDisabled,
                         modifier = Modifier.weight(1f),
                     ) {
-                        Text(if (busy) actionLoadingLabel ?: "Procesando..." else "Aceptar")
+                        Text(if (actionsDisabled) actionLoadingLabel ?: "Procesando..." else "Aceptar")
                     }
                     OutlinedButton(
                         onClick = { onRejectExitRequest(request.id) },
-                        enabled = !busy,
+                        enabled = !actionsDisabled,
                         modifier = Modifier.weight(1f),
                     ) {
-                        Text(if (busy) actionLoadingLabel ?: "Procesando..." else "Rechazar")
+                        Text(if (actionsDisabled) actionLoadingLabel ?: "Procesando..." else "Rechazar")
                     }
                 }
             }
@@ -545,6 +628,52 @@ private fun MessageBubble(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun OptimisticMessageBubble(
+    message: OptimisticOutgoingMessage,
+    onRetry: (localId: String, content: String) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.End,
+    ) {
+        Card(
+            modifier = Modifier.widthIn(max = 300.dp),
+            shape = RoundedCornerShape(
+                topStart = 18.dp,
+                topEnd = 18.dp,
+                bottomStart = 18.dp,
+                bottomEnd = 4.dp,
+            ),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+            ),
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                Text(TextSafety.safeDisplay(message.content))
+                Text(
+                    text = when (message.deliveryState) {
+                        OutgoingMessageDeliveryState.Sending -> "Enviando..."
+                        OutgoingMessageDeliveryState.Failed -> "No se pudo enviar"
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.End,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (message.deliveryState == OutgoingMessageDeliveryState.Failed) {
+                    TextButton(
+                        onClick = { onRetry(message.localId, message.content) },
+                        modifier = Modifier.align(Alignment.End),
+                    ) {
+                        Text("Reintentar")
+                    }
+                }
             }
         }
     }

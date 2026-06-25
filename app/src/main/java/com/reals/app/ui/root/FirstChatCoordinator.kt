@@ -136,30 +136,32 @@ internal class FirstChatCoordinator(
     suspend fun sendMessage(
         current: RealsRootUiState.FirstChat,
         cleanContent: String,
+        localId: String,
     ): RealsRootUiState.FirstChat {
         val chat = current.chat ?: return current
         val cursorBeforeSend = current.messages.lastMessageCursor()
-        val pending = current.copy(sending = true, error = null, message = null)
         return when (val result = dependencies.sendChatMessage(chat.id, cleanContent)) {
             is ApiResult.Success -> {
                 val sentMessage = result.value
-                val messagesWithSent = pending.messages.appendUnique(listOf(sentMessage))
+                val messagesWithSent = current.messages.appendUnique(listOf(sentMessage))
 
                 val messagesResult = dependencies.getChatMessages(chat.id, cursorBeforeSend)
                 val chatResult = dependencies.getFirstChatForMatch(current.matchId)
 
-                pending.copy(
-                    chat = (chatResult as? ApiResult.Success)?.value ?: pending.chat,
+                current.copy(
+                    chat = (chatResult as? ApiResult.Success)?.value ?: current.chat,
                     messages = messagesWithSent.appendUnique(
                         (messagesResult as? ApiResult.Success)?.value.orEmpty()
                     ),
+                    optimisticMessages = current.optimisticMessages.filterNot { it.localId == localId },
                     sending = false,
                     error = (messagesResult as? ApiResult.Failure)?.error
                         ?: (chatResult as? ApiResult.Failure)?.error,
                 )
             }
 
-            is ApiResult.Failure -> pending.copy(
+            is ApiResult.Failure -> current.copy(
+                optimisticMessages = current.optimisticMessages.markOptimisticMessageFailed(localId),
                 sending = false,
                 error = result.error,
             )

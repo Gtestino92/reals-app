@@ -46,6 +46,27 @@ internal class HomeCoordinator(
 
     // -- Public API for RealsRootViewModel -------------------------------------
 
+    fun beginMatchmakingLocationResolution() {
+        val current = uiState.value as? RealsRootUiState.Ready ?: return
+        uiState.value = current.copy(
+            home = current.home.copy(
+                matchmakingSearchPhase = MatchmakingSearchUiPhase.ResolvingLocation,
+                homeError = null,
+                homeMessage = null,
+            ),
+        )
+    }
+
+    fun failMatchmakingSearchPreparation() {
+        val current = uiState.value as? RealsRootUiState.Ready ?: return
+        uiState.value = current.copy(
+            home = current.home.copy(
+                matchmakingSearchPhase = MatchmakingSearchUiPhase.Failed,
+                homeLoading = false,
+            ),
+        )
+    }
+
     fun refreshHomeState() {
         val current = uiState.value as? RealsRootUiState.Ready ?: return
 
@@ -82,6 +103,10 @@ internal class HomeCoordinator(
                                 homeState = homeResult.value,
                                 screenModel = screenModel,
                                 homeLoading = false,
+                                matchmakingSearchPhase = searchPhaseAfterHomeLoad(
+                                    ready = latest,
+                                    screenModel = screenModel,
+                                ),
                             ),
                         ),
                         autoNavigateEngagements = latest.home.screenModel?.matchmaking?.inQueue == true,
@@ -106,6 +131,7 @@ internal class HomeCoordinator(
                     homeError = null,
                     homeMessage = null,
                     matchmakingBlockedReason = null,
+                    matchmakingSearchPhase = MatchmakingSearchUiPhase.JoiningQueue,
                 ),
             )
             uiState.value = pending
@@ -115,6 +141,7 @@ internal class HomeCoordinator(
                         home = pending.home.copy(
                             homeLoading = true,
                             homeMessage = null,
+                            matchmakingSearchPhase = MatchmakingSearchUiPhase.Searching,
                         ),
                     ),
                     autoNavigateEngagements = true,
@@ -131,6 +158,7 @@ internal class HomeCoordinator(
                             homeLoading = false,
                             homeError = result.error,
                             matchmakingBlockedReason = blockedReason,
+                            matchmakingSearchPhase = MatchmakingSearchUiPhase.Failed,
                         ),
                     )
                 }
@@ -240,6 +268,10 @@ internal class HomeCoordinator(
                             screenModel = screenModel,
                             homeLoading = false,
                             homeError = null,
+                            matchmakingSearchPhase = searchPhaseAfterHomeLoad(
+                                ready = ready,
+                                screenModel = screenModel,
+                            ),
                         ),
                     ),
                     autoNavigateEngagements = autoNavigateEngagements,
@@ -252,6 +284,7 @@ internal class HomeCoordinator(
                         homeLoading = false,
                         homeError = homeResult.error,
                         homeMessage = null,
+                        matchmakingSearchPhase = MatchmakingSearchUiPhase.Failed,
                     ),
                 )
             }
@@ -359,6 +392,20 @@ internal class HomeCoordinator(
         localHidden = localHiddenSnapshot(),
         localMatchmakingBlockedReason = localMatchmakingBlockedReason,
     )
+
+    private fun searchPhaseAfterHomeLoad(
+        ready: RealsRootUiState.Ready,
+        screenModel: com.reals.app.ui.matchmaking.HomeScreenModel,
+    ): MatchmakingSearchUiPhase {
+        if (screenModel.matchmaking.inQueue) return MatchmakingSearchUiPhase.Searching
+        return when (ready.home.matchmakingSearchPhase) {
+            MatchmakingSearchUiPhase.ResolvingLocation,
+            MatchmakingSearchUiPhase.JoiningQueue,
+            MatchmakingSearchUiPhase.Searching,
+            MatchmakingSearchUiPhase.Failed -> MatchmakingSearchUiPhase.Idle
+            MatchmakingSearchUiPhase.Idle -> MatchmakingSearchUiPhase.Idle
+        }
+    }
 
     private suspend fun routeFromHomeScreenModel(
         ready: RealsRootUiState.Ready,
