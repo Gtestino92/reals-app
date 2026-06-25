@@ -84,7 +84,7 @@ class FirstChatCoordinatorTest {
     fun `sendMessage appends sent message and refreshes messages`() = runBlocking {
         val current = firstChatState(chatStatus = ChatStatus.Active)
 
-        val state = coordinator.sendMessage(current, "hola")
+        val state = coordinator.sendMessage(current, "hola", localId = "local-1")
 
         assertEquals(false, state.sending)
         assertTrue(state.messages.any { it.id == "message-1" })

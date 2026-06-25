@@ -22,6 +22,8 @@ import com.reals.app.data.dto.PhotoResponseDto
 import com.reals.app.data.dto.PingResponseDto
 import com.reals.app.data.dto.ProfileResponseDto
 import com.reals.app.data.dto.QueueStatusResponseDto
+import com.reals.app.data.dto.RegisterPushTokenRequestDto
+import com.reals.app.data.dto.RegisterPushTokenResponseDto
 import com.reals.app.data.dto.ReplacePhotoRequestDto
 import com.reals.app.data.dto.ScheduleProposalResponseDto
 import com.reals.app.data.dto.SendMessageRequestDto
@@ -97,11 +99,15 @@ class FakeRealsApi : RealsApi {
         private set
     var replacePhotoBody: ReplacePhotoRequestDto? = null
         private set
+    var registerPushTokenBody: RegisterPushTokenRequestDto? = null
+        private set
 
     var pingResponse: Response<PingResponseDto> = Response.success(PingResponseDto("ok"))
     var userResponse: Response<UserResponseDto> = Response.success(TestDtos.user())
     var deleteMeResponse: Response<Unit> = Response.success(Unit)
     var homeResponse: Response<HomeResponseDto> = Response.success(TestDtos.home())
+    var registerPushTokenResponse: Response<RegisterPushTokenResponseDto> =
+        Response.success(RegisterPushTokenResponseDto(registered = true))
     var profileResponse: Response<ProfileResponseDto> = Response.success(TestDtos.profile())
     var photosResponse: Response<List<PhotoResponseDto>> = Response.success(listOf(TestDtos.photo()))
     var photoResponse: Response<PhotoResponseDto> = Response.success(TestDtos.photo())
@@ -134,6 +140,15 @@ class FakeRealsApi : RealsApi {
 
     override suspend fun getHome(authorization: String): Response<HomeResponseDto> =
         record("getHome", authorization) { homeResponse }
+
+    override suspend fun registerPushToken(
+        authorization: String,
+        body: RegisterPushTokenRequestDto,
+    ): Response<RegisterPushTokenResponseDto> =
+        record("registerPushToken", authorization) {
+            registerPushTokenBody = body
+            registerPushTokenResponse
+        }
 
     override suspend fun deleteMe(authorization: String): Response<Unit> =
         record("deleteMe", authorization) { deleteMeResponse }

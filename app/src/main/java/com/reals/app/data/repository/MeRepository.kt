@@ -5,6 +5,7 @@ import com.reals.app.core.network.ApiResult
 import com.reals.app.core.network.map
 import com.reals.app.data.api.AuthTokenProvider
 import com.reals.app.data.api.RealsApi
+import com.reals.app.data.dto.RegisterPushTokenRequestDto
 import com.reals.app.data.mapper.toDomain
 import com.reals.app.domain.model.BackendUser
 import com.reals.app.domain.model.HomeState
@@ -25,6 +26,14 @@ class MeRepository(
     suspend fun getHome(): ApiResult<HomeState> =
         authorizedCall { authorization -> api.getHome(authorization) }
             .map { it.toDomain() }
+
+    suspend fun registerPushToken(token: String): ApiResult<Boolean> =
+        authorizedCall { authorization ->
+            api.registerPushToken(
+                authorization = authorization,
+                body = RegisterPushTokenRequestDto(token = token, platform = "ANDROID"),
+            )
+        }.map { it.registered }
 
     suspend fun deleteMe(): ApiResult<Unit> =
         authorizedUnitCall { authorization -> api.deleteMe(authorization) }

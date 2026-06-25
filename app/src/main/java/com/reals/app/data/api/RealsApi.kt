@@ -21,6 +21,8 @@ import com.reals.app.data.dto.PhotoResponseDto
 import com.reals.app.data.dto.PingResponseDto
 import com.reals.app.data.dto.ProfileResponseDto
 import com.reals.app.data.dto.QueueStatusResponseDto
+import com.reals.app.data.dto.RegisterPushTokenRequestDto
+import com.reals.app.data.dto.RegisterPushTokenResponseDto
 import com.reals.app.data.dto.ReplacePhotoRequestDto
 import com.reals.app.data.dto.ScheduleProposalResponseDto
 import com.reals.app.data.dto.SendMessageRequestDto
@@ -63,6 +65,12 @@ interface RealsApi {
     suspend fun getHome(
         @Header("Authorization") authorization: String,
     ): Response<HomeResponseDto>
+
+    @PUT("api/me/push-tokens")
+    suspend fun registerPushToken(
+        @Header("Authorization") authorization: String,
+        @Body body: RegisterPushTokenRequestDto,
+    ): Response<RegisterPushTokenResponseDto>
 
     @DELETE("api/me")
     suspend fun deleteMe(

@@ -38,6 +38,17 @@ class MeRepositoryTest {
     }
 
     @Test
+    fun `registerPushToken sends android platform and maps registered flag`() = runBlocking {
+        val registered = repository.registerPushToken("fcm-token").successValue()
+
+        assertTrue(registered)
+        assertEquals("registerPushToken", api.calls.single())
+        assertEquals("Bearer test-token", api.lastAuthorization)
+        assertEquals("fcm-token", api.registerPushTokenBody?.token)
+        assertEquals("ANDROID", api.registerPushTokenBody?.platform)
+    }
+
+    @Test
     fun `auth failure returns auth error without api call`() = runBlocking {
         tokenProvider.failMissingUser()
 

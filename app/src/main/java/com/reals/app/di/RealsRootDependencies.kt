@@ -42,6 +42,7 @@ import com.reals.app.domain.usecase.SubmitVisualDecisionUseCase
 import com.reals.app.domain.usecase.TimeoutChatExitRequestUseCase
 import com.reals.app.domain.usecase.UpdateMatchFiltersUseCase
 import com.reals.app.domain.usecase.UpdateProfileUseCase
+import com.reals.app.notifications.registration.PushTokenRegistrationService
 
 data class RealsRootDependencies(
     val session: SessionFeatureDependencies,
@@ -57,6 +58,7 @@ data class SessionFeatureDependencies(
     val authRepository: FirebaseAuthRepository,
     val provisionAndLoadProfile: ProvisionAndLoadProfileUseCase,
     val getMe: GetMeUseCase,
+    val pushTokenRegistrationService: PushTokenRegistrationService,
 )
 
 data class AccountFeatureDependencies(
