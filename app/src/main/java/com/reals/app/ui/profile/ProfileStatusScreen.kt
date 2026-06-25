@@ -10,7 +10,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -71,6 +73,7 @@ fun ProfileStatusScreen(
     activationError: ApiError?,
     accountDeleteLoading: Boolean,
     accountDeleteError: ApiError?,
+    showDraftAfterEditNotice: Boolean = false,
     onUpdateProfile: (UpdateProfileInput) -> Unit,
     onUpdateMatchFilters: (UpdateMatchFiltersInput) -> Unit,
     onLoadPhotos: () -> Unit,
@@ -94,6 +97,8 @@ fun ProfileStatusScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .safeDrawingPadding()
+            .imePadding()
             .verticalScroll(scrollState)
             .padding(24.dp),
         verticalArrangement = Arrangement.Center,
@@ -110,6 +115,14 @@ fun ProfileStatusScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(modifier = Modifier.height(20.dp))
+        if (showDraftAfterEditNotice) {
+            FeedbackCard(
+                title = "Tu perfil volvió a borrador",
+                message = "Como modificaste tus fotos, necesitamos que vuelvas a activar el perfil antes de volver al Home.",
+                tone = FeedbackTone.Warning,
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+        }
         when (val snapshot = session.profileSnapshot) {
             ProfileSnapshot.Missing -> MissingProfileCard()
             is ProfileSnapshot.Found -> ProfileCard(

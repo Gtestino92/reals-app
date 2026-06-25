@@ -92,7 +92,7 @@ fun RealsApp(appContainer: AppContainer) {
                 )
 
                 is ProfileSnapshot.Found -> {
-                    val profile = (current.session.profileSnapshot as ProfileSnapshot.Found).profile
+                    val profile = (current.session.profileSnapshot).profile
                     if (current.editingActiveProfile || profile.status != ProfileStatus.Active) {
                         ProfileStatusScreen(
                             session = current.session,
@@ -110,6 +110,8 @@ fun RealsApp(appContainer: AppContainer) {
                             photoActionMessage = current.photoActionMessage,
                             activationLoading = current.activatingProfile,
                             activationError = current.profileActivationError,
+                            showDraftAfterEditNotice = current.editingActiveProfile &&
+                                profile.status != ProfileStatus.Active,
                             onUpdateProfile = viewModel::updateProfile,
                             onUpdateMatchFilters = viewModel::updateMatchFilters,
                             onLoadPhotos = viewModel::loadProfilePhotos,
@@ -124,7 +126,10 @@ fun RealsApp(appContainer: AppContainer) {
                             accountDeleteLoading = current.deletingAccount,
                             accountDeleteError = current.accountDeleteError,
                             onDeleteAccount = viewModel::deleteAccount,
-                            onBackHome = if (current.editingActiveProfile) {
+                            onBackHome = if (
+                                current.editingActiveProfile &&
+                                profile.status == ProfileStatus.Active
+                            ) {
                                 viewModel::closeProfileManagement
                             } else {
                                 null
@@ -137,10 +142,13 @@ fun RealsApp(appContainer: AppContainer) {
                             homeLoading = current.homeLoading,
                             homeError = current.homeError,
                             homeMessage = current.homeMessage,
+                            matchmakingSearchPhase = current.home.matchmakingSearchPhase,
                             accountDeleteLoading = current.deletingAccount,
                             accountDeleteError = current.accountDeleteError,
                             onEnqueue = viewModel::enqueueMatchmaking,
                             onLeaveQueue = viewModel::leaveMatchmakingQueue,
+                            onBeginLocationResolution = viewModel::beginMatchmakingLocationResolution,
+                            onFailSearchPreparation = viewModel::failMatchmakingSearchPreparation,
                             onRefreshHome = viewModel::refreshHomeState,
                             onPollHome = viewModel::pollHomeStateSilently,
                             onOpenFirstChat = { matchId, chatId -> viewModel.openFirstChat(matchId, chatId) },
@@ -159,13 +167,12 @@ fun RealsApp(appContainer: AppContainer) {
 
             is RealsRootUiState.FirstChat -> ChatScreen(
                 currentUserId = current.session.user.id,
-                matchId = current.matchId,
                 match = current.match,
                 chat = current.chat,
                 messages = current.messages,
+                optimisticMessages = current.optimisticMessages,
                 exitRequests = current.exitRequests,
                 loading = current.loading,
-                refreshing = current.refreshing,
                 sending = current.sending,
                 actionLoading = current.actionLoading,
                 actionLoadingLabel = current.actionLoadingLabel,
@@ -173,6 +180,7 @@ fun RealsApp(appContainer: AppContainer) {
                 message = current.message,
                 onRefresh = { viewModel.refreshFirstChat(silent = true) },
                 onSendMessage = viewModel::sendFirstChatMessage,
+                onRetryOptimisticMessage = viewModel::retryFirstChatMessage,
                 onApprove = { viewModel.submitFirstChatDecision(ChatContinueDecision.Approved) },
                 onReject = { viewModel.submitFirstChatDecision(ChatContinueDecision.Rejected) },
                 onRequestMutualExit = viewModel::requestMutualChatExit,
@@ -184,13 +192,12 @@ fun RealsApp(appContainer: AppContainer) {
 
             is RealsRootUiState.SecondChat -> ChatScreen(
                 currentUserId = current.session.user.id,
-                matchId = current.matchId,
                 match = null,
                 chat = current.chat,
                 messages = current.messages,
+                optimisticMessages = current.optimisticMessages,
                 exitRequests = current.exitRequests,
                 loading = current.loading,
-                refreshing = current.refreshing,
                 sending = current.sending,
                 actionLoading = current.actionLoading,
                 actionLoadingLabel = current.actionLoadingLabel,
@@ -205,6 +212,7 @@ fun RealsApp(appContainer: AppContainer) {
                 onBackHome = viewModel::closeSecondChat,
                 onRefresh = { viewModel.refreshSecondChat(silent = true) },
                 onSendMessage = viewModel::sendSecondChatMessage,
+                onRetryOptimisticMessage = viewModel::retrySecondChatMessage,
                 onApprove = {},
                 onReject = {},
                 onRequestMutualExit = {},

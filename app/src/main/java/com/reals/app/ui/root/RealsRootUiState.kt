@@ -74,6 +74,7 @@ sealed interface RealsRootUiState {
         val match: Match? = null,
         val chat: Chat? = null,
         val messages: List<ChatMessage> = emptyList(),
+        val optimisticMessages: List<OptimisticOutgoingMessage> = emptyList(),
         val exitRequests: List<ChatExitRequest> = emptyList(),
         val loading: Boolean = false,
         val refreshing: Boolean = false,
@@ -92,6 +93,7 @@ sealed interface RealsRootUiState {
         val chatId: String? = null,
         val chat: Chat? = null,
         val messages: List<ChatMessage> = emptyList(),
+        val optimisticMessages: List<OptimisticOutgoingMessage> = emptyList(),
         val exitRequests: List<ChatExitRequest> = emptyList(),
         val loading: Boolean = false,
         val refreshing: Boolean = false,
@@ -186,12 +188,45 @@ data class HomeUiState(
     val homeError: ApiError? = null,
     val homeMessage: String? = null,
     val matchmakingBlockedReason: ApiError? = null,
+    val matchmakingSearchPhase: MatchmakingSearchUiPhase = MatchmakingSearchUiPhase.Idle,
 )
+
+enum class MatchmakingSearchUiPhase {
+    Idle,
+    ResolvingLocation,
+    JoiningQueue,
+    Searching,
+    Failed,
+}
 
 data class AccountUiState(
     val deletingAccount: Boolean = false,
     val accountDeleteError: ApiError? = null,
 )
+
+enum class OutgoingMessageDeliveryState {
+    Sending,
+    Failed,
+}
+
+data class OptimisticOutgoingMessage(
+    val localId: String,
+    val chatId: String,
+    val senderId: String,
+    val content: String,
+    val createdAtMillis: Long,
+    val deliveryState: OutgoingMessageDeliveryState,
+)
+
+internal fun List<OptimisticOutgoingMessage>.markOptimisticMessageFailed(
+    localId: String,
+): List<OptimisticOutgoingMessage> = map { message ->
+    if (message.localId == localId) {
+        message.copy(deliveryState = OutgoingMessageDeliveryState.Failed)
+    } else {
+        message
+    }
+}
 
 fun RealsRootUiState.Ready.clearProfileFeedback(): RealsRootUiState.Ready = copy(
     profileOp = profileOp.copy(

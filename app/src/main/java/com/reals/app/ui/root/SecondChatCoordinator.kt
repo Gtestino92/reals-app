@@ -79,27 +79,29 @@ internal class SecondChatCoordinator(
     suspend fun sendMessage(
         current: RealsRootUiState.SecondChat,
         cleanContent: String,
+        localId: String,
     ): RealsRootUiState.SecondChat {
         val chat = current.chat ?: return current
         val cursorBeforeSend = current.messages.lastMessageCursor()
-        val pending = current.copy(sending = true, error = null, message = null)
 
         return when (val result = dependencies.sendChatMessage(chat.id, cleanContent)) {
             is ApiResult.Success -> {
                 val messagesResult = dependencies.getChatMessages(chat.id, cursorBeforeSend)
                 val chatResult = dependencies.getChat(chat.id)
-                pending.copy(
-                    chat = (chatResult as? ApiResult.Success)?.value ?: pending.chat,
-                    messages = pending.messages.appendUnique(
+                current.copy(
+                    chat = (chatResult as? ApiResult.Success)?.value ?: current.chat,
+                    messages = current.messages.appendUnique(
                         (messagesResult as? ApiResult.Success)?.value.orEmpty() + result.value
                     ),
+                    optimisticMessages = current.optimisticMessages.filterNot { it.localId == localId },
                     sending = false,
                     error = (messagesResult as? ApiResult.Failure)?.error
                         ?: (chatResult as? ApiResult.Failure)?.error,
                 )
             }
 
-            is ApiResult.Failure -> pending.copy(
+            is ApiResult.Failure -> current.copy(
+                optimisticMessages = current.optimisticMessages.markOptimisticMessageFailed(localId),
                 sending = false,
                 error = result.error,
             )

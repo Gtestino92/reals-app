@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -36,8 +38,10 @@ import com.reals.app.domain.model.HomeActiveInteractionsSummary
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.SearchLocationInput
 import com.reals.app.ui.common.ApiErrorFeedbackCard
+import com.reals.app.ui.root.MatchmakingSearchUiPhase
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
@@ -47,10 +51,13 @@ fun MatchmakingHomeScreen(
     homeLoading: Boolean,
     homeError: ApiError?,
     homeMessage: String?,
+    matchmakingSearchPhase: MatchmakingSearchUiPhase,
     accountDeleteLoading: Boolean,
     accountDeleteError: ApiError?,
     onEnqueue: (SearchLocationInput) -> Unit,
     onLeaveQueue: () -> Unit,
+    onBeginLocationResolution: () -> Unit,
+    onFailSearchPreparation: () -> Unit,
     onRefreshHome: () -> Unit,
     onPollHome: () -> Unit,
     onOpenFirstChat: (matchId: String, chatId: String) -> Unit,
@@ -68,18 +75,72 @@ fun MatchmakingHomeScreen(
         return
     }
 
+    val context = LocalContext.current
+    val searchScope = rememberCoroutineScope()
     val model = screenModel ?: emptyHomeScreenModel()
     var nowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var localError by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
+    var manualExpanded by rememberSaveable(profile.id) { mutableStateOf(false) }
 
-    if (model.matchmaking.inQueue) {
-        SearchingChatScreen(
-            homeError = homeError,
-            accountDeleteLoading = accountDeleteLoading,
-            onPollHome = onPollHome,
-            onLeaveQueue = onLeaveQueue,
-            onSignOut = onSignOut,
-        )
-        return
+    fun enqueueWithDeviceLocation() {
+        searchScope.launch {
+            localError = null
+            val result = runCatching {
+                withTimeoutOrNull(10_000.milliseconds) { currentSearchLocation(context) }
+                    ?: error("No hay ubicacion disponible todavia. Intenta nuevamente en unos segundos.")
+            }
+            result
+                .onSuccess { location ->
+                    onEnqueue(location)
+                }
+                .onFailure {
+                    onFailSearchPreparation()
+                    localError = it.message
+                        ?: "No se pudo obtener la ubicacion del dispositivo."
+                    manualExpanded = true
+                }
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { grants ->
+        if (grants.values.any { it }) {
+            localError = null
+            enqueueWithDeviceLocation()
+        } else {
+            onFailSearchPreparation()
+            localError = "Necesitamos ubicacion para buscar personas cerca. " +
+                "Podes habilitar permisos o usar el fallback manual de desarrollo."
+            manualExpanded = true
+        }
+    }
+
+    when {
+        matchmakingSearchPhase == MatchmakingSearchUiPhase.ResolvingLocation ||
+            matchmakingSearchPhase == MatchmakingSearchUiPhase.JoiningQueue -> {
+            SearchingChatScreen(
+                body = SEARCHING_CHAT_BODY,
+                canCancelSearch = false,
+                homeError = null,
+                accountDeleteLoading = accountDeleteLoading,
+                onPollHome = {},
+                onLeaveQueue = {},
+            )
+            return
+        }
+
+        matchmakingSearchPhase == MatchmakingSearchUiPhase.Searching ||
+            model.matchmaking.inQueue -> {
+            SearchingChatScreen(
+                canCancelSearch = model.matchmaking.inQueue,
+                homeError = homeError,
+                accountDeleteLoading = accountDeleteLoading,
+                onPollHome = onPollHome,
+                onLeaveQueue = onLeaveQueue,
+            )
+            return
+        }
     }
 
     if (model.shouldPollHome()) {
@@ -122,7 +183,25 @@ fun MatchmakingHomeScreen(
         nowMillis = nowMillis,
         accountDeleteLoading = accountDeleteLoading,
         accountDeleteError = accountDeleteError,
+        localError = localError,
+        manualExpanded = manualExpanded,
         onEnqueue = onEnqueue,
+        onLocalErrorChange = { localError = it },
+        onManualExpandedChange = { manualExpanded = it },
+        onSearchWithDeviceLocation = {
+            localError = null
+            onBeginLocationResolution()
+            if (hasLocationPermission(context)) {
+                enqueueWithDeviceLocation()
+            } else {
+                permissionLauncher.launch(
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                    )
+                )
+            }
+        },
         onRefreshHome = onRefreshHome,
         onOpenFirstChat = onOpenFirstChat,
         onOpenVisualApproval = onOpenVisualApproval,
@@ -146,7 +225,12 @@ private fun MatchmakingIdleScreen(
     nowMillis: Long,
     accountDeleteLoading: Boolean,
     accountDeleteError: ApiError?,
+    localError: String?,
+    manualExpanded: Boolean,
     onEnqueue: (SearchLocationInput) -> Unit,
+    onLocalErrorChange: (String?) -> Unit,
+    onManualExpandedChange: (Boolean) -> Unit,
+    onSearchWithDeviceLocation: () -> Unit,
     onRefreshHome: () -> Unit,
     onOpenFirstChat: (matchId: String, chatId: String) -> Unit,
     onOpenVisualApproval: (matchId: String) -> Unit,
@@ -158,49 +242,18 @@ private fun MatchmakingIdleScreen(
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit,
 ) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var localError by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
-    var locating by rememberSaveable(profile.id) { mutableStateOf(false) }
-    var manualExpanded by rememberSaveable(profile.id) { mutableStateOf(false) }
     var latitude by rememberSaveable(profile.id) { mutableStateOf("-34.6037") }
     var longitude by rememberSaveable(profile.id) { mutableStateOf("-58.3816") }
     var accuracy by rememberSaveable(profile.id) { mutableStateOf("50") }
-    val busy = homeLoading || accountDeleteLoading || locating
+    val busy = homeLoading || accountDeleteLoading
     val canSearch = screenModel.matchmaking.canSearch
     val blockedReason = screenModel.matchmaking.blockedReason
-
-    fun enqueueWithDeviceLocation() {
-        scope.launch {
-            locating = true
-            localError = null
-            val result = runCatching { currentSearchLocation(context) }
-            locating = false
-            result
-                .onSuccess(onEnqueue)
-                .onFailure {
-                    localError = it.message
-                        ?: "No se pudo obtener la ubicacion del dispositivo."
-                }
-        }
-    }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions(),
-    ) { grants ->
-        if (grants.values.any { it }) {
-            localError = null
-            enqueueWithDeviceLocation()
-        } else {
-            localError = "Necesitamos ubicacion para buscar personas cerca. " +
-                "Podes habilitar permisos o usar el fallback manual de desarrollo."
-            manualExpanded = true
-        }
-    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .safeDrawingPadding()
+            .imePadding()
             .verticalScroll(rememberScrollState())
             .padding(24.dp),
         verticalArrangement = Arrangement.Center,
@@ -245,9 +298,7 @@ private fun MatchmakingIdleScreen(
                     summary = screenModel.activeInteractionsSummary,
                     passiveNotices = screenModel.passiveNotices,
                 )
-                if (!locating) {
-                    localError?.let { ErrorFeedback("No pudimos usar tu ubicacion", it) }
-                }
+                localError?.let { ErrorFeedback("No pudimos usar tu ubicacion", it) }
                 homeError?.let { ApiErrorFeedbackCard(it, ErrorContext.Home) }
                 homeMessage?.let { SuccessFeedback(it) }
                 if (!canSearch && blockedReason != null) {
@@ -258,26 +309,14 @@ private fun MatchmakingIdleScreen(
                     )
                 }
                 Button(
-                    onClick = {
-                        localError = null
-                        if (hasLocationPermission(context)) {
-                            enqueueWithDeviceLocation()
-                        } else {
-                            permissionLauncher.launch(
-                                arrayOf(
-                                    Manifest.permission.ACCESS_FINE_LOCATION,
-                                    Manifest.permission.ACCESS_COARSE_LOCATION,
-                                )
-                            )
-                        }
-                    },
+                    onClick = onSearchWithDeviceLocation,
                     enabled = !busy && canSearch,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(if (locating || homeLoading) "Preparando busqueda..." else "Buscar chat")
+                    Text(if (homeLoading) "Preparando busqueda..." else "Buscar chat")
                 }
                 OutlinedButton(
-                    onClick = { manualExpanded = !manualExpanded },
+                    onClick = { onManualExpandedChange(!manualExpanded) },
                     enabled = !busy && canSearch,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
@@ -295,10 +334,12 @@ private fun MatchmakingIdleScreen(
                         onSubmit = {
                             val location = validateLocation(latitude, longitude, accuracy)
                             if (location == null) {
-                                localError = "Ubicacion invalida. Latitud -90..90, " +
-                                    "longitud -180..180, precision 0..100000."
+                                onLocalErrorChange(
+                                    "Ubicacion invalida. Latitud -90..90, " +
+                                        "longitud -180..180, precision 0..100000."
+                                )
                             } else {
-                                localError = null
+                                onLocalErrorChange(null)
                                 onEnqueue(location)
                             }
                         },
