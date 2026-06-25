@@ -17,9 +17,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -46,6 +48,7 @@ import kotlin.time.Duration.Companion.milliseconds
 
 private const val LOCATION_RESOLUTION_TIMEOUT_MILLIS = 20_000L
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MatchmakingHomeScreen(
     profile: Profile,
@@ -198,48 +201,53 @@ fun MatchmakingHomeScreen(
         }
     }
 
-    MatchmakingIdleScreen(
-        profile = profile,
-        screenModel = model,
-        homeLoading = homeLoading,
-        homeError = homeError,
-        homeMessage = homeMessage,
-        nowMillis = nowMillis,
-        accountDeleteLoading = accountDeleteLoading,
-        accountDeleteError = accountDeleteError,
-        localError = localError,
-        manualExpanded = manualExpanded,
-        onEnqueue = onEnqueue,
-        onLocalErrorChange = { localError = it },
-        onManualExpandedChange = { manualExpanded = it },
-        onSearchWithDeviceLocation = {
-            localError = null
-            locationAttemptId += 1
-            val attemptId = locationAttemptId
-            onBeginLocationResolution()
-            if (hasLocationPermission(context)) {
-                enqueueWithDeviceLocation(attemptId)
-            } else {
-                pendingPermissionAttemptId = attemptId
-                permissionLauncher.launch(
-                    arrayOf(
-                        Manifest.permission.ACCESS_FINE_LOCATION,
-                        Manifest.permission.ACCESS_COARSE_LOCATION,
+    PullToRefreshBox(
+        isRefreshing = homeLoading,
+        onRefresh = onRefreshHome,
+    ) {
+        MatchmakingIdleScreen(
+            profile = profile,
+            screenModel = model,
+            homeLoading = homeLoading,
+            homeError = homeError,
+            homeMessage = homeMessage,
+            nowMillis = nowMillis,
+            accountDeleteLoading = accountDeleteLoading,
+            accountDeleteError = accountDeleteError,
+            localError = localError,
+            manualExpanded = manualExpanded,
+            onEnqueue = onEnqueue,
+            onLocalErrorChange = { localError = it },
+            onManualExpandedChange = { manualExpanded = it },
+            onSearchWithDeviceLocation = {
+                localError = null
+                locationAttemptId += 1
+                val attemptId = locationAttemptId
+                onBeginLocationResolution()
+                if (hasLocationPermission(context)) {
+                    enqueueWithDeviceLocation(attemptId)
+                } else {
+                    pendingPermissionAttemptId = attemptId
+                    permissionLauncher.launch(
+                        arrayOf(
+                            Manifest.permission.ACCESS_FINE_LOCATION,
+                            Manifest.permission.ACCESS_COARSE_LOCATION,
+                        )
                     )
-                )
-            }
-        },
-        onRefreshHome = onRefreshHome,
-        onOpenFirstChat = onOpenFirstChat,
-        onOpenVisualApproval = onOpenVisualApproval,
-        onOpenScheduling = onOpenScheduling,
-        onOpenSecondChat = onOpenSecondChat,
-        onOpenConnectionPartnerProfile = onOpenConnectionPartnerProfile,
-        onDismissSecondChat = onDismissSecondChat,
-        onEditProfile = onEditProfile,
-        onSignOut = onSignOut,
-        onDeleteAccount = onDeleteAccount,
-    )
+                }
+            },
+            onRefreshHome = onRefreshHome,
+            onOpenFirstChat = onOpenFirstChat,
+            onOpenVisualApproval = onOpenVisualApproval,
+            onOpenScheduling = onOpenScheduling,
+            onOpenSecondChat = onOpenSecondChat,
+            onOpenConnectionPartnerProfile = onOpenConnectionPartnerProfile,
+            onDismissSecondChat = onDismissSecondChat,
+            onEditProfile = onEditProfile,
+            onSignOut = onSignOut,
+            onDeleteAccount = onDeleteAccount,
+        )
+    }
 }
 
 @Composable
