@@ -71,6 +71,7 @@ fun ProfileStatusScreen(
     activationError: ApiError?,
     accountDeleteLoading: Boolean,
     accountDeleteError: ApiError?,
+    showDraftAfterEditNotice: Boolean = false,
     onUpdateProfile: (UpdateProfileInput) -> Unit,
     onUpdateMatchFilters: (UpdateMatchFiltersInput) -> Unit,
     onLoadPhotos: () -> Unit,
@@ -110,6 +111,14 @@ fun ProfileStatusScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(modifier = Modifier.height(20.dp))
+        if (showDraftAfterEditNotice) {
+            FeedbackCard(
+                title = "Tu perfil volvió a borrador",
+                message = "Como modificaste tus fotos, necesitamos que vuelvas a activar el perfil antes de volver al Home.",
+                tone = FeedbackTone.Warning,
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+        }
         when (val snapshot = session.profileSnapshot) {
             ProfileSnapshot.Missing -> MissingProfileCard()
             is ProfileSnapshot.Found -> ProfileCard(

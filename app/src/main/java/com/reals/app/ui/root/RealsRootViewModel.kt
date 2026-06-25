@@ -186,22 +186,20 @@ class RealsRootViewModel(
 
     fun closeProfileManagement() {
         val current = _uiState.value as? RealsRootUiState.Ready ?: return
-        val profile = (current.session.profileSnapshot as? ProfileSnapshot.Found)?.profile
-        if (profile?.status == ProfileStatus.Active) {
-            viewModelScope.launch {
-                homeCoordinator.loadHomeForReady(
-                    current.copy(
-                        editingActiveProfile = false,
-                        home = current.home.copy(
-                            homeLoading = true,
-                            homeError = null,
-                            homeMessage = null,
-                        ),
-                    )
+        val profile = (current.session.profileSnapshot as? ProfileSnapshot.Found)?.profile ?: return
+        if (profile.status != ProfileStatus.Active) return
+
+        viewModelScope.launch {
+            homeCoordinator.loadHomeForReady(
+                current.copy(
+                    editingActiveProfile = false,
+                    home = current.home.copy(
+                        homeLoading = true,
+                        homeError = null,
+                        homeMessage = null,
+                    ),
                 )
-            }
-        } else {
-            _uiState.value = current.copy(editingActiveProfile = false)
+            )
         }
     }
 

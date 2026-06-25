@@ -110,6 +110,8 @@ fun RealsApp(appContainer: AppContainer) {
                             photoActionMessage = current.photoActionMessage,
                             activationLoading = current.activatingProfile,
                             activationError = current.profileActivationError,
+                            showDraftAfterEditNotice = current.editingActiveProfile &&
+                                profile.status != ProfileStatus.Active,
                             onUpdateProfile = viewModel::updateProfile,
                             onUpdateMatchFilters = viewModel::updateMatchFilters,
                             onLoadPhotos = viewModel::loadProfilePhotos,
@@ -124,7 +126,10 @@ fun RealsApp(appContainer: AppContainer) {
                             accountDeleteLoading = current.deletingAccount,
                             accountDeleteError = current.accountDeleteError,
                             onDeleteAccount = viewModel::deleteAccount,
-                            onBackHome = if (current.editingActiveProfile) {
+                            onBackHome = if (
+                                current.editingActiveProfile &&
+                                profile.status == ProfileStatus.Active
+                            ) {
                                 viewModel::closeProfileManagement
                             } else {
                                 null
