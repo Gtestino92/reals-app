@@ -1,16 +1,21 @@
 package com.reals.app.ui.matchmaking
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
+import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import androidx.core.location.LocationManagerCompat
-import androidx.core.os.CancellationSignal
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import com.reals.app.domain.model.SearchLocationInput
-import kotlin.coroutines.resume
-import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.tasks.await
+
+private const val RECENT_LOCATION_MAX_AGE_MILLIS = 5 * 60 * 1000L
 
 internal fun hasLocationPermission(context: Context): Boolean {
     val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
@@ -18,82 +23,80 @@ internal fun hasLocationPermission(context: Context): Boolean {
     return fine == PackageManager.PERMISSION_GRANTED || coarse == PackageManager.PERMISSION_GRANTED
 }
 
-internal suspend fun currentSearchLocation(context: Context): SearchLocationInput {
+@SuppressLint("MissingPermission")
+internal suspend fun currentSearchLocation(context: Context): SearchLocationInput? {
     if (!hasLocationPermission(context)) {
-        error("Falta permiso de ubicacion.")
+        return null
     }
-    val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-    val provider = preferredProvider(locationManager)
-        ?: error("Activa la ubicacion del dispositivo para buscar chat.")
-    val location = requestCurrentLocation(context, locationManager, provider)
-        ?: newestLastKnownLocation(context, locationManager)
-        ?: error("No hay ubicacion disponible todavia. Intenta nuevamente en unos segundos.")
-    return SearchLocationInput(
-        latitude = location.latitude,
-        longitude = location.longitude,
-        accuracyMeters = location.accuracy.takeIf { location.hasAccuracy() }?.toInt()?.coerceIn(0, 100000),
-    )
-}
-
-private fun preferredProvider(locationManager: LocationManager): String? {
-    return listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
-        .firstOrNull { provider ->
-            runCatching { locationManager.isProviderEnabled(provider) }.getOrDefault(false)
-        }
-}
-
-private suspend fun requestCurrentLocation(
-    context: Context,
-    locationManager: LocationManager,
-    provider: String,
-): Location? = suspendCancellableCoroutine { continuation ->
-    val cancellationSignal = CancellationSignal()
-    continuation.invokeOnCancellation { cancellationSignal.cancel() }
-    try {
-        LocationManagerCompat.getCurrentLocation(
-            locationManager,
-            provider,
-            cancellationSignal,
-            ContextCompat.getMainExecutor(context),
-        ) { location ->
-            if (continuation.isActive) continuation.resume(location)
-        }
-    } catch (exception: SecurityException) {
-        if (continuation.isActive) continuation.resume(null)
-    } catch (exception: IllegalArgumentException) {
-        if (continuation.isActive) continuation.resume(null)
-    }
-}
-
-private fun newestLastKnownLocation(
-    context: Context,
-    locationManager: LocationManager,
-): Location? {
-    val hasFineLocation = ContextCompat.checkSelfPermission(
-        context,
-        Manifest.permission.ACCESS_FINE_LOCATION,
-    ) == PackageManager.PERMISSION_GRANTED
-
-    val hasCoarseLocation = ContextCompat.checkSelfPermission(
-        context,
-        Manifest.permission.ACCESS_COARSE_LOCATION,
-    ) == PackageManager.PERMISSION_GRANTED
-
-    if (!hasFineLocation && !hasCoarseLocation) {
+    val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        ?: return null
+    if (!LocationManagerCompat.isLocationEnabled(locationManager)) {
         return null
     }
 
-    return listOf(
-        LocationManager.GPS_PROVIDER,
+    val client = LocationServices.getFusedLocationProviderClient(context)
+    val cached = runCatching { client.lastLocation.await() }.getOrNull()
+    if (cached != null && cached.isFreshEnough()) {
+        return cached.toSearchLocationInput()
+    }
+
+    val providerCached = newestFreshLastKnownLocation(locationManager)
+    if (providerCached != null) {
+        return providerCached.toSearchLocationInput()
+    }
+
+    val cancellation = CancellationTokenSource()
+    val fresh = try {
+        runCatching {
+            client.getCurrentLocation(
+                Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+                cancellation.token,
+            ).await()
+        }.getOrNull()
+    } finally {
+        cancellation.cancel()
+    }
+
+    return fresh?.toSearchLocationInput()
+}
+
+@SuppressLint("MissingPermission")
+private fun newestFreshLastKnownLocation(locationManager: LocationManager): Location? =
+    listOf(
         LocationManager.NETWORK_PROVIDER,
+        LocationManager.GPS_PROVIDER,
+        LocationManager.PASSIVE_PROVIDER,
     )
         .mapNotNull { provider ->
-            runCatching {
-                locationManager.getLastKnownLocation(provider)
-            }.getOrNull()
+            runCatching { locationManager.getLastKnownLocation(provider) }.getOrNull()
         }
-        .maxByOrNull { it.time }
+        .filter { it.isFreshEnough() }
+        .maxByOrNull { it.locationTimeMillis() }
+
+private fun Location.isFreshEnough(): Boolean {
+    val ageMillis = ageMillis()
+    return ageMillis in 0..RECENT_LOCATION_MAX_AGE_MILLIS
 }
+
+private fun Location.ageMillis(): Long =
+    if (elapsedRealtimeNanos > 0L) {
+        (SystemClock.elapsedRealtimeNanos() - elapsedRealtimeNanos) / 1_000_000L
+    } else {
+        System.currentTimeMillis() - time
+    }
+
+private fun Location.locationTimeMillis(): Long =
+    if (elapsedRealtimeNanos > 0L) {
+        SystemClock.elapsedRealtime() - ageMillis()
+    } else {
+        time
+    }
+
+private fun Location.toSearchLocationInput(): SearchLocationInput = SearchLocationInput(
+    latitude = latitude,
+    longitude = longitude,
+    accuracyMeters = accuracy.takeIf { hasAccuracy() }?.toInt()?.coerceIn(0, 100000),
+)
 
 internal fun signedDecimalInput(value: String): String =
     value.filterIndexed { index, char ->

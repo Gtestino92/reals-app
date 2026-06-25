@@ -44,6 +44,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration.Companion.milliseconds
 
+private const val LOCATION_RESOLUTION_TIMEOUT_MILLIS = 20_000L
+
 @Composable
 fun MatchmakingHomeScreen(
     profile: Profile,
@@ -55,7 +57,8 @@ fun MatchmakingHomeScreen(
     accountDeleteLoading: Boolean,
     accountDeleteError: ApiError?,
     onEnqueue: (SearchLocationInput) -> Unit,
-    onLeaveQueue: () -> Unit,
+    onDeviceLocationResolved: (SearchLocationInput) -> Unit,
+    onCancelSearch: () -> Unit,
     onBeginLocationResolution: () -> Unit,
     onFailSearchPreparation: () -> Unit,
     onRefreshHome: () -> Unit,
@@ -86,12 +89,16 @@ fun MatchmakingHomeScreen(
         searchScope.launch {
             localError = null
             val result = runCatching {
-                withTimeoutOrNull(10_000.milliseconds) { currentSearchLocation(context) }
-                    ?: error("No hay ubicacion disponible todavia. Intenta nuevamente en unos segundos.")
+                withTimeoutOrNull(LOCATION_RESOLUTION_TIMEOUT_MILLIS.milliseconds) {
+                    currentSearchLocation(context)
+                } ?: error(
+                    "No hay ubicacion disponible todavia. Verifica que la ubicacion del telefono " +
+                        "este activada e intenta nuevamente."
+                )
             }
             result
                 .onSuccess { location ->
-                    onEnqueue(location)
+                    onDeviceLocationResolved(location)
                 }
                 .onFailure {
                     onFailSearchPreparation()
@@ -121,11 +128,11 @@ fun MatchmakingHomeScreen(
             matchmakingSearchPhase == MatchmakingSearchUiPhase.JoiningQueue -> {
             SearchingChatScreen(
                 body = SEARCHING_CHAT_BODY,
-                canCancelSearch = false,
+                canCancelSearch = true,
                 homeError = null,
                 accountDeleteLoading = accountDeleteLoading,
                 onPollHome = {},
-                onLeaveQueue = {},
+                onLeaveQueue = onCancelSearch,
             )
             return
         }
@@ -133,11 +140,11 @@ fun MatchmakingHomeScreen(
         matchmakingSearchPhase == MatchmakingSearchUiPhase.Searching ||
             model.matchmaking.inQueue -> {
             SearchingChatScreen(
-                canCancelSearch = model.matchmaking.inQueue,
+                canCancelSearch = true,
                 homeError = homeError,
                 accountDeleteLoading = accountDeleteLoading,
                 onPollHome = onPollHome,
-                onLeaveQueue = onLeaveQueue,
+                onLeaveQueue = onCancelSearch,
             )
             return
         }

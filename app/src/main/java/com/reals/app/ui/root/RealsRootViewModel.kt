@@ -194,6 +194,14 @@ class RealsRootViewModel(
         homeCoordinator.enqueueMatchmaking(location)
     }
 
+    fun enqueueMatchmakingFromResolvedDeviceLocation(location: SearchLocationInput) {
+        homeCoordinator.enqueueMatchmakingFromResolvedDeviceLocation(location)
+    }
+
+    fun cancelMatchmakingSearch() {
+        homeCoordinator.cancelMatchmakingSearch()
+    }
+
     fun leaveMatchmakingQueue() {
         homeCoordinator.leaveMatchmakingQueue()
     }
