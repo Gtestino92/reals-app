@@ -73,11 +73,11 @@ fun MatchmakingHomeScreen(
 
     if (model.matchmaking.inQueue) {
         SearchingChatScreen(
+            canCancelSearch = true,
             homeError = homeError,
             accountDeleteLoading = accountDeleteLoading,
             onPollHome = onPollHome,
-            onLeaveQueue = onLeaveQueue,
-            onSignOut = onSignOut,
+            onLeaveQueue = onLeaveQueue
         )
         return
     }
@@ -162,6 +162,7 @@ private fun MatchmakingIdleScreen(
     val scope = rememberCoroutineScope()
     var localError by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
     var locating by rememberSaveable(profile.id) { mutableStateOf(false) }
+    var joiningQueue by rememberSaveable(profile.id) { mutableStateOf(false) }
     var manualExpanded by rememberSaveable(profile.id) { mutableStateOf(false) }
     var latitude by rememberSaveable(profile.id) { mutableStateOf("-34.6037") }
     var longitude by rememberSaveable(profile.id) { mutableStateOf("-58.3816") }
@@ -170,6 +171,17 @@ private fun MatchmakingIdleScreen(
     val canSearch = screenModel.matchmaking.canSearch
     val blockedReason = screenModel.matchmaking.blockedReason
 
+    if (locating || joiningQueue) {
+        SearchingChatScreen(
+            canCancelSearch = false,
+            homeError = null,
+            accountDeleteLoading = accountDeleteLoading,
+            onPollHome = {},
+            onLeaveQueue = {},
+        )
+        return
+    }
+
     fun enqueueWithDeviceLocation() {
         scope.launch {
             locating = true
@@ -177,8 +189,12 @@ private fun MatchmakingIdleScreen(
             val result = runCatching { currentSearchLocation(context) }
             locating = false
             result
-                .onSuccess(onEnqueue)
+                .onSuccess { location ->
+                    joiningQueue = true
+                    onEnqueue(location)
+                }
                 .onFailure {
+                    joiningQueue = false
                     localError = it.message
                         ?: "No se pudo obtener la ubicacion del dispositivo."
                 }
@@ -299,6 +315,7 @@ private fun MatchmakingIdleScreen(
                                     "longitud -180..180, precision 0..100000."
                             } else {
                                 localError = null
+                                joiningQueue = true
                                 onEnqueue(location)
                             }
                         },

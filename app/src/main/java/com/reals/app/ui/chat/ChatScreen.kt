@@ -1,24 +1,17 @@
 package com.reals.app.ui.chat
-
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -37,7 +30,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ApiError
@@ -55,6 +47,7 @@ import com.reals.app.domain.model.MatchState
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
+import com.reals.app.ui.common.SearchingDotsIndicator
 import com.reals.app.ui.common.formatBackendDateTime
 import com.reals.app.ui.common.formatBackendTime
 import com.reals.app.ui.common.userLabel
@@ -101,16 +94,16 @@ fun ChatScreen(
     var showingActionsDialog by rememberSaveable(chat?.id) { mutableStateOf(false) }
     val busy = loading || sending || actionLoading
     val canChat = chat?.status == ChatStatus.Active ||
-        (allowAvailableChat && chat?.status == ChatStatus.Available)
+            (allowAvailableChat && chat?.status == ChatStatus.Available)
     val pendingExitRequest = exitRequests
         .filter { it.status == ChatExitRequestStatus.Pending }
         .maxByOrNull { it.createdAt }
     val exitFlowLocked = pendingExitRequest != null
     val canDecide = showDecisionActions &&
-        match?.state == MatchState.ChatActive &&
-        chat?.status == ChatStatus.Active &&
-        chat.myDecision == ChatDecisionState.Pending &&
-        !exitFlowLocked
+            match?.state == MatchState.ChatActive &&
+            chat?.status == ChatStatus.Active &&
+            chat.myDecision == ChatDecisionState.Pending &&
+            !exitFlowLocked
     val partnerDisplayName = chat?.partner?.displayName
         ?.takeIf { it.isNotBlank() }
         ?: partnerNameFallback?.takeIf { it.isNotBlank() }
@@ -133,6 +126,7 @@ fun ChatScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .safeDrawingPadding()
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -151,31 +145,35 @@ fun ChatScreen(
             messages = messages,
             modifier = Modifier.weight(1f),
         )
-        ChatComposer(
-            draft = draft,
-            canChat = canChat,
-            busy = busy,
-            sending = sending,
-            actionLoading = actionLoading,
-            actionLoadingLabel = actionLoadingLabel,
-            canDecide = canDecide,
-            currentUserId = currentUserId,
-            activeExitRequest = if (showExitActions) pendingExitRequest else null,
-            canOpenActions = !exitFlowLocked,
-            showDecisionActions = showDecisionActions,
-            showExitActions = showExitActions,
-            showMutualExitActions = showMutualExitActions,
-            onDraftChange = { draft = it.take(1_000) },
-            onSend = {
-                onSendMessage(draft)
-                draft = ""
-            },
-            onApprove = onApprove,
-            onShowActions = { showingActionsDialog = true },
-            onAcceptExitRequest = onAcceptExitRequest,
-            onRejectExitRequest = onRejectExitRequest,
-            onExitRequestTimeout = onExitRequestTimeout,
-        )
+        Box(
+            modifier = Modifier.imePadding()
+        ) {
+            ChatComposer(
+                draft = draft,
+                canChat = canChat,
+                busy = busy,
+                sending = sending,
+                actionLoading = actionLoading,
+                actionLoadingLabel = actionLoadingLabel,
+                canDecide = canDecide,
+                currentUserId = currentUserId,
+                activeExitRequest = if (showExitActions) pendingExitRequest else null,
+                canOpenActions = !exitFlowLocked,
+                showDecisionActions = showDecisionActions,
+                showExitActions = showExitActions,
+                showMutualExitActions = showMutualExitActions,
+                onDraftChange = { draft = it.take(1_000) },
+                onSend = {
+                    onSendMessage(draft)
+                    draft = ""
+                },
+                onApprove = onApprove,
+                onShowActions = { showingActionsDialog = true },
+                onAcceptExitRequest = onAcceptExitRequest,
+                onRejectExitRequest = onRejectExitRequest,
+                onExitRequestTimeout = onExitRequestTimeout,
+            )
+        }
         onBackHome?.let { back ->
             OutlinedButton(
                 onClick = back,
@@ -234,17 +232,6 @@ private fun LoadingChatScreen(
     title: String,
     body: String,
 ) {
-    val pulse = rememberInfiniteTransition(label = "chat-loading-pulse")
-    val scale by pulse.animateFloat(
-        initialValue = 0.85f,
-        targetValue = 1.15f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1100),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "chat-loading-dot-scale",
-    )
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -252,19 +239,7 @@ private fun LoadingChatScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(
-            modifier = Modifier
-                .size(112.dp)
-                .scale(scale)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f), CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .background(MaterialTheme.colorScheme.primary, CircleShape),
-            )
-        }
+        SearchingDotsIndicator()
         Text(
             text = title,
             modifier = Modifier.padding(top = 28.dp),
@@ -309,7 +284,11 @@ private fun ChatHeader(
                 text = "Valido hasta ${formatBackendDateTime(expiresAt)}",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (showDecisionSummary) chatDecisionSummary(myDecision, partnerDecision, partnerName)?.let {
+            if (showDecisionSummary) chatDecisionSummary(
+                myDecision,
+                partnerDecision,
+                partnerName
+            )?.let {
                 Text(
                     text = it,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -348,7 +327,10 @@ private fun MessageList(
         ) {
             if (messages.isEmpty()) {
                 item {
-                    Text("Todavia no hay mensajes.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        "Todavia no hay mensajes.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             } else {
                 items(sortedMessages, key = { it.id }) { item ->
@@ -389,7 +371,10 @@ private fun ChatComposer(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             activeExitRequest?.let { request ->
                 TimedExitRequestCard(
                     currentUserId = currentUserId,
@@ -411,7 +396,7 @@ private fun ChatComposer(
                 value = draft,
                 onValueChange = onDraftChange,
                 label = { Text("Mensaje") },
-                enabled = !busy && canChat,
+                enabled = canChat && !actionLoading,
                 minLines = 1,
                 maxLines = 4,
                 modifier = Modifier.fillMaxWidth(),
@@ -430,7 +415,10 @@ private fun ChatComposer(
                         enabled = !busy && (canOpenActions || !showMutualExitActions),
                         modifier = Modifier.weight(1f),
                     ) {
-                        Text(if (actionLoading) actionLoadingLabel ?: "Procesando..." else "Mas acciones")
+                        Text(
+                            if (actionLoading) actionLoadingLabel
+                                ?: "Procesando..." else "Mas acciones"
+                        )
                     }
                 }
             }
@@ -440,7 +428,9 @@ private fun ChatComposer(
                     enabled = !busy && canDecide,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(if (actionLoading) actionLoadingLabel ?: "Procesando..." else "Aprobar chat")
+                    Text(
+                        if (actionLoading) actionLoadingLabel ?: "Procesando..." else "Aprobar chat"
+                    )
                 }
             }
         }
@@ -468,7 +458,7 @@ private fun TimedExitRequestCard(
 
     LaunchedEffect(request.id) {
         while (true) {
-            delay(1_000)
+            delay(1_000.milliseconds)
             nowMillis = System.currentTimeMillis()
         }
     }
@@ -481,7 +471,10 @@ private fun TimedExitRequestCard(
     }
 
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             Text("Salida consensuada pendiente", style = MaterialTheme.typography.titleMedium)
             Text(
                 text = if (requestedByMe) {
@@ -659,7 +652,12 @@ private fun SafetyReportDialog(
 
 @Composable
 private fun SuccessFeedback(message: String, modifier: Modifier = Modifier) {
-    FeedbackCard(title = "Listo", message = message, tone = FeedbackTone.Success, modifier = modifier)
+    FeedbackCard(
+        title = "Listo",
+        message = message,
+        tone = FeedbackTone.Success,
+        modifier = modifier
+    )
 }
 
 private fun chatDecisionSummary(
@@ -673,14 +671,19 @@ private fun chatDecisionSummary(
     return when {
         myDecision == ChatDecisionState.Approved && partnerDecision == ChatDecisionState.Pending ->
             "Aprobaste el chat. Esperando decision de $partnerLabel."
+
         myDecision == ChatDecisionState.Pending && partnerDecision == ChatDecisionState.Approved ->
             "$partnerLabel aprobo el chat. Falta tu decision."
+
         myDecision == ChatDecisionState.Approved && partnerDecision == ChatDecisionState.Approved ->
             "Ambas personas aprobaron. Pasando a revision visual."
+
         myDecision == ChatDecisionState.Rejected || partnerDecision == ChatDecisionState.Rejected ->
             "El chat fue rechazado."
+
         myDecision == ChatDecisionState.Abandoned || partnerDecision == ChatDecisionState.Abandoned ->
             "El chat fue abandonado."
+
         else -> null
     }
 }

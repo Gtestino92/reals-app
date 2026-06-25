@@ -142,12 +142,16 @@ internal class FirstChatCoordinator(
         val pending = current.copy(sending = true, error = null, message = null)
         return when (val result = dependencies.sendChatMessage(chat.id, cleanContent)) {
             is ApiResult.Success -> {
+                val sentMessage = result.value
+                val messagesWithSent = pending.messages.appendUnique(listOf(sentMessage))
+
                 val messagesResult = dependencies.getChatMessages(chat.id, cursorBeforeSend)
                 val chatResult = dependencies.getFirstChatForMatch(current.matchId)
+
                 pending.copy(
                     chat = (chatResult as? ApiResult.Success)?.value ?: pending.chat,
-                    messages = pending.messages.appendUnique(
-                        (messagesResult as? ApiResult.Success)?.value.orEmpty() + result.value
+                    messages = messagesWithSent.appendUnique(
+                        (messagesResult as? ApiResult.Success)?.value.orEmpty()
                     ),
                     sending = false,
                     error = (messagesResult as? ApiResult.Failure)?.error
