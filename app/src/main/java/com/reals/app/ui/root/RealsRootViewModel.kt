@@ -6,8 +6,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ApiResult
-import com.reals.app.core.network.BackendErrorCode
-import com.reals.app.core.network.backendErrorCode
 import com.reals.app.core.network.isAccountDeleted
 import com.reals.app.core.security.TextSafety
 import com.reals.app.data.repository.AuthOperationResult
@@ -28,6 +26,7 @@ import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.ProvisionedSession
+import com.reals.app.domain.model.SearchLocationInput
 import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.UpdateProfileInput
 import com.reals.app.domain.model.VisualDecision
@@ -72,7 +71,7 @@ class RealsRootViewModel(
         dependencies = dependencies.home,
         scope = viewModelScope,
         onOpenFirstChat = { session, matchId, chatId -> openFirstChat(session, matchId, chatId) },
-        onProvisionActiveSession = { user -> loadBackendSessionForActiveUser(user) },
+        onReloadActiveSession = { user -> loadBackendSessionForActiveUser(user) },
     )
     val uiState: StateFlow<RealsRootUiState> = _uiState.asStateFlow()
 
@@ -146,7 +145,11 @@ class RealsRootViewModel(
         viewModelScope.launch {
             _uiState.value = current.copy(reactivating = true, error = null)
             when (val result = reactivateAccountUseCase()) {
-                is ApiResult.Success -> homeCoordinator.reenterMatchmakingOrLoadHome(result.value)
+                is ApiResult.Success -> {
+                    val session = loadProvisionedSessionForActiveUser(result.value) ?: return@launch
+                    homeCoordinator.reenterMatchmakingOrLoadHome(session)
+                }
+
                 is ApiResult.Failure -> _uiState.value = current.copy(
                     reactivating = false,
                     error = result.error,
@@ -637,8 +640,8 @@ class RealsRootViewModel(
                     when (val state = result.value.state) {
                         MatchState.ChatActive -> {
                             if (decision == ChatContinueDecision.Approved) {
-                                hideFirstChatLocally(current.matchId)
-                                loadHomeForReady(
+                                homeCoordinator.hideFirstChatLocally(current.matchId)
+                                homeCoordinator.loadHomeForReady(
                                     ready = RealsRootUiState.Ready(
                                         session = current.session,
                                         home = HomeUiState(
@@ -665,9 +668,9 @@ class RealsRootViewModel(
                         MatchState.Expired,
                         MatchState.VisualApproved,
                         MatchState.VisualRejected -> {
-                            hideFirstChatLocally(current.matchId)
+                            homeCoordinator.hideFirstChatLocally(current.matchId)
                             if (decision == ChatContinueDecision.Approved) {
-                                loadHomeForReady(
+                                homeCoordinator.loadHomeForReady(
                                     ready = RealsRootUiState.Ready(
                                         session = current.session,
                                         home = HomeUiState(
@@ -680,7 +683,10 @@ class RealsRootViewModel(
                                     autoNavigateEngagements = false,
                                 )
                             } else {
-                                routeAfterFirstChatClosed(current.session, state)
+                                homeCoordinator.returnHome(
+                                    session = current.session,
+                                    message = firstChatExitMessage(state),
+                                )
                             }
                         }
 
@@ -809,9 +815,9 @@ class RealsRootViewModel(
             when (val result =
                 visualApprovalCoordinator.submitDecision(current.matchId, decision)) {
                 is ApiResult.Success -> {
-                    hideVisualReviewLocally(current.matchId)
+                    homeCoordinator.hideVisualReviewLocally(current.matchId)
                     when (result.value.state) {
-                        MatchState.VisualPhase -> loadHomeForReady(
+                        MatchState.VisualPhase -> homeCoordinator.loadHomeForReady(
                             ready = RealsRootUiState.Ready(
                                 session = current.session,
                                 home = HomeUiState(homeLoading = true),
@@ -819,7 +825,7 @@ class RealsRootViewModel(
                             autoNavigateEngagements = false,
                         )
 
-                        MatchState.VisualApproved -> loadHomeForReady(
+                        MatchState.VisualApproved -> homeCoordinator.loadHomeForReady(
                             ready = RealsRootUiState.Ready(
                                 session = current.session,
                                 home = HomeUiState(homeLoading = true),
@@ -829,7 +835,7 @@ class RealsRootViewModel(
 
                         MatchState.VisualRejected,
                         MatchState.ChatRejected,
-                        MatchState.Expired -> loadHomeForReady(
+                        MatchState.Expired -> homeCoordinator.loadHomeForReady(
                             ready = RealsRootUiState.Ready(
                                 session = current.session,
                                 home = HomeUiState(homeLoading = true),
@@ -926,11 +932,11 @@ class RealsRootViewModel(
                 matchId = matchId,
                 initialMatch = initialMatch,
                 previous = previous,
-                locallyHidden = matchId in localHiddenSnapshot().hiddenVisualMatchIds,
+                locallyHidden = matchId in homeCoordinator.localHiddenSnapshot().hiddenVisualMatchIds,
             )
         ) {
             is VisualApprovalLoadResult.Show -> _uiState.value = result.state
-            is VisualApprovalLoadResult.RouteHome -> loadHomeForReady(
+            is VisualApprovalLoadResult.RouteHome -> homeCoordinator.loadHomeForReady(
                 ready = RealsRootUiState.Ready(
                     session = session,
                     home = HomeUiState(
@@ -971,198 +977,6 @@ class RealsRootViewModel(
         }
     }
 
-    private suspend fun loadHomeForReady(
-        ready: RealsRootUiState.Ready,
-        publishLoadingState: Boolean = true,
-        autoNavigateEngagements: Boolean = false,
-    ) {
-        if (publishLoadingState) {
-            _uiState.value = ready.copy(
-                home = ready.home.copy(
-                    homeLoading = true,
-                    homeError = null,
-                ),
-            )
-        }
-
-        when (val homeResult = getHomeUseCase()) {
-            is ApiResult.Success -> {
-                pruneLocalHiddenInteractions(homeResult.value)
-                val screenModel = buildHomeScreenModel(
-                    home = homeResult.value,
-                    localMatchmakingBlockedReason = ready.home.matchmakingBlockedReason,
-                )
-
-                routeFromHomeScreenModel(
-                    ready = ready.copy(
-                        home = ready.home.copy(
-                            homeState = homeResult.value,
-                            screenModel = screenModel,
-                            homeLoading = false,
-                            homeError = null,
-                        ),
-                    ),
-                    autoNavigateEngagements = autoNavigateEngagements,
-                )
-            }
-
-            is ApiResult.Failure -> {
-                _uiState.value = ready.copy(
-                    home = ready.home.copy(
-                        homeLoading = false,
-                        homeError = homeResult.error,
-                        homeMessage = null,
-                    ),
-                )
-            }
-        }
-    }
-
-    private suspend fun routeFromHomeScreenModel(
-        ready: RealsRootUiState.Ready,
-        autoNavigateEngagements: Boolean,
-    ) {
-        val home = ready.homeState ?: run {
-            _uiState.value = ready
-            return
-        }
-
-        if (home.profileStatus != ProfileStatus.Active) {
-            loadBackendSessionForActiveUser(ready.session.user)
-            return
-        }
-
-        when (
-            val route = homeRouter.resolve(
-                screenModel = ready.home.screenModel ?: buildHomeScreenModel(
-                    home = home,
-                    localMatchmakingBlockedReason = ready.home.matchmakingBlockedReason,
-                ),
-                autoNavigate = autoNavigateEngagements,
-            )
-        ) {
-            HomeRoute.StayHome -> _uiState.value = ready
-            is HomeRoute.OpenFirstChat -> openFirstChat(
-                session = ready.session,
-                matchId = route.matchId,
-                chatId = route.chatId,
-            )
-        }
-    }
-
-    private fun localHiddenSnapshot(): LocalHiddenInteractions = LocalHiddenInteractions(
-        hiddenFirstChatMatchIds = locallyHiddenPendingChatMatchIds.toSet(),
-        hiddenVisualMatchIds = locallyHiddenVisualMatchIds.toSet(),
-    )
-
-    private fun buildHomeScreenModel(
-        home: HomeState?,
-        localMatchmakingBlockedReason: ApiError?,
-    ) = homeUiMapper.toScreenModel(
-        home = home,
-        localHidden = localHiddenSnapshot(),
-        localMatchmakingBlockedReason = localMatchmakingBlockedReason,
-    )
-
-    private fun hideFirstChatLocally(matchId: String) {
-        locallyHiddenPendingChatMatchIds += matchId
-    }
-
-    private fun hideVisualReviewLocally(matchId: String) {
-        locallyHiddenVisualMatchIds += matchId
-    }
-
-    private fun pruneLocalHiddenInteractions(home: HomeState) {
-        val actionableChatActiveIds = home.pendingActions
-            .filterIsInstance<HomePendingAction.FirstChat>()
-            .map { it.matchId }
-            .toSet()
-
-        val stillVisualPhaseIds = home.pendingActions
-            .filterIsInstance<HomePendingAction.VisualReview>()
-            .map { it.matchId }
-            .toSet()
-
-        locallyHiddenPendingChatMatchIds.retainAll(actionableChatActiveIds)
-        locallyHiddenVisualMatchIds.retainAll(stillVisualPhaseIds)
-    }
-
-    private suspend fun reenterMatchmakingOrLoadHome(session: ProvisionedSession) {
-        val location = lastSearchLocation
-
-        if (location == null) {
-            loadHomeForReady(
-                ready = RealsRootUiState.Ready(
-                    session = session,
-                    home = HomeUiState(homeLoading = true),
-                ),
-                autoNavigateEngagements = false,
-            )
-            return
-        }
-
-        val ready = RealsRootUiState.Ready(
-            session = session,
-            home = HomeUiState(homeLoading = false),
-        )
-
-        when (val enqueueResult = enqueueMatchmakingUseCase(location)) {
-            is ApiResult.Success -> loadHomeForReady(
-                ready = ready.copy(
-                    home = ready.home.copy(
-                        matchmakingBlockedReason = null,
-                        homeMessage = "Aprobaste el chat. Te avisaremos si la otra persona también aprueba.",
-                    ),
-                ),
-                publishLoadingState = false,
-                autoNavigateEngagements = true,
-            )
-
-            is ApiResult.Failure -> {
-                val reachedLimit = enqueueResult.error.isActiveInteractionLimitError()
-
-                loadHomeForReady(
-                    ready = ready.copy(
-                        home = ready.home.copy(
-                            homeMessage = if (reachedLimit) {
-                                "Aprobaste el chat. Ya tenés el máximo de interacciones activas."
-                            } else {
-                                "Aprobaste el chat. No pudimos volver a iniciar la búsqueda automáticamente."
-                            },
-                            matchmakingBlockedReason = enqueueResult.error,
-                        ),
-                    ),
-                    publishLoadingState = false,
-                    autoNavigateEngagements = false,
-                )
-            }
-        }
-    }
-
-    private suspend fun routeAfterFirstChatClosed(session: ProvisionedSession, state: MatchState?) {
-        returnHomeAfterFirstChatExit(
-            session = session,
-            message = firstChatExitMessage(state),
-        )
-    }
-
-    private suspend fun returnHomeAfterFirstChatExit(
-        session: ProvisionedSession,
-        message: String? = null,
-    ) {
-        loadHomeForReady(
-            ready = RealsRootUiState.Ready(
-                session = session,
-                home = HomeUiState(
-                    homeLoading = true,
-                    homeMessage = message,
-                ),
-            ),
-            publishLoadingState = true,
-            autoNavigateEngagements = false,
-        )
-    }
-
     private fun runChatExitAction(
         successMessage: String = "Actualizamos el estado del chat.",
         loadingLabel: String = "Procesando...",
@@ -1184,16 +998,16 @@ class RealsRootViewModel(
                 is ApiResult.Success -> {
                     val outcome = result.value as? ChatExitOutcome
                     if (outcome != null && outcome.chat.status != ChatStatus.Active) {
-                        hideFirstChatLocally(current.matchId)
-                        returnHomeAfterFirstChatExit(
+                        homeCoordinator.hideFirstChatLocally(current.matchId)
+                        homeCoordinator.returnHome(
                             session = current.session,
                             message = successMessage,
                         )
                         return@launch
                     }
                     if (outcome?.exitRequest?.status.isResolvedExitStatus()) {
-                        hideFirstChatLocally(current.matchId)
-                        returnHomeAfterFirstChatExit(
+                        homeCoordinator.hideFirstChatLocally(current.matchId)
+                        homeCoordinator.returnHome(
                             session = current.session,
                             message = "El chat fue cerrado.",
                         )
@@ -1279,9 +1093,16 @@ class RealsRootViewModel(
     }
 
     private suspend fun loadBackendSessionForActiveUser(user: BackendUser) {
-        when (val result = provisionAndLoadProfile.loadProfileFor(user)) {
-            is ApiResult.Success -> showReadySession(result.value)
-            is ApiResult.Failure -> handleSessionLoadFailure(result.error)
+        loadProvisionedSessionForActiveUser(user)?.let { showReadySession(it) }
+    }
+
+    private suspend fun loadProvisionedSessionForActiveUser(user: BackendUser): ProvisionedSession? {
+        return when (val result = provisionAndLoadProfile.loadProfileFor(user)) {
+            is ApiResult.Success -> result.value
+            is ApiResult.Failure -> {
+                handleSessionLoadFailure(result.error)
+                null
+            }
         }
     }
 
@@ -1289,7 +1110,7 @@ class RealsRootViewModel(
         val snapshot = session.profileSnapshot
         if (snapshot is ProfileSnapshot.Found) {
             if (snapshot.profile.status == ProfileStatus.Active) {
-                loadHomeForReady(
+                homeCoordinator.loadHomeForReady(
                     ready = RealsRootUiState.Ready(
                         session = session,
                         home = HomeUiState(homeLoading = true),
@@ -1367,14 +1188,6 @@ class RealsRootViewModel(
         return statusCode == 404 || statusCode == 403
     }
 
-    private fun ApiError.isActiveInteractionLimitError(): Boolean {
-        if (this !is ApiError.Backend) return false
-        return when (backendErrorCode) {
-            BackendErrorCode.ActiveMatchLimitReached,
-            BackendErrorCode.ActiveConnectionLimitReached -> true
-            else -> false
-        }
-    }
 }
 
 class RealsRootViewModelFactory(

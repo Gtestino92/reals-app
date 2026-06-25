@@ -1,4 +1,4 @@
-﻿ Ypackage com.reals.app.ui.root
+package com.reals.app.ui.root
 
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ApiResult
@@ -31,8 +31,12 @@ internal class HomeCoordinator(
     private val uiState: MutableStateFlow<RealsRootUiState>,
     private val dependencies: HomeFeatureDependencies,
     private val scope: CoroutineScope,
-    private val onOpenFirstChat: suspend (session: ProvisionedSession, matchId: String, chatId: String) -> Unit,
-    private val onProvisionActiveSession: suspend (user: BackendUser) -> Unit,
+    private val onOpenFirstChat: suspend (
+        session: ProvisionedSession,
+        matchId: String,
+        chatId: String?,
+    ) -> Unit,
+    private val onReloadActiveSession: suspend (user: BackendUser) -> Unit,
 ) {
     private val homeUiMapper = HomeUiMapper()
     private val homeRouter = HomeRouter()
@@ -366,7 +370,7 @@ internal class HomeCoordinator(
         }
 
         if (home.profileStatus != ProfileStatus.Active) {
-            onProvisionActiveSession(ready.session.user)
+            onReloadActiveSession(ready.session.user)
             return
         }
 
@@ -381,9 +385,9 @@ internal class HomeCoordinator(
         ) {
             HomeRoute.StayHome -> uiState.value = ready
             is HomeRoute.OpenFirstChat -> onOpenFirstChat(
-                session = ready.session,
-                matchId = route.matchId,
-                chatId = route.chatId,
+                ready.session,
+                route.matchId,
+                route.chatId,
             )
         }
     }
