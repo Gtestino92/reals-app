@@ -43,6 +43,7 @@ import com.reals.app.domain.usecase.PutMyPersonalMessageUseCase
 import com.reals.app.domain.usecase.ReactivateAccountUseCase
 import com.reals.app.domain.usecase.RejectChatExitRequestUseCase
 import com.reals.app.domain.usecase.RejectSchedulingRoundUseCase
+import com.reals.app.domain.usecase.RegisterPushTokenUseCase
 import com.reals.app.domain.usecase.ReplaceMockProfilePhotoUseCase
 import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
@@ -54,6 +55,7 @@ import com.reals.app.domain.usecase.SubmitVisualDecisionUseCase
 import com.reals.app.domain.usecase.TimeoutChatExitRequestUseCase
 import com.reals.app.domain.usecase.UpdateMatchFiltersUseCase
 import com.reals.app.domain.usecase.UpdateProfileUseCase
+import com.reals.app.notifications.registration.PushTokenRegistrationService
 import kotlinx.serialization.json.Json
 
 class AppContainer(context: Context) {
@@ -82,6 +84,8 @@ class AppContainer(context: Context) {
     val updateMatchFiltersUseCase = UpdateMatchFiltersUseCase(profileRepository)
     val getMeUseCase = GetMeUseCase(meRepository)
     val getHomeUseCase = GetHomeUseCase(meRepository)
+    val registerPushTokenUseCase = RegisterPushTokenUseCase(meRepository)
+    val pushTokenRegistrationService = PushTokenRegistrationService(appContext, registerPushTokenUseCase)
     val getProfilePhotosUseCase = GetProfilePhotosUseCase(profileRepository)
     val addMockProfilePhotoUseCase = AddMockProfilePhotoUseCase(profileRepository)
     val addProfilePhotoFileUseCase = AddProfilePhotoFileUseCase(profileRepository)
@@ -124,6 +128,7 @@ class AppContainer(context: Context) {
             authRepository = authRepository,
             provisionAndLoadProfile = provisionAndLoadProfileUseCase,
             getMe = getMeUseCase,
+            pushTokenRegistrationService = pushTokenRegistrationService,
         ),
         account = AccountFeatureDependencies(
             reactivateAccount = reactivateAccountUseCase,

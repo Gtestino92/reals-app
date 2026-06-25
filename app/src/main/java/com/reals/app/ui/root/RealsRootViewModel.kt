@@ -30,6 +30,7 @@ import com.reals.app.domain.model.SearchLocationInput
 import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.UpdateProfileInput
 import com.reals.app.domain.model.VisualDecision
+import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_AVAILABLE
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,6 +42,7 @@ class RealsRootViewModel(
     private val authRepository = dependencies.session.authRepository
     private val provisionAndLoadProfile = dependencies.session.provisionAndLoadProfile
     private val getMeUseCase = dependencies.session.getMe
+    private val pushTokenRegistrationService = dependencies.session.pushTokenRegistrationService
     private val reactivateAccountUseCase = dependencies.account.reactivateAccount
     private val deleteAccountUseCase = dependencies.account.deleteAccount
     private val _uiState = MutableStateFlow<RealsRootUiState>(RealsRootUiState.Checking)
@@ -164,6 +166,28 @@ class RealsRootViewModel(
 
     fun pollHomeStateSilently() {
         homeCoordinator.pollHomeStateSilently()
+    }
+
+    fun handleExternalNotificationOpened(type: String?) {
+        if (type != TYPE_VISUAL_REVIEW_AVAILABLE) return
+
+        when (val current = _uiState.value) {
+            is RealsRootUiState.Ready -> refreshHomeState()
+            is RealsRootUiState.FirstChat -> returnHomeFromExternalNotification(current.session)
+            is RealsRootUiState.SecondChat -> returnHomeFromExternalNotification(current.session)
+            is RealsRootUiState.VisualApproval -> returnHomeFromExternalNotification(current.session)
+            is RealsRootUiState.Scheduling -> returnHomeFromExternalNotification(current.session)
+            is RealsRootUiState.PartnerProfile -> returnHomeFromExternalNotification(current.session)
+            is RealsRootUiState.PendingEngagement -> returnHomeFromExternalNotification(current.session)
+            is RealsRootUiState.ActivationComplete -> returnHomeFromExternalNotification(current.session)
+            is RealsRootUiState.LoadingSession,
+            RealsRootUiState.Checking -> refreshSession()
+            is RealsRootUiState.AccountDeletionPending,
+            is RealsRootUiState.AccountDeletionScheduled,
+            is RealsRootUiState.Failure,
+            is RealsRootUiState.Login,
+            is RealsRootUiState.MissingFirebase -> Unit
+        }
     }
 
     fun enqueueMatchmaking(location: SearchLocationInput) {
@@ -1161,6 +1185,7 @@ class RealsRootViewModel(
     }
 
     private suspend fun showReadySession(session: ProvisionedSession) {
+        registerPushTokenBestEffort()
         val snapshot = session.profileSnapshot
         if (snapshot is ProfileSnapshot.Found) {
             if (snapshot.profile.status == ProfileStatus.Active) {
@@ -1240,6 +1265,18 @@ class RealsRootViewModel(
     private fun ApiError.Backend?.shouldProvisionAfterGetMeFailure(): Boolean {
         if (this == null) return false
         return statusCode == 404 || statusCode == 403
+    }
+
+    private fun returnHomeFromExternalNotification(session: ProvisionedSession) {
+        viewModelScope.launch {
+            homeCoordinator.returnHome(session)
+        }
+    }
+
+    private fun registerPushTokenBestEffort() {
+        viewModelScope.launch {
+            pushTokenRegistrationService.registerCurrentTokenIfPossible()
+        }
     }
 
     private fun optimisticMessageLocalId(): String = "local-${System.currentTimeMillis()}"

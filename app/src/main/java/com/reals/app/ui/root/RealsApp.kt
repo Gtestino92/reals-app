@@ -1,10 +1,21 @@
 package com.reals.app.ui.root
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.reals.app.core.network.ErrorContext
@@ -28,11 +39,23 @@ import com.reals.app.ui.profile.ProfileStatusScreen
 import com.reals.app.ui.scheduling.SchedulingScreen
 
 @Composable
-fun RealsApp(appContainer: AppContainer) {
+fun RealsApp(
+    appContainer: AppContainer,
+    notificationOpenNonce: Long = 0L,
+    notificationOpenType: String? = null,
+) {
     val viewModel: RealsRootViewModel = viewModel(
         factory = RealsRootViewModelFactory(appContainer),
     )
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(notificationOpenNonce) {
+        if (notificationOpenNonce != 0L) {
+            viewModel.handleExternalNotificationOpened(notificationOpenType)
+        }
+    }
+
+    NotificationPermissionGate(enabled = state is RealsRootUiState.Ready)
 
     Surface(modifier = Modifier.fillMaxSize()) {
         when (val current = state) {
@@ -295,5 +318,30 @@ fun RealsApp(appContainer: AppContainer) {
                 onDismiss = viewModel::signOut,
             )
         }
+    }
+}
+
+@Composable
+private fun NotificationPermissionGate(enabled: Boolean) {
+    if (!enabled || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+
+    val context = LocalContext.current
+    var requestedThisSession by rememberSaveable { mutableStateOf(false) }
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) {
+        requestedThisSession = true
+    }
+
+    LaunchedEffect(enabled, requestedThisSession) {
+        if (requestedThisSession) return@LaunchedEffect
+        val hasPermission = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.POST_NOTIFICATIONS,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (hasPermission) return@LaunchedEffect
+
+        requestedThisSession = true
+        launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 }
