@@ -102,6 +102,11 @@ class FakeRealsApi : RealsApi {
     var registerPushTokenBody: RegisterPushTokenRequestDto? = null
         private set
 
+    var beforeGetHomeResponse: suspend () -> Unit = {}
+    var beforeGetFirstChatForMatchResponse: suspend () -> Unit = {}
+    var beforeGetChatResponse: suspend () -> Unit = {}
+    var beforeGetConnectionNegotiationResponse: suspend () -> Unit = {}
+
     var pingResponse: Response<PingResponseDto> = Response.success(PingResponseDto("ok"))
     var userResponse: Response<UserResponseDto> = Response.success(TestDtos.user())
     var deleteMeResponse: Response<Unit> = Response.success(Unit)
@@ -139,7 +144,7 @@ class FakeRealsApi : RealsApi {
         record("getMe", authorization) { userResponse }
 
     override suspend fun getHome(authorization: String): Response<HomeResponseDto> =
-        record("getHome", authorization) { homeResponse }
+        record("getHome", authorization, beforeResponse = beforeGetHomeResponse) { homeResponse }
 
     override suspend fun registerPushToken(
         authorization: String,
@@ -256,7 +261,12 @@ class FakeRealsApi : RealsApi {
         authorization: String,
         matchId: String,
     ): Response<ChatResponseDto> =
-        record("getFirstChatForMatch", authorization, matchId) { nextChatResponse() }
+        record(
+            "getFirstChatForMatch",
+            authorization,
+            matchId,
+            beforeResponse = beforeGetFirstChatForMatchResponse,
+        ) { nextChatResponse() }
 
     override suspend fun submitChatDecision(
         authorization: String,
@@ -304,7 +314,7 @@ class FakeRealsApi : RealsApi {
         authorization: String,
         chatId: String,
     ): Response<ChatResponseDto> =
-        record("getChat", authorization, chatId) { nextChatResponse() }
+        record("getChat", authorization, chatId, beforeResponse = beforeGetChatResponse) { nextChatResponse() }
 
     override suspend fun sendChatMessage(
         authorization: String,
@@ -403,7 +413,12 @@ class FakeRealsApi : RealsApi {
         authorization: String,
         connectionId: String,
     ): Response<NegotiationResponseDto> =
-        record("getConnectionNegotiation", authorization, connectionId) { negotiationResponse }
+        record(
+            "getConnectionNegotiation",
+            authorization,
+            connectionId,
+            beforeResponse = beforeGetConnectionNegotiationResponse,
+        ) { negotiationResponse }
 
     override suspend fun getConnectionProposals(
         authorization: String,
@@ -434,15 +449,17 @@ class FakeRealsApi : RealsApi {
     ): Response<NegotiationResponseDto> =
         record("rejectConnectionNegotiationRound", authorization, connectionId) { negotiationResponse }
 
-    private fun <T> record(
+    private suspend fun <T> record(
         name: String,
         authorization: String?,
         pathId: String? = null,
+        beforeResponse: suspend () -> Unit = {},
         response: () -> Response<T>,
     ): Response<T> {
         calls = calls + name
         lastAuthorization = authorization
         lastPathId = pathId
+        beforeResponse()
         return response()
     }
 

@@ -49,6 +49,107 @@ class ApiErrorTest {
     }
 
     @Test
+    fun `fromRaw parses chat backend codes`() {
+        mapOf(
+            "CHAT_NOT_FOUND" to BackendErrorCode.ChatNotFound,
+            "CHAT_NOT_AVAILABLE" to BackendErrorCode.ChatNotAvailable,
+            "CHAT_EXPIRED" to BackendErrorCode.ChatExpired,
+            "CHAT_MESSAGE_INVALID" to BackendErrorCode.ChatMessageInvalid,
+            "CHAT_DECISION_NOT_AVAILABLE" to BackendErrorCode.ChatDecisionNotAvailable,
+            "CHAT_DECISION_ALREADY_SUBMITTED" to BackendErrorCode.ChatDecisionAlreadySubmitted,
+            "CHAT_MIN_MESSAGES_REQUIRED" to BackendErrorCode.ChatMinMessagesRequired,
+            "CHAT_MUTUAL_CANCELLATION_PENDING" to BackendErrorCode.ChatMutualCancellationPending,
+            "CHAT_EXIT_REQUEST_NOT_FOUND" to BackendErrorCode.ChatExitRequestNotFound,
+            "CHAT_EXIT_REQUEST_NOT_AVAILABLE" to BackendErrorCode.ChatExitRequestNotAvailable,
+            "CHAT_EXIT_REQUEST_ALREADY_PENDING" to BackendErrorCode.ChatExitRequestAlreadyPending,
+        ).forEach { (raw, expected) ->
+            assertEquals(expected, BackendErrorCode.fromRaw(raw))
+        }
+    }
+
+    @Test
+    fun `chat backend codes map to deterministic chat messages`() {
+        mapOf(
+            "CHAT_NOT_FOUND" to "No encontramos esta conversacion. Actualiza el estado.",
+            "CHAT_NOT_AVAILABLE" to "Esta conversacion ya no esta disponible. Actualiza el estado.",
+            "CHAT_EXPIRED" to "La conversacion vencio.",
+            "CHAT_MESSAGE_INVALID" to
+                "Revisa el mensaje. No puede estar vacio ni superar el limite permitido.",
+            "CHAT_DECISION_NOT_AVAILABLE" to
+                "La decision sobre esta conversacion ya no esta disponible. Actualiza el estado.",
+            "CHAT_DECISION_ALREADY_SUBMITTED" to
+                "Ya enviaste tu decision para esta conversacion.",
+            "CHAT_MIN_MESSAGES_REQUIRED" to
+                "Antes de decidir, envia al menos un poco mas de conversacion.",
+            "CHAT_MUTUAL_CANCELLATION_PENDING" to
+                "Hay una solicitud de salida pendiente. Resolvela antes de decidir.",
+            "CHAT_EXIT_REQUEST_NOT_FOUND" to
+                "No encontramos esa solicitud de salida. Actualiza la conversacion.",
+            "CHAT_EXIT_REQUEST_NOT_AVAILABLE" to
+                "Esa solicitud de salida ya no esta disponible.",
+            "CHAT_EXIT_REQUEST_ALREADY_PENDING" to
+                "Ya hay una solicitud de salida pendiente.",
+        ).forEach { (code, expected) ->
+            assertEquals(
+                expected,
+                backendError(code, message = "raw backend message").toUserMessage(ErrorContext.Chat),
+            )
+        }
+    }
+
+    @Test
+    fun `fromRaw parses scheduling backend codes`() {
+        mapOf(
+            "SCHEDULING_NOT_AVAILABLE" to BackendErrorCode.SchedulingNotAvailable,
+            "SCHEDULING_EXPIRED" to BackendErrorCode.SchedulingExpired,
+            "SCHEDULING_NEGOTIATION_NOT_FOUND" to BackendErrorCode.SchedulingNegotiationNotFound,
+            "SCHEDULING_INVALID_PROPOSALS" to BackendErrorCode.SchedulingInvalidProposals,
+            "SCHEDULING_PROPOSALS_ALREADY_SUBMITTED" to BackendErrorCode.SchedulingProposalsAlreadySubmitted,
+            "SCHEDULING_PROPOSAL_NOT_AVAILABLE" to BackendErrorCode.SchedulingProposalNotAvailable,
+            "SCHEDULING_CANNOT_ACCEPT_OWN_PROPOSAL" to BackendErrorCode.SchedulingCannotAcceptOwnProposal,
+            "SCHEDULING_ROUND_NOT_REJECTABLE" to BackendErrorCode.SchedulingRoundNotRejectable,
+        ).forEach { (raw, expected) ->
+            assertEquals(expected, BackendErrorCode.fromRaw(raw))
+        }
+    }
+
+    @Test
+    fun `scheduling backend codes map to deterministic scheduling messages`() {
+        mapOf(
+            "SCHEDULING_NOT_AVAILABLE" to
+                "La coordinacion de horarios ya no esta disponible. Actualiza el estado e intenta nuevamente.",
+            "SCHEDULING_EXPIRED" to "La coordinacion de horarios vencio.",
+            "SCHEDULING_NEGOTIATION_NOT_FOUND" to
+                "No encontramos la coordinacion de horarios. Actualiza el estado.",
+            "SCHEDULING_INVALID_PROPOSALS" to
+                "Revisa los horarios elegidos. Deben ser futuros, unicos y estar alineados cada media hora.",
+            "SCHEDULING_PROPOSALS_ALREADY_SUBMITTED" to
+                "Ya enviaste tus horarios para esta ronda.",
+            "SCHEDULING_PROPOSAL_NOT_AVAILABLE" to
+                "Ese horario ya no esta disponible. Actualiza la propuesta.",
+            "SCHEDULING_CANNOT_ACCEPT_OWN_PROPOSAL" to
+                "No podes aceptar un horario propuesto por vos.",
+            "SCHEDULING_ROUND_NOT_REJECTABLE" to
+                "Todavia no se puede rechazar esta ronda. Espera a que ambas personas envien horarios.",
+        ).forEach { (code, expected) ->
+            assertEquals(
+                expected,
+                backendError(code, message = "raw backend message").toUserMessage(ErrorContext.Scheduling),
+            )
+        }
+    }
+
+    @Test
+    fun `scheduling domain conflict does not use raw backend message`() {
+        val error = backendError("DOMAIN_CONFLICT", message = "raw backend message")
+
+        assertEquals(
+            "Esta accion no esta disponible con el estado actual.",
+            error.toUserMessage(ErrorContext.Scheduling),
+        )
+    }
+
+    @Test
     fun `unknown code maps to generic fallback`() {
         val error = backendError("SOME_NEW_BACKEND_CODE", message = "technical backend detail")
 
