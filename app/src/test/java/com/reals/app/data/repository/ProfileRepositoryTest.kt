@@ -99,30 +99,13 @@ class ProfileRepositoryTest {
     }
 
     @Test
-    fun `photo URL operations map and send bodies`() = runBlocking {
+    fun `photo read delete and activation operations call API`() = runBlocking {
         repository.getMyProfilePhotos().successValue()
-        repository.addMyProfilePhoto(
-            url = "https://example.com/a.jpg",
-            position = 2,
-            isPersonPhoto = true,
-            isFullBody = false,
-        ).successValue()
-        repository.replaceMyProfilePhoto(
-            url = "https://example.com/b.jpg",
-            position = 2,
-            isPersonPhoto = false,
-            isFullBody = true,
-        ).successValue()
         repository.deleteMyProfilePhoto("photo-1").successValue()
         repository.activateMyProfile().successValue()
 
-        assertEquals("https://example.com/a.jpg", api.addPhotoBody?.url)
-        assertEquals(2, api.addPhotoBody?.position)
-        assertEquals("https://example.com/b.jpg", api.replacePhotoBody?.url)
         assertEquals(listOf(
             "getMyProfilePhotos",
-            "addMyProfilePhoto",
-            "replaceMyProfilePhoto",
             "deleteMyProfilePhoto",
             "activateMyProfile",
         ), api.calls)

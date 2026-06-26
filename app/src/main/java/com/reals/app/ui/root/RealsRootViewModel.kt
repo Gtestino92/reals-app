@@ -43,7 +43,6 @@ class RealsRootViewModel(
         uiState = _uiState,
         dependencies = dependencies.profile,
         getProfilePhotosUseCase = getProfilePhotosUseCase,
-        provisionAndLoadProfile = dependencies.session.provisionAndLoadProfile,
         scope = viewModelScope,
     )
     private val getFirstChatForMatchUseCase = dependencies.firstChat.getFirstChatForMatch
@@ -959,26 +958,8 @@ class RealsRootViewModel(
         profileHandler.loadProfilePhotos()
     }
 
-    fun addMockProfilePhoto(
-        profile: Profile,
-        position: Int,
-        isPersonPhoto: Boolean,
-        isFullBody: Boolean,
-    ) {
-        profileHandler.addMockProfilePhoto(profile, position, isPersonPhoto, isFullBody)
-    }
-
     fun addProfilePhotoFile(position: Int, fileUri: Uri) {
         profileHandler.addProfilePhotoFile(position, fileUri)
-    }
-
-    fun replaceMockProfilePhoto(
-        profile: Profile,
-        position: Int,
-        isPersonPhoto: Boolean,
-        isFullBody: Boolean,
-    ) {
-        profileHandler.replaceMockProfilePhoto(profile, position, isPersonPhoto, isFullBody)
     }
 
     fun replaceProfilePhotoFile(photoId: String, position: Int, fileUri: Uri) {

@@ -9,8 +9,6 @@ import com.reals.app.core.network.ApiResult
 import com.reals.app.core.network.map
 import com.reals.app.data.api.AuthTokenProvider
 import com.reals.app.data.api.RealsApi
-import com.reals.app.data.dto.AddPhotoRequestDto
-import com.reals.app.data.dto.ReplacePhotoRequestDto
 import com.reals.app.data.mapper.toDto
 import com.reals.app.data.mapper.toDomain
 import com.reals.app.domain.model.CreateProfileInput
@@ -61,24 +59,6 @@ class ProfileRepository(
         authorizedCall { authorization -> api.getMyProfilePhotos(authorization) }
             .map { photos -> photos.map { it.toDomain() } }
 
-    suspend fun addMyProfilePhoto(
-        url: String,
-        position: Int,
-        isPersonPhoto: Boolean,
-        isFullBody: Boolean,
-    ): ApiResult<ProfilePhoto> =
-        authorizedCall { authorization ->
-            api.addMyProfilePhoto(
-                authorization = authorization,
-                body = AddPhotoRequestDto(
-                    url = url,
-                    position = position,
-                    isPersonPhoto = isPersonPhoto,
-                    isFullBody = isFullBody,
-                ),
-            )
-        }.map { it.toDomain() }
-
     suspend fun addMyProfilePhotoFile(
         fileUri: Uri,
         position: Int,
@@ -94,24 +74,6 @@ class ProfileRepository(
     suspend fun deleteMyProfilePhoto(photoId: String): ApiResult<Profile> =
         authorizedCall { authorization -> api.deleteMyProfilePhoto(authorization, photoId) }
             .map { it.toDomain() }
-
-    suspend fun replaceMyProfilePhoto(
-        url: String,
-        position: Int,
-        isPersonPhoto: Boolean,
-        isFullBody: Boolean,
-    ): ApiResult<ProfilePhoto> =
-        authorizedCall { authorization ->
-            api.replaceMyProfilePhoto(
-                authorization = authorization,
-                position = position,
-                body = ReplacePhotoRequestDto(
-                    url = url,
-                    isPersonPhoto = isPersonPhoto,
-                    isFullBody = isFullBody,
-                ),
-            )
-        }.map { it.toDomain() }
 
     suspend fun replaceMyProfilePhotoFile(
         photoId: String,
