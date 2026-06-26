@@ -20,7 +20,6 @@ import com.reals.app.di.VisualApprovalFeatureDependencies
 import com.reals.app.domain.usecase.AcceptChatExitRequestUseCase
 import com.reals.app.domain.usecase.AcceptSchedulingProposalUseCase
 import com.reals.app.domain.usecase.ActivateProfileUseCase
-import com.reals.app.domain.usecase.AddMockProfilePhotoUseCase
 import com.reals.app.domain.usecase.AddProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.CancelChatUseCase
 import com.reals.app.domain.usecase.CreateProfileUseCase
@@ -48,7 +47,6 @@ import com.reals.app.domain.usecase.ReactivateAccountUseCase
 import com.reals.app.domain.usecase.RegisterPushTokenUseCase
 import com.reals.app.domain.usecase.RejectChatExitRequestUseCase
 import com.reals.app.domain.usecase.RejectSchedulingRoundUseCase
-import com.reals.app.domain.usecase.ReplaceMockProfilePhotoUseCase
 import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
 import com.reals.app.domain.usecase.SafetyCancelChatUseCase
@@ -256,9 +254,7 @@ class RealsRootViewModelPollingGuardTest {
                 updateProfile = UpdateProfileUseCase(profileRepository),
                 updateMatchFilters = UpdateMatchFiltersUseCase(profileRepository),
                 getProfilePhotos = GetProfilePhotosUseCase(profileRepository),
-                addMockProfilePhoto = AddMockProfilePhotoUseCase(profileRepository),
                 addProfilePhotoFile = AddProfilePhotoFileUseCase(profileRepository),
-                replaceMockProfilePhoto = ReplaceMockProfilePhotoUseCase(profileRepository),
                 replaceProfilePhotoFile = ReplaceProfilePhotoFileUseCase(profileRepository),
                 deleteProfilePhoto = DeleteProfilePhotoUseCase(profileRepository),
                 activateProfile = ActivateProfileUseCase(profileRepository),

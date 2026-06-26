@@ -15,7 +15,6 @@ import com.reals.app.data.repository.SchedulingRepository
 import com.reals.app.domain.usecase.AcceptChatExitRequestUseCase
 import com.reals.app.domain.usecase.AcceptSchedulingProposalUseCase
 import com.reals.app.domain.usecase.ActivateProfileUseCase
-import com.reals.app.domain.usecase.AddMockProfilePhotoUseCase
 import com.reals.app.domain.usecase.AddProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.CancelChatUseCase
 import com.reals.app.domain.usecase.CreateProfileUseCase
@@ -44,7 +43,6 @@ import com.reals.app.domain.usecase.ReactivateAccountUseCase
 import com.reals.app.domain.usecase.RejectChatExitRequestUseCase
 import com.reals.app.domain.usecase.RejectSchedulingRoundUseCase
 import com.reals.app.domain.usecase.RegisterPushTokenUseCase
-import com.reals.app.domain.usecase.ReplaceMockProfilePhotoUseCase
 import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
 import com.reals.app.domain.usecase.SafetyCancelChatUseCase
@@ -87,9 +85,7 @@ class AppContainer(context: Context) {
     val registerPushTokenUseCase = RegisterPushTokenUseCase(meRepository)
     val pushTokenRegistrationService = PushTokenRegistrationService(appContext, registerPushTokenUseCase)
     val getProfilePhotosUseCase = GetProfilePhotosUseCase(profileRepository)
-    val addMockProfilePhotoUseCase = AddMockProfilePhotoUseCase(profileRepository)
     val addProfilePhotoFileUseCase = AddProfilePhotoFileUseCase(profileRepository)
-    val replaceMockProfilePhotoUseCase = ReplaceMockProfilePhotoUseCase(profileRepository)
     val replaceProfilePhotoFileUseCase = ReplaceProfilePhotoFileUseCase(profileRepository)
     val deleteProfilePhotoUseCase = DeleteProfilePhotoUseCase(profileRepository)
     val activateProfileUseCase = ActivateProfileUseCase(profileRepository)
@@ -139,9 +135,7 @@ class AppContainer(context: Context) {
             updateProfile = updateProfileUseCase,
             updateMatchFilters = updateMatchFiltersUseCase,
             getProfilePhotos = getProfilePhotosUseCase,
-            addMockProfilePhoto = addMockProfilePhotoUseCase,
             addProfilePhotoFile = addProfilePhotoFileUseCase,
-            replaceMockProfilePhoto = replaceMockProfilePhotoUseCase,
             replaceProfilePhotoFile = replaceProfilePhotoFileUseCase,
             deleteProfilePhoto = deleteProfilePhotoUseCase,
             activateProfile = activateProfileUseCase,

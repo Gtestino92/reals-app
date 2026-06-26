@@ -1,6 +1,5 @@
 ﻿package com.reals.app.data.api
 
-import com.reals.app.data.dto.AddPhotoRequestDto
 import com.reals.app.data.dto.AddProposalRequestDto
 import com.reals.app.data.dto.ChatDecisionRequestDto
 import com.reals.app.data.dto.ChatExitOutcomeResponseDto
@@ -23,7 +22,6 @@ import com.reals.app.data.dto.ProfileResponseDto
 import com.reals.app.data.dto.QueueStatusResponseDto
 import com.reals.app.data.dto.RegisterPushTokenRequestDto
 import com.reals.app.data.dto.RegisterPushTokenResponseDto
-import com.reals.app.data.dto.ReplacePhotoRequestDto
 import com.reals.app.data.dto.ScheduleProposalResponseDto
 import com.reals.app.data.dto.SendMessageRequestDto
 import com.reals.app.data.dto.UpdateMatchFiltersRequestDto
@@ -110,12 +108,6 @@ interface RealsApi {
         @Header("Authorization") authorization: String,
     ): Response<List<PhotoResponseDto>>
 
-    @POST("api/me/profile/photos")
-    suspend fun addMyProfilePhoto(
-        @Header("Authorization") authorization: String,
-        @Body body: AddPhotoRequestDto,
-    ): Response<PhotoResponseDto>
-
     @Multipart
     @POST("api/me/profile/photos")
     suspend fun addMyProfilePhotoFile(
@@ -129,13 +121,6 @@ interface RealsApi {
         @Header("Authorization") authorization: String,
         @Path("photoId") photoId: String,
     ): Response<ProfileResponseDto>
-
-    @PUT("api/me/profile/photos/position/{position}")
-    suspend fun replaceMyProfilePhoto(
-        @Header("Authorization") authorization: String,
-        @Path("position") position: Int,
-        @Body body: ReplacePhotoRequestDto,
-    ): Response<PhotoResponseDto>
 
     @Multipart
     @PUT("api/me/profile/photos/{photoId}/file")

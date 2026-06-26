@@ -6,11 +6,13 @@ import com.reals.app.di.ProfileFeatureDependencies
 import com.reals.app.domain.model.CreateProfileInput
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfileActivationResult
+import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.ProfileSnapshot
+import com.reals.app.domain.model.ProfileStatus
+import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.UpdateProfileInput
 import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
-import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -25,14 +27,12 @@ import kotlinx.coroutines.launch
  * @param uiState the shared mutable state flow that [RealsRootViewModel] owns
  * @param dependencies profile feature use cases
  * @param getProfilePhotosUseCase retrieves profile photos
- * @param provisionAndLoadProfile refreshes the backend session after photo mutations
  * @param scope coroutine scope (typically [androidx.lifecycle.viewModelScope])
  */
 class ProfileOperationHandler(
     private val uiState: MutableStateFlow<RealsRootUiState>,
     private val dependencies: ProfileFeatureDependencies,
     private val getProfilePhotosUseCase: GetProfilePhotosUseCase,
-    private val provisionAndLoadProfile: ProvisionAndLoadProfileUseCase,
     private val scope: CoroutineScope,
 ) {
     /**
@@ -174,32 +174,6 @@ class ProfileOperationHandler(
         }
     }
 
-    fun addMockProfilePhoto(
-        profile: Profile,
-        position: Int,
-        isPersonPhoto: Boolean,
-        isFullBody: Boolean,
-    ) {
-        val current = requireReady() ?: return
-        scope.launch {
-            val cleared = current.clearProfileFeedback()
-            val pending = cleared.copy(photos = cleared.photos.copy(addingPhoto = true))
-            uiState.value = pending
-            when (val result = dependencies.addMockProfilePhoto(profile, position, isPersonPhoto, isFullBody)) {
-                is ApiResult.Success -> refreshAfterPhotoMutation(
-                    previous = pending,
-                    successMessage = "Foto agregada correctamente.",
-                )
-
-                is ApiResult.Failure -> {
-                    uiState.value = pending.copy(
-                        photos = pending.photos.copy(addingPhoto = false, photoActionError = result.error),
-                    )
-                }
-            }
-        }
-    }
-
     fun addProfilePhotoFile(position: Int, fileUri: Uri) {
         val current = requireReady() ?: return
         scope.launch {
@@ -207,35 +181,10 @@ class ProfileOperationHandler(
             val pending = cleared.copy(photos = cleared.photos.copy(addingPhoto = true))
             uiState.value = pending
             when (val result = dependencies.addProfilePhotoFile(fileUri, position)) {
-                is ApiResult.Success -> refreshAfterPhotoMutation(
+                is ApiResult.Success -> completePhotoAdded(
                     previous = pending,
+                    addedPhoto = result.value,
                     successMessage = "Foto subida correctamente.",
-                )
-
-                is ApiResult.Failure -> {
-                    uiState.value = pending.copy(
-                        photos = pending.photos.copy(addingPhoto = false, photoActionError = result.error),
-                    )
-                }
-            }
-        }
-    }
-
-    fun replaceMockProfilePhoto(
-        profile: Profile,
-        position: Int,
-        isPersonPhoto: Boolean,
-        isFullBody: Boolean,
-    ) {
-        val current = requireReady() ?: return
-        scope.launch {
-            val cleared = current.clearProfileFeedback()
-            val pending = cleared.copy(photos = cleared.photos.copy(addingPhoto = true))
-            uiState.value = pending
-            when (val result = dependencies.replaceMockProfilePhoto(profile, position, isPersonPhoto, isFullBody)) {
-                is ApiResult.Success -> refreshAfterPhotoMutation(
-                    previous = pending,
-                    successMessage = "Foto reemplazada correctamente.",
                 )
 
                 is ApiResult.Failure -> {
@@ -254,8 +203,9 @@ class ProfileOperationHandler(
             val pending = cleared.copy(photos = cleared.photos.copy(addingPhoto = true))
             uiState.value = pending
             when (val result = dependencies.replaceProfilePhotoFile(photoId, fileUri)) {
-                is ApiResult.Success -> refreshAfterPhotoMutation(
+                is ApiResult.Success -> completePhotoReplaced(
                     previous = pending,
+                    replacedPhoto = result.value,
                     successMessage = "Foto reemplazada correctamente.",
                 )
 
@@ -275,23 +225,12 @@ class ProfileOperationHandler(
             val pending = cleared.copy(photos = cleared.photos.copy(addingPhoto = true))
             uiState.value = pending
             when (val result = dependencies.deleteProfilePhoto(photoId)) {
-                is ApiResult.Success -> {
-                    val refreshedPhotos = getProfilePhotosUseCase()
-                    val updatedPhotos = (refreshedPhotos as? ApiResult.Success)?.value
-                        ?.sortedBy { it.position }
-                        ?: pending.profilePhotos.filterNot { it.id == photoId }
-                    uiState.value = pending.copy(
-                        session = pending.session.copy(
-                            profileSnapshot = ProfileSnapshot.Found(result.value),
-                        ),
-                        photos = pending.photos.copy(
-                            profilePhotos = updatedPhotos,
-                            profilePhotosError = null,
-                            addingPhoto = false,
-                            photoActionMessage = "Foto eliminada.",
-                        ),
-                    )
-                }
+                is ApiResult.Success -> completePhotoDeleted(
+                    previous = pending,
+                    deletedPhotoId = photoId,
+                    updatedProfile = result.value,
+                    successMessage = "Foto eliminada.",
+                )
 
                 is ApiResult.Failure -> {
                     uiState.value = pending.copy(
@@ -338,33 +277,117 @@ class ProfileOperationHandler(
     private fun requireReady(): RealsRootUiState.Ready? =
         uiState.value as? RealsRootUiState.Ready
 
-    private suspend fun refreshAfterPhotoMutation(
+    private fun completePhotoAdded(
         previous: RealsRootUiState.Ready,
+        addedPhoto: ProfilePhoto,
         successMessage: String,
     ) {
-        val refreshedPhotos = getProfilePhotosUseCase()
-        val refreshedSession = provisionAndLoadProfile()
-
-        if (refreshedPhotos is ApiResult.Success) {
-            uiState.value = previous.copy(
-                session = (refreshedSession as? ApiResult.Success)?.value ?: previous.session,
-                photos = previous.photos.copy(
-                    profilePhotos = refreshedPhotos.value.sortedBy { it.position },
-                    profilePhotosError = null,
-                    addingPhoto = false,
-                    photoActionMessage = successMessage,
-                    photoActionError = null,
-                ),
-            )
-            return
-        }
-
-        uiState.value = previous.copy(
-            session = (refreshedSession as? ApiResult.Success)?.value ?: previous.session,
-            photos = previous.photos.copy(
-                addingPhoto = false,
-                photoActionError = (refreshedPhotos as ApiResult.Failure).error,
-            ),
-        )
+        uiState.value = photoAddedState(previous, addedPhoto, successMessage)
     }
+
+    private fun completePhotoReplaced(
+        previous: RealsRootUiState.Ready,
+        replacedPhoto: ProfilePhoto,
+        successMessage: String,
+    ) {
+        uiState.value = photoReplacedState(previous, replacedPhoto, successMessage)
+    }
+
+    private fun completePhotoDeleted(
+        previous: RealsRootUiState.Ready,
+        deletedPhotoId: String,
+        updatedProfile: Profile,
+        successMessage: String,
+    ) {
+        uiState.value = photoDeletedState(previous, deletedPhotoId, updatedProfile, successMessage)
+    }
+}
+
+internal fun photoAddedState(
+    previous: RealsRootUiState.Ready,
+    addedPhoto: ProfilePhoto,
+    successMessage: String,
+): RealsRootUiState.Ready {
+    val isNewPhoto = previous.profilePhotos.none {
+        it.id == addedPhoto.id || it.position == addedPhoto.position
+    }
+    return previous.copy(
+        session = markProfileDraftAfterPhotoMutation(
+            session = previous.session,
+            photoCountDelta = if (isNewPhoto) 1 else 0,
+        ),
+        photos = previous.photos.copy(
+            profilePhotos = upsertPhoto(previous.profilePhotos, addedPhoto),
+            profilePhotosError = null,
+            addingPhoto = false,
+            photoActionMessage = successMessage,
+            photoActionError = null,
+        ),
+    )
+}
+
+internal fun photoReplacedState(
+    previous: RealsRootUiState.Ready,
+    replacedPhoto: ProfilePhoto,
+    successMessage: String,
+): RealsRootUiState.Ready = previous.copy(
+    session = markProfileDraftAfterPhotoMutation(previous.session),
+    photos = previous.photos.copy(
+        profilePhotos = replacePhoto(previous.profilePhotos, replacedPhoto),
+        profilePhotosError = null,
+        addingPhoto = false,
+        photoActionMessage = successMessage,
+        photoActionError = null,
+    ),
+)
+
+internal fun photoDeletedState(
+    previous: RealsRootUiState.Ready,
+    deletedPhotoId: String,
+    updatedProfile: Profile,
+    successMessage: String,
+): RealsRootUiState.Ready = previous.copy(
+    session = previous.session.copy(
+        profileSnapshot = ProfileSnapshot.Found(updatedProfile),
+    ),
+    photos = previous.photos.copy(
+        profilePhotos = previous.profilePhotos
+            .filterNot { it.id == deletedPhotoId }
+            .sortedBy { it.position },
+        profilePhotosError = null,
+        addingPhoto = false,
+        photoActionMessage = successMessage,
+        photoActionError = null,
+    ),
+)
+
+internal fun upsertPhoto(photos: List<ProfilePhoto>, photo: ProfilePhoto): List<ProfilePhoto> {
+    val replaced = photos.map {
+        if (it.id == photo.id || it.position == photo.position) photo else it
+    }
+    val withPhoto = if (replaced.any { it.id == photo.id }) replaced else replaced + photo
+    return withPhoto.sortedBy { it.position }
+}
+
+internal fun replacePhoto(photos: List<ProfilePhoto>, photo: ProfilePhoto): List<ProfilePhoto> {
+    val replacedById = photos.map { if (it.id == photo.id) photo else it }
+    if (replacedById.any { it.id == photo.id }) return replacedById.sortedBy { it.position }
+
+    val replacedByPosition = photos.map { if (it.position == photo.position) photo else it }
+    if (replacedByPosition.any { it.id == photo.id }) return replacedByPosition.sortedBy { it.position }
+
+    return (photos + photo).sortedBy { it.position }
+}
+
+internal fun markProfileDraftAfterPhotoMutation(
+    session: ProvisionedSession,
+    photoCountDelta: Int = 0,
+): ProvisionedSession {
+    val snapshot = session.profileSnapshot as? ProfileSnapshot.Found ?: return session
+    val profile = snapshot.profile
+    val updatedProfile = profile.copy(
+        status = if (profile.status == ProfileStatus.Active) ProfileStatus.Draft else profile.status,
+        photoCount = (profile.photoCount + photoCountDelta).coerceAtLeast(0),
+    )
+    return session.copy(profileSnapshot = ProfileSnapshot.Found(updatedProfile))
 }

@@ -18,7 +18,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -31,7 +33,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -43,9 +44,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.shape.RoundedCornerShape
 import coil3.compose.AsyncImage
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
@@ -86,9 +88,7 @@ fun ProfileStatusScreen(
     onUpdateProfile: (UpdateProfileInput) -> Unit,
     onUpdateMatchFilters: (UpdateMatchFiltersInput) -> Unit,
     onLoadPhotos: () -> Unit,
-    onAddMockPhoto: (profile: Profile, position: Int, isPersonPhoto: Boolean, isFullBody: Boolean) -> Unit,
     onAddPhotoFile: (position: Int, fileUri: Uri) -> Unit,
-    onReplaceMockPhoto: (profile: Profile, position: Int, isPersonPhoto: Boolean, isFullBody: Boolean) -> Unit,
     onReplacePhotoFile: (photoId: String, position: Int, fileUri: Uri) -> Unit,
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
     onActivateProfile: (Profile) -> Unit,
@@ -153,9 +153,7 @@ fun ProfileStatusScreen(
                 onUpdateProfile = onUpdateProfile,
                 onUpdateMatchFilters = onUpdateMatchFilters,
                 onLoadPhotos = onLoadPhotos,
-                onAddMockPhoto = onAddMockPhoto,
                 onAddPhotoFile = onAddPhotoFile,
-                onReplaceMockPhoto = onReplaceMockPhoto,
                 onReplacePhotoFile = onReplacePhotoFile,
                 onDeletePhoto = onDeletePhoto,
                 onActivateProfile = onActivateProfile,
@@ -228,9 +226,7 @@ private fun ProfileCard(
     onUpdateProfile: (UpdateProfileInput) -> Unit,
     onUpdateMatchFilters: (UpdateMatchFiltersInput) -> Unit,
     onLoadPhotos: () -> Unit,
-    onAddMockPhoto: (profile: Profile, position: Int, isPersonPhoto: Boolean, isFullBody: Boolean) -> Unit,
     onAddPhotoFile: (position: Int, fileUri: Uri) -> Unit,
-    onReplaceMockPhoto: (profile: Profile, position: Int, isPersonPhoto: Boolean, isFullBody: Boolean) -> Unit,
     onReplacePhotoFile: (photoId: String, position: Int, fileUri: Uri) -> Unit,
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
     onActivateProfile: (Profile) -> Unit,
@@ -301,9 +297,7 @@ private fun ProfileCard(
                     expandedSection = if (expandedSection == ProfileSection.Photos) null else ProfileSection.Photos
                 },
                 onLoadPhotos = onLoadPhotos,
-                onAddMockPhoto = onAddMockPhoto,
                 onAddPhotoFile = onAddPhotoFile,
-                onReplaceMockPhoto = onReplaceMockPhoto,
                 onReplacePhotoFile = onReplacePhotoFile,
                 onDeletePhoto = onDeletePhoto,
                 onActivateProfile = onActivateProfile,
@@ -440,9 +434,7 @@ private fun PhotoManagerActions(
     expanded: Boolean,
     onToggleExpanded: () -> Unit,
     onLoadPhotos: () -> Unit,
-    onAddMockPhoto: (profile: Profile, position: Int, isPersonPhoto: Boolean, isFullBody: Boolean) -> Unit,
     onAddPhotoFile: (position: Int, fileUri: Uri) -> Unit,
-    onReplaceMockPhoto: (profile: Profile, position: Int, isPersonPhoto: Boolean, isFullBody: Boolean) -> Unit,
     onReplacePhotoFile: (photoId: String, position: Int, fileUri: Uri) -> Unit,
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
     onActivateProfile: (Profile) -> Unit,
@@ -590,16 +582,17 @@ private fun FilledPhotoSlot(
     onPickReplacementFile: (photoId: String, position: Int) -> Unit,
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
 ) {
-    val shape = RoundedCornerShape(8.dp)
+    val imageShape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
+    val actionShape = RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp)
     val displayUrl = photo.url.toEmulatorReachableUrl()
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(0.dp)) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .clip(shape)
+                .clip(imageShape)
                 .background(MaterialTheme.colorScheme.surfaceContainer)
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape),
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, imageShape),
         ) {
             when {
                 photo.url.isLocalhostPresignedUrl() -> {
@@ -642,22 +635,57 @@ private fun FilledPhotoSlot(
                 color = Color.White,
                 style = MaterialTheme.typography.labelSmall,
             )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(4.dp)
+                    .size(24.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.Black.copy(alpha = 0.52f))
+                    .clickable(
+                        enabled = !busy,
+                        onClickLabel = "Borrar foto ${photo.position}",
+                    ) { onDeletePhoto(photo.id, photo.position) }
+                    .semantics { contentDescription = "Borrar foto ${photo.position}" },
+            ) {
+                Text(
+                    text = "x",
+                    modifier = Modifier.align(Alignment.Center),
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+            if (busy) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.34f)),
+                )
+            }
         }
-        Column(verticalArrangement = Arrangement.spacedBy(0.dp), modifier = Modifier.fillMaxWidth()) {
-            TextButton(
-                onClick = { onPickReplacementFile(photo.id, photo.position) },
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Cambiar")
-            }
-            TextButton(
-                onClick = { onDeletePhoto(photo.id, photo.position) },
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Borrar")
-            }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(32.dp)
+                .clip(actionShape)
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                    shape = actionShape,
+                )
+                .clickable(
+                    enabled = !busy,
+                    onClickLabel = "Reemplazar foto ${photo.position}",
+                ) { onPickReplacementFile(photo.id, photo.position) }
+                .semantics { contentDescription = "Reemplazar foto ${photo.position}" },
+        ) {
+            Text(
+                text = "Cambiar",
+                modifier = Modifier.align(Alignment.Center),
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelMedium,
+            )
         }
     }
 }
@@ -676,7 +704,11 @@ private fun EmptyPhotoSlot(
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceContainer)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
-            .clickable(enabled = !busy) { onPickNewFile(position) },
+            .clickable(
+                enabled = !busy,
+                onClickLabel = "Agregar foto $position",
+            ) { onPickNewFile(position) }
+            .semantics { contentDescription = "Agregar foto $position" },
     ) {
         Column(
             modifier = Modifier.align(Alignment.Center),
@@ -702,6 +734,13 @@ private fun EmptyPhotoSlot(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelSmall,
         )
+        if (busy) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.34f)),
+            )
+        }
     }
 }
 
@@ -774,13 +813,6 @@ private fun SuccessFeedback(message: String) {
 
 private fun profileNextStep(status: ProfileStatus): String = when (status) {
     else -> status.userDescription()
-}
-
-private fun previewGeneratedPhotoUrl(profile: Profile, position: Int?): String {
-    if (position == null) return "elige una posicion"
-    val userId = profile.userId.replace("-", "")
-    val profileId = profile.id.replace("-", "")
-    return "https://static.reals.local/mock-profiles/$userId/$profileId/photo-$position.jpg"
 }
 
 @Composable

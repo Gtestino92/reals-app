@@ -2,7 +2,6 @@ package com.reals.app.testutil
 
 import com.reals.app.core.network.ApiExecutor
 import com.reals.app.data.api.RealsApi
-import com.reals.app.data.dto.AddPhotoRequestDto
 import com.reals.app.data.dto.AddProposalRequestDto
 import com.reals.app.data.dto.ChatDecisionRequestDto
 import com.reals.app.data.dto.ChatExitOutcomeResponseDto
@@ -24,7 +23,6 @@ import com.reals.app.data.dto.ProfileResponseDto
 import com.reals.app.data.dto.QueueStatusResponseDto
 import com.reals.app.data.dto.RegisterPushTokenRequestDto
 import com.reals.app.data.dto.RegisterPushTokenResponseDto
-import com.reals.app.data.dto.ReplacePhotoRequestDto
 import com.reals.app.data.dto.ScheduleProposalResponseDto
 import com.reals.app.data.dto.SendMessageRequestDto
 import com.reals.app.data.dto.UpdateMatchFiltersRequestDto
@@ -94,10 +92,6 @@ class FakeRealsApi : RealsApi {
     var updateProfileBody: UpdateProfileRequestDto? = null
         private set
     var updateFiltersBody: UpdateMatchFiltersRequestDto? = null
-        private set
-    var addPhotoBody: AddPhotoRequestDto? = null
-        private set
-    var replacePhotoBody: ReplacePhotoRequestDto? = null
         private set
     var registerPushTokenBody: RegisterPushTokenRequestDto? = null
         private set
@@ -194,15 +188,6 @@ class FakeRealsApi : RealsApi {
     override suspend fun getMyProfilePhotos(authorization: String): Response<List<PhotoResponseDto>> =
         record("getMyProfilePhotos", authorization) { photosResponse }
 
-    override suspend fun addMyProfilePhoto(
-        authorization: String,
-        body: AddPhotoRequestDto,
-    ): Response<PhotoResponseDto> =
-        record("addMyProfilePhoto", authorization) {
-            addPhotoBody = body
-            photoResponse
-        }
-
     override suspend fun addMyProfilePhotoFile(
         authorization: String,
         file: MultipartBody.Part,
@@ -215,16 +200,6 @@ class FakeRealsApi : RealsApi {
         photoId: String,
     ): Response<ProfileResponseDto> =
         record("deleteMyProfilePhoto", authorization, photoId) { profileResponse }
-
-    override suspend fun replaceMyProfilePhoto(
-        authorization: String,
-        position: Int,
-        body: ReplacePhotoRequestDto,
-    ): Response<PhotoResponseDto> =
-        record("replaceMyProfilePhoto", authorization, position.toString()) {
-            replacePhotoBody = body
-            photoResponse
-        }
 
     override suspend fun replaceMyProfilePhotoFile(
         authorization: String,
