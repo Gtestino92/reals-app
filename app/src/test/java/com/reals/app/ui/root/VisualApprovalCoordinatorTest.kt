@@ -1,6 +1,7 @@
 package com.reals.app.ui.root
 
 import com.reals.app.core.network.ApiError
+import com.reals.app.data.mapper.toDomain
 import com.reals.app.di.VisualApprovalFeatureDependencies
 import com.reals.app.domain.usecase.GetMatchUseCase
 import com.reals.app.domain.usecase.GetPartnerPersonalMessageUseCase
@@ -16,6 +17,7 @@ import com.reals.app.testutil.backendErrorResponse
 import com.reals.app.testutil.testApiExecutor
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import retrofit2.Response
@@ -39,8 +41,148 @@ class VisualApprovalCoordinatorTest {
 
         val state = (result as VisualApprovalLoadResult.Show).state
         assertEquals(true, state.myPersonalMessageSubmitted)
+        assertEquals(null, state.partnerMessage)
+        assertEquals(false, state.partnerMessageLoaded)
+        assertFalse(api.calls.contains("getPartnerPersonalMessage"))
+    }
+
+    @Test
+    fun `load does not fetch unread partner message automatically`() = runBlocking {
+        api.matchResponse = Response.success(TestDtos.match("VISUAL_PHASE"))
+        api.visualProfileResponse = Response.success(
+            TestDtos.visualProfile(
+                partnerPersonalMessageSubmitted = true,
+                partnerPersonalMessageRead = false,
+                decisionRequiresPartnerPersonalMessageRead = true,
+            )
+        )
+
+        val result = coordinator.load(
+            session = TestDomain.session(),
+            matchId = "match-1",
+            initialMatch = null,
+            previous = null,
+            locallyHidden = false,
+        )
+
+        val state = (result as VisualApprovalLoadResult.Show).state
+        val profile = requireNotNull(state.profile)
+        assertFalse(profile.partnerPersonalMessageRead)
+        assertTrue(profile.decisionRequiresPartnerPersonalMessageRead)
+        assertEquals(null, state.partnerMessage)
+        assertFalse(state.partnerMessageLoaded)
+        assertFalse(api.calls.contains("getPartnerPersonalMessage"))
+    }
+
+    @Test
+    fun `readPartnerPersonalMessage success marks partner message read locally`() = runBlocking {
+        api.matchResponse = Response.success(TestDtos.match("VISUAL_PHASE"))
+        api.visualProfileResponse = Response.success(
+            TestDtos.visualProfile(
+                partnerPersonalMessageSubmitted = true,
+                partnerPersonalMessageRead = false,
+                decisionRequiresPartnerPersonalMessageRead = true,
+            )
+        )
+        val loadResult = coordinator.load(
+            session = TestDomain.session(),
+            matchId = "match-1",
+            initialMatch = null,
+            previous = null,
+            locallyHidden = false,
+        )
+        val unreadState = (loadResult as VisualApprovalLoadResult.Show).state
+
+        val state = coordinator.readPartnerPersonalMessage(unreadState)
+
+        val profile = requireNotNull(state.profile)
+        assertTrue(profile.partnerPersonalMessageRead)
+        assertFalse(profile.decisionRequiresPartnerPersonalMessageRead)
         assertEquals("hola", state.partnerMessage)
-        assertEquals(true, state.partnerMessageLoaded)
+        assertTrue(state.partnerMessageLoaded)
+        assertFalse(state.readingPartnerMessage)
+        assertEquals(1, api.calls.count { it == "getPartnerPersonalMessage" })
+    }
+
+    @Test
+    fun `readPartnerPersonalMessage failure keeps unread metadata`() = runBlocking {
+        api.partnerMessageResponse = backendErrorResponse(500, "SERVER_ERROR", "failed")
+        val current = RealsRootUiState.VisualApproval(
+            session = TestDomain.session(),
+            matchId = "match-1",
+            profile = TestDtos.visualProfile(
+                    partnerPersonalMessageSubmitted = true,
+                    partnerPersonalMessageRead = false,
+                    decisionRequiresPartnerPersonalMessageRead = true,
+                ).toDomain(),
+        )
+
+        val state = coordinator.readPartnerPersonalMessage(current)
+
+        val profile = requireNotNull(state.profile)
+        assertFalse(profile.partnerPersonalMessageRead)
+        assertTrue(profile.decisionRequiresPartnerPersonalMessageRead)
+        assertFalse(state.partnerMessageLoaded)
+        assertFalse(state.readingPartnerMessage)
+        assertTrue(state.partnerMessageError is ApiError.Backend)
+        assertTrue(state.error is ApiError.Backend)
+        assertEquals(1, api.calls.count { it == "getPartnerPersonalMessage" })
+    }
+
+    @Test
+    fun `load fetches partner message automatically when already read`() = runBlocking {
+        api.matchResponse = Response.success(TestDtos.match("VISUAL_PHASE"))
+        api.visualProfileResponse = Response.success(
+            TestDtos.visualProfile(
+                partnerPersonalMessageSubmitted = true,
+                partnerPersonalMessageRead = true,
+                decisionRequiresPartnerPersonalMessageRead = false,
+            )
+        )
+
+        val result = coordinator.load(
+            session = TestDomain.session(),
+            matchId = "match-1",
+            initialMatch = null,
+            previous = null,
+            locallyHidden = false,
+        )
+
+        val state = (result as VisualApprovalLoadResult.Show).state
+        val profile = requireNotNull(state.profile)
+        assertTrue(profile.partnerPersonalMessageRead)
+        assertFalse(profile.decisionRequiresPartnerPersonalMessageRead)
+        assertEquals("hola", state.partnerMessage)
+        assertTrue(state.partnerMessageLoaded)
+        assertEquals(1, api.calls.count { it == "getPartnerPersonalMessage" })
+    }
+
+    @Test
+    fun `load does not fetch partner message when none submitted`() = runBlocking {
+        api.matchResponse = Response.success(TestDtos.match("VISUAL_PHASE"))
+        api.visualProfileResponse = Response.success(
+            TestDtos.visualProfile(
+                partnerPersonalMessageSubmitted = false,
+                partnerPersonalMessageRead = true,
+                decisionRequiresPartnerPersonalMessageRead = false,
+            )
+        )
+
+        val result = coordinator.load(
+            session = TestDomain.session(),
+            matchId = "match-1",
+            initialMatch = null,
+            previous = null,
+            locallyHidden = false,
+        )
+
+        val state = (result as VisualApprovalLoadResult.Show).state
+        val profile = requireNotNull(state.profile)
+        assertFalse(profile.partnerPersonalMessageSubmitted)
+        assertFalse(profile.decisionRequiresPartnerPersonalMessageRead)
+        assertEquals(null, state.partnerMessage)
+        assertFalse(state.partnerMessageLoaded)
+        assertFalse(api.calls.contains("getPartnerPersonalMessage"))
     }
 
     @Test
