@@ -3,10 +3,15 @@ package com.reals.app.ui.profile
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,9 +40,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.RoundedCornerShape
 import coil3.compose.AsyncImage
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
@@ -438,21 +447,17 @@ private fun PhotoManagerActions(
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
     onActivateProfile: (Profile) -> Unit,
 ) {
-    var positionText by rememberSaveable(profile.id) { mutableStateOf(((profile.photoCount + 1).coerceIn(1, 9)).toString()) }
     var localError by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
     var replacePhotoId by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
     var replacePosition by rememberSaveable(profile.id) { mutableStateOf<Int?>(null) }
     var pendingAddedPosition by rememberSaveable(profile.id) { mutableStateOf<Int?>(null) }
     val addFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) {
-            val position = positionText.toIntOrNull()
-            if (position == null || position !in 1..9) {
-                localError = "La posicion debe estar entre 1 y 9."
-            } else {
-                localError = null
-                pendingAddedPosition = position
-                onAddPhotoFile(position, uri)
-            }
+        val position = pendingAddedPosition
+        if (uri != null && position != null) {
+            localError = null
+            onAddPhotoFile(position, uri)
+        } else {
+            pendingAddedPosition = null
         }
     }
     val replaceFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -468,9 +473,7 @@ private fun PhotoManagerActions(
     val busy = photosLoading || photoActionLoading || activationLoading
 
     LaunchedEffect(photoActionLoading, photoActionMessage) {
-        val addedPosition = pendingAddedPosition
-        if (!photoActionLoading && photoActionMessage != null && addedPosition != null) {
-            positionText = nextAvailablePhotoPosition(photos, addedPosition).toString()
+        if (!photoActionLoading && photoActionMessage != null && pendingAddedPosition != null) {
             pendingAddedPosition = null
         }
         if (!photoActionLoading && photoActionError != null) {
@@ -494,47 +497,23 @@ private fun PhotoManagerActions(
                     Text(if (photosLoading) "Cargando fotos..." else "Reintentar carga de fotos")
                 }
             }
-            if (photos.isEmpty()) {
-                Text("No hay fotos cargadas.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else {
-                photos.forEach { photo ->
-                    PhotoRow(
-                        photo = photo,
-                        busy = busy,
-                        onPickReplacementFile = { photoId, position ->
-                            replacePhotoId = photoId
-                            replacePosition = position
-                            replaceFileLauncher.launch("image/*")
-                        },
-                        onDeletePhoto = onDeletePhoto,
-                    )
-                }
-            }
-            OutlinedTextField(
-                value = positionText,
-                onValueChange = { next -> positionText = next.filter { it.isDigit() } },
-                label = { Text("Posicion de foto (1-9)") },
-                enabled = !busy,
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Button(
-                onClick = {
-                    val position = positionText.toIntOrNull()
-                    if (position == null || position !in 1..9) {
-                        localError = "La posicion debe estar entre 1 y 9."
-                    } else {
-                        localError = null
-                        addFileLauncher.launch("image/*")
-                    }
+            PhotoGrid(
+                photos = photos,
+                busy = busy,
+                onPickNewFile = { position ->
+                    localError = null
+                    pendingAddedPosition = position
+                    addFileLauncher.launch("image/*")
                 },
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(if (photoActionLoading) "Subiendo archivo..." else "Subir archivo a posicion")
-            }
-            localError?.let { ErrorFeedback("Revisa la posicion", it) }
+                onPickReplacementFile = { photoId, position ->
+                    localError = null
+                    replacePhotoId = photoId
+                    replacePosition = position
+                    replaceFileLauncher.launch("image/*")
+                },
+                onDeletePhoto = onDeletePhoto,
+            )
+            localError?.let { ErrorFeedback("Revisa las fotos", it) }
             photoActionMessage?.let { SuccessFeedback(it) }
             photoActionError?.let { ApiErrorFeedbackCard(it, ErrorContext.PhotoUpload) }
             activationError?.let { ApiErrorFeedbackCard(it, ErrorContext.ProfileActivation) }
@@ -548,47 +527,189 @@ private fun PhotoManagerActions(
 }
 
 @Composable
-private fun PhotoRow(
-    photo: ProfilePhoto,
+private fun PhotoGrid(
+    photos: List<ProfilePhoto>,
     busy: Boolean,
+    onPickNewFile: (position: Int) -> Unit,
     onPickReplacementFile: (photoId: String, position: Int) -> Unit,
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
 ) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            val displayUrl = photo.url.toEmulatorReachableUrl()
-            Text("Posicion ${photo.position}")
-            if (photo.url.isLocalhostPresignedUrl()) {
-                Text(
-                    text = "La URL firmada usa localhost. El emulador no puede resolverla y cambiar el host invalida la firma.",
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            } else if (displayUrl.isRenderableImageUrl()) {
-                AsyncImage(
-                    model = displayUrl,
-                    contentDescription = "Foto de perfil en posicion ${photo.position}",
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(260.dp),
-                )
-            } else {
-                Text(
-                    text = "Imagen almacenada sin URL publica de descarga.",
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            OutlinedButton(onClick = { onPickReplacementFile(photo.id, photo.position) }, enabled = !busy) {
-                Text("Reemplazar archivo")
-            }
-            OutlinedButton(onClick = { onDeletePhoto(photo.id, photo.position) }, enabled = !busy) {
-                Text("Borrar posicion ${photo.position}")
+    val photosByPosition = photos.profilePhotosByGridPosition()
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        ProfilePhotoGridPositions.chunked(3).forEach { rowPositions ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                rowPositions.forEach { position ->
+                    PhotoSlot(
+                        position = position,
+                        photo = photosByPosition[position],
+                        busy = busy,
+                        modifier = Modifier.weight(1f),
+                        onPickNewFile = onPickNewFile,
+                        onPickReplacementFile = onPickReplacementFile,
+                        onDeletePhoto = onDeletePhoto,
+                    )
+                }
             }
         }
     }
 }
+
+@Composable
+private fun PhotoSlot(
+    position: Int,
+    photo: ProfilePhoto?,
+    busy: Boolean,
+    modifier: Modifier = Modifier,
+    onPickNewFile: (position: Int) -> Unit,
+    onPickReplacementFile: (photoId: String, position: Int) -> Unit,
+    onDeletePhoto: (photoId: String, position: Int) -> Unit,
+) {
+    if (photo == null) {
+        EmptyPhotoSlot(
+            position = position,
+            busy = busy,
+            modifier = modifier,
+            onPickNewFile = onPickNewFile,
+        )
+    } else {
+        FilledPhotoSlot(
+            photo = photo,
+            busy = busy,
+            modifier = modifier,
+            onPickReplacementFile = onPickReplacementFile,
+            onDeletePhoto = onDeletePhoto,
+        )
+    }
+}
+
+@Composable
+private fun FilledPhotoSlot(
+    photo: ProfilePhoto,
+    busy: Boolean,
+    modifier: Modifier = Modifier,
+    onPickReplacementFile: (photoId: String, position: Int) -> Unit,
+    onDeletePhoto: (photoId: String, position: Int) -> Unit,
+) {
+    val shape = RoundedCornerShape(8.dp)
+    val displayUrl = photo.url.toEmulatorReachableUrl()
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .clip(shape)
+                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape),
+        ) {
+            when {
+                photo.url.isLocalhostPresignedUrl() -> {
+                    Text(
+                        text = "URL local firmada no renderizable en emulador.",
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(8.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+
+                displayUrl.isRenderableImageUrl() -> {
+                    AsyncImage(
+                        model = displayUrl,
+                        contentDescription = "Foto de perfil ${photo.position}",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+
+                else -> {
+                    Text(
+                        text = "Sin URL publica.",
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(8.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+            Text(
+                text = "Foto ${photo.position}",
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .background(Color.Black.copy(alpha = 0.56f))
+                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                color = Color.White,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(0.dp), modifier = Modifier.fillMaxWidth()) {
+            TextButton(
+                onClick = { onPickReplacementFile(photo.id, photo.position) },
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Cambiar")
+            }
+            TextButton(
+                onClick = { onDeletePhoto(photo.id, photo.position) },
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Borrar")
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyPhotoSlot(
+    position: Int,
+    busy: Boolean,
+    modifier: Modifier = Modifier,
+    onPickNewFile: (position: Int) -> Unit,
+) {
+    val shape = RoundedCornerShape(8.dp)
+    Box(
+        modifier = modifier
+            .aspectRatio(1f)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+            .clickable(enabled = !busy) { onPickNewFile(position) },
+    ) {
+        Column(
+            modifier = Modifier.align(Alignment.Center),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = "+",
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                text = "Agregar",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            text = "Foto $position",
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(horizontal = 6.dp, vertical = 3.dp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall,
+        )
+    }
+}
+
+internal val ProfilePhotoGridPositions: IntRange = 1..9
+
+internal fun List<ProfilePhoto>.profilePhotosByGridPosition(): Map<Int, ProfilePhoto> =
+    filter { it.position in ProfilePhotoGridPositions }
+        .associateBy { it.position }
 
 private fun String.toEmulatorReachableUrl(): String {
     if (isPresignedUrl()) return this
@@ -660,13 +781,6 @@ private fun previewGeneratedPhotoUrl(profile: Profile, position: Int?): String {
     val userId = profile.userId.replace("-", "")
     val profileId = profile.id.replace("-", "")
     return "https://static.reals.local/mock-profiles/$userId/$profileId/photo-$position.jpg"
-}
-
-private fun nextAvailablePhotoPosition(photos: List<ProfilePhoto>, addedPosition: Int): Int {
-    val occupied = photos.map { it.position }.toSet()
-    return ((addedPosition + 1)..9).firstOrNull { it !in occupied }
-        ?: (1..9).firstOrNull { it !in occupied }
-        ?: addedPosition.coerceIn(1, 9)
 }
 
 @Composable
