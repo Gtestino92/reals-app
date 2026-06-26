@@ -44,6 +44,8 @@ enum class BackendErrorCode(val raw: String) {
     AccountDeleted("ACCOUNT_DELETED"),
     AccountDeletionFinalized("ACCOUNT_DELETION_FINALIZED"),
     DomainConflict("DOMAIN_CONFLICT"),
+    PartnerPersonalMessageNotRead("PARTNER_PERSONAL_MESSAGE_NOT_READ"),
+    VisualReviewPartnerMessageNotRead("VISUAL_REVIEW_PARTNER_MESSAGE_NOT_READ"),
     SecondChatNotAvailable("SECOND_CHAT_NOT_AVAILABLE"),
     SecondChatNotAvailableYet("SECOND_CHAT_NOT_AVAILABLE_YET"),
     SecondChatExpired("SECOND_CHAT_EXPIRED"),
@@ -153,6 +155,8 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
         ErrorContext.VisualReview -> "La revision visual no cumple una regla del flujo todavia. Revisa el mensaje personal o actualiza el estado."
         else -> "Esta accion no esta disponible con el estado actual."
     }
+    BackendErrorCode.PartnerPersonalMessageNotRead,
+    BackendErrorCode.VisualReviewPartnerMessageNotRead -> "Lee el mensaje personal de la otra persona antes de decidir."
     BackendErrorCode.SecondChatNotAvailable -> "El segundo chat todavia no esta disponible o ya no se puede abrir."
     BackendErrorCode.SecondChatNotAvailableYet -> "El segundo chat todavia no esta disponible."
     BackendErrorCode.SecondChatExpired -> "El segundo chat ya vencio."

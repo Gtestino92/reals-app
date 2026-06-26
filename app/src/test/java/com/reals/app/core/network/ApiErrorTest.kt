@@ -36,6 +36,19 @@ class ApiErrorTest {
     }
 
     @Test
+    fun `partner personal message unread codes map to visual review message`() {
+        listOf(
+            "PARTNER_PERSONAL_MESSAGE_NOT_READ",
+            "VISUAL_REVIEW_PARTNER_MESSAGE_NOT_READ",
+        ).forEach { code ->
+            assertEquals(
+                "Lee el mensaje personal de la otra persona antes de decidir.",
+                backendError(code).toUserMessage(ErrorContext.VisualReview),
+            )
+        }
+    }
+
+    @Test
     fun `unknown code maps to generic fallback`() {
         val error = backendError("SOME_NEW_BACKEND_CODE", message = "technical backend detail")
 
