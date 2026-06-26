@@ -44,6 +44,7 @@ internal class HomeCoordinator(
     private var lastSearchLocation: SearchLocationInput? = null
     private var searchAttemptId = 0
     private var enqueueJob: Job? = null
+    private var silentHomePollJob: Job? = null
     private val locallyHiddenPendingChatMatchIds = mutableSetOf<String>()
     private val locallyHiddenVisualMatchIds = mutableSetOf<String>()
 
@@ -90,8 +91,9 @@ internal class HomeCoordinator(
 
     fun pollHomeStateSilently() {
         val current = uiState.value as? RealsRootUiState.Ready ?: return
+        if (silentHomePollJob?.isActive == true) return
 
-        scope.launch {
+        silentHomePollJob = scope.launch {
             when (val homeResult = dependencies.getHome()) {
                 is ApiResult.Success -> {
                     val latest = uiState.value as? RealsRootUiState.Ready ?: return@launch

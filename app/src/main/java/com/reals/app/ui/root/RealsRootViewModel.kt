@@ -27,6 +27,7 @@ import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.UpdateProfileInput
 import com.reals.app.domain.model.VisualDecision
 import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_AVAILABLE
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,6 +35,7 @@ import kotlinx.coroutines.launch
 
 class RealsRootViewModel(
     dependencies: RealsRootDependencies,
+    autoRefreshSession: Boolean = true,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<RealsRootUiState>(RealsRootUiState.Checking)
     private val getProfilePhotosUseCase = dependencies.profile.getProfilePhotos
@@ -59,6 +61,9 @@ class RealsRootViewModel(
     private val visualApprovalCoordinator = VisualApprovalCoordinator(dependencies.visualApproval)
     private val schedulingCoordinator = SchedulingCoordinator(dependencies.scheduling)
     private lateinit var sessionCoordinator: SessionCoordinator
+    private var silentFirstChatRefreshJob: Job? = null
+    private var silentSecondChatRefreshJob: Job? = null
+    private var silentSchedulingRefreshJob: Job? = null
     private val homeCoordinator = HomeCoordinator(
         uiState = _uiState,
         dependencies = dependencies.home,
@@ -79,7 +84,9 @@ class RealsRootViewModel(
                 homeCoordinator.reenterMatchmakingOrLoadHome(session)
             },
         )
-        refreshSession()
+        if (autoRefreshSession) {
+            refreshSession()
+        }
     }
 
     fun refreshSession() = sessionCoordinator.refreshSession()
@@ -260,13 +267,14 @@ class RealsRootViewModel(
     fun refreshSecondChat(silent: Boolean = false) {
         val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
         if (current.refreshing || current.sending || current.actionLoading) return
+        if (silent && silentSecondChatRefreshJob?.isActive == true) return
         if (current.chat == null) return openSecondChat(
             connectionId = current.connectionId,
             matchId = current.matchId,
             partnerName = current.partnerName,
         )
 
-        viewModelScope.launch {
+        val job = viewModelScope.launch {
             if (!silent) {
                 _uiState.value = current.copy(
                     refreshing = true,
@@ -285,6 +293,9 @@ class RealsRootViewModel(
                 return@launch
             }
             _uiState.value = result
+        }
+        if (silent) {
+            silentSecondChatRefreshJob = job
         }
     }
 
@@ -459,9 +470,13 @@ class RealsRootViewModel(
     fun refreshScheduling(silent: Boolean = false) {
         val current = _uiState.value as? RealsRootUiState.Scheduling ?: return
         if (current.refreshing || current.submitting) return
+        if (silent && silentSchedulingRefreshJob?.isActive == true) return
 
-        viewModelScope.launch {
+        val job = viewModelScope.launch {
             _uiState.value = schedulingCoordinator.refresh(current, silent)
+        }
+        if (silent) {
+            silentSchedulingRefreshJob = job
         }
     }
 
@@ -546,9 +561,10 @@ class RealsRootViewModel(
     fun refreshFirstChat(silent: Boolean = false) {
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
         if (current.refreshing || current.sending || current.actionLoading) return
+        if (silent && silentFirstChatRefreshJob?.isActive == true) return
         if (current.chat == null) return openFirstChat(current.matchId, current.chatId)
 
-        viewModelScope.launch {
+        val job = viewModelScope.launch {
             if (!silent) {
                 _uiState.value = current.copy(
                     refreshing = true,
@@ -585,6 +601,9 @@ class RealsRootViewModel(
                     )
                 }
             }
+        }
+        if (silent) {
+            silentFirstChatRefreshJob = job
         }
     }
 

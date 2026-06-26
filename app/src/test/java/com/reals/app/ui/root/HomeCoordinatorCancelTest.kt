@@ -21,8 +21,12 @@ import com.reals.app.testutil.testJson
 import com.reals.app.ui.matchmaking.HomeUiMapper
 import com.reals.app.ui.matchmaking.LocalHiddenInteractions
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -30,6 +34,40 @@ import org.junit.Test
 import retrofit2.Response
 
 class HomeCoordinatorCancelTest {
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `silent home poll ignores overlapping call`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val firstPollStarted = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeGetHomeResponse = {
+                firstPollStarted.complete(Unit)
+                gate.await()
+            }
+        }
+        val state = MutableStateFlow<RealsRootUiState>(
+            ready(phase = MatchmakingSearchUiPhase.Searching, inQueue = true),
+        )
+        val coordinator = coordinator(api, state, this)
+
+        coordinator.pollHomeStateSilently()
+        runCurrent()
+        firstPollStarted.await()
+
+        coordinator.pollHomeStateSilently()
+        runCurrent()
+
+        assertEquals(1, api.calls.count { it == "getHome" })
+
+        gate.complete(Unit)
+        runCurrent()
+
+        coordinator.pollHomeStateSilently()
+        runCurrent()
+
+        assertEquals(2, api.calls.count { it == "getHome" })
+    }
+
     @Test
     fun `cancel while resolving location returns idle without leaving queue`() = runBlocking {
         val api = FakeRealsApi()

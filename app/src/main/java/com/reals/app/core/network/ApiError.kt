@@ -46,9 +46,28 @@ enum class BackendErrorCode(val raw: String) {
     DomainConflict("DOMAIN_CONFLICT"),
     PartnerPersonalMessageNotRead("PARTNER_PERSONAL_MESSAGE_NOT_READ"),
     VisualReviewPartnerMessageNotRead("VISUAL_REVIEW_PARTNER_MESSAGE_NOT_READ"),
+    ChatNotFound("CHAT_NOT_FOUND"),
+    ChatNotAvailable("CHAT_NOT_AVAILABLE"),
+    ChatExpired("CHAT_EXPIRED"),
+    ChatMessageInvalid("CHAT_MESSAGE_INVALID"),
+    ChatDecisionNotAvailable("CHAT_DECISION_NOT_AVAILABLE"),
+    ChatDecisionAlreadySubmitted("CHAT_DECISION_ALREADY_SUBMITTED"),
+    ChatMinMessagesRequired("CHAT_MIN_MESSAGES_REQUIRED"),
+    ChatMutualCancellationPending("CHAT_MUTUAL_CANCELLATION_PENDING"),
+    ChatExitRequestNotFound("CHAT_EXIT_REQUEST_NOT_FOUND"),
+    ChatExitRequestNotAvailable("CHAT_EXIT_REQUEST_NOT_AVAILABLE"),
+    ChatExitRequestAlreadyPending("CHAT_EXIT_REQUEST_ALREADY_PENDING"),
     SecondChatNotAvailable("SECOND_CHAT_NOT_AVAILABLE"),
     SecondChatNotAvailableYet("SECOND_CHAT_NOT_AVAILABLE_YET"),
     SecondChatExpired("SECOND_CHAT_EXPIRED"),
+    SchedulingNotAvailable("SCHEDULING_NOT_AVAILABLE"),
+    SchedulingExpired("SCHEDULING_EXPIRED"),
+    SchedulingNegotiationNotFound("SCHEDULING_NEGOTIATION_NOT_FOUND"),
+    SchedulingInvalidProposals("SCHEDULING_INVALID_PROPOSALS"),
+    SchedulingProposalsAlreadySubmitted("SCHEDULING_PROPOSALS_ALREADY_SUBMITTED"),
+    SchedulingProposalNotAvailable("SCHEDULING_PROPOSAL_NOT_AVAILABLE"),
+    SchedulingCannotAcceptOwnProposal("SCHEDULING_CANNOT_ACCEPT_OWN_PROPOSAL"),
+    SchedulingRoundNotRejectable("SCHEDULING_ROUND_NOT_REJECTABLE"),
     Unknown("UNKNOWN");
 
     companion object {
@@ -72,6 +91,7 @@ enum class ErrorContext {
     Home,
     Chat,
     VisualReview,
+    Scheduling,
     Account,
 }
 
@@ -96,7 +116,11 @@ enum class AuthFailureReason {
 fun ApiError.toDisplayMessage(): String = toUserMessage()
 
 fun ApiError.toUserMessage(context: ErrorContext = ErrorContext.General): String = when (this) {
-    is ApiError.Backend -> if (backendErrorCode == BackendErrorCode.DomainConflict && message.isNotBlank()) {
+    is ApiError.Backend -> if (
+        backendErrorCode == BackendErrorCode.DomainConflict &&
+        context != ErrorContext.Scheduling &&
+        message.isNotBlank()
+    ) {
         message
     } else {
         userMessageForBackendError(backendErrorCode, context)
@@ -123,6 +147,7 @@ fun ApiError.toUserTitle(context: ErrorContext = ErrorContext.General): String =
     ErrorContext.Home -> "No pudimos actualizar tu estado"
     ErrorContext.Chat -> "No pudimos completar la accion"
     ErrorContext.VisualReview -> "No pudimos completar la revision"
+    ErrorContext.Scheduling -> "No pudimos coordinar el horario"
     ErrorContext.Account -> "No pudimos actualizar tu cuenta"
     ErrorContext.General -> "Algo salio mal"
 }
@@ -157,9 +182,28 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     }
     BackendErrorCode.PartnerPersonalMessageNotRead,
     BackendErrorCode.VisualReviewPartnerMessageNotRead -> "Lee el mensaje personal de la otra persona antes de decidir."
+    BackendErrorCode.ChatNotFound -> "No encontramos esta conversacion. Actualiza el estado."
+    BackendErrorCode.ChatNotAvailable -> "Esta conversacion ya no esta disponible. Actualiza el estado."
+    BackendErrorCode.ChatExpired -> "La conversacion vencio."
+    BackendErrorCode.ChatMessageInvalid -> "Revisa el mensaje. No puede estar vacio ni superar el limite permitido."
+    BackendErrorCode.ChatDecisionNotAvailable -> "La decision sobre esta conversacion ya no esta disponible. Actualiza el estado."
+    BackendErrorCode.ChatDecisionAlreadySubmitted -> "Ya enviaste tu decision para esta conversacion."
+    BackendErrorCode.ChatMinMessagesRequired -> "Antes de decidir, envia al menos un poco mas de conversacion."
+    BackendErrorCode.ChatMutualCancellationPending -> "Hay una solicitud de salida pendiente. Resolvela antes de decidir."
+    BackendErrorCode.ChatExitRequestNotFound -> "No encontramos esa solicitud de salida. Actualiza la conversacion."
+    BackendErrorCode.ChatExitRequestNotAvailable -> "Esa solicitud de salida ya no esta disponible."
+    BackendErrorCode.ChatExitRequestAlreadyPending -> "Ya hay una solicitud de salida pendiente."
     BackendErrorCode.SecondChatNotAvailable -> "El segundo chat todavia no esta disponible o ya no se puede abrir."
     BackendErrorCode.SecondChatNotAvailableYet -> "El segundo chat todavia no esta disponible."
     BackendErrorCode.SecondChatExpired -> "El segundo chat ya vencio."
+    BackendErrorCode.SchedulingNotAvailable -> "La coordinacion de horarios ya no esta disponible. Actualiza el estado e intenta nuevamente."
+    BackendErrorCode.SchedulingExpired -> "La coordinacion de horarios vencio."
+    BackendErrorCode.SchedulingNegotiationNotFound -> "No encontramos la coordinacion de horarios. Actualiza el estado."
+    BackendErrorCode.SchedulingInvalidProposals -> "Revisa los horarios elegidos. Deben ser futuros, unicos y estar alineados cada media hora."
+    BackendErrorCode.SchedulingProposalsAlreadySubmitted -> "Ya enviaste tus horarios para esta ronda."
+    BackendErrorCode.SchedulingProposalNotAvailable -> "Ese horario ya no esta disponible. Actualiza la propuesta."
+    BackendErrorCode.SchedulingCannotAcceptOwnProposal -> "No podes aceptar un horario propuesto por vos."
+    BackendErrorCode.SchedulingRoundNotRejectable -> "Todavia no se puede rechazar esta ronda. Espera a que ambas personas envien horarios."
     BackendErrorCode.Unknown -> when (context) {
         ErrorContext.ProfileActivation -> "Revisa que tu perfil tenga la informacion y fotos necesarias."
         ErrorContext.PhotoUpload,
@@ -167,6 +211,7 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
         ErrorContext.Matchmaking -> "No pudimos iniciar la busqueda. Revisa tu perfil e intenta nuevamente."
         ErrorContext.Chat -> "La conversacion cambio de estado. Actualiza e intenta nuevamente."
         ErrorContext.VisualReview -> "La revision visual cambio de estado. Actualiza e intenta nuevamente."
+        ErrorContext.Scheduling -> "La coordinacion de horarios cambio de estado. Actualiza e intenta nuevamente."
         else -> "Intenta nuevamente en unos segundos."
     }
 }

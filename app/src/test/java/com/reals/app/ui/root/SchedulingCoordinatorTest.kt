@@ -1,5 +1,10 @@
 package com.reals.app.ui.root
 
+import com.reals.app.core.network.ApiError
+import com.reals.app.core.network.BackendErrorCode
+import com.reals.app.core.network.ErrorContext
+import com.reals.app.core.network.backendErrorCode
+import com.reals.app.core.network.toUserMessage
 import com.reals.app.di.SchedulingFeatureDependencies
 import com.reals.app.data.mapper.toDomain
 import com.reals.app.domain.model.NegotiationStatus
@@ -13,6 +18,7 @@ import com.reals.app.testutil.FakeAuthTokenProvider
 import com.reals.app.testutil.FakeRealsApi
 import com.reals.app.testutil.TestDomain
 import com.reals.app.testutil.TestDtos
+import com.reals.app.testutil.backendErrorResponse
 import com.reals.app.testutil.testApiExecutor
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -47,6 +53,28 @@ class SchedulingCoordinatorTest {
         assertEquals(false, state.submitting)
         assertEquals("Enviamos tus horarios.", state.message)
         assertEquals(slots, api.proposalsBody?.proposedDateTimes)
+    }
+
+    @Test
+    fun `submit proposals failure keeps scheduling backend error`() = runBlocking {
+        api.proposalsResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "SCHEDULING_PROPOSALS_ALREADY_SUBMITTED",
+            message = "raw backend message",
+        )
+
+        val state = coordinator.submitProposals(
+            current = baseState(),
+            proposedDateTimes = listOf("2026-06-18T21:00:00Z"),
+        )
+        val error = state.error as ApiError.Backend
+
+        assertEquals(false, state.submitting)
+        assertEquals(BackendErrorCode.SchedulingProposalsAlreadySubmitted, error.backendErrorCode)
+        assertEquals(
+            "Ya enviaste tus horarios para esta ronda.",
+            error.toUserMessage(ErrorContext.Scheduling),
+        )
     }
 
     @Test

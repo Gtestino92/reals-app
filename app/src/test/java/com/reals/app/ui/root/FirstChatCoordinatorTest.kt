@@ -1,5 +1,10 @@
 package com.reals.app.ui.root
 
+import com.reals.app.core.network.ApiError
+import com.reals.app.core.network.BackendErrorCode
+import com.reals.app.core.network.ErrorContext
+import com.reals.app.core.network.backendErrorCode
+import com.reals.app.core.network.toUserMessage
 import com.reals.app.data.repository.ChatRepository
 import com.reals.app.data.repository.MatchRepository
 import com.reals.app.di.FirstChatFeatureDependencies
@@ -24,6 +29,7 @@ import com.reals.app.testutil.FakeAuthTokenProvider
 import com.reals.app.testutil.FakeRealsApi
 import com.reals.app.testutil.TestDomain
 import com.reals.app.testutil.TestDtos
+import com.reals.app.testutil.backendErrorResponse
 import com.reals.app.testutil.testApiExecutor
 import com.reals.app.testutil.testJson
 import kotlinx.coroutines.runBlocking
@@ -89,6 +95,26 @@ class FirstChatCoordinatorTest {
         assertEquals(false, state.sending)
         assertTrue(state.messages.any { it.id == "message-1" })
         assertEquals("sendChatMessage", api.calls.first())
+    }
+
+    @Test
+    fun `sendMessage failure keeps chat backend error`() = runBlocking {
+        api.chatMessageResponse = backendErrorResponse(
+            statusCode = 400,
+            code = "CHAT_MESSAGE_INVALID",
+            message = "raw backend message",
+        )
+        val current = firstChatState(chatStatus = ChatStatus.Active)
+
+        val state = coordinator.sendMessage(current, "", localId = "local-1")
+        val error = state.error as ApiError.Backend
+
+        assertEquals(false, state.sending)
+        assertEquals(BackendErrorCode.ChatMessageInvalid, error.backendErrorCode)
+        assertEquals(
+            "Revisa el mensaje. No puede estar vacio ni superar el limite permitido.",
+            error.toUserMessage(ErrorContext.Chat),
+        )
     }
 
     private fun firstChatState(chatStatus: ChatStatus): RealsRootUiState.FirstChat =

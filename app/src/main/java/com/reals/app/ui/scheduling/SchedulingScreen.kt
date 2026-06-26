@@ -121,7 +121,7 @@ fun SchedulingScreen(
         }
 
         error?.let {
-            ApiErrorFeedbackCard(it, ErrorContext.General)
+            ApiErrorFeedbackCard(it, ErrorContext.Scheduling)
             Spacer(modifier = Modifier.height(12.dp))
         }
 
