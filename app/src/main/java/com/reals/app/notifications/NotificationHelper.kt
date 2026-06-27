@@ -24,6 +24,8 @@ import com.reals.app.notifications.PushNotificationContract.VISUAL_REVIEW_NOTIFI
 
 object NotificationHelper {
     private const val TAG = "NotificationHelper"
+    internal const val VISUAL_REVIEW_CHANNEL_IMPORTANCE = NotificationManager.IMPORTANCE_HIGH
+    internal const val VISUAL_REVIEW_NOTIFICATION_PRIORITY = NotificationCompat.PRIORITY_HIGH
 
     fun ensureChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -31,7 +33,7 @@ object NotificationHelper {
         val channel = NotificationChannel(
             VISUAL_REVIEW_CHANNEL_ID,
             "Revisiones",
-            NotificationManager.IMPORTANCE_DEFAULT,
+            VISUAL_REVIEW_CHANNEL_IMPORTANCE,
         ).apply {
             description = "Avisos cuando hay una revisión visual disponible"
         }
@@ -52,7 +54,8 @@ object NotificationHelper {
                 NotificationCompat.BigTextStyle()
                     .bigText("Ya podés revisar el perfil visual de una conversación reciente."),
             )
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(VISUAL_REVIEW_NOTIFICATION_PRIORITY)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
             .setContentIntent(visualReviewPendingIntent(context, matchId))
             .build()
