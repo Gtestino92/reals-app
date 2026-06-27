@@ -1,8 +1,14 @@
 package com.reals.app.ui.root
 
+import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ApiResult
+import com.reals.app.core.security.TextSafety
 import com.reals.app.di.FirstChatFeatureDependencies
+import com.reals.app.domain.model.ChatContinueDecision
 import com.reals.app.domain.model.ChatDecisionState
+import com.reals.app.domain.model.ChatExitOutcome
+import com.reals.app.domain.model.ChatExitReason
+import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.MatchState
 import com.reals.app.domain.model.ProvisionedSession
 
@@ -167,6 +173,260 @@ internal class FirstChatCoordinator(
             )
         }
     }
+
+    suspend fun submitDecision(
+        current: RealsRootUiState.FirstChat,
+        decision: ChatContinueDecision,
+        onPending: (RealsRootUiState.FirstChat) -> Unit,
+    ): FirstChatActionResult {
+        if (current.loading || current.refreshing || current.sending || current.actionLoading) {
+            return FirstChatActionResult.Ignore
+        }
+        val chat = current.chat
+        if (chat != null && chat.myDecision != ChatDecisionState.Pending) {
+            return FirstChatActionResult.Show(
+                current.copy(
+                    message = "Ya registramos tu decision para este chat.",
+                    error = null,
+                )
+            )
+        }
+
+        val pending = current.copy(
+            actionLoading = true,
+            actionLoadingLabel = if (decision == ChatContinueDecision.Approved) {
+                "Aprobando..."
+            } else {
+                "Rechazando..."
+            },
+            error = null,
+            message = null,
+        )
+        onPending(pending)
+
+        return when (val result = dependencies.submitChatDecision(current.matchId, decision)) {
+            is ApiResult.Success -> {
+                when (val state = result.value.state) {
+                    MatchState.ChatActive -> {
+                        if (decision == ChatContinueDecision.Approved) {
+                            FirstChatActionResult.ReloadHome(
+                                session = current.session,
+                                message = "Aprobaste el chat. Te avisaremos si la otra persona tambiÃ©n aprueba.",
+                                hideFirstChatMatchId = current.matchId,
+                                autoNavigateEngagements = false,
+                            )
+                        } else {
+                            FirstChatActionResult.Show(
+                                pending.copy(
+                                    match = result.value,
+                                    actionLoading = false,
+                                    actionLoadingLabel = null,
+                                    message = firstChatDecisionMessage(state),
+                                )
+                            )
+                        }
+                    }
+
+                    MatchState.VisualPhase,
+                    MatchState.ChatRejected,
+                    MatchState.Expired,
+                    MatchState.VisualApproved,
+                    MatchState.VisualRejected -> {
+                        if (decision == ChatContinueDecision.Approved) {
+                            FirstChatActionResult.ReloadHome(
+                                session = current.session,
+                                message = firstChatExitMessage(state),
+                                hideFirstChatMatchId = current.matchId,
+                                autoNavigateEngagements = false,
+                            )
+                        } else {
+                            FirstChatActionResult.ReturnHome(
+                                session = current.session,
+                                message = firstChatExitMessage(state),
+                                hideFirstChatMatchId = current.matchId,
+                                autoNavigateEngagements = false,
+                            )
+                        }
+                    }
+
+                    is MatchState.Unknown -> FirstChatActionResult.Show(
+                        pending.copy(
+                            match = result.value,
+                            actionLoading = false,
+                            actionLoadingLabel = null,
+                            message = firstChatDecisionMessage(state),
+                        )
+                    )
+                }
+            }
+
+            is ApiResult.Failure -> FirstChatActionResult.Show(
+                pending.copy(
+                    actionLoading = false,
+                    actionLoadingLabel = null,
+                    error = result.error,
+                )
+            )
+        }
+    }
+
+    suspend fun requestMutualExit(
+        current: RealsRootUiState.FirstChat,
+        onPending: (RealsRootUiState.FirstChat) -> Unit,
+    ): FirstChatActionResult = runExitAction(
+        current = current,
+        successMessage = "Enviamos tu solicitud de salida consensuada.",
+        loadingLabel = "Solicitando salida...",
+        onPending = onPending,
+    ) { chatId ->
+        dependencies.requestMutualChatExit(chatId, ChatExitReason.NoLongerInterested, null)
+    }
+
+    suspend fun cancelUnilaterally(
+        current: RealsRootUiState.FirstChat,
+        onPending: (RealsRootUiState.FirstChat) -> Unit,
+    ): FirstChatActionResult = runExitAction(
+        current = current,
+        successMessage = "Cerraste el chat.",
+        loadingLabel = "Cerrando chat...",
+        onPending = onPending,
+    ) { chatId ->
+        dependencies.cancelChat(chatId, ChatExitReason.NoLongerInterested, null)
+    }
+
+    suspend fun safetyCancel(
+        current: RealsRootUiState.FirstChat,
+        details: String,
+        onPending: (RealsRootUiState.FirstChat) -> Unit,
+    ): FirstChatActionResult {
+        if (current.loading || current.refreshing || current.sending || current.actionLoading) {
+            return FirstChatActionResult.Ignore
+        }
+        if (current.chat == null) return FirstChatActionResult.Ignore
+
+        val cleanDetails = normalizeSafetyReportDetails(details) ?: return FirstChatActionResult.Show(
+            current.copy(
+                error = invalidSafetyReportDetailsError(),
+                message = null,
+            )
+        )
+
+        return runExitAction(
+            current = current,
+            successMessage = "Reporte enviado. Cerramos esta conversacion por seguridad.",
+            loadingLabel = "Enviando reporte...",
+            onPending = onPending,
+        ) { chatId ->
+            dependencies.safetyCancelChat(
+                chatId,
+                ChatExitReason.InappropriateBehavior,
+                cleanDetails,
+            )
+        }
+    }
+
+    suspend fun acceptExitRequest(
+        current: RealsRootUiState.FirstChat,
+        exitRequestId: String,
+        onPending: (RealsRootUiState.FirstChat) -> Unit,
+    ): FirstChatActionResult = runExitAction(
+        current = current,
+        successMessage = "Aceptaste la salida consensuada.",
+        loadingLabel = "Aceptando salida...",
+        onPending = onPending,
+    ) { chatId ->
+        dependencies.acceptChatExitRequest(chatId, exitRequestId)
+    }
+
+    suspend fun rejectExitRequest(
+        current: RealsRootUiState.FirstChat,
+        exitRequestId: String,
+        onPending: (RealsRootUiState.FirstChat) -> Unit,
+    ): FirstChatActionResult = runExitAction(
+        current = current,
+        successMessage = "Rechazaste la salida consensuada.",
+        loadingLabel = "Rechazando salida...",
+        onPending = onPending,
+    ) { chatId ->
+        dependencies.rejectChatExitRequest(chatId, exitRequestId)
+    }
+
+    suspend fun timeoutExitRequest(
+        current: RealsRootUiState.FirstChat,
+        exitRequestId: String,
+        onPending: (RealsRootUiState.FirstChat) -> Unit,
+    ): FirstChatActionResult = runExitAction(
+        current = current,
+        successMessage = "La solicitud de salida vencio.",
+        loadingLabel = "Cerrando por timeout...",
+        onPending = onPending,
+    ) { chatId ->
+        dependencies.timeoutChatExitRequest(chatId, exitRequestId)
+    }
+
+    private suspend fun runExitAction(
+        current: RealsRootUiState.FirstChat,
+        successMessage: String = "Actualizamos el estado del chat.",
+        loadingLabel: String = "Procesando...",
+        onPending: (RealsRootUiState.FirstChat) -> Unit,
+        action: suspend (chatId: String) -> ApiResult<*>,
+    ): FirstChatActionResult {
+        if (current.loading || current.refreshing || current.sending || current.actionLoading) {
+            return FirstChatActionResult.Ignore
+        }
+        val chat = current.chat ?: return FirstChatActionResult.Ignore
+
+        val pending = current.copy(
+            actionLoading = true,
+            actionLoadingLabel = loadingLabel,
+            error = null,
+            message = null,
+        )
+        onPending(pending)
+
+        return when (val result = action(chat.id)) {
+            is ApiResult.Success -> {
+                val outcome = result.value as? ChatExitOutcome
+                if (outcome != null && outcome.chat.status != ChatStatus.Active) {
+                    return FirstChatActionResult.ReturnHome(
+                        session = current.session,
+                        message = successMessage,
+                        hideFirstChatMatchId = current.matchId,
+                    )
+                }
+                if (outcome?.exitRequest?.status.isResolvedExitStatus()) {
+                    return FirstChatActionResult.ReturnHome(
+                        session = current.session,
+                        message = "El chat fue cerrado.",
+                        hideFirstChatMatchId = current.matchId,
+                    )
+                }
+
+                val chatResult = dependencies.getFirstChatForMatch(current.matchId)
+                val exitsResult = dependencies.getChatExitRequests(chat.id)
+                FirstChatActionResult.Show(
+                    pending.copy(
+                        chat = (chatResult as? ApiResult.Success)?.value ?: pending.chat,
+                        exitRequests = (exitsResult as? ApiResult.Success)?.value
+                            ?: pending.exitRequests,
+                        actionLoading = false,
+                        actionLoadingLabel = null,
+                        message = successMessage,
+                        error = (chatResult as? ApiResult.Failure)?.error
+                            ?: (exitsResult as? ApiResult.Failure)?.error,
+                    )
+                )
+            }
+
+            is ApiResult.Failure -> FirstChatActionResult.Show(
+                pending.copy(
+                    actionLoading = false,
+                    actionLoadingLabel = null,
+                    error = result.error,
+                )
+            )
+        }
+    }
 }
 
 internal sealed interface FirstChatLoadResult {
@@ -180,3 +440,30 @@ internal sealed interface FirstChatRefreshResult {
     data class Closed(val matchState: MatchState?) : FirstChatRefreshResult
     data object ExitResolved : FirstChatRefreshResult
 }
+
+internal sealed interface FirstChatActionResult {
+    data object Ignore : FirstChatActionResult
+
+    data class Show(val state: RealsRootUiState.FirstChat) : FirstChatActionResult
+
+    data class ReturnHome(
+        val session: ProvisionedSession,
+        val message: String?,
+        val hideFirstChatMatchId: String? = null,
+        val autoNavigateEngagements: Boolean = false,
+    ) : FirstChatActionResult
+
+    data class ReloadHome(
+        val session: ProvisionedSession,
+        val message: String?,
+        val hideFirstChatMatchId: String? = null,
+        val autoNavigateEngagements: Boolean = false,
+    ) : FirstChatActionResult
+}
+
+internal fun normalizeSafetyReportDetails(details: String): String? =
+    TextSafety.normalizeMultiline(details, maxLength = 1_000)
+        .takeUnless { it.isBlank() || TextSafety.containsHtmlLikeMarkup(it) }
+
+internal fun invalidSafetyReportDetailsError(): ApiError =
+    ApiError.Unexpected("El detalle del reporte no es valido.")

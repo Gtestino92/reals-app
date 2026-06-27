@@ -4,8 +4,10 @@ import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ApiResult
 import com.reals.app.core.network.BackendErrorCode
 import com.reals.app.core.network.backendErrorCode
+import com.reals.app.core.security.TextSafety
 import com.reals.app.di.VisualApprovalFeatureDependencies
 import com.reals.app.domain.model.Match
+import com.reals.app.domain.model.MatchState
 import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.VisualDecision
 import com.reals.app.domain.model.VisualProfile
@@ -13,6 +15,28 @@ import com.reals.app.domain.model.VisualProfile
 internal class VisualApprovalCoordinator(
     private val dependencies: VisualApprovalFeatureDependencies,
 ) {
+    suspend fun open(
+        session: ProvisionedSession,
+        matchId: String,
+        locallyHidden: Boolean,
+        onPending: (RealsRootUiState.VisualApproval) -> Unit,
+    ): VisualApprovalFlowResult {
+        val cleanMatchId = matchId.trim()
+        if (cleanMatchId.isBlank()) return VisualApprovalFlowResult.Ignore
+        if (locallyHidden) {
+            return VisualApprovalFlowResult.ReturnHome(session = session)
+        }
+
+        return loadFlow(
+            session = session,
+            matchId = cleanMatchId,
+            initialMatch = null,
+            previous = null,
+            locallyHidden = false,
+            onPending = onPending,
+        )
+    }
+
     suspend fun load(
         session: ProvisionedSession,
         matchId: String,
@@ -34,8 +58,8 @@ internal class VisualApprovalCoordinator(
         val matchResult = dependencies.getMatch(matchId)
         val match = (matchResult as? ApiResult.Success)?.value ?: initialMatch
         if (match != null &&
-            match.state != com.reals.app.domain.model.MatchState.VisualPhase &&
-            match.state !is com.reals.app.domain.model.MatchState.Unknown
+            match.state != MatchState.VisualPhase &&
+            match.state !is MatchState.Unknown
         ) {
             return VisualApprovalLoadResult.RouteHome(
                 message = "La revision visual cambio de estado. Actualizamos tu Home.",
@@ -77,6 +101,31 @@ internal class VisualApprovalCoordinator(
         )
     }
 
+    suspend fun refresh(
+        current: RealsRootUiState.VisualApproval,
+        locallyHidden: Boolean,
+        onPending: (RealsRootUiState.VisualApproval) -> Unit,
+    ): VisualApprovalFlowResult {
+        if (
+            current.loading ||
+            current.refreshing ||
+            current.readingPartnerMessage ||
+            current.writingMessage ||
+            current.deciding
+        ) {
+            return VisualApprovalFlowResult.Ignore
+        }
+
+        return loadFlow(
+            session = current.session,
+            matchId = current.matchId,
+            initialMatch = current.match,
+            previous = current.copy(refreshing = true, error = null, message = null),
+            locallyHidden = locallyHidden,
+            onPending = onPending,
+        )
+    }
+
     suspend fun readPartnerPersonalMessage(
         current: RealsRootUiState.VisualApproval,
     ): RealsRootUiState.VisualApproval {
@@ -102,6 +151,35 @@ internal class VisualApprovalCoordinator(
                 error = result.error,
             )
         }
+    }
+
+    suspend fun readPartnerPersonalMessageAction(
+        current: RealsRootUiState.VisualApproval,
+        onPending: (RealsRootUiState.VisualApproval) -> Unit,
+    ): VisualApprovalFlowResult {
+        if (
+            current.loading ||
+            current.refreshing ||
+            current.readingPartnerMessage ||
+            current.writingMessage ||
+            current.deciding ||
+            current.partnerMessageLoaded
+        ) {
+            return VisualApprovalFlowResult.Ignore
+        }
+
+        val profile = current.profile ?: return VisualApprovalFlowResult.Ignore
+        if (!profile.partnerPersonalMessageSubmitted) return VisualApprovalFlowResult.Ignore
+
+        onPending(
+            current.copy(
+                readingPartnerMessage = true,
+                partnerMessageError = null,
+                error = null,
+                message = null,
+            )
+        )
+        return VisualApprovalFlowResult.Show(readPartnerPersonalMessage(current))
     }
 
     suspend fun savePersonalMessage(
@@ -131,8 +209,143 @@ internal class VisualApprovalCoordinator(
         }
     }
 
-    suspend fun submitDecision(matchId: String, decision: VisualDecision): ApiResult<Match> =
-        dependencies.submitVisualDecision(matchId, decision)
+    suspend fun savePersonalMessageAction(
+        current: RealsRootUiState.VisualApproval,
+        message: String,
+        onPending: (RealsRootUiState.VisualApproval) -> Unit,
+    ): VisualApprovalFlowResult {
+        if (current.readingPartnerMessage || current.writingMessage || current.deciding) {
+            return VisualApprovalFlowResult.Ignore
+        }
+        if (current.myPersonalMessageSubmitted) {
+            return VisualApprovalFlowResult.Show(
+                current.copy(
+                    writingMessage = false,
+                    error = null,
+                    message = "Ya habias guardado tu mensaje personal.",
+                )
+            )
+        }
+
+        val cleanMessage = TextSafety.normalizeMultiline(message, maxLength = 280)
+        if (cleanMessage.isBlank() || TextSafety.containsHtmlLikeMarkup(cleanMessage)) {
+            return VisualApprovalFlowResult.Show(
+                current.copy(
+                    error = ApiError.Unexpected("El mensaje personal no es valido."),
+                    message = null,
+                )
+            )
+        }
+
+        onPending(current.copy(writingMessage = true, error = null, message = null))
+        return VisualApprovalFlowResult.Show(savePersonalMessage(current, cleanMessage))
+    }
+
+    suspend fun submitDecision(
+        current: RealsRootUiState.VisualApproval,
+        decision: VisualDecision,
+        onPending: (RealsRootUiState.VisualApproval) -> Unit,
+    ): VisualApprovalFlowResult {
+        if (
+            current.deciding ||
+            current.writingMessage ||
+            current.readingPartnerMessage ||
+            current.profile?.decisionRequiresPartnerPersonalMessageRead == true
+        ) {
+            return VisualApprovalFlowResult.Ignore
+        }
+
+        val pending = current.copy(
+            deciding = true,
+            decidingLabel = if (decision == VisualDecision.Approved) {
+                "Aprobando..."
+            } else {
+                "Rechazando..."
+            },
+            error = null,
+            message = null,
+        )
+        onPending(pending)
+
+        return when (val result = dependencies.submitVisualDecision(current.matchId, decision)) {
+            is ApiResult.Success -> {
+                when (result.value.state) {
+                    MatchState.VisualPhase -> VisualApprovalFlowResult.ReloadHome(
+                        session = current.session,
+                        hideVisualMatchId = current.matchId,
+                        autoNavigateEngagements = false,
+                    )
+
+                    MatchState.VisualApproved -> VisualApprovalFlowResult.ReloadHome(
+                        session = current.session,
+                        hideVisualMatchId = current.matchId,
+                        autoNavigateEngagements = false,
+                    )
+
+                    MatchState.VisualRejected,
+                    MatchState.ChatRejected,
+                    MatchState.Expired -> VisualApprovalFlowResult.ReloadHome(
+                        session = current.session,
+                        hideVisualMatchId = current.matchId,
+                        autoNavigateEngagements = false,
+                    )
+
+                    MatchState.ChatActive,
+                    is MatchState.Unknown -> VisualApprovalFlowResult.Show(
+                        state = pending.copy(
+                            match = result.value,
+                            deciding = false,
+                            decidingLabel = null,
+                            message = "Guardamos tu decision.",
+                        ),
+                        hideVisualMatchId = current.matchId,
+                    )
+                }
+            }
+
+            is ApiResult.Failure -> VisualApprovalFlowResult.Show(
+                pending.copy(
+                    deciding = false,
+                    decidingLabel = null,
+                    error = result.error,
+                )
+            )
+        }
+    }
+
+    private suspend fun loadFlow(
+        session: ProvisionedSession,
+        matchId: String,
+        initialMatch: Match?,
+        previous: RealsRootUiState.VisualApproval?,
+        locallyHidden: Boolean,
+        onPending: (RealsRootUiState.VisualApproval) -> Unit,
+    ): VisualApprovalFlowResult {
+        val loadingState = previous ?: RealsRootUiState.VisualApproval(
+            session = session,
+            matchId = matchId,
+            match = initialMatch,
+            loading = true,
+        )
+        onPending(loadingState)
+
+        return when (
+            val result = load(
+                session = session,
+                matchId = matchId,
+                initialMatch = initialMatch,
+                previous = previous,
+                locallyHidden = locallyHidden,
+            )
+        ) {
+            is VisualApprovalLoadResult.Show -> VisualApprovalFlowResult.Show(result.state)
+            is VisualApprovalLoadResult.RouteHome -> VisualApprovalFlowResult.ReloadHome(
+                session = session,
+                message = result.message,
+                autoNavigateEngagements = false,
+            )
+        }
+    }
 }
 
 private fun VisualProfile.markPartnerPersonalMessageReadLocally(): VisualProfile =
@@ -172,4 +385,27 @@ private fun ApiError.isDomainConflict(): Boolean =
 internal sealed interface VisualApprovalLoadResult {
     data class Show(val state: RealsRootUiState.VisualApproval) : VisualApprovalLoadResult
     data class RouteHome(val message: String?) : VisualApprovalLoadResult
+}
+
+internal sealed interface VisualApprovalFlowResult {
+    data object Ignore : VisualApprovalFlowResult
+
+    data class Show(
+        val state: RealsRootUiState.VisualApproval,
+        val hideVisualMatchId: String? = null,
+    ) : VisualApprovalFlowResult
+
+    data class ReturnHome(
+        val session: ProvisionedSession,
+        val message: String? = null,
+        val hideVisualMatchId: String? = null,
+        val autoNavigateEngagements: Boolean = false,
+    ) : VisualApprovalFlowResult
+
+    data class ReloadHome(
+        val session: ProvisionedSession,
+        val message: String? = null,
+        val hideVisualMatchId: String? = null,
+        val autoNavigateEngagements: Boolean = false,
+    ) : VisualApprovalFlowResult
 }

@@ -2,6 +2,7 @@ package com.reals.app.ui.root
 
 import com.reals.app.core.network.ApiResult
 import com.reals.app.di.FirstChatFeatureDependencies
+import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.ProvisionedSession
 
@@ -107,6 +108,62 @@ internal class SecondChatCoordinator(
             )
         }
     }
+
+    suspend fun safetyCancel(
+        current: RealsRootUiState.SecondChat,
+        details: String,
+        onPending: (RealsRootUiState.SecondChat) -> Unit,
+    ): SecondChatActionResult {
+        if (current.loading || current.refreshing || current.sending || current.actionLoading) {
+            return SecondChatActionResult.Ignore
+        }
+        val chat = current.chat ?: return SecondChatActionResult.Ignore
+
+        val cleanDetails = normalizeSafetyReportDetails(details) ?: return SecondChatActionResult.Show(
+            current.copy(
+                error = invalidSafetyReportDetailsError(),
+                message = null,
+            )
+        )
+
+        val pending = current.copy(
+            actionLoading = true,
+            actionLoadingLabel = "Enviando reporte...",
+            error = null,
+            message = null,
+        )
+        onPending(pending)
+
+        return when (val result = dependencies.safetyCancelChat(
+            chat.id,
+            ChatExitReason.InappropriateBehavior,
+            cleanDetails,
+        )) {
+            is ApiResult.Success -> SecondChatActionResult.ReturnHome(
+                session = current.session,
+                message = "Reporte enviado. Cerramos esta conversacion por seguridad.",
+            )
+
+            is ApiResult.Failure -> SecondChatActionResult.Show(
+                pending.copy(
+                    actionLoading = false,
+                    actionLoadingLabel = null,
+                    error = result.error,
+                )
+            )
+        }
+    }
 }
 
 internal fun ChatStatus.isOpenSecondChatStatus(): Boolean = this == ChatStatus.Active
+
+internal sealed interface SecondChatActionResult {
+    data object Ignore : SecondChatActionResult
+
+    data class Show(val state: RealsRootUiState.SecondChat) : SecondChatActionResult
+
+    data class ReturnHome(
+        val session: ProvisionedSession,
+        val message: String?,
+    ) : SecondChatActionResult
+}
