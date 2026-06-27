@@ -220,6 +220,27 @@ data class OptimisticOutgoingMessage(
     val deliveryState: OutgoingMessageDeliveryState,
 )
 
+internal fun newOptimisticOutgoingMessage(
+    chatId: String,
+    senderId: String,
+    content: String,
+    localId: String = optimisticMessageLocalId(),
+    createdAtMillis: Long = System.currentTimeMillis(),
+): OptimisticOutgoingMessage = OptimisticOutgoingMessage(
+    localId = localId,
+    chatId = chatId,
+    senderId = senderId,
+    content = content,
+    createdAtMillis = createdAtMillis,
+    deliveryState = OutgoingMessageDeliveryState.Sending,
+)
+
+private fun optimisticMessageLocalId(): String = "local-${System.currentTimeMillis()}"
+
+internal fun List<OptimisticOutgoingMessage>.withoutOptimisticMessage(
+    localId: String,
+): List<OptimisticOutgoingMessage> = filterNot { it.localId == localId }
+
 internal fun List<OptimisticOutgoingMessage>.markOptimisticMessageFailed(
     localId: String,
 ): List<OptimisticOutgoingMessage> = map { message ->
