@@ -8,12 +8,8 @@ import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ApiResult
 import com.reals.app.core.network.isAccountDeleted
 import com.reals.app.core.security.TextSafety
-import com.reals.app.data.repository.AuthOperationResult
-import com.reals.app.data.repository.FirebaseAuthRepository
 import com.reals.app.di.AppContainer
 import com.reals.app.di.RealsRootDependencies
-import com.reals.app.domain.model.BackendUser
-import com.reals.app.domain.model.BackendUserStatus
 import com.reals.app.domain.model.ChatContinueDecision
 import com.reals.app.domain.model.ChatDecisionState
 import com.reals.app.domain.model.ChatExitOutcome
@@ -31,6 +27,7 @@ import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.UpdateProfileInput
 import com.reals.app.domain.model.VisualDecision
 import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_AVAILABLE
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,20 +35,14 @@ import kotlinx.coroutines.launch
 
 class RealsRootViewModel(
     dependencies: RealsRootDependencies,
+    autoRefreshSession: Boolean = true,
 ) : ViewModel() {
-    private val authRepository = dependencies.session.authRepository
-    private val provisionAndLoadProfile = dependencies.session.provisionAndLoadProfile
-    private val getMeUseCase = dependencies.session.getMe
-    private val pushTokenRegistrationService = dependencies.session.pushTokenRegistrationService
-    private val reactivateAccountUseCase = dependencies.account.reactivateAccount
-    private val deleteAccountUseCase = dependencies.account.deleteAccount
     private val _uiState = MutableStateFlow<RealsRootUiState>(RealsRootUiState.Checking)
     private val getProfilePhotosUseCase = dependencies.profile.getProfilePhotos
     private val profileHandler = ProfileOperationHandler(
         uiState = _uiState,
         dependencies = dependencies.profile,
         getProfilePhotosUseCase = getProfilePhotosUseCase,
-        provisionAndLoadProfile = dependencies.session.provisionAndLoadProfile,
         scope = viewModelScope,
     )
     private val getFirstChatForMatchUseCase = dependencies.firstChat.getFirstChatForMatch
@@ -68,97 +59,46 @@ class RealsRootViewModel(
     private val secondChatCoordinator = SecondChatCoordinator(dependencies.firstChat)
     private val visualApprovalCoordinator = VisualApprovalCoordinator(dependencies.visualApproval)
     private val schedulingCoordinator = SchedulingCoordinator(dependencies.scheduling)
+    private lateinit var sessionCoordinator: SessionCoordinator
+    private var silentFirstChatRefreshJob: Job? = null
+    private var silentSecondChatRefreshJob: Job? = null
+    private var silentSchedulingRefreshJob: Job? = null
     private val homeCoordinator = HomeCoordinator(
         uiState = _uiState,
         dependencies = dependencies.home,
         scope = viewModelScope,
         onOpenFirstChat = { session, matchId, chatId -> openFirstChat(session, matchId, chatId) },
-        onReloadActiveSession = { user -> loadBackendSessionForActiveUser(user) },
+        onReloadActiveSession = { user -> sessionCoordinator.loadBackendSessionForActiveUser(user) },
     )
     val uiState: StateFlow<RealsRootUiState> = _uiState.asStateFlow()
 
     init {
-        refreshSession()
-    }
-
-    fun refreshSession() {
-        if (!authRepository.isConfigured()) {
-            _uiState.value =
-                RealsRootUiState.MissingFirebase(FirebaseAuthRepository.firebaseMissingMessage)
-            return
-        }
-        if (!authRepository.hasSignedInUser()) {
-            _uiState.value = RealsRootUiState.Login()
-            return
-        }
-        loadBackendSession()
-    }
-
-    fun signIn(email: String, password: String) {
-        authenticate(email, password) { cleanEmail, cleanPassword ->
-            authRepository.signIn(cleanEmail, cleanPassword)
+        sessionCoordinator = SessionCoordinator(
+            uiState = _uiState,
+            dependencies = dependencies.session,
+            accountDependencies = dependencies.account,
+            scope = viewModelScope,
+            onActiveSessionLoaded = { session -> showReadySession(session) },
+            onReactivatedSessionLoaded = { session ->
+                homeCoordinator.reenterMatchmakingOrLoadHome(session)
+            },
+        )
+        if (autoRefreshSession) {
+            refreshSession()
         }
     }
 
-    fun signUp(email: String, password: String) {
-        authenticate(email, password) { cleanEmail, cleanPassword ->
-            authRepository.signUp(cleanEmail, cleanPassword)
-        }
-    }
+    fun refreshSession() = sessionCoordinator.refreshSession()
 
-    fun signOut() {
-        authRepository.signOut()
-        _uiState.value = RealsRootUiState.Login()
-    }
+    fun signIn(email: String, password: String) = sessionCoordinator.signIn(email, password)
 
-    fun deleteAccount() {
-        val current = _uiState.value as? RealsRootUiState.Ready ?: return
+    fun signUp(email: String, password: String) = sessionCoordinator.signUp(email, password)
 
-        viewModelScope.launch {
-            _uiState.value = current.copy(
-                account = current.account.copy(
-                    deletingAccount = true,
-                    accountDeleteError = null,
-                ),
-            )
+    fun signOut() = sessionCoordinator.signOut()
 
-            when (val result = deleteAccountUseCase()) {
-                is ApiResult.Success -> {
-                    _uiState.value = RealsRootUiState.AccountDeletionScheduled(
-                        deletionFinalizesAt = result.value.deletionFinalizesAt,
-                    )
-                }
+    fun deleteAccount() = sessionCoordinator.deleteAccount()
 
-                is ApiResult.Failure -> {
-                    _uiState.value = current.copy(
-                        account = current.account.copy(
-                            deletingAccount = false,
-                            accountDeleteError = result.error,
-                        ),
-                    )
-                }
-            }
-        }
-    }
-
-    fun reactivateAccount() {
-        val current = _uiState.value as? RealsRootUiState.AccountDeletionPending ?: return
-
-        viewModelScope.launch {
-            _uiState.value = current.copy(reactivating = true, error = null)
-            when (val result = reactivateAccountUseCase()) {
-                is ApiResult.Success -> {
-                    val session = loadProvisionedSessionForActiveUser(result.value) ?: return@launch
-                    homeCoordinator.reenterMatchmakingOrLoadHome(session)
-                }
-
-                is ApiResult.Failure -> _uiState.value = current.copy(
-                    reactivating = false,
-                    error = result.error,
-                )
-            }
-        }
-    }
+    fun reactivateAccount() = sessionCoordinator.reactivateAccount()
 
     fun refreshHomeState() {
         homeCoordinator.refreshHomeState()
@@ -326,13 +266,14 @@ class RealsRootViewModel(
     fun refreshSecondChat(silent: Boolean = false) {
         val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
         if (current.refreshing || current.sending || current.actionLoading) return
+        if (silent && silentSecondChatRefreshJob?.isActive == true) return
         if (current.chat == null) return openSecondChat(
             connectionId = current.connectionId,
             matchId = current.matchId,
             partnerName = current.partnerName,
         )
 
-        viewModelScope.launch {
+        val job = viewModelScope.launch {
             if (!silent) {
                 _uiState.value = current.copy(
                     refreshing = true,
@@ -351,6 +292,9 @@ class RealsRootViewModel(
                 return@launch
             }
             _uiState.value = result
+        }
+        if (silent) {
+            silentSecondChatRefreshJob = job
         }
     }
 
@@ -479,7 +423,15 @@ class RealsRootViewModel(
 
     fun refreshVisualApproval() {
         val current = _uiState.value as? RealsRootUiState.VisualApproval ?: return
-        if (current.loading || current.refreshing || current.writingMessage || current.deciding) return
+        if (
+            current.loading ||
+            current.refreshing ||
+            current.readingPartnerMessage ||
+            current.writingMessage ||
+            current.deciding
+        ) {
+            return
+        }
         viewModelScope.launch {
             loadVisualApprovalState(
                 session = current.session,
@@ -517,9 +469,13 @@ class RealsRootViewModel(
     fun refreshScheduling(silent: Boolean = false) {
         val current = _uiState.value as? RealsRootUiState.Scheduling ?: return
         if (current.refreshing || current.submitting) return
+        if (silent && silentSchedulingRefreshJob?.isActive == true) return
 
-        viewModelScope.launch {
+        val job = viewModelScope.launch {
             _uiState.value = schedulingCoordinator.refresh(current, silent)
+        }
+        if (silent) {
+            silentSchedulingRefreshJob = job
         }
     }
 
@@ -604,9 +560,10 @@ class RealsRootViewModel(
     fun refreshFirstChat(silent: Boolean = false) {
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
         if (current.refreshing || current.sending || current.actionLoading) return
+        if (silent && silentFirstChatRefreshJob?.isActive == true) return
         if (current.chat == null) return openFirstChat(current.matchId, current.chatId)
 
-        viewModelScope.launch {
+        val job = viewModelScope.launch {
             if (!silent) {
                 _uiState.value = current.copy(
                     refreshing = true,
@@ -643,6 +600,9 @@ class RealsRootViewModel(
                     )
                 }
             }
+        }
+        if (silent) {
+            silentFirstChatRefreshJob = job
         }
     }
 
@@ -859,7 +819,7 @@ class RealsRootViewModel(
 
     fun saveMyVisualPersonalMessage(message: String) {
         val current = _uiState.value as? RealsRootUiState.VisualApproval ?: return
-        if (current.writingMessage || current.deciding) return
+        if (current.readingPartnerMessage || current.writingMessage || current.deciding) return
         if (current.myPersonalMessageSubmitted) {
             _uiState.value = current.copy(
                 writingMessage = false,
@@ -883,9 +843,43 @@ class RealsRootViewModel(
         }
     }
 
+    fun readPartnerPersonalMessage() {
+        val current = _uiState.value as? RealsRootUiState.VisualApproval ?: return
+        if (
+            current.loading ||
+            current.refreshing ||
+            current.readingPartnerMessage ||
+            current.writingMessage ||
+            current.deciding ||
+            current.partnerMessageLoaded
+        ) {
+            return
+        }
+
+        val profile = current.profile ?: return
+        if (!profile.partnerPersonalMessageSubmitted) return
+
+        viewModelScope.launch {
+            _uiState.value = current.copy(
+                readingPartnerMessage = true,
+                partnerMessageError = null,
+                error = null,
+                message = null,
+            )
+            _uiState.value = visualApprovalCoordinator.readPartnerPersonalMessage(current)
+        }
+    }
+
     fun submitVisualDecision(decision: VisualDecision) {
         val current = _uiState.value as? RealsRootUiState.VisualApproval ?: return
-        if (current.deciding || current.writingMessage) return
+        if (
+            current.deciding ||
+            current.writingMessage ||
+            current.readingPartnerMessage ||
+            current.profile?.decisionRequiresPartnerPersonalMessageRead == true
+        ) {
+            return
+        }
         viewModelScope.launch {
             val pending = current.copy(
                 deciding = true,
@@ -964,26 +958,8 @@ class RealsRootViewModel(
         profileHandler.loadProfilePhotos()
     }
 
-    fun addMockProfilePhoto(
-        profile: Profile,
-        position: Int,
-        isPersonPhoto: Boolean,
-        isFullBody: Boolean,
-    ) {
-        profileHandler.addMockProfilePhoto(profile, position, isPersonPhoto, isFullBody)
-    }
-
     fun addProfilePhotoFile(position: Int, fileUri: Uri) {
         profileHandler.addProfilePhotoFile(position, fileUri)
-    }
-
-    fun replaceMockProfilePhoto(
-        profile: Profile,
-        position: Int,
-        isPersonPhoto: Boolean,
-        isFullBody: Boolean,
-    ) {
-        profileHandler.replaceMockProfilePhoto(profile, position, isPersonPhoto, isFullBody)
     }
 
     fun replaceProfilePhotoFile(photoId: String, position: Int, fileUri: Uri) {
@@ -1123,77 +1099,7 @@ class RealsRootViewModel(
         }
     }
 
-    private fun authenticate(
-        email: String,
-        password: String,
-        action: suspend (email: String, password: String) -> AuthOperationResult,
-    ) {
-        val cleanEmail = email.trim()
-        if (cleanEmail.isBlank() || password.isBlank()) {
-            _uiState.value = RealsRootUiState.Login(error = "Email y password son requeridos.")
-            return
-        }
-        viewModelScope.launch {
-            _uiState.value = RealsRootUiState.Login(loading = true)
-            when (val result = action(cleanEmail, password)) {
-                AuthOperationResult.Success -> loadBackendSession()
-                is AuthOperationResult.Failure -> _uiState.value =
-                    RealsRootUiState.Login(error = result.message)
-            }
-        }
-    }
-
-    private fun loadBackendSession() {
-        viewModelScope.launch {
-            _uiState.value = RealsRootUiState.LoadingSession(authRepository.currentUserEmail())
-            when (val userResult = getMeUseCase()) {
-                is ApiResult.Success -> when (userResult.value.status) {
-                    BackendUserStatus.Active -> loadBackendSessionForActiveUser(userResult.value)
-                    BackendUserStatus.Deleted -> _uiState.value =
-                        RealsRootUiState.AccountDeletionPending(
-                            user = userResult.value,
-                        )
-
-                    is BackendUserStatus.Unknown -> _uiState.value = RealsRootUiState.Failure(
-                        ApiError.Unexpected("No pudimos leer el estado de tu cuenta.")
-                    )
-                }
-
-                is ApiResult.Failure -> {
-                    val backend = userResult.error as? ApiError.Backend
-                    if (backend.shouldProvisionAfterGetMeFailure()) {
-                        provisionAndLoadBackendSession()
-                    } else {
-                        handleSessionLoadFailure(userResult.error)
-                    }
-                }
-            }
-        }
-    }
-
-    private suspend fun provisionAndLoadBackendSession() {
-        when (val result = provisionAndLoadProfile()) {
-            is ApiResult.Success -> showReadySession(result.value)
-            is ApiResult.Failure -> handleSessionLoadFailure(result.error)
-        }
-    }
-
-    private suspend fun loadBackendSessionForActiveUser(user: BackendUser) {
-        loadProvisionedSessionForActiveUser(user)?.let { showReadySession(it) }
-    }
-
-    private suspend fun loadProvisionedSessionForActiveUser(user: BackendUser): ProvisionedSession? {
-        return when (val result = provisionAndLoadProfile.loadProfileFor(user)) {
-            is ApiResult.Success -> result.value
-            is ApiResult.Failure -> {
-                handleSessionLoadFailure(result.error)
-                null
-            }
-        }
-    }
-
     private suspend fun showReadySession(session: ProvisionedSession) {
-        registerPushTokenBestEffort()
         val snapshot = session.profileSnapshot
         if (snapshot is ProfileSnapshot.Found) {
             if (snapshot.profile.status == ProfileStatus.Active) {
@@ -1223,7 +1129,7 @@ class RealsRootViewModel(
 
                 is ApiResult.Failure -> {
                     if (photos.error.isAccountDeleted()) {
-                        showAccountDeletionPendingFromBackend()
+                        sessionCoordinator.showAccountDeletionPendingFromBackend()
                     } else {
                         _uiState.value = RealsRootUiState.Ready(
                             session = session,
@@ -1240,50 +1146,9 @@ class RealsRootViewModel(
         }
     }
 
-    private suspend fun handleSessionLoadFailure(error: ApiError) {
-        if (error.isAccountDeleted()) {
-            showAccountDeletionPendingFromBackend()
-            return
-        }
-
-        _uiState.value = RealsRootUiState.Failure(error)
-    }
-
-    private suspend fun showAccountDeletionPendingFromBackend() {
-        when (val userResult = getMeUseCase()) {
-            is ApiResult.Success -> when (userResult.value.status) {
-                BackendUserStatus.Deleted -> _uiState.value =
-                    RealsRootUiState.AccountDeletionPending(userResult.value)
-
-                BackendUserStatus.Active -> loadBackendSessionForActiveUser(userResult.value)
-                is BackendUserStatus.Unknown -> _uiState.value = RealsRootUiState.Failure(
-                    ApiError.Unexpected("No pudimos leer el estado de tu cuenta.")
-                )
-            }
-
-            is ApiResult.Failure -> {
-                authRepository.signOut()
-                _uiState.value = RealsRootUiState.Login(
-                    error = "La cuenta esta pendiente de eliminacion. Volve a iniciar sesion para recuperarla."
-                )
-            }
-        }
-    }
-
-    private fun ApiError.Backend?.shouldProvisionAfterGetMeFailure(): Boolean {
-        if (this == null) return false
-        return statusCode == 404 || statusCode == 403
-    }
-
     private fun returnHomeFromExternalNotification(session: ProvisionedSession) {
         viewModelScope.launch {
             homeCoordinator.returnHome(session)
-        }
-    }
-
-    private fun registerPushTokenBestEffort() {
-        viewModelScope.launch {
-            pushTokenRegistrationService.registerCurrentTokenIfPossible()
         }
     }
 

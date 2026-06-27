@@ -10,6 +10,10 @@ data class VisualProfileResponseDto(
     val bio: String? = null,
     val photos: List<PhotoResponseDto>,
     val myPersonalMessageSubmitted: Boolean = false,
+    val partnerPersonalMessageSubmitted: Boolean = false,
+    val partnerPersonalMessageRead: Boolean = true,
+    val decisionRequiresPartnerPersonalMessageRead: Boolean? = null,
+    val approvalRequiresPartnerPersonalMessageRead: Boolean? = null,
 )
 
 @Serializable

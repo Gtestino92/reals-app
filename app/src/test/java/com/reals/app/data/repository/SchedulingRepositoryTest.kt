@@ -1,10 +1,17 @@
 package com.reals.app.data.repository
 
+import com.reals.app.core.network.ApiError
+import com.reals.app.core.network.BackendErrorCode
+import com.reals.app.core.network.ErrorContext
+import com.reals.app.core.network.backendErrorCode
 import com.reals.app.domain.model.NegotiationStatus
 import com.reals.app.domain.model.ProposalStatus
+import com.reals.app.core.network.toUserMessage
+import com.reals.app.testutil.backendErrorResponse
 import com.reals.app.testutil.FakeAuthTokenProvider
 import com.reals.app.testutil.FakeRealsApi
 import com.reals.app.testutil.TestDtos
+import com.reals.app.testutil.failureError
 import com.reals.app.testutil.successValue
 import com.reals.app.testutil.testApiExecutor
 import kotlinx.coroutines.runBlocking
@@ -37,6 +44,27 @@ class SchedulingRepositoryTest {
 
         assertEquals("submitConnectionProposals", api.calls.single())
         assertEquals(slots, api.proposalsBody?.proposedDateTimes)
+    }
+
+    @Test
+    fun `submit proposals failure surfaces scheduling backend code`() = runBlocking {
+        api.proposalsResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "SCHEDULING_INVALID_PROPOSALS",
+            message = "raw backend message",
+        )
+
+        val error = repository.submitProposals(
+            connectionId = "connection-1",
+            proposedDateTimes = listOf("2026-06-18T21:00:00Z"),
+        ).failureError() as ApiError.Backend
+
+        assertEquals("SCHEDULING_INVALID_PROPOSALS", error.code)
+        assertEquals(BackendErrorCode.SchedulingInvalidProposals, error.backendErrorCode)
+        assertEquals(
+            "Revisa los horarios elegidos. Deben ser futuros, unicos y estar alineados cada media hora.",
+            error.toUserMessage(ErrorContext.Scheduling),
+        )
     }
 
     @Test

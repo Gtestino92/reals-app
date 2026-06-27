@@ -1,6 +1,9 @@
 package com.reals.app.ui.matchmaking
 
 import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -34,19 +37,30 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.app.ActivityCompat
+import com.reals.app.BuildConfig
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
 import com.reals.app.domain.model.HomeActiveInteractionsSummary
 import com.reals.app.domain.model.Profile
+import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.SearchLocationInput
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.root.MatchmakingSearchUiPhase
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration.Companion.milliseconds
 
-private const val LOCATION_RESOLUTION_TIMEOUT_MILLIS = 20_000L
+private val showManualLocationFallback =
+    BuildConfig.DEBUG ||
+        BuildConfig.REALS_ENVIRONMENT == "local" ||
+        BuildConfig.REALS_ENVIRONMENT == "dev"
+
+private enum class LocationPermissionRequestMode {
+    None,
+    AutoPrewarm,
+    Search,
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,17 +103,43 @@ fun MatchmakingHomeScreen(
     var manualExpanded by rememberSaveable(profile.id) { mutableStateOf(false) }
     var locationAttemptId by rememberSaveable(profile.id) { mutableLongStateOf(0L) }
     var pendingPermissionAttemptId by rememberSaveable(profile.id) { mutableLongStateOf(0L) }
+    var pendingPermissionRequestMode by rememberSaveable(profile.id) {
+        mutableStateOf(LocationPermissionRequestMode.None)
+    }
+    var autoLocationPermissionRequested by rememberSaveable(profile.id) { mutableStateOf(false) }
+    var prewarmedProfileId by rememberSaveable { mutableStateOf<String?>(null) }
+
+    fun prewarmLocationSilently() {
+        searchScope.launch {
+            DeviceSearchLocationResolver.prewarmIfPermitted(context)
+        }
+    }
+
+    fun locationPermissionDeniedMessage(): String {
+        val activity = context.findActivity()
+        val permanentlyDenied = activity != null &&
+            !ActivityCompat.shouldShowRequestPermissionRationale(
+                activity,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+            ) &&
+            !ActivityCompat.shouldShowRequestPermissionRationale(
+                activity,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+            )
+
+        if (permanentlyDenied) {
+            return "Necesitamos tu ubicacion para buscar chats cerca. " +
+                "Habilita el permiso de ubicacion desde los ajustes de la app."
+        }
+
+        return "Necesitamos tu ubicacion para buscar chats cerca."
+    }
 
     fun enqueueWithDeviceLocation(attemptId: Long) {
         searchScope.launch {
             localError = null
             val result = runCatching {
-                withTimeoutOrNull(LOCATION_RESOLUTION_TIMEOUT_MILLIS.milliseconds) {
-                    currentSearchLocation(context)
-                } ?: error(
-                    "No hay ubicacion disponible todavia. Verifica que la ubicacion del telefono " +
-                        "este activada e intenta nuevamente."
-                )
+                DeviceSearchLocationResolver.resolveForSearch(context)
             }
             if (attemptId != locationAttemptId) return@launch
             result
@@ -111,8 +151,8 @@ fun MatchmakingHomeScreen(
                     if (attemptId != locationAttemptId) return@launch
                     onFailSearchPreparation()
                     localError = it.message
-                        ?: "No se pudo obtener la ubicacion del dispositivo."
-                    manualExpanded = true
+                        ?: SEARCH_LOCATION_UNAVAILABLE_MESSAGE
+                    manualExpanded = showManualLocationFallback
                 }
         }
     }
@@ -120,18 +160,29 @@ fun MatchmakingHomeScreen(
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { grants ->
+        val requestMode = pendingPermissionRequestMode
         val attemptId = pendingPermissionAttemptId
         pendingPermissionAttemptId = 0L
-        if (attemptId == 0L || attemptId != locationAttemptId) return@rememberLauncherForActivityResult
+        pendingPermissionRequestMode = LocationPermissionRequestMode.None
 
         if (grants.values.any { it }) {
             localError = null
-            enqueueWithDeviceLocation(attemptId)
+            when (requestMode) {
+                LocationPermissionRequestMode.AutoPrewarm -> prewarmLocationSilently()
+                LocationPermissionRequestMode.Search -> {
+                    if (attemptId == 0L || attemptId != locationAttemptId) {
+                        return@rememberLauncherForActivityResult
+                    }
+                    enqueueWithDeviceLocation(attemptId)
+                }
+                LocationPermissionRequestMode.None -> Unit
+            }
         } else {
-            onFailSearchPreparation()
-            localError = "Necesitamos ubicacion para buscar personas cerca. " +
-                "Podes habilitar permisos o usar el fallback manual de desarrollo."
-            manualExpanded = true
+            localError = locationPermissionDeniedMessage()
+            if (requestMode == LocationPermissionRequestMode.Search) {
+                onFailSearchPreparation()
+                manualExpanded = showManualLocationFallback
+            }
         }
     }
 
@@ -201,6 +252,42 @@ fun MatchmakingHomeScreen(
         }
     }
 
+    val canPrewarmSearchLocation = screenModel != null &&
+        matchmakingSearchPhase == MatchmakingSearchUiPhase.Idle &&
+        !homeLoading &&
+        profile.status == ProfileStatus.Active &&
+        model.matchmaking.canSearch &&
+        !model.matchmaking.inQueue &&
+        hasLocationPermission(context)
+
+    val shouldAutoRequestLocationPermission = shouldAutoRequestHomeLocationPermission(
+        profileStatus = profile.status,
+        screenModel = screenModel,
+        homeLoading = homeLoading,
+        matchmakingSearchPhase = matchmakingSearchPhase,
+        hasLocationPermission = hasLocationPermission(context),
+        autoLocationPermissionRequested = autoLocationPermissionRequested,
+    )
+
+    LaunchedEffect(profile.id, shouldAutoRequestLocationPermission) {
+        if (!shouldAutoRequestLocationPermission) return@LaunchedEffect
+        autoLocationPermissionRequested = true
+        pendingPermissionRequestMode = LocationPermissionRequestMode.AutoPrewarm
+        pendingPermissionAttemptId = 0L
+        permissionLauncher.launch(
+            arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+            )
+        )
+    }
+
+    LaunchedEffect(profile.id, canPrewarmSearchLocation) {
+        if (!canPrewarmSearchLocation || prewarmedProfileId == profile.id) return@LaunchedEffect
+        prewarmedProfileId = profile.id
+        prewarmLocationSilently()
+    }
+
     PullToRefreshBox(
         isRefreshing = homeLoading,
         onRefresh = onRefreshHome,
@@ -216,6 +303,7 @@ fun MatchmakingHomeScreen(
             accountDeleteError = accountDeleteError,
             localError = localError,
             manualExpanded = manualExpanded,
+            showManualLocationFallback = showManualLocationFallback,
             onEnqueue = onEnqueue,
             onLocalErrorChange = { localError = it },
             onManualExpandedChange = { manualExpanded = it },
@@ -227,6 +315,7 @@ fun MatchmakingHomeScreen(
                 if (hasLocationPermission(context)) {
                     enqueueWithDeviceLocation(attemptId)
                 } else {
+                    pendingPermissionRequestMode = LocationPermissionRequestMode.Search
                     pendingPermissionAttemptId = attemptId
                     permissionLauncher.launch(
                         arrayOf(
@@ -250,6 +339,32 @@ fun MatchmakingHomeScreen(
     }
 }
 
+internal fun shouldAutoRequestHomeLocationPermission(
+    profileStatus: ProfileStatus,
+    screenModel: HomeScreenModel?,
+    homeLoading: Boolean,
+    matchmakingSearchPhase: MatchmakingSearchUiPhase,
+    hasLocationPermission: Boolean,
+    autoLocationPermissionRequested: Boolean,
+): Boolean {
+    val matchmaking = screenModel?.matchmaking ?: return false
+    return profileStatus == ProfileStatus.Active &&
+        !homeLoading &&
+        matchmakingSearchPhase == MatchmakingSearchUiPhase.Idle &&
+        matchmaking.canSearch &&
+        !matchmaking.inQueue &&
+        matchmaking.blockedReason == null &&
+        !hasLocationPermission &&
+        !autoLocationPermissionRequested
+}
+
+private tailrec fun Context.findActivity(): Activity? =
+    when (this) {
+        is Activity -> this
+        is ContextWrapper -> baseContext.findActivity()
+        else -> null
+    }
+
 @Composable
 private fun MatchmakingIdleScreen(
     profile: Profile,
@@ -262,6 +377,7 @@ private fun MatchmakingIdleScreen(
     accountDeleteError: ApiError?,
     localError: String?,
     manualExpanded: Boolean,
+    showManualLocationFallback: Boolean,
     onEnqueue: (SearchLocationInput) -> Unit,
     onLocalErrorChange: (String?) -> Unit,
     onManualExpandedChange: (Boolean) -> Unit,
@@ -350,14 +466,16 @@ private fun MatchmakingIdleScreen(
                 ) {
                     Text(if (homeLoading) "Preparando busqueda..." else "Buscar chat")
                 }
-                OutlinedButton(
-                    onClick = { onManualExpandedChange(!manualExpanded) },
-                    enabled = !busy && canSearch,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(if (manualExpanded) "Ocultar fallback manual" else "Fallback manual dev")
+                if (showManualLocationFallback) {
+                    OutlinedButton(
+                        onClick = { onManualExpandedChange(!manualExpanded) },
+                        enabled = !busy && canSearch,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(if (manualExpanded) "Ocultar fallback manual" else "Fallback manual dev")
+                    }
                 }
-                if (manualExpanded) {
+                if (showManualLocationFallback && manualExpanded) {
                     ManualLocationFallback(
                         latitude = latitude,
                         longitude = longitude,

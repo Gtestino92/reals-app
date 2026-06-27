@@ -34,11 +34,21 @@ class MatchRepositoryTest {
 
     @Test
     fun `getVisualProfile maps myPersonalMessageSubmitted`() = runBlocking {
-        api.visualProfileResponse = Response.success(TestDtos.visualProfile(myPersonalMessageSubmitted = true))
+        api.visualProfileResponse = Response.success(
+            TestDtos.visualProfile(
+                myPersonalMessageSubmitted = true,
+                partnerPersonalMessageSubmitted = true,
+                partnerPersonalMessageRead = false,
+                decisionRequiresPartnerPersonalMessageRead = true,
+            )
+        )
 
         val profile = repository.getVisualProfile("match-1").successValue()
 
         assertEquals(true, profile.myPersonalMessageSubmitted)
+        assertEquals(true, profile.partnerPersonalMessageSubmitted)
+        assertEquals(false, profile.partnerPersonalMessageRead)
+        assertEquals(true, profile.decisionRequiresPartnerPersonalMessageRead)
         assertEquals(listOf("photo-1", "photo-2"), profile.photos.map { it.id })
     }
 

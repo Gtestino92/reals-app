@@ -7,6 +7,9 @@ data class VisualProfile(
     val bio: String?,
     val photos: List<ProfilePhoto>,
     val myPersonalMessageSubmitted: Boolean,
+    val partnerPersonalMessageSubmitted: Boolean,
+    val partnerPersonalMessageRead: Boolean,
+    val decisionRequiresPartnerPersonalMessageRead: Boolean,
 )
 
 enum class VisualDecision(val backendValue: String) {

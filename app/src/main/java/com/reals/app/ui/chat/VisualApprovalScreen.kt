@@ -43,6 +43,8 @@ fun VisualApprovalScreen(
     profile: VisualProfile?,
     partnerMessage: String?,
     partnerMessageLoaded: Boolean,
+    readingPartnerMessage: Boolean,
+    partnerMessageError: ApiError?,
     myPersonalMessageSubmitted: Boolean,
     loading: Boolean,
     refreshing: Boolean,
@@ -52,13 +54,17 @@ fun VisualApprovalScreen(
     error: ApiError?,
     message: String?,
     onRefresh: () -> Unit,
+    onReadPartnerMessage: () -> Unit,
     onSavePersonalMessage: (String) -> Unit,
     onApprove: () -> Unit,
     onReject: () -> Unit,
     onBackHome: () -> Unit,
 ) {
     var personalMessage by rememberSaveable(matchId) { mutableStateOf("") }
-    val busy = loading || refreshing || writingMessage || deciding
+    val busy = loading || refreshing || readingPartnerMessage || writingMessage || deciding
+    val decisionBlockedByUnreadPartnerMessage =
+        profile?.decisionRequiresPartnerPersonalMessageRead == true
+    val canMakeVisualDecision = !busy && profile != null && !decisionBlockedByUnreadPartnerMessage
 
     Column(
         modifier = Modifier
@@ -109,11 +115,15 @@ fun VisualApprovalScreen(
         }
         Spacer(modifier = Modifier.height(16.dp))
         PartnerMessageCard(
+            profile = profile,
             partnerMessage = partnerMessage,
             partnerMessageLoaded = partnerMessageLoaded,
+            readingPartnerMessage = readingPartnerMessage,
+            partnerMessageError = partnerMessageError,
+            decisionRequiresPartnerPersonalMessageRead = decisionBlockedByUnreadPartnerMessage,
             busy = busy,
             refreshing = refreshing,
-            onRefresh = onRefresh,
+            onReadPartnerMessage = onReadPartnerMessage,
         )
         Spacer(modifier = Modifier.height(16.dp))
         Card(
@@ -160,11 +170,25 @@ fun VisualApprovalScreen(
                     text = "Si aprobas y la otra persona tambien aprueba, se crea la conexion para la siguiente etapa.",
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
+                if (decisionBlockedByUnreadPartnerMessage) {
+                    Text(
+                        text = "Lee el mensaje personal de la otra persona antes de decidir.",
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = onApprove, enabled = !busy && profile != null, modifier = Modifier.weight(1f)) {
+                    Button(
+                        onClick = onApprove,
+                        enabled = canMakeVisualDecision,
+                        modifier = Modifier.weight(1f),
+                    ) {
                         Text(if (deciding) decidingLabel ?: "Procesando..." else "Aprobar")
                     }
-                    OutlinedButton(onClick = onReject, enabled = !busy && profile != null, modifier = Modifier.weight(1f)) {
+                    OutlinedButton(
+                        onClick = onReject,
+                        enabled = canMakeVisualDecision,
+                        modifier = Modifier.weight(1f),
+                    ) {
                         Text(if (deciding) decidingLabel ?: "Procesando..." else "Rechazar")
                     }
                 }
@@ -206,11 +230,15 @@ private fun StatusCard(
 
 @Composable
 private fun PartnerMessageCard(
+    profile: VisualProfile?,
     partnerMessage: String?,
     partnerMessageLoaded: Boolean,
+    readingPartnerMessage: Boolean,
+    partnerMessageError: ApiError?,
+    decisionRequiresPartnerPersonalMessageRead: Boolean,
     busy: Boolean,
     refreshing: Boolean,
-    onRefresh: () -> Unit,
+    onReadPartnerMessage: () -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -218,15 +246,35 @@ private fun PartnerMessageCard(
     ) {
         Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Mensaje personal de la otra persona", style = MaterialTheme.typography.titleMedium)
+            val partnerPersonalMessageSubmitted = profile?.partnerPersonalMessageSubmitted == true
             val body = when {
+                profile == null -> "Cargando mensaje personal..."
+                !partnerPersonalMessageSubmitted -> "La otra persona todavia no dejo un mensaje personal."
+                readingPartnerMessage -> "Leyendo mensaje..."
+                partnerMessageError != null -> "No pudimos cargar el mensaje personal. Intenta nuevamente."
+                partnerMessageLoaded -> partnerMessage
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { TextSafety.safeDisplay(it, maxLength = 280) }
+                    ?: "La otra persona todavia no dejo un mensaje personal."
+                !partnerMessageLoaded && decisionRequiresPartnerPersonalMessageRead ->
+                    "La otra persona dejo un mensaje personal. Tenes que leerlo antes de decidir."
                 !partnerMessageLoaded -> "Cargando mensaje personal..."
-                partnerMessage.isNullOrBlank() -> "La otra persona todavia no dejo un mensaje personal."
-                else -> TextSafety.safeDisplay(partnerMessage, maxLength = 280)
+                else -> "La otra persona todavia no dejo un mensaje personal."
             }
             Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (!partnerMessageLoaded) {
-                OutlinedButton(onClick = onRefresh, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (refreshing) "Actualizando..." else "Reintentar lectura")
+            if (partnerPersonalMessageSubmitted && !partnerMessageLoaded) {
+                OutlinedButton(
+                    onClick = onReadPartnerMessage,
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        when {
+                            readingPartnerMessage -> "Leyendo mensaje..."
+                            refreshing || partnerMessageError != null -> "Reintentar lectura"
+                            else -> "Leer mensaje"
+                        }
+                    )
                 }
             }
         }

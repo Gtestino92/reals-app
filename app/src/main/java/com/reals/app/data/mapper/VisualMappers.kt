@@ -10,4 +10,9 @@ fun VisualProfileResponseDto.toDomain(): VisualProfile = VisualProfile(
     bio = bio,
     photos = photos.map { it.toDomain() }.sortedBy { it.position },
     myPersonalMessageSubmitted = myPersonalMessageSubmitted,
+    partnerPersonalMessageSubmitted = partnerPersonalMessageSubmitted,
+    partnerPersonalMessageRead = partnerPersonalMessageRead,
+    decisionRequiresPartnerPersonalMessageRead = decisionRequiresPartnerPersonalMessageRead
+        ?: approvalRequiresPartnerPersonalMessageRead
+        ?: false,
 )

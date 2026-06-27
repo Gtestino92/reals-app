@@ -1,6 +1,10 @@
 package com.reals.app.data.repository
 
 import com.reals.app.core.network.ApiError
+import com.reals.app.core.network.BackendErrorCode
+import com.reals.app.core.network.ErrorContext
+import com.reals.app.core.network.backendErrorCode
+import com.reals.app.core.network.toUserMessage
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatStatus
@@ -65,6 +69,24 @@ class ChatRepositoryTest {
         assertEquals("chat-1", api.lastPathId)
         assertEquals("  hola  ", api.chatMessageBody?.content)
         assertEquals("message-1", message.id)
+    }
+
+    @Test
+    fun `sendMessage failure surfaces chat backend code`() = runBlocking {
+        api.chatMessageResponse = backendErrorResponse(
+            statusCode = 400,
+            code = "CHAT_MESSAGE_INVALID",
+            message = "raw backend message",
+        )
+
+        val error = repository.sendMessage("chat-1", "").failureError() as ApiError.Backend
+
+        assertEquals("CHAT_MESSAGE_INVALID", error.code)
+        assertEquals(BackendErrorCode.ChatMessageInvalid, error.backendErrorCode)
+        assertEquals(
+            "Revisa el mensaje. No puede estar vacio ni superar el limite permitido.",
+            error.toUserMessage(ErrorContext.Chat),
+        )
     }
 
     @Test

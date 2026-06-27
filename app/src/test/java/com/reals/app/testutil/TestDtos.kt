@@ -153,13 +153,21 @@ object TestDtos {
         penalizedUserId = null,
     )
 
-    fun visualProfile(myPersonalMessageSubmitted: Boolean = true) = VisualProfileResponseDto(
+    fun visualProfile(
+        myPersonalMessageSubmitted: Boolean = true,
+        partnerPersonalMessageSubmitted: Boolean = false,
+        partnerPersonalMessageRead: Boolean = true,
+        decisionRequiresPartnerPersonalMessageRead: Boolean = false,
+    ) = VisualProfileResponseDto(
         profileId = "visual-profile-1",
         displayName = "Taylor",
         age = 27,
         bio = "Bio",
         photos = listOf(photo("photo-2", 2), photo("photo-1", 1)),
         myPersonalMessageSubmitted = myPersonalMessageSubmitted,
+        partnerPersonalMessageSubmitted = partnerPersonalMessageSubmitted,
+        partnerPersonalMessageRead = partnerPersonalMessageRead,
+        decisionRequiresPartnerPersonalMessageRead = decisionRequiresPartnerPersonalMessageRead,
     )
 
     fun queueStatus(inQueue: Boolean = true) = QueueStatusResponseDto(
