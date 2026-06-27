@@ -81,7 +81,9 @@ Acceptance criteria:
 ### 2.1 Complete RootViewModel refactor
 
 Status:
-- In progress / assumed before further frontend hardening.
+- Mostly complete for MVP.
+- `RealsRootViewModel` now primarily orchestrates feature coordinators/handlers.
+- Remaining cleanup should be limited to small dependency/import cleanup or future feature-specific splits as needed.
 
 Goal:
 - Keep `RealsRootViewModel` as orchestration only.
@@ -90,12 +92,13 @@ Goal:
 
 Expected structure:
 - Session/account handling.
-- Profile handling.
+- Profile entry/profile operations.
 - Home/matchmaking handling.
 - First chat handling.
-- Visual approval handling.
-- Scheduling handling.
 - Second chat handling.
+- Visual approval handling.
+- Partner profile handling.
+- Scheduling handling.
 
 Acceptance criteria:
 - No behavior regression in login/provision/profile/home/chat/scheduling flows.
@@ -104,20 +107,6 @@ Acceptance criteria:
 - Local hidden Home interactions are still pruned when no longer relevant.
 - Feature-specific behavior is no longer concentrated in `RealsRootViewModel`.
 
-### 2.2 Hide manual location fallback outside local/dev
-
-The Home screen currently exposes a manual latitude/longitude fallback intended for development/testing.
-
-MVP requirement:
-- Hide manual coordinate entry in production builds.
-- Keep it available only in local/debug/dev builds or behind a feature flag.
-- The user-facing production flow should use device location permission and current device location.
-
-Acceptance criteria:
-- Production UI does not show manual coordinate entry.
-- Local/dev builds can still manually enter coordinates for testing.
-- Device-location flow remains the default path for matchmaking.
-- Matchmaking location submission remains stable.
 
 ### 2.3 Configure real dev/prod API URLs
 
@@ -136,125 +125,7 @@ Acceptance criteria:
 - Installable APKs for device testing can communicate with backend without local network hacks.
 - Release-like builds do not allow cleartext traffic unless explicitly documented and intended.
 
-### 2.4 Visual approval: review and message-read gating
 
-The visual approval screen currently allows approval once the partner visual profile is loaded, subject to backend state and personal-message-read rules.
-
-MVP product decisions:
-- Decide whether users must review all required photos before approving.
-- Keep backend as the final source of truth for visual-review state transitions.
-- Keep partner personal-message-read gating aligned with backend rules when the backend requires it.
-
-If full visual-review gating remains active:
-- Track whether all required photos were displayed, paged through, or scrolled through.
-- Disable the Approve action until the review condition is met.
-- Keep Reject available without requiring full review, if desired.
-- Add clear UI copy explaining why approval is blocked.
-
-If partner personal-message-read gating is active:
-- Disable visual decision actions when backend state says the partner personal message must be read first.
-- Provide a clear “read message” action and blocked-state copy.
-- Do not rely only on frontend local state if backend requires the rule.
-
-Acceptance criteria:
-- User cannot approve immediately without reviewing the visual profile if the full-review rule is enabled.
-- User cannot decide before reading the partner personal message if backend state requires it.
-- UI explains disabled actions.
-- Backend remains the final source of truth for match state.
-
-### 2.5 Remove mock/non-file photo flows
-
-The Android app previously contained mock photo use cases and UI wiring for URL/non-file test flows.
-
-MVP decision:
-- Multipart file upload is the only official Android profile-photo mutation flow.
-- Remove mock/non-file URL photo actions from the main Android profile flow.
-- Do not keep production UI paths that create or replace profile photos by URL.
-- Local/dev testing should use real file upload unless a strictly local-only helper is explicitly reintroduced later.
-
-Acceptance criteria:
-- Production users only see real file upload actions.
-- Empty profile-photo slots open a file picker and upload the selected file with the selected slot position.
-- Filled profile-photo slots allow file replacement and delete.
-- Mock URL/non-file add and replace actions are not exposed.
-- Mock photo use cases, DTOs, repository calls, and UI callbacks are removed if unused.
-
-### 2.6 Profile photo display robustness
-
-Profile and visual-review screens should handle stored image URLs robustly.
-
-MVP checks:
-- Confirm uploaded photos render correctly in local/dev/staging.
-- Confirm presigned/local URLs behave as expected on emulator and physical devices.
-- Confirm failed image loads do not break the screen.
-- Confirm visual profile photos are readable and ordered by position.
-- Confirm profile-management UI and partner-profile display use distinct presentation components.
-
-MVP UI decision:
-- The authenticated user's profile-photo management screen uses a 3x3 slot grid.
-- Visual approval and partner profile viewing should not use the management grid.
-- Partner visual profile viewing should use a viewer/carrusel/slide-style presentation or another read-only visual component, not the upload grid.
-- Ordering remains based on backend photo `position`.
-
-Acceptance criteria:
-- Photos render in profile management.
-- Photos render in visual approval.
-- Photos render in partner profile viewing.
-- Broken/unreachable images show a safe fallback message.
-- Photo ordering is stable.
-- Upload grid actions are only present in the authenticated user's profile-management screen.
-- Read-only partner profile screens do not expose upload, replace, delete, or slot-management UI.
-
-### 2.7 Error copy and blocked states
-
-Review user-facing error messages before MVP.
-
-Focus areas:
-- Active penalty.
-- Active match limit.
-- Active connection limit.
-- Profile activation failures.
-- Photo upload failures.
-- Location permission denied.
-- Second chat not available yet.
-- Second chat expired.
-- Account pending deletion.
-- Account deletion finalized.
-- Partner personal message not read.
-- Visual-review decision blocked by backend state.
-
-Acceptance criteria:
-- Backend error codes are translated into understandable UI copy.
-- User knows what action is possible next.
-- Technical backend messages are not exposed when a clearer product message exists.
-- Blocked actions explain what must happen before the user can continue.
-
-### 2.8 Report visual profile or profile photo
-
-Current state:
-- The app supports safety/report flows from chat contexts.
-- Visual profile review can expose user-generated photos before or after a connection is created.
-
-MVP safety decision:
-- Automatic image moderation is not required for MVP.
-- If not implemented before MVP, reporting visual profile/photo content must remain documented as a known safety gap.
-- Chat safety reports remain the initial safety mechanism until visual-profile reporting exists.
-
-Recommended MVP implementation:
-- Add “Report profile” or “Report photo” action from:
-  - visual approval screen;
-  - partner profile screen;
-  - any future profile/photo viewer.
-- Allow reason selection and optional details.
-- Route the report to backend moderation/safety endpoints.
-- Make clear whether report also rejects/cancels the current flow or only submits a moderation report.
-
-Acceptance criteria:
-- User can report problematic visual content without needing to send a chat message.
-- Reporting does not crash or leave the user stuck in the interaction.
-- UI makes clear what happens to the current interaction after reporting.
-
----
 
 ## 3. MVP installable build readiness
 

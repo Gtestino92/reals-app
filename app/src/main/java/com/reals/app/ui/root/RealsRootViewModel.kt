@@ -4,8 +4,6 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.reals.app.core.network.ApiError
-import com.reals.app.core.security.TextSafety
 import com.reals.app.di.AppContainer
 import com.reals.app.di.RealsRootDependencies
 import com.reals.app.domain.model.ChatContinueDecision
@@ -285,41 +283,31 @@ class RealsRootViewModel(
 
     fun sendSecondChatMessage(content: String): Boolean {
         val current = _uiState.value as? RealsRootUiState.SecondChat ?: return false
-        if (current.loading || current.refreshing || current.sending || current.actionLoading) return false
-        val chat = current.chat ?: return false
-        val cleanContent = TextSafety.normalizeMultiline(content, maxLength = 1_000)
-        if (cleanContent.isBlank() || TextSafety.containsHtmlLikeMarkup(cleanContent)) {
-            _uiState.value = current.copy(
-                error = ApiError.Unexpected("El mensaje no es valido."),
-                message = null,
-            )
-            return false
-        }
+        return when (val preparation = ChatMessageActionHandler.prepareSecondChatSend(current, content)) {
+            is ChatMessageSendPreparation.Accepted -> {
+                _uiState.value = preparation.pendingState
+                viewModelScope.launch {
+                    _uiState.value = secondChatCoordinator.sendMessage(
+                        preparation.pendingState,
+                        preparation.cleanContent,
+                        preparation.localId,
+                    )
+                }
+                true
+            }
 
-        val optimisticMessage = newOptimisticOutgoingMessage(
-            chatId = chat.id,
-            senderId = current.session.user.id,
-            content = cleanContent,
-        )
-        val localId = optimisticMessage.localId
-        val pending = current.copy(
-            optimisticMessages = current.optimisticMessages + optimisticMessage,
-            sending = true,
-            error = null,
-            message = null,
-        )
-        _uiState.value = pending
-        viewModelScope.launch {
-            _uiState.value = secondChatCoordinator.sendMessage(pending, cleanContent, localId)
+            is ChatMessageSendPreparation.Rejected -> {
+                _uiState.value = preparation.state
+                false
+            }
+
+            ChatMessageSendPreparation.Ignored -> false
         }
-        return true
     }
 
     fun retrySecondChatMessage(localId: String, content: String) {
         val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
-        _uiState.value = current.copy(
-            optimisticMessages = current.optimisticMessages.withoutOptimisticMessage(localId),
-        )
+        _uiState.value = ChatMessageActionHandler.retrySecondChat(current, localId)
         sendSecondChatMessage(content)
     }
 
@@ -558,41 +546,31 @@ class RealsRootViewModel(
 
     fun sendFirstChatMessage(content: String): Boolean {
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return false
-        if (current.loading || current.refreshing || current.sending || current.actionLoading) return false
-        val chat = current.chat ?: return false
-        val cleanContent = TextSafety.normalizeMultiline(content, maxLength = 1_000)
-        if (cleanContent.isBlank() || TextSafety.containsHtmlLikeMarkup(cleanContent)) {
-            _uiState.value = current.copy(
-                error = ApiError.Unexpected("El mensaje no es valido."),
-                message = null,
-            )
-            return false
-        }
+        return when (val preparation = ChatMessageActionHandler.prepareFirstChatSend(current, content)) {
+            is ChatMessageSendPreparation.Accepted -> {
+                _uiState.value = preparation.pendingState
+                viewModelScope.launch {
+                    _uiState.value = firstChatCoordinator.sendMessage(
+                        preparation.pendingState,
+                        preparation.cleanContent,
+                        preparation.localId,
+                    )
+                }
+                true
+            }
 
-        val optimisticMessage = newOptimisticOutgoingMessage(
-            chatId = chat.id,
-            senderId = current.session.user.id,
-            content = cleanContent,
-        )
-        val localId = optimisticMessage.localId
-        val pending = current.copy(
-            optimisticMessages = current.optimisticMessages + optimisticMessage,
-            sending = true,
-            error = null,
-            message = null,
-        )
-        _uiState.value = pending
-        viewModelScope.launch {
-            _uiState.value = firstChatCoordinator.sendMessage(pending, cleanContent, localId)
+            is ChatMessageSendPreparation.Rejected -> {
+                _uiState.value = preparation.state
+                false
+            }
+
+            ChatMessageSendPreparation.Ignored -> false
         }
-        return true
     }
 
     fun retryFirstChatMessage(localId: String, content: String) {
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
-        _uiState.value = current.copy(
-            optimisticMessages = current.optimisticMessages.withoutOptimisticMessage(localId),
-        )
+        _uiState.value = ChatMessageActionHandler.retryFirstChat(current, localId)
         sendFirstChatMessage(content)
     }
 
