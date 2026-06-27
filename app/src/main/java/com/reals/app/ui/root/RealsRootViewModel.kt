@@ -5,14 +5,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.reals.app.core.network.ApiError
-import com.reals.app.core.network.ApiResult
-import com.reals.app.core.network.isAccountDeleted
 import com.reals.app.core.security.TextSafety
 import com.reals.app.di.AppContainer
 import com.reals.app.di.RealsRootDependencies
 import com.reals.app.domain.model.ChatContinueDecision
 import com.reals.app.domain.model.CreateProfileInput
-import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.ProvisionedSession
@@ -39,10 +36,13 @@ class RealsRootViewModel(
         getProfilePhotosUseCase = getProfilePhotosUseCase,
         scope = viewModelScope,
     )
-    private val getVisualProfileUseCase = dependencies.visualApproval.getVisualProfile
+    private val profileEntryCoordinator = ProfileEntryCoordinator(getProfilePhotosUseCase)
     private val firstChatCoordinator = FirstChatCoordinator(dependencies.firstChat)
     private val secondChatCoordinator = SecondChatCoordinator(dependencies.firstChat)
     private val visualApprovalCoordinator = VisualApprovalCoordinator(dependencies.visualApproval)
+    private val partnerProfileCoordinator = PartnerProfileCoordinator(
+        dependencies.visualApproval.getVisualProfile,
+    )
     private val schedulingCoordinator = SchedulingCoordinator(dependencies.scheduling)
     private lateinit var sessionCoordinator: SessionCoordinator
     private var silentFirstChatRefreshJob: Job? = null
@@ -473,9 +473,10 @@ class RealsRootViewModel(
         if (cleanMatchId.isBlank()) return
 
         viewModelScope.launch {
-            loadPartnerProfile(
+            _uiState.value = partnerProfileCoordinator.load(
                 session = session,
                 matchId = cleanMatchId,
+                onPending = { _uiState.value = it },
             )
         }
     }
@@ -483,10 +484,9 @@ class RealsRootViewModel(
     fun refreshPartnerProfile() {
         val current = _uiState.value as? RealsRootUiState.PartnerProfile ?: return
         viewModelScope.launch {
-            loadPartnerProfile(
-                session = current.session,
-                matchId = current.matchId,
-                previous = current.copy(refreshing = true, error = null),
+            _uiState.value = partnerProfileCoordinator.refresh(
+                current = current,
+                onPending = { _uiState.value = it },
             )
         }
     }
@@ -755,34 +755,6 @@ class RealsRootViewModel(
         profileHandler.activateProfile()
     }
 
-    private suspend fun loadPartnerProfile(
-        session: ProvisionedSession,
-        matchId: String,
-        previous: RealsRootUiState.PartnerProfile? = null,
-    ) {
-        val loadingState = previous ?: RealsRootUiState.PartnerProfile(
-            session = session,
-            matchId = matchId,
-            loading = true,
-        )
-        _uiState.value = loadingState
-
-        when (val result = getVisualProfileUseCase(matchId)) {
-            is ApiResult.Success -> _uiState.value = loadingState.copy(
-                profile = result.value,
-                loading = false,
-                refreshing = false,
-                error = null,
-            )
-
-            is ApiResult.Failure -> _uiState.value = loadingState.copy(
-                loading = false,
-                refreshing = false,
-                error = result.error,
-            )
-        }
-    }
-
     private suspend fun applyVisualApprovalFlowResult(result: VisualApprovalFlowResult) {
         when (result) {
             VisualApprovalFlowResult.Ignore -> Unit
@@ -857,49 +829,22 @@ class RealsRootViewModel(
     }
 
     private suspend fun showReadySession(session: ProvisionedSession) {
-        val snapshot = session.profileSnapshot
-        if (snapshot is ProfileSnapshot.Found) {
-            if (snapshot.profile.status == ProfileStatus.Active) {
-                homeCoordinator.loadHomeForReady(
-                    ready = RealsRootUiState.Ready(
-                        session = session,
-                        home = HomeUiState(homeLoading = true),
-                    ),
-                    publishLoadingState = false,
-                    autoNavigateEngagements = true,
-                )
-                return
-            }
-
-            _uiState.value = RealsRootUiState.Ready(
+        when (
+            val result = profileEntryCoordinator.enter(
                 session = session,
-                photos = PhotoManagementUiState(loadingPhotos = true),
+                onPending = { _uiState.value = it.state },
             )
-            when (val photos = getProfilePhotosUseCase.invoke()) {
-                is ApiResult.Success -> _uiState.value = RealsRootUiState.Ready(
-                    session = session,
-                    photos = PhotoManagementUiState(
-                        loadingPhotos = false,
-                        profilePhotos = photos.value.sortedBy { it.position },
-                    ),
-                )
+        ) {
+            is ProfileEntryResult.LoadHome -> homeCoordinator.loadHomeForReady(
+                ready = result.ready,
+                publishLoadingState = result.publishLoadingState,
+                autoNavigateEngagements = result.autoNavigateEngagements,
+            )
 
-                is ApiResult.Failure -> {
-                    if (photos.error.isAccountDeleted()) {
-                        sessionCoordinator.showAccountDeletionPendingFromBackend()
-                    } else {
-                        _uiState.value = RealsRootUiState.Ready(
-                            session = session,
-                            photos = PhotoManagementUiState(
-                                loadingPhotos = false,
-                                profilePhotosError = photos.error,
-                            ),
-                        )
-                    }
-                }
-            }
-        } else {
-            _uiState.value = RealsRootUiState.Ready(session)
+            is ProfileEntryResult.ShowReady -> _uiState.value = result.state
+
+            ProfileEntryResult.AccountDeletionPendingFromBackend ->
+                sessionCoordinator.showAccountDeletionPendingFromBackend()
         }
     }
 

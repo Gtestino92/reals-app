@@ -13,6 +13,7 @@ import com.reals.app.domain.model.SearchLocationInput
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.Duration.Companion.milliseconds
 
 private const val TAG = "RealsLocation"
 private const val SEARCH_LOCATION_CACHE_MAX_AGE_MILLIS = 15 * 60 * 1000L
@@ -42,10 +43,6 @@ internal object DeviceSearchLocationResolver {
             source = AndroidSearchLocationSource(context),
             cache = sharedSearchLocationCache,
         ).resolveForSearch()
-}
-
-internal suspend fun currentSearchLocation(context: Context): SearchLocationInput {
-    return DeviceSearchLocationResolver.resolveForSearch(context)
 }
 
 internal class SearchLocationResolver(
@@ -86,7 +83,7 @@ internal class SearchLocationResolver(
 
         if (!allowCurrentRequest) return null
 
-        val current = withTimeoutOrNull(currentLocationTimeoutMillis) {
+        val current = withTimeoutOrNull(currentLocationTimeoutMillis.milliseconds) {
             source.currentLocation()
         }?.takeIf(::isAcceptable)
         if (current != null) {
