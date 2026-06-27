@@ -26,12 +26,17 @@ Acceptance criteria:
 
 MVP decision:
 - Keep multipart profile-photo upload as the official frontend flow.
+- Android uploads photos using real files and slot positions.
 - Do not add temporary `isPersonPhoto` or `isFullBody` fields to the Android multipart upload request.
 - Let the backend use permissive pre-MVP validation defaults for uploaded photos.
+- Remove mock/non-file URL photo flows from Android production code.
 
 Acceptance criteria:
-- Android uploads photos using file + position.
-- Production UI does not expose mock URL photo flows.
+- Android uploads photos using multipart `file + position`.
+- Android replaces photos using multipart file replacement.
+- Android deletes photos through the backend delete endpoint.
+- Production UI exposes only real file upload, replace, and delete actions.
+- Mock URL/non-file photo actions are not exposed in production and are not part of the main Android profile flow.
 - Profile activation can proceed once backend MVP photo validation behavior is in place.
 
 ### 1.3 Polling before push notifications
@@ -39,11 +44,15 @@ Acceptance criteria:
 MVP decision:
 - Keep Home polling and chat/scheduling polling as the pre-notification fallback behavior.
 - Push notifications are not required for MVP.
+- Polling remains a temporary frontend/backend strategy for MVP validation.
 
 Acceptance criteria:
 - App remains usable without push notifications.
 - Home, chat, scheduling and second-chat availability can refresh through polling.
 - Polling does not overwrite visible user errors or create confusing state jumps.
+- Polling intervals are not unnecessarily aggressive.
+- Repeated polling calls remain stable and idempotent.
+- Payloads remain bounded enough for controlled MVP usage.
 
 ### 1.4 Admin/backoffice UI
 
@@ -51,11 +60,19 @@ MVP decision:
 - Do not build a native Android admin/backoffice UI.
 - Safety-report review can continue through backend/admin endpoints and Bruno or another external admin tool.
 
+Acceptance criteria:
+- Android does not expose admin-only surfaces.
+- Admin/backoffice work remains backend/tooling-owned for MVP.
+
 ### 1.5 Dev-only helpers
 
 MVP decision:
 - Keep manual/dev-only helpers available in local/dev builds only.
 - Production UI should not expose testing shortcuts.
+
+Acceptance criteria:
+- Dev-only helpers are hidden from production/release-like builds.
+- Local/dev builds can still use controlled shortcuts when they materially speed up manual testing.
 
 ---
 
@@ -85,6 +102,7 @@ Acceptance criteria:
 - Home auto-routing still works after queue/match creation.
 - Silent polling still avoids overwriting visible UI errors.
 - Local hidden Home interactions are still pruned when no longer relevant.
+- Feature-specific behavior is no longer concentrated in `RealsRootViewModel`.
 
 ### 2.2 Hide manual location fallback outside local/dev
 
@@ -99,6 +117,7 @@ Acceptance criteria:
 - Production UI does not show manual coordinate entry.
 - Local/dev builds can still manually enter coordinates for testing.
 - Device-location flow remains the default path for matchmaking.
+- Matchmaking location submission remains stable.
 
 ### 2.3 Configure real dev/prod API URLs
 
@@ -115,38 +134,50 @@ Acceptance criteria:
 - Dev flavor points to real dev/staging backend.
 - Prod flavor does not point to placeholder URLs.
 - Installable APKs for device testing can communicate with backend without local network hacks.
+- Release-like builds do not allow cleartext traffic unless explicitly documented and intended.
 
-### 2.4 Visual approval: require full visual review before approval
+### 2.4 Visual approval: review and message-read gating
 
-The visual approval screen currently allows approval once the partner visual profile is loaded.
+The visual approval screen currently allows approval once the partner visual profile is loaded, subject to backend state and personal-message-read rules.
 
-MVP product decision:
-- Decide whether users must actually review all required photos before approving.
+MVP product decisions:
+- Decide whether users must review all required photos before approving.
+- Keep backend as the final source of truth for visual-review state transitions.
+- Keep partner personal-message-read gating aligned with backend rules when the backend requires it.
 
-If the rule remains active:
-- Track whether all required photos were displayed or scrolled through.
+If full visual-review gating remains active:
+- Track whether all required photos were displayed, paged through, or scrolled through.
 - Disable the Approve action until the review condition is met.
 - Keep Reject available without requiring full review, if desired.
 - Add clear UI copy explaining why approval is blocked.
 
+If partner personal-message-read gating is active:
+- Disable visual decision actions when backend state says the partner personal message must be read first.
+- Provide a clear “read message” action and blocked-state copy.
+- Do not rely only on frontend local state if backend requires the rule.
+
 Acceptance criteria:
-- User cannot approve immediately without reviewing the visual profile if the rule is enabled.
-- UI explains the requirement.
+- User cannot approve immediately without reviewing the visual profile if the full-review rule is enabled.
+- User cannot decide before reading the partner personal message if backend state requires it.
+- UI explains disabled actions.
 - Backend remains the final source of truth for match state.
 
-### 2.5 Remove or hide mock photo flows
+### 2.5 Remove mock/non-file photo flows
 
-The Android app still contains mock photo use cases and UI wiring for test flows.
+The Android app previously contained mock photo use cases and UI wiring for URL/non-file test flows.
 
 MVP decision:
-- Keep multipart upload as the official app flow.
-- Hide or remove mock photo actions from production UI.
-- Keep mock photo utilities only if useful in local/dev builds.
+- Multipart file upload is the only official Android profile-photo mutation flow.
+- Remove mock/non-file URL photo actions from the main Android profile flow.
+- Do not keep production UI paths that create or replace profile photos by URL.
+- Local/dev testing should use real file upload unless a strictly local-only helper is explicitly reintroduced later.
 
 Acceptance criteria:
 - Production users only see real file upload actions.
-- Mock URLs are not exposed in production.
-- Local/dev testing remains possible if needed.
+- Empty profile-photo slots open a file picker and upload the selected file with the selected slot position.
+- Filled profile-photo slots allow file replacement and delete.
+- Mock URL/non-file add and replace actions are not exposed.
+- Mock photo use cases, DTOs, repository calls, and UI callbacks are removed if unused.
 
 ### 2.6 Profile photo display robustness
 
@@ -157,12 +188,22 @@ MVP checks:
 - Confirm presigned/local URLs behave as expected on emulator and physical devices.
 - Confirm failed image loads do not break the screen.
 - Confirm visual profile photos are readable and ordered by position.
+- Confirm profile-management UI and partner-profile display use distinct presentation components.
+
+MVP UI decision:
+- The authenticated user's profile-photo management screen uses a 3x3 slot grid.
+- Visual approval and partner profile viewing should not use the management grid.
+- Partner visual profile viewing should use a viewer/carrusel/slide-style presentation or another read-only visual component, not the upload grid.
+- Ordering remains based on backend photo `position`.
 
 Acceptance criteria:
 - Photos render in profile management.
 - Photos render in visual approval.
+- Photos render in partner profile viewing.
 - Broken/unreachable images show a safe fallback message.
 - Photo ordering is stable.
+- Upload grid actions are only present in the authenticated user's profile-management screen.
+- Read-only partner profile screens do not expose upload, replace, delete, or slot-management UI.
 
 ### 2.7 Error copy and blocked states
 
@@ -179,11 +220,14 @@ Focus areas:
 - Second chat expired.
 - Account pending deletion.
 - Account deletion finalized.
+- Partner personal message not read.
+- Visual-review decision blocked by backend state.
 
 Acceptance criteria:
 - Backend error codes are translated into understandable UI copy.
 - User knows what action is possible next.
 - Technical backend messages are not exposed when a clearer product message exists.
+- Blocked actions explain what must happen before the user can continue.
 
 ### 2.8 Report visual profile or profile photo
 
@@ -194,6 +238,7 @@ Current state:
 MVP safety decision:
 - Automatic image moderation is not required for MVP.
 - If not implemented before MVP, reporting visual profile/photo content must remain documented as a known safety gap.
+- Chat safety reports remain the initial safety mechanism until visual-profile reporting exists.
 
 Recommended MVP implementation:
 - Add “Report profile” or “Report photo” action from:
@@ -251,3 +296,6 @@ The following are not MVP blockers:
 - Identity verification UX.
 - Advanced onboarding experiments.
 - Full production telemetry dashboards.
+- Drag-and-drop profile-photo reordering.
+- Generated photo thumbnails/previews.
+- Direct Android-to-storage photo upload.
