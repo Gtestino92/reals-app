@@ -87,6 +87,7 @@ object TestDtos {
         userBId = "user-2",
         state = state,
         connectionId = "connection-1",
+        visualExpiresAt = "2026-06-19T21:00:00Z",
         createdAt = now,
         updatedAt = now,
     )
@@ -106,6 +107,7 @@ object TestDtos {
         activatedAt = now,
         timeoutAt = "2026-06-19T21:00:00Z",
         expiresAt = "2026-06-20T21:00:00Z",
+        inactivityExpiresAt = "2026-06-18T21:05:00Z",
         partner = partner(),
         myDecision = myDecision,
         partnerDecision = partnerDecision,
@@ -164,6 +166,7 @@ object TestDtos {
         age = 27,
         bio = "Bio",
         photos = listOf(photo("photo-2", 2), photo("photo-1", 1)),
+        visualExpiresAt = "2026-06-19T21:00:00Z",
         myPersonalMessageSubmitted = myPersonalMessageSubmitted,
         partnerPersonalMessageSubmitted = partnerPersonalMessageSubmitted,
         partnerPersonalMessageRead = partnerPersonalMessageRead,
@@ -243,6 +246,7 @@ object TestDtos {
         status = status,
         confirmedDateTime = if (status == "CONFIRMED") now else null,
         chatId = if (status == "CONFIRMED") "chat-2" else null,
+        schedulingExpiresAt = "2026-06-19T21:00:00Z",
         createdAt = now,
         updatedAt = now,
     )

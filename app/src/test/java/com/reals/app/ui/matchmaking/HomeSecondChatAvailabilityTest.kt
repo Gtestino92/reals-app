@@ -43,6 +43,24 @@ class HomeSecondChatAvailabilityTest {
         assertTrue(item.canOpenSecondChatNow(millis("2026-06-20T18:30:00-03:00")))
     }
 
+    @Test
+    fun `read only second chat closes after read only window`() {
+        val item = HomeNextStepItem.SecondChatReadOnly(
+            connectionId = "connection-second",
+            matchId = "match-second",
+            partnerDisplayName = "Partner",
+            chatId = "chat-second",
+            chatStatus = "EXPIRED",
+            availableAt = "2026-06-20T18:00:00-03:00",
+            expiresAt = "2026-06-20T20:00:00-03:00",
+            readOnlyUntil = "2026-06-21T20:00:00-03:00",
+            durationMinutes = 120,
+        )
+
+        assertTrue(item.canOpenSecondChatNow(millis("2026-06-21T19:59:59-03:00")))
+        assertFalse(item.canOpenSecondChatNow(millis("2026-06-21T20:00:00-03:00")))
+    }
+
     private fun scheduledSecondChat(): HomeNextStepItem.SecondChatScheduled =
         HomeNextStepItem.SecondChatScheduled(
             connectionId = "connection-second",

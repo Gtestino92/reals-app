@@ -24,6 +24,7 @@ class ChatMappersTest {
         assertEquals(ChatStatus.Active, chat.status)
         assertEquals("2026-06-19T21:00:00Z", chat.timeoutAt)
         assertEquals("2026-06-20T21:00:00Z", chat.expiresAt)
+        assertEquals("2026-06-18T21:05:00Z", chat.inactivityExpiresAt)
         assertEquals("Taylor", chat.partner?.displayName)
         assertEquals(ChatDecisionState.Approved, chat.myDecision)
         assertEquals(ChatDecisionState.Pending, chat.partnerDecision)

@@ -6,6 +6,7 @@ data class Match(
     val userBId: String,
     val state: MatchState,
     val connectionId: String?,
+    val visualExpiresAt: String?,
     val createdAt: String,
     val updatedAt: String,
 )

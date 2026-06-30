@@ -9,6 +9,7 @@ data class VisualProfileResponseDto(
     val age: Int,
     val bio: String? = null,
     val photos: List<PhotoResponseDto>,
+    val visualExpiresAt: String? = null,
     val myPersonalMessageSubmitted: Boolean = false,
     val partnerPersonalMessageSubmitted: Boolean = false,
     val partnerPersonalMessageRead: Boolean = true,

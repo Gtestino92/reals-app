@@ -18,6 +18,7 @@ data class SchedulingNegotiation(
     val status: NegotiationStatus,
     val confirmedDateTime: String?,
     val chatId: String?,
+    val schedulingExpiresAt: String,
     val createdAt: String,
     val updatedAt: String,
 )

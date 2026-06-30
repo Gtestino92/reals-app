@@ -6,6 +6,7 @@ data class VisualProfile(
     val age: Int,
     val bio: String?,
     val photos: List<ProfilePhoto>,
+    val visualExpiresAt: String?,
     val myPersonalMessageSubmitted: Boolean,
     val partnerPersonalMessageSubmitted: Boolean,
     val partnerPersonalMessageRead: Boolean,

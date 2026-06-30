@@ -61,10 +61,32 @@ fun VisualApprovalScreen(
     onBackHome: () -> Unit,
 ) {
     var personalMessage by rememberSaveable(matchId) { mutableStateOf("") }
+    var nowMillis by rememberSaveable(matchId) { mutableStateOf(System.currentTimeMillis()) }
+    var expiryRefreshRequested by rememberSaveable(matchId) { mutableStateOf(false) }
     val busy = loading || refreshing || readingPartnerMessage || writingMessage || deciding
     val decisionBlockedByUnreadPartnerMessage =
         profile?.decisionRequiresPartnerPersonalMessageRead == true
-    val canMakeVisualDecision = !busy && profile != null && !decisionBlockedByUnreadPartnerMessage
+    val visualExpiresAt = profile?.visualExpiresAt ?: match?.visualExpiresAt
+    val lifecycle = visualApprovalLifecycleUiState(visualExpiresAt, nowMillis)
+    val canMakeVisualDecision = !busy &&
+        profile != null &&
+        !decisionBlockedByUnreadPartnerMessage &&
+        !lifecycle.expired
+
+    androidx.compose.runtime.LaunchedEffect(visualExpiresAt) {
+        while (visualExpiresAt != null && !visualApprovalLifecycleUiState(visualExpiresAt).expired) {
+            kotlinx.coroutines.delay(1_000)
+            nowMillis = System.currentTimeMillis()
+        }
+        nowMillis = System.currentTimeMillis()
+    }
+
+    androidx.compose.runtime.LaunchedEffect(lifecycle.expired) {
+        if (lifecycle.expired && !expiryRefreshRequested) {
+            expiryRefreshRequested = true
+            onRefresh()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -94,6 +116,21 @@ fun VisualApprovalScreen(
             message = message,
         )
         Spacer(modifier = Modifier.height(16.dp))
+        if (lifecycle.expired) {
+            FeedbackCard(
+                title = "Estado",
+                message = "La revisi\u00f3n visual venci\u00f3. Actualizando estado...",
+                tone = FeedbackTone.Warning,
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+        } else if (lifecycle.showWarning) {
+            FeedbackCard(
+                title = "Revisi\u00f3n por vencer",
+                message = "La revisi\u00f3n visual vence pronto. Complet\u00e1 tu decisi\u00f3n para no perder esta oportunidad.",
+                tone = FeedbackTone.Warning,
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+        }
         if (profile == null) {
             Card(
                 modifier = Modifier.fillMaxWidth(),

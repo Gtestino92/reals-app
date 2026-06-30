@@ -83,10 +83,32 @@ fun SchedulingScreen(
     val stage = roundState.stage
     val myProposals = roundState.myProposals
     val partnerProposals = roundState.partnerProposals
+    var nowMillis by rememberSaveable(connectionId) { mutableStateOf(System.currentTimeMillis()) }
+    var expiryRefreshRequested by rememberSaveable(connectionId) { mutableStateOf(false) }
+    val lifecycle = schedulingLifecycleUiState(negotiation?.schedulingExpiresAt, nowMillis)
+    val actionsDisabled = lifecycle.expired
 
     LaunchedEffect(connectionId, negotiation?.status?.rawValue) {
         while (negotiation?.status == NegotiationStatus.Pending) {
             delay(7.seconds)
+            onRefresh()
+        }
+    }
+
+    LaunchedEffect(negotiation?.schedulingExpiresAt) {
+        while (
+            negotiation?.schedulingExpiresAt != null &&
+            !schedulingLifecycleUiState(negotiation.schedulingExpiresAt).expired
+        ) {
+            delay(1.seconds)
+            nowMillis = System.currentTimeMillis()
+        }
+        nowMillis = System.currentTimeMillis()
+    }
+
+    LaunchedEffect(lifecycle.expired) {
+        if (lifecycle.expired && !expiryRefreshRequested) {
+            expiryRefreshRequested = true
             onRefresh()
         }
     }
@@ -132,11 +154,27 @@ fun SchedulingScreen(
             stage = stage,
         )
         Spacer(modifier = Modifier.height(12.dp))
+        if (lifecycle.expired) {
+            FeedbackCard(
+                title = "Estado",
+                message = "La coordinaci\u00f3n venci\u00f3. Actualizando estado...",
+                tone = FeedbackTone.Warning,
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+        } else if (lifecycle.showWarning) {
+            FeedbackCard(
+                title = "Coordinaci\u00f3n por vencer",
+                message = "La coordinaci\u00f3n de horarios vence pronto. Confirm\u00e1 o envi\u00e1 opciones para no perder la conexi\u00f3n.",
+                tone = FeedbackTone.Warning,
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+        }
 
         when (stage) {
             SchedulingStage.Loading -> LoadingCard()
             SchedulingStage.WaitingForMyProposals -> ProposalSelectorCard(
                 submitting = submitting,
+                actionsDisabled = actionsDisabled,
                 submittingLabel = submittingLabel,
                 onSubmitProposals = onSubmitProposals,
             )
@@ -146,6 +184,7 @@ fun SchedulingScreen(
                 if (myProposals.isEmpty()) {
                     ProposalSelectorCard(
                         submitting = submitting,
+                        actionsDisabled = actionsDisabled,
                         submittingLabel = submittingLabel,
                         onSubmitProposals = onSubmitProposals,
                     )
@@ -155,6 +194,7 @@ fun SchedulingScreen(
                     myProposals = myProposals,
                     partnerProposals = partnerProposals,
                     submitting = submitting,
+                    actionsDisabled = actionsDisabled,
                     submittingLabel = submittingLabel,
                     onAcceptProposal = onAcceptProposal,
                     onRejectRound = onRejectRound,
@@ -254,6 +294,7 @@ private fun LoadingCard() {
 @Composable
 private fun ProposalSelectorCard(
     submitting: Boolean,
+    actionsDisabled: Boolean,
     submittingLabel: String?,
     onSubmitProposals: (List<String>) -> Unit,
 ) {
@@ -310,7 +351,7 @@ private fun ProposalSelectorCard(
                 title = "Dia",
                 options = dayOptions,
                 selected = dayOptions.firstOrNull { it.date == selectedLocalDate },
-                enabled = !submitting,
+                enabled = !submitting && !actionsDisabled,
                 optionLabel = { it.label },
                 isOptionEnabled = { day -> availableSchedulingHours(day.date, now, zoneId).isNotEmpty() },
                 onSelected = { day ->
@@ -343,7 +384,7 @@ private fun ProposalSelectorCard(
                     title = "Hora",
                     options = availableHours,
                     selected = selectedHour.takeIf { it in availableHours },
-                    enabled = !submitting,
+                    enabled = !submitting && !actionsDisabled,
                     optionLabel = { it.toString().padStart(2, '0') },
                     scrollKey = hourScrollKey,
                     onSelected = { hour ->
@@ -364,7 +405,7 @@ private fun ProposalSelectorCard(
                 MinutePickerColumn(
                     minutes = listOf(0, 30),
                     selected = selectedMinute.takeIf { it in availableMinutes },
-                    enabled = !submitting,
+                    enabled = !submitting && !actionsDisabled,
                     enabledMinutes = availableMinutes,
                     onSelected = { minute ->
                         selectedMinute = minute
@@ -390,7 +431,7 @@ private fun ProposalSelectorCard(
                         }
                     }
                 },
-                enabled = !submitting && selected.size < 3 && candidateValue != null,
+                enabled = !submitting && !actionsDisabled && selected.size < 3 && candidateValue != null,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("Agregar opcion")
@@ -419,7 +460,7 @@ private fun ProposalSelectorCard(
                                 selected = selected.filterNot { it == value }
                                 validationError = null
                             },
-                            enabled = !submitting,
+                            enabled = !submitting && !actionsDisabled,
                         ) {
                             Text("Quitar")
                         }
@@ -439,7 +480,7 @@ private fun ProposalSelectorCard(
                         validationError = validation
                     }
                 },
-                enabled = !submitting && selected.isNotEmpty(),
+                enabled = !submitting && !actionsDisabled && selected.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 if (submitting) {
@@ -607,6 +648,7 @@ private fun ReviewProposalsCard(
     myProposals: List<SchedulingProposal>,
     partnerProposals: List<SchedulingProposal>,
     submitting: Boolean,
+    actionsDisabled: Boolean,
     submittingLabel: String?,
     onAcceptProposal: (String) -> Unit,
     onRejectRound: () -> Unit,
@@ -625,7 +667,7 @@ private fun ReviewProposalsCard(
                 .forEach { proposal ->
                     Button(
                         onClick = { onAcceptProposal(proposal.id) },
-                        enabled = !submitting,
+                        enabled = !submitting && !actionsDisabled,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(
@@ -639,7 +681,7 @@ private fun ReviewProposalsCard(
                 }
             OutlinedButton(
                 onClick = onRejectRound,
-                enabled = !submitting,
+                enabled = !submitting && !actionsDisabled,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(if (submitting) submittingLabel ?: "Procesando..." else "Rechazar ronda")

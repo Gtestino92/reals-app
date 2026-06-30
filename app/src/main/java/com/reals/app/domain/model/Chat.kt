@@ -11,6 +11,7 @@ data class Chat(
     val activatedAt: String?,
     val timeoutAt: String,
     val expiresAt: String,
+    val inactivityExpiresAt: String?,
     val partner: ChatPartner?,
     val myDecision: ChatDecisionState,
     val partnerDecision: ChatDecisionState,

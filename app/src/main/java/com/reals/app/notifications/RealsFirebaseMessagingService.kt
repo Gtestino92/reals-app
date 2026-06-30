@@ -4,6 +4,7 @@ import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.reals.app.RealsApplication
+import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_REMINDER
 import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_AVAILABLE
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,6 +36,12 @@ class RealsFirebaseMessagingService : FirebaseMessagingService() {
             TYPE_VISUAL_REVIEW_AVAILABLE -> NotificationHelper.showVisualReviewAvailable(
                 context = this,
                 matchId = remoteMessage.data["matchId"],
+            )
+
+            TYPE_SECOND_CHAT_REMINDER -> NotificationHelper.showSecondChatReminder(
+                context = this,
+                connectionId = remoteMessage.data["connectionId"],
+                availableAt = remoteMessage.data["availableAt"],
             )
 
             else -> {

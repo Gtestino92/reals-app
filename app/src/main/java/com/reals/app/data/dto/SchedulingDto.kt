@@ -40,6 +40,7 @@ data class NegotiationResponseDto(
     val status: String,
     val confirmedDateTime: String? = null,
     val chatId: String? = null,
+    val schedulingExpiresAt: String,
     val createdAt: String,
     val updatedAt: String,
 )

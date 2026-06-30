@@ -16,6 +16,7 @@ import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.UpdateProfileInput
 import com.reals.app.domain.model.VisualDecision
 import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_AVAILABLE
+import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_REMINDER
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -92,7 +93,7 @@ class RealsRootViewModel(
     }
 
     fun handleExternalNotificationOpened(type: String?) {
-        if (type != TYPE_VISUAL_REVIEW_AVAILABLE) return
+        if (type != TYPE_VISUAL_REVIEW_AVAILABLE && type != TYPE_SECOND_CHAT_REMINDER) return
 
         when (val current = _uiState.value) {
             is RealsRootUiState.Ready -> refreshHomeState()
@@ -237,11 +238,13 @@ class RealsRootViewModel(
                 partnerName = partnerName,
                 loading = true,
             )
-            _uiState.value = secondChatCoordinator.load(
-                session = session,
-                connectionId = cleanConnectionId,
-                matchId = cleanMatchId,
-                partnerName = partnerName,
+            applySecondChatLoadResult(
+                secondChatCoordinator.load(
+                    session = session,
+                    connectionId = cleanConnectionId,
+                    matchId = cleanMatchId,
+                    partnerName = partnerName,
+                )
             )
         }
     }
@@ -274,7 +277,7 @@ class RealsRootViewModel(
             ) {
                 return@launch
             }
-            _uiState.value = result
+            applySecondChatLoadResult(result)
         }
         if (silent) {
             silentSecondChatRefreshJob = job
@@ -517,7 +520,8 @@ class RealsRootViewModel(
                     homeCoordinator.hideFirstChatLocally(current.matchId)
                     homeCoordinator.returnHome(
                         session = current.session,
-                        message = firstChatExitMessage(result.matchState),
+                        message = result.chatStatus?.firstChatClosedMessage()
+                            ?: firstChatExitMessage(result.matchState),
                     )
                 }
 
@@ -550,10 +554,12 @@ class RealsRootViewModel(
             is ChatMessageSendPreparation.Accepted -> {
                 _uiState.value = preparation.pendingState
                 viewModelScope.launch {
-                    _uiState.value = firstChatCoordinator.sendMessage(
-                        preparation.pendingState,
-                        preparation.cleanContent,
-                        preparation.localId,
+                    applyFirstChatSendResult(
+                        firstChatCoordinator.sendMessage(
+                            preparation.pendingState,
+                            preparation.cleanContent,
+                            preparation.localId,
+                        )
                     )
                 }
                 true
@@ -583,6 +589,31 @@ class RealsRootViewModel(
                     decision = decision,
                     onPending = { _uiState.value = it },
                 )
+            )
+        }
+    }
+
+    fun handleFirstChatLocalExpiry(inactivity: Boolean) {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        homeCoordinator.hideFirstChatLocally(current.matchId)
+        viewModelScope.launch {
+            homeCoordinator.returnHome(
+                session = current.session,
+                message = if (inactivity) {
+                    "La conversaci\u00f3n se cerr\u00f3 por inactividad."
+                } else {
+                    "El chat venci\u00f3."
+                },
+            )
+        }
+    }
+
+    fun handleSecondChatUnavailable() {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        viewModelScope.launch {
+            homeCoordinator.returnHome(
+                session = current.session,
+                message = "Este segundo chat ya no est\u00e1 disponible.",
             )
         }
     }
@@ -795,11 +826,34 @@ class RealsRootViewModel(
         }
     }
 
+    private suspend fun applyFirstChatSendResult(result: FirstChatSendResult) {
+        when (result) {
+            is FirstChatSendResult.Show -> _uiState.value = result.state
+            is FirstChatSendResult.ReturnHome -> {
+                homeCoordinator.hideFirstChatLocally(result.hideFirstChatMatchId)
+                homeCoordinator.returnHome(
+                    session = result.session,
+                    message = result.message,
+                )
+            }
+        }
+    }
+
     private suspend fun applySecondChatActionResult(result: SecondChatActionResult) {
         when (result) {
             SecondChatActionResult.Ignore -> Unit
             is SecondChatActionResult.Show -> _uiState.value = result.state
             is SecondChatActionResult.ReturnHome -> homeCoordinator.returnHome(
+                session = result.session,
+                message = result.message,
+            )
+        }
+    }
+
+    private suspend fun applySecondChatLoadResult(result: SecondChatLoadResult) {
+        when (result) {
+            is SecondChatLoadResult.Show -> _uiState.value = result.state
+            is SecondChatLoadResult.ReturnHome -> homeCoordinator.returnHome(
                 session = result.session,
                 message = result.message,
             )

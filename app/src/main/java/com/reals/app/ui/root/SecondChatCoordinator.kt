@@ -1,6 +1,7 @@
 package com.reals.app.ui.root
 
 import com.reals.app.core.network.ApiResult
+import com.reals.app.core.time.isExpired
 import com.reals.app.di.FirstChatFeatureDependencies
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatStatus
@@ -14,24 +15,27 @@ internal class SecondChatCoordinator(
         connectionId: String,
         matchId: String,
         partnerName: String?,
-    ): RealsRootUiState.SecondChat {
+    ): SecondChatLoadResult {
         val chatResult = dependencies.getSecondChatForConnection(connectionId)
         if (chatResult is ApiResult.Failure) {
-            return RealsRootUiState.SecondChat(
+            return SecondChatLoadResult.Show(RealsRootUiState.SecondChat(
                 session = session,
                 connectionId = connectionId,
                 matchId = matchId,
                 partnerName = partnerName,
                 loading = false,
                 error = chatResult.error,
-            )
+            ))
         }
 
         val chat = (chatResult as ApiResult.Success).value
+        chat.secondChatHomeMessage()?.let { message ->
+            return SecondChatLoadResult.ReturnHome(session, message)
+        }
         val messagesResult = dependencies.getChatMessages(chat.id)
         val exitsResult = dependencies.getChatExitRequests(chat.id)
 
-        return RealsRootUiState.SecondChat(
+        return SecondChatLoadResult.Show(RealsRootUiState.SecondChat(
             session = session,
             connectionId = connectionId,
             matchId = matchId,
@@ -43,14 +47,14 @@ internal class SecondChatCoordinator(
             loading = false,
             error = (messagesResult as? ApiResult.Failure)?.error
                 ?: (exitsResult as? ApiResult.Failure)?.error,
-        )
+        ))
     }
 
     suspend fun refresh(
         current: RealsRootUiState.SecondChat,
         silent: Boolean,
-    ): RealsRootUiState.SecondChat {
-        val chatId = current.chat?.id ?: current.chatId ?: return current
+    ): SecondChatLoadResult {
+        val chatId = current.chat?.id ?: current.chatId ?: return SecondChatLoadResult.Show(current)
         val pending = current.copy(
             refreshing = true,
             error = if (silent) current.error else null,
@@ -60,7 +64,7 @@ internal class SecondChatCoordinator(
         val messagesResult = dependencies.getChatMessages(chatId, pending.messages.lastMessageCursor())
         val exitsResult = dependencies.getChatExitRequests(chatId)
 
-        return pending.copy(
+        val updated = pending.copy(
             chat = (chatResult as? ApiResult.Success)?.value ?: pending.chat,
             messages = (messagesResult as? ApiResult.Success)?.value
                 ?.let { pending.messages.appendUnique(it) }
@@ -75,6 +79,10 @@ internal class SecondChatCoordinator(
                     ?: (exitsResult as? ApiResult.Failure)?.error
             },
         )
+        updated.chat?.secondChatHomeMessage()?.let { message ->
+            return SecondChatLoadResult.ReturnHome(current.session, message)
+        }
+        return SecondChatLoadResult.Show(updated)
     }
 
     suspend fun sendMessage(
@@ -156,6 +164,26 @@ internal class SecondChatCoordinator(
 }
 
 internal fun ChatStatus.isOpenSecondChatStatus(): Boolean = this == ChatStatus.Active
+
+private fun com.reals.app.domain.model.Chat.secondChatHomeMessage(
+    nowMillis: Long = System.currentTimeMillis(),
+): String? = when (status) {
+    ChatStatus.Closed,
+    ChatStatus.Cancelled,
+    ChatStatus.Abandoned,
+    ChatStatus.Finished -> "Este segundo chat ya no est\u00e1 disponible."
+    ChatStatus.Expired -> if (readOnlyUntil == null || isExpired(readOnlyUntil, nowMillis)) {
+        "Este segundo chat ya no est\u00e1 disponible."
+    } else {
+        null
+    }
+    else -> null
+}
+
+internal sealed interface SecondChatLoadResult {
+    data class Show(val state: RealsRootUiState.SecondChat) : SecondChatLoadResult
+    data class ReturnHome(val session: ProvisionedSession, val message: String) : SecondChatLoadResult
+}
 
 internal sealed interface SecondChatActionResult {
     data object Ignore : SecondChatActionResult

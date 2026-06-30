@@ -25,6 +25,7 @@ fun MatchResponseDto.toDomain(): Match = Match(
     userBId = userBId,
     state = MatchState.fromBackend(state),
     connectionId = connectionId,
+    visualExpiresAt = visualExpiresAt,
     createdAt = createdAt,
     updatedAt = updatedAt,
 )

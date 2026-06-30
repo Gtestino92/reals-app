@@ -16,8 +16,12 @@ import androidx.core.content.ContextCompat
 import com.reals.app.MainActivity
 import com.reals.app.R
 import com.reals.app.notifications.PushNotificationContract.EXTRA_MATCH_ID
+import com.reals.app.notifications.PushNotificationContract.EXTRA_AVAILABLE_AT
+import com.reals.app.notifications.PushNotificationContract.EXTRA_CONNECTION_ID
 import com.reals.app.notifications.PushNotificationContract.EXTRA_PUSH_TYPE
 import com.reals.app.notifications.PushNotificationContract.EXTRA_REFRESH_HOME
+import com.reals.app.notifications.PushNotificationContract.SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE
+import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_REMINDER
 import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_AVAILABLE
 import com.reals.app.notifications.PushNotificationContract.VISUAL_REVIEW_CHANNEL_ID
 import com.reals.app.notifications.PushNotificationContract.VISUAL_REVIEW_NOTIFICATION_ID_BASE
@@ -70,6 +74,32 @@ object NotificationHelper {
         }
     }
 
+    @SuppressLint("MissingPermission")
+    fun showSecondChatReminder(context: Context, connectionId: String?, availableAt: String?) {
+        if (!canPostNotifications(context)) return
+
+        val body = "Entr\u00e1 a Reals para ver el horario y prepararte."
+        val notification = NotificationCompat.Builder(context, VISUAL_REVIEW_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Tu segunda charla empieza pronto")
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(VISUAL_REVIEW_NOTIFICATION_PRIORITY)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setAutoCancel(true)
+            .setContentIntent(secondChatReminderPendingIntent(context, connectionId, availableAt))
+            .build()
+
+        try {
+            NotificationManagerCompat.from(context).notify(
+                SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE + notificationSuffix(connectionId),
+                notification,
+            )
+        } catch (exception: SecurityException) {
+            Log.w(TAG, "Could not show second chat reminder because permission was denied.", exception)
+        }
+    }
+
     private fun visualReviewPendingIntent(context: Context, matchId: String?): PendingIntent {
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -81,6 +111,27 @@ object NotificationHelper {
         return PendingIntent.getActivity(
             context,
             VISUAL_REVIEW_NOTIFICATION_ID_BASE + notificationSuffix(matchId),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    private fun secondChatReminderPendingIntent(
+        context: Context,
+        connectionId: String?,
+        availableAt: String?,
+    ): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(EXTRA_PUSH_TYPE, TYPE_SECOND_CHAT_REMINDER)
+            putExtra(EXTRA_CONNECTION_ID, connectionId)
+            putExtra(EXTRA_AVAILABLE_AT, availableAt)
+            putExtra(EXTRA_REFRESH_HOME, true)
+        }
+
+        return PendingIntent.getActivity(
+            context,
+            SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE + notificationSuffix(connectionId),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )

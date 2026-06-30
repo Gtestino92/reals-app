@@ -54,6 +54,7 @@ class ApiErrorTest {
             "CHAT_NOT_FOUND" to BackendErrorCode.ChatNotFound,
             "CHAT_NOT_AVAILABLE" to BackendErrorCode.ChatNotAvailable,
             "CHAT_EXPIRED" to BackendErrorCode.ChatExpired,
+            "CHAT_ABANDONED" to BackendErrorCode.ChatAbandoned,
             "CHAT_MESSAGE_INVALID" to BackendErrorCode.ChatMessageInvalid,
             "CHAT_DECISION_NOT_AVAILABLE" to BackendErrorCode.ChatDecisionNotAvailable,
             "CHAT_DECISION_ALREADY_SUBMITTED" to BackendErrorCode.ChatDecisionAlreadySubmitted,
@@ -72,7 +73,8 @@ class ApiErrorTest {
         mapOf(
             "CHAT_NOT_FOUND" to "No encontramos esta conversacion. Actualiza el estado.",
             "CHAT_NOT_AVAILABLE" to "Esta conversacion ya no esta disponible. Actualiza el estado.",
-            "CHAT_EXPIRED" to "La conversacion vencio.",
+            "CHAT_EXPIRED" to "La conversaci\u00f3n venci\u00f3.",
+            "CHAT_ABANDONED" to "La conversaci\u00f3n se cerr\u00f3 por inactividad.",
             "CHAT_MESSAGE_INVALID" to
                 "Revisa el mensaje. No puede estar vacio ni superar el limite permitido.",
             "CHAT_DECISION_NOT_AVAILABLE" to

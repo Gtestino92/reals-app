@@ -10,7 +10,7 @@ internal fun HomeNextStepItem.canOpenSecondChatNow(nowMillis: Long = System.curr
     when (this) {
         is HomeNextStepItem.SecondChatScheduled,
         is HomeNextStepItem.SecondChatAvailable -> isInsideSecondChatEntryWindow(nowMillis)
-        is HomeNextStepItem.SecondChatReadOnly -> hasSecondChatReference()
+        is HomeNextStepItem.SecondChatReadOnly -> hasSecondChatReference() && isReadOnlyWindowOpen(nowMillis)
         else -> false
     }
 
@@ -55,6 +55,11 @@ private fun HomeNextStepItem.hasSecondChatReference(): Boolean =
             chatId?.isNotBlank() == true && chatStatus == "EXPIRED"
         else -> false
     }
+
+private fun HomeNextStepItem.SecondChatReadOnly.isReadOnlyWindowOpen(nowMillis: Long): Boolean {
+    val readOnlyUntilInstant = readOnlyUntil.toInstantOrNull() ?: return false
+    return Instant.ofEpochMilli(nowMillis).isBefore(readOnlyUntilInstant)
+}
 
 private fun String?.toInstantOrNull(): Instant? =
     this?.let { value ->

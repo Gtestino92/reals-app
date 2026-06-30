@@ -21,4 +21,12 @@ class NotificationHelperTest {
             NotificationHelper.VISUAL_REVIEW_NOTIFICATION_PRIORITY,
         )
     }
+
+    @Test
+    fun `second chat reminder contract refreshes home instead of deep linking`() {
+        assertEquals("SECOND_CHAT_REMINDER", PushNotificationContract.TYPE_SECOND_CHAT_REMINDER)
+        assertEquals("connection_id", PushNotificationContract.EXTRA_CONNECTION_ID)
+        assertEquals("available_at", PushNotificationContract.EXTRA_AVAILABLE_AT)
+        assertEquals(20_000, PushNotificationContract.SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE)
+    }
 }

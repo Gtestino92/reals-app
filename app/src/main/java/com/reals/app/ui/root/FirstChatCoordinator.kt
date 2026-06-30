@@ -2,6 +2,8 @@ package com.reals.app.ui.root
 
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ApiResult
+import com.reals.app.core.network.BackendErrorCode
+import com.reals.app.core.network.backendErrorCode
 import com.reals.app.core.security.TextSafety
 import com.reals.app.di.FirstChatFeatureDependencies
 import com.reals.app.domain.model.ChatContinueDecision
@@ -57,7 +59,9 @@ internal class FirstChatCoordinator(
         val chat = (chatResult as ApiResult.Success).value
 
         if (!chat.status.isOpenFirstChatStatus()) {
-            return FirstChatLoadResult.RouteHome("El chat cambio de estado. Actualizamos tu Home.")
+            return FirstChatLoadResult.RouteHome(
+                chat.status.firstChatClosedMessage() ?: "El chat cambio de estado. Actualizamos tu Home."
+            )
         }
 
         if (chat.myDecision != ChatDecisionState.Pending) {
@@ -107,11 +111,17 @@ internal class FirstChatCoordinator(
                 updatedMatch.state != MatchState.ChatActive) ||
             (updatedChat != null && !updatedChat.status.isOpenFirstChatStatus())
         ) {
-            return FirstChatRefreshResult.Closed(updatedMatch?.state)
+            return FirstChatRefreshResult.Closed(
+                matchState = updatedMatch?.state,
+                chatStatus = updatedChat?.status,
+            )
         }
 
         if (updatedChat != null && updatedChat.myDecision != ChatDecisionState.Pending) {
-            return FirstChatRefreshResult.Closed(updatedMatch?.state)
+            return FirstChatRefreshResult.Closed(
+                matchState = updatedMatch?.state,
+                chatStatus = updatedChat?.status,
+            )
         }
 
         if (updatedExitRequests.latestExitRequest()?.status.isResolvedExitStatus()) {
@@ -143,8 +153,8 @@ internal class FirstChatCoordinator(
         current: RealsRootUiState.FirstChat,
         cleanContent: String,
         localId: String,
-    ): RealsRootUiState.FirstChat {
-        val chat = current.chat ?: return current
+    ): FirstChatSendResult {
+        val chat = current.chat ?: return FirstChatSendResult.Show(current)
         val cursorBeforeSend = current.messages.lastMessageCursor()
         return when (val result = dependencies.sendChatMessage(chat.id, cleanContent)) {
             is ApiResult.Success -> {
@@ -154,7 +164,7 @@ internal class FirstChatCoordinator(
                 val messagesResult = dependencies.getChatMessages(chat.id, cursorBeforeSend)
                 val chatResult = dependencies.getFirstChatForMatch(current.matchId)
 
-                current.copy(
+                FirstChatSendResult.Show(current.copy(
                     chat = (chatResult as? ApiResult.Success)?.value ?: current.chat,
                     messages = messagesWithSent.appendUnique(
                         (messagesResult as? ApiResult.Success)?.value.orEmpty()
@@ -163,14 +173,17 @@ internal class FirstChatCoordinator(
                     sending = false,
                     error = (messagesResult as? ApiResult.Failure)?.error
                         ?: (chatResult as? ApiResult.Failure)?.error,
-                )
+                ))
             }
 
-            is ApiResult.Failure -> current.copy(
-                optimisticMessages = current.optimisticMessages.markOptimisticMessageFailed(localId),
-                sending = false,
-                error = result.error,
-            )
+            is ApiResult.Failure -> result.error.firstChatSendExpiryRoute(current)
+                ?: FirstChatSendResult.Show(
+                    current.copy(
+                        optimisticMessages = current.optimisticMessages.markOptimisticMessageFailed(localId),
+                        sending = false,
+                        error = result.error,
+                    )
+                )
         }
     }
 
@@ -260,13 +273,14 @@ internal class FirstChatCoordinator(
                 }
             }
 
-            is ApiResult.Failure -> FirstChatActionResult.Show(
-                pending.copy(
-                    actionLoading = false,
-                    actionLoadingLabel = null,
-                    error = result.error,
+            is ApiResult.Failure -> result.error.firstChatActionExpiryRoute(current)
+                ?: FirstChatActionResult.Show(
+                    pending.copy(
+                        actionLoading = false,
+                        actionLoadingLabel = null,
+                        error = result.error,
+                    )
                 )
-            )
         }
     }
 
@@ -437,8 +451,18 @@ internal sealed interface FirstChatLoadResult {
 internal sealed interface FirstChatRefreshResult {
     data class Show(val state: RealsRootUiState.FirstChat) : FirstChatRefreshResult
     data class Reopen(val matchId: String, val chatId: String?) : FirstChatRefreshResult
-    data class Closed(val matchState: MatchState?) : FirstChatRefreshResult
+    data class Closed(val matchState: MatchState?, val chatStatus: ChatStatus?) : FirstChatRefreshResult
     data object ExitResolved : FirstChatRefreshResult
+}
+
+internal sealed interface FirstChatSendResult {
+    data class Show(val state: RealsRootUiState.FirstChat) : FirstChatSendResult
+
+    data class ReturnHome(
+        val session: ProvisionedSession,
+        val message: String,
+        val hideFirstChatMatchId: String,
+    ) : FirstChatSendResult
 }
 
 internal sealed interface FirstChatActionResult {
@@ -459,6 +483,38 @@ internal sealed interface FirstChatActionResult {
         val hideFirstChatMatchId: String? = null,
         val autoNavigateEngagements: Boolean = false,
     ) : FirstChatActionResult
+}
+
+private fun ApiError.firstChatActionExpiryRoute(
+    current: RealsRootUiState.FirstChat,
+): FirstChatActionResult.ReturnHome? {
+    val message = firstChatExpiryErrorMessage() ?: return null
+    return FirstChatActionResult.ReturnHome(
+        session = current.session,
+        message = message,
+        hideFirstChatMatchId = current.matchId,
+        autoNavigateEngagements = false,
+    )
+}
+
+private fun ApiError.firstChatSendExpiryRoute(
+    current: RealsRootUiState.FirstChat,
+): FirstChatSendResult.ReturnHome? {
+    val message = firstChatExpiryErrorMessage() ?: return null
+    return FirstChatSendResult.ReturnHome(
+        session = current.session,
+        message = message,
+        hideFirstChatMatchId = current.matchId,
+    )
+}
+
+private fun ApiError.firstChatExpiryErrorMessage(): String? {
+    if (this !is ApiError.Backend) return null
+    return when (backendErrorCode) {
+        BackendErrorCode.ChatExpired -> "El chat venci\u00f3."
+        BackendErrorCode.ChatAbandoned -> "La conversaci\u00f3n se cerr\u00f3 por inactividad."
+        else -> null
+    }
 }
 
 internal fun normalizeSafetyReportDetails(details: String): String? =

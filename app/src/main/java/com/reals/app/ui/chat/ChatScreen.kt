@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
 import com.reals.app.core.security.TextSafety
+import com.reals.app.core.time.backendInstantOrNull
 import com.reals.app.core.time.remainingExitSeconds
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatDecisionState
@@ -50,6 +51,7 @@ import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.Match
 import com.reals.app.domain.model.MatchState
+import com.reals.app.domain.model.ChatType
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
@@ -86,6 +88,8 @@ fun ChatScreen(
     allowAvailableChat: Boolean = false,
     onBackHome: (() -> Unit)? = null,
     onRefresh: () -> Unit,
+    onFirstChatLocalExpiry: (inactivity: Boolean) -> Unit = {},
+    onSecondChatUnavailable: () -> Unit = {},
     onSendMessage: (String) -> Boolean,
     onRetryOptimisticMessage: (localId: String, content: String) -> Unit,
     onApprove: () -> Unit,
@@ -100,8 +104,32 @@ fun ChatScreen(
     var safetyDetails by rememberSaveable(chat?.id) { mutableStateOf("") }
     var showingSafetyDialog by rememberSaveable(chat?.id) { mutableStateOf(false) }
     var showingActionsDialog by rememberSaveable(chat?.id) { mutableStateOf(false) }
-    val canChat = chat?.status == ChatStatus.Active ||
+    var nowMillis by rememberSaveable(chat?.id) { mutableStateOf(System.currentTimeMillis()) }
+    var firstChatExpiryHandled by rememberSaveable(chat?.id) { mutableStateOf(false) }
+    var secondChatUnavailableHandled by rememberSaveable(chat?.id) { mutableStateOf(false) }
+    val firstChatLifecycle = firstChatLifecycleUiState(chat, nowMillis)
+    val firstChatLocallyExpired = firstChatLifecycle?.expired == true
+    val readOnlyUntilInstant = backendInstantOrNull(chat?.readOnlyUntil)
+    val secondChatReadOnlyFuture = chat?.chatType == ChatType.SecondChat &&
+        chat.status == ChatStatus.Expired &&
+        readOnlyUntilInstant != null &&
+        java.time.Instant.ofEpochMilli(nowMillis).isBefore(readOnlyUntilInstant)
+    val secondChatUnavailable = chat?.chatType == ChatType.SecondChat &&
+        (
+            chat.status in listOf(
+                ChatStatus.Closed,
+                ChatStatus.Cancelled,
+                ChatStatus.Abandoned,
+                ChatStatus.Finished,
+            ) ||
+                (chat.status == ChatStatus.Expired && !secondChatReadOnlyFuture)
+            )
+    val canChat = !firstChatLocallyExpired &&
+            !secondChatReadOnlyFuture &&
+            !secondChatUnavailable &&
+            (chat?.status == ChatStatus.Active ||
             (allowAvailableChat && chat?.status == ChatStatus.Available)
+            )
     val sendingMessage = sending
     val loadingChatAction = actionLoading
     val canEditDraft = canChat && !loadingChatAction
@@ -115,7 +143,8 @@ fun ChatScreen(
             match?.state == MatchState.ChatActive &&
             chat?.status == ChatStatus.Active &&
             chat.myDecision == ChatDecisionState.Pending &&
-            !exitFlowLocked
+            !exitFlowLocked &&
+            !firstChatLocallyExpired
     val partnerDisplayName = chat?.partner?.displayName
         ?.takeIf { it.isNotBlank() }
         ?: partnerNameFallback?.takeIf { it.isNotBlank() }
@@ -138,6 +167,29 @@ fun ChatScreen(
         }
     }
 
+    LaunchedEffect(chat?.id, firstChatLifecycle?.deadline) {
+        while (firstChatLifecycleUiState(chat)?.expired == false) {
+            delay(1_000.milliseconds)
+            nowMillis = System.currentTimeMillis()
+        }
+        nowMillis = System.currentTimeMillis()
+    }
+
+    LaunchedEffect(chat?.id, firstChatLocallyExpired, firstChatLifecycle?.reason) {
+        val lifecycle = firstChatLifecycle ?: return@LaunchedEffect
+        if (firstChatLocallyExpired && !firstChatExpiryHandled) {
+            firstChatExpiryHandled = true
+            onFirstChatLocalExpiry(lifecycle.reason == FirstChatExpiryReason.Inactivity)
+        }
+    }
+
+    LaunchedEffect(chat?.id, secondChatUnavailable) {
+        if (secondChatUnavailable && !secondChatUnavailableHandled) {
+            secondChatUnavailableHandled = true
+            onSecondChatUnavailable()
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -152,12 +204,22 @@ fun ChatScreen(
                 titlePrefix = chatTitlePrefix,
                 partnerName = partnerDisplayName,
                 expiresAt = chat?.expiresAt,
+                firstChatLifecycle = firstChatLifecycle,
+                secondChatReadOnlyUntil = chat?.readOnlyUntil.takeIf { secondChatReadOnlyFuture },
+                secondChatUnavailable = secondChatUnavailable,
                 myDecision = chat?.myDecision,
                 partnerDecision = chat?.partnerDecision,
                 showDecisionSummary = showDecisionActions,
             )
             error?.let { ApiErrorFeedbackCard(it, ErrorContext.Chat) }
             message?.let { SuccessFeedback(it) }
+            firstChatLifecycle?.takeIf { it.showCountdown || it.expired }?.let { lifecycle ->
+                FeedbackCard(
+                    title = if (lifecycle.expired) "Estado" else "Tiempo restante",
+                    message = if (lifecycle.expired) lifecycle.expiredCopy() else lifecycle.warningCopy(),
+                    tone = FeedbackTone.Warning,
+                )
+            }
             ChatActionsPanel(
                 currentUserId = currentUserId,
                 activeExitRequest = if (showExitActions) pendingExitRequest else null,
@@ -198,8 +260,8 @@ fun ChatScreen(
                 },
             ) {
                 MessageComposer(
-                    draft = draft,
-                    canChat = canChat,
+                draft = draft,
+                canChat = canChat,
                     canEditDraft = canEditDraft,
                     sendingMessage = sendingMessage,
                     loadingChatAction = loadingChatAction,
@@ -289,6 +351,9 @@ private fun ChatHeader(
     titlePrefix: String,
     partnerName: String?,
     expiresAt: String?,
+    firstChatLifecycle: FirstChatLifecycleUiState?,
+    secondChatReadOnlyUntil: String?,
+    secondChatUnavailable: Boolean,
     myDecision: ChatDecisionState?,
     partnerDecision: ChatDecisionState?,
     showDecisionSummary: Boolean,
@@ -309,8 +374,14 @@ private fun ChatHeader(
                 style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.primary,
             )
+            val deadlineLabel = firstChatLifecycle?.deadline ?: expiresAt
             Text(
-                text = "Valido hasta ${formatBackendDateTime(expiresAt)}",
+                text = when {
+                    secondChatReadOnlyUntil != null ->
+                        "Este segundo chat venci\u00f3. Pod\u00e9s leerlo hasta ${formatBackendDateTime(secondChatReadOnlyUntil)}."
+                    secondChatUnavailable -> "Este segundo chat ya no est\u00e1 disponible."
+                    else -> "V\u00e1lido hasta ${formatBackendDateTime(deadlineLabel)}"
+                },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (showDecisionSummary) chatDecisionSummary(
