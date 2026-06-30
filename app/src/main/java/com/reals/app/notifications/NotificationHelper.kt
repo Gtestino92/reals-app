@@ -5,6 +5,7 @@ import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -66,7 +67,11 @@ object NotificationHelper {
                 notification,
             )
         } catch (exception: SecurityException) {
-            Log.w(TAG, "Could not show visual review notification because permission was denied.", exception)
+            Log.w(
+                TAG,
+                "Could not show visual review notification because permission was denied.",
+                exception
+            )
         }
     }
 
@@ -92,17 +97,19 @@ object NotificationHelper {
                 notification,
             )
         } catch (exception: SecurityException) {
-            Log.w(TAG, "Could not show second chat reminder because permission was denied.", exception)
+            Log.w(
+                TAG,
+                "Could not show second chat reminder because permission was denied.",
+                exception
+            )
         }
     }
 
     private fun visualReviewPendingIntent(context: Context, matchId: String?): PendingIntent {
-        val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            setPackage(context.packageName)
-            putExtra(EXTRA_PUSH_TYPE, TYPE_VISUAL_REVIEW_AVAILABLE)
-            putExtra(EXTRA_REFRESH_HOME, true)
-        }
+        val intent = mainActivityNotificationIntent(
+            context = context,
+            pushType = TYPE_VISUAL_REVIEW_AVAILABLE,
+        )
 
         return PendingIntent.getActivity(
             context,
@@ -118,12 +125,10 @@ object NotificationHelper {
         context: Context,
         connectionId: String?,
     ): PendingIntent {
-        val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            setPackage(context.packageName)
-            putExtra(EXTRA_PUSH_TYPE, TYPE_SECOND_CHAT_REMINDER)
-            putExtra(EXTRA_REFRESH_HOME, true)
-        }
+        val intent = mainActivityNotificationIntent(
+            context = context,
+            pushType = TYPE_SECOND_CHAT_REMINDER,
+        )
 
         return PendingIntent.getActivity(
             context,
@@ -147,4 +152,15 @@ object NotificationHelper {
             Manifest.permission.POST_NOTIFICATIONS,
         ) == PackageManager.PERMISSION_GRANTED
     }
+
+    private fun mainActivityNotificationIntent(
+        context: Context,
+        pushType: String,
+    ): Intent =
+        Intent().apply {
+            setComponent(ComponentName(context, MainActivity::class.java))
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(EXTRA_PUSH_TYPE, pushType)
+            putExtra(EXTRA_REFRESH_HOME, true)
+        }
 }
