@@ -67,7 +67,10 @@ Acceptance criteria:
 ## 3. Polling strategy after push notifications
 
 Current behavior:
-- Home, chat, scheduling and second-chat availability use polling.
+- Home silent polling uses `GET /api/me/home/status` and fetches full `GET /api/me/home` only when the status version changes or Home is dirty.
+- Full `GET /api/me/home` remains the Android source of truth for Home rendering, routing, explicit refreshes and notification taps.
+- `GET /api/me/home/pending` is wired in the Android data/domain layer but is not the primary routing source.
+- Chat, scheduling and second-chat availability use polling.
 
 Production target:
 - Keep polling as fallback.

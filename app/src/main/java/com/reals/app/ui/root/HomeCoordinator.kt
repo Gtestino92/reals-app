@@ -90,37 +90,39 @@ internal class HomeCoordinator(
     }
 
     fun pollHomeStateSilently() {
-        val current = uiState.value as? RealsRootUiState.Ready ?: return
+        if (uiState.value !is RealsRootUiState.Ready) return
         if (silentHomePollJob?.isActive == true) return
 
         silentHomePollJob = scope.launch {
-            when (val homeResult = dependencies.getHome()) {
+            when (val statusResult = dependencies.getHomeStatus()) {
                 is ApiResult.Success -> {
                     val latest = uiState.value as? RealsRootUiState.Ready ?: return@launch
-                    pruneLocalHiddenInteractions(homeResult.value)
-                    val screenModel = buildHomeScreenModel(
-                        home = homeResult.value,
-                        localMatchmakingBlockedReason = latest.home.matchmakingBlockedReason,
-                    )
+                    val status = statusResult.value
+                    val knownVersion = latest.home.homeStatusVersion
+                    if (!status.dirty && knownVersion == status.version) return@launch
+                    if (!status.dirty && knownVersion == null && latest.home.homeState != null) {
+                        uiState.value = latest.copy(
+                            home = latest.home.copy(homeStatusVersion = status.version),
+                        )
+                        return@launch
+                    }
 
-                    routeFromHomeScreenModel(
-                        ready = latest.copy(
-                            home = latest.home.copy(
-                                homeState = homeResult.value,
-                                screenModel = screenModel,
-                                homeLoading = false,
-                                matchmakingSearchPhase = searchPhaseAfterHomeLoad(
-                                    ready = latest,
-                                    screenModel = screenModel,
-                                ),
-                            ),
-                        ),
-                        autoNavigateEngagements = latest.home.screenModel?.matchmaking?.inQueue == true,
-                    )
+                    when (val homeResult = dependencies.getHome()) {
+                        is ApiResult.Success -> publishHomeSuccess(
+                            ready = latest,
+                            home = homeResult.value,
+                            autoNavigateEngagements = latest.home.screenModel?.matchmaking?.inQueue == true,
+                            homeStatusVersion = status.version,
+                        )
+
+                        is ApiResult.Failure -> {
+                            // Silent polling should never surface transient refresh errors.
+                        }
+                    }
                 }
 
                 is ApiResult.Failure -> {
-                    // polling silencioso: no pisar UI
+                    // Silent polling should never surface transient status errors.
                 }
             }
         }
@@ -308,26 +310,11 @@ internal class HomeCoordinator(
 
         when (val homeResult = dependencies.getHome()) {
             is ApiResult.Success -> {
-                pruneLocalHiddenInteractions(homeResult.value)
-                val screenModel = buildHomeScreenModel(
+                publishHomeSuccess(
+                    ready = ready,
                     home = homeResult.value,
-                    localMatchmakingBlockedReason = ready.home.matchmakingBlockedReason,
-                )
-
-                routeFromHomeScreenModel(
-                    ready = ready.copy(
-                        home = ready.home.copy(
-                            homeState = homeResult.value,
-                            screenModel = screenModel,
-                            homeLoading = false,
-                            homeError = null,
-                            matchmakingSearchPhase = searchPhaseAfterHomeLoad(
-                                ready = ready,
-                                screenModel = screenModel,
-                            ),
-                        ),
-                    ),
                     autoNavigateEngagements = autoNavigateEngagements,
+                    homeStatusVersion = ready.home.homeStatusVersion,
                 )
             }
 
@@ -445,6 +432,36 @@ internal class HomeCoordinator(
         localHidden = localHiddenSnapshot(),
         localMatchmakingBlockedReason = localMatchmakingBlockedReason,
     )
+
+    private suspend fun publishHomeSuccess(
+        ready: RealsRootUiState.Ready,
+        home: HomeState,
+        autoNavigateEngagements: Boolean,
+        homeStatusVersion: Long?,
+    ) {
+        pruneLocalHiddenInteractions(home)
+        val screenModel = buildHomeScreenModel(
+            home = home,
+            localMatchmakingBlockedReason = ready.home.matchmakingBlockedReason,
+        )
+
+        routeFromHomeScreenModel(
+            ready = ready.copy(
+                home = ready.home.copy(
+                    homeState = home,
+                    homeStatusVersion = homeStatusVersion,
+                    screenModel = screenModel,
+                    homeLoading = false,
+                    homeError = null,
+                    matchmakingSearchPhase = searchPhaseAfterHomeLoad(
+                        ready = ready,
+                        screenModel = screenModel,
+                    ),
+                ),
+            ),
+            autoNavigateEngagements = autoNavigateEngagements,
+        )
+    }
 
     private fun searchPhaseAfterHomeLoad(
         ready: RealsRootUiState.Ready,

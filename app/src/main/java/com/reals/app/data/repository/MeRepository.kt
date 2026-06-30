@@ -8,7 +8,9 @@ import com.reals.app.data.api.RealsApi
 import com.reals.app.data.dto.RegisterPushTokenRequestDto
 import com.reals.app.data.mapper.toDomain
 import com.reals.app.domain.model.BackendUser
+import com.reals.app.domain.model.HomePendingState
 import com.reals.app.domain.model.HomeState
+import com.reals.app.domain.model.HomeStatus
 
 class MeRepository(
     private val api: RealsApi,
@@ -25,6 +27,14 @@ class MeRepository(
 
     suspend fun getHome(): ApiResult<HomeState> =
         authorizedCall { authorization -> api.getHome(authorization) }
+            .map { it.toDomain() }
+
+    suspend fun getHomeStatus(): ApiResult<HomeStatus> =
+        authorizedCall { authorization -> api.getHomeStatus(authorization) }
+            .map { it.toDomain() }
+
+    suspend fun getHomePending(): ApiResult<HomePendingState> =
+        authorizedCall { authorization -> api.getHomePending(authorization) }
             .map { it.toDomain() }
 
     suspend fun registerPushToken(token: String): ApiResult<Boolean> =

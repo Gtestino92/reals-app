@@ -13,6 +13,22 @@ data class HomeResponseDto(
 )
 
 @Serializable
+data class HomeStatusResponseDto(
+    val version: Long,
+    val dirty: Boolean,
+    val serverTime: String,
+)
+
+@Serializable
+data class HomePendingStateResponseDto(
+    val version: Long,
+    val pendingActions: List<HomePendingActionLiteResponseDto> = emptyList(),
+    val nextSteps: List<HomeNextStepLiteResponseDto> = emptyList(),
+    val passiveNotices: List<HomePassiveNoticeResponseDto> = emptyList(),
+    val serverTime: String,
+)
+
+@Serializable
 data class HomeMatchmakingResponseDto(
     val inQueue: Boolean,
     val canSearch: Boolean,
@@ -42,12 +58,36 @@ data class HomePendingActionResponseDto(
 )
 
 @Serializable
+data class HomePendingActionLiteResponseDto(
+    val type: String,
+    val matchId: String,
+    val chatId: String? = null,
+)
+
+@Serializable
 data class HomeNextStepResponseDto(
     val type: String,
     val connectionId: String,
     val matchId: String,
     val partner: ChatPartnerResponseDto? = null,
     val secondChat: HomeChatResponseDto? = null,
+)
+
+@Serializable
+data class HomeNextStepLiteResponseDto(
+    val type: String,
+    val connectionId: String,
+    val matchId: String,
+    val secondChat: HomePendingSecondChatLiteResponseDto? = null,
+)
+
+@Serializable
+data class HomePendingSecondChatLiteResponseDto(
+    val chatId: String? = null,
+    val availableAt: String? = null,
+    val expiresAt: String? = null,
+    val readOnlyUntil: String? = null,
+    val durationMinutes: Long? = null,
 )
 
 @Serializable

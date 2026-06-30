@@ -64,16 +64,9 @@ internal fun SearchingChatScreen(
 ) {
     if (canCancelSearch) {
         LaunchedEffect(Unit) {
-            var elapsedMillis = 0L
-
             while (true) {
-                delay(500.milliseconds)
-                elapsedMillis += 500
-
-                if (elapsedMillis >= 2_000) {
-                    elapsedMillis = 0
-                    onPollHome()
-                }
+                delay(HOME_POLL_INTERVAL_MILLIS.milliseconds)
+                onPollHome()
             }
         }
     }

@@ -14,6 +14,8 @@ import com.reals.app.data.dto.ConnectionResponseDto
 import com.reals.app.data.dto.CreateProfileRequestDto
 import com.reals.app.data.dto.EnqueueMatchmakingRequestDto
 import com.reals.app.data.dto.HomeResponseDto
+import com.reals.app.data.dto.HomePendingStateResponseDto
+import com.reals.app.data.dto.HomeStatusResponseDto
 import com.reals.app.data.dto.MatchResponseDto
 import com.reals.app.data.dto.NegotiationResponseDto
 import com.reals.app.data.dto.PartnerPersonalMessageResponseDto
@@ -97,6 +99,7 @@ class FakeRealsApi : RealsApi {
         private set
 
     var beforeGetHomeResponse: suspend () -> Unit = {}
+    var beforeGetHomeStatusResponse: suspend () -> Unit = {}
     var beforeGetFirstChatForMatchResponse: suspend () -> Unit = {}
     var beforeGetChatResponse: suspend () -> Unit = {}
     var beforeGetConnectionNegotiationResponse: suspend () -> Unit = {}
@@ -105,6 +108,8 @@ class FakeRealsApi : RealsApi {
     var userResponse: Response<UserResponseDto> = Response.success(TestDtos.user())
     var deleteMeResponse: Response<Unit> = Response.success(Unit)
     var homeResponse: Response<HomeResponseDto> = Response.success(TestDtos.home())
+    var homeStatusResponse: Response<HomeStatusResponseDto> = Response.success(TestDtos.homeStatus())
+    var homePendingResponse: Response<HomePendingStateResponseDto> = Response.success(TestDtos.homePending())
     var registerPushTokenResponse: Response<RegisterPushTokenResponseDto> =
         Response.success(RegisterPushTokenResponseDto(registered = true))
     var profileResponse: Response<ProfileResponseDto> = Response.success(TestDtos.profile())
@@ -139,6 +144,12 @@ class FakeRealsApi : RealsApi {
 
     override suspend fun getHome(authorization: String): Response<HomeResponseDto> =
         record("getHome", authorization, beforeResponse = beforeGetHomeResponse) { homeResponse }
+
+    override suspend fun getHomeStatus(authorization: String): Response<HomeStatusResponseDto> =
+        record("getHomeStatus", authorization, beforeResponse = beforeGetHomeStatusResponse) { homeStatusResponse }
+
+    override suspend fun getHomePending(authorization: String): Response<HomePendingStateResponseDto> =
+        record("getHomePending", authorization) { homePendingResponse }
 
     override suspend fun registerPushToken(
         authorization: String,
