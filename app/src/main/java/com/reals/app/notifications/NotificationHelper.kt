@@ -15,9 +15,6 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.reals.app.MainActivity
 import com.reals.app.R
-import com.reals.app.notifications.PushNotificationContract.EXTRA_MATCH_ID
-import com.reals.app.notifications.PushNotificationContract.EXTRA_AVAILABLE_AT
-import com.reals.app.notifications.PushNotificationContract.EXTRA_CONNECTION_ID
 import com.reals.app.notifications.PushNotificationContract.EXTRA_PUSH_TYPE
 import com.reals.app.notifications.PushNotificationContract.EXTRA_REFRESH_HOME
 import com.reals.app.notifications.PushNotificationContract.SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE
@@ -32,7 +29,6 @@ object NotificationHelper {
     internal const val VISUAL_REVIEW_NOTIFICATION_PRIORITY = NotificationCompat.PRIORITY_HIGH
 
     fun ensureChannels(context: Context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
 
         val channel = NotificationChannel(
             VISUAL_REVIEW_CHANNEL_ID,
@@ -75,7 +71,7 @@ object NotificationHelper {
     }
 
     @SuppressLint("MissingPermission")
-    fun showSecondChatReminder(context: Context, connectionId: String?, availableAt: String?) {
+    fun showSecondChatReminder(context: Context, connectionId: String?) {
         if (!canPostNotifications(context)) return
 
         val body = "Entr\u00e1 a Reals para ver el horario y prepararte."
@@ -87,7 +83,7 @@ object NotificationHelper {
             .setPriority(VISUAL_REVIEW_NOTIFICATION_PRIORITY)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
-            .setContentIntent(secondChatReminderPendingIntent(context, connectionId, availableAt))
+            .setContentIntent(secondChatReminderPendingIntent(context, connectionId))
             .build()
 
         try {
@@ -103,8 +99,8 @@ object NotificationHelper {
     private fun visualReviewPendingIntent(context: Context, matchId: String?): PendingIntent {
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            setPackage(context.packageName)
             putExtra(EXTRA_PUSH_TYPE, TYPE_VISUAL_REVIEW_AVAILABLE)
-            putExtra(EXTRA_MATCH_ID, matchId)
             putExtra(EXTRA_REFRESH_HOME, true)
         }
 
@@ -112,20 +108,20 @@ object NotificationHelper {
             context,
             VISUAL_REVIEW_NOTIFICATION_ID_BASE + notificationSuffix(matchId),
             intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            PendingIntent.FLAG_CANCEL_CURRENT or
+                    PendingIntent.FLAG_ONE_SHOT or
+                    PendingIntent.FLAG_IMMUTABLE,
         )
     }
 
     private fun secondChatReminderPendingIntent(
         context: Context,
         connectionId: String?,
-        availableAt: String?,
     ): PendingIntent {
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            setPackage(context.packageName)
             putExtra(EXTRA_PUSH_TYPE, TYPE_SECOND_CHAT_REMINDER)
-            putExtra(EXTRA_CONNECTION_ID, connectionId)
-            putExtra(EXTRA_AVAILABLE_AT, availableAt)
             putExtra(EXTRA_REFRESH_HOME, true)
         }
 
@@ -133,7 +129,9 @@ object NotificationHelper {
             context,
             SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE + notificationSuffix(connectionId),
             intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            PendingIntent.FLAG_CANCEL_CURRENT or
+                    PendingIntent.FLAG_ONE_SHOT or
+                    PendingIntent.FLAG_IMMUTABLE,
         )
     }
 

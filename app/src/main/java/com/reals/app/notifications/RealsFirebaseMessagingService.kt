@@ -41,7 +41,6 @@ class RealsFirebaseMessagingService : FirebaseMessagingService() {
             TYPE_SECOND_CHAT_REMINDER -> NotificationHelper.showSecondChatReminder(
                 context = this,
                 connectionId = remoteMessage.data["connectionId"],
-                availableAt = remoteMessage.data["availableAt"],
             )
 
             else -> {

@@ -46,7 +46,6 @@ class MainActivity : ComponentActivity() {
         if (intent == null) return
 
         val pushType = intent.getStringExtra(EXTRA_PUSH_TYPE)
-            ?: intent.getStringExtra("type")
         val shouldRefreshHome = intent.getBooleanExtra(EXTRA_REFRESH_HOME, false) ||
             pushType == TYPE_VISUAL_REVIEW_AVAILABLE ||
             pushType == TYPE_SECOND_CHAT_REMINDER
