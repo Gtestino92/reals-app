@@ -149,7 +149,7 @@ internal class SecondChatCoordinator(
         )) {
             is ApiResult.Success -> SecondChatActionResult.ReturnHome(
                 session = current.session,
-                message = "Reporte enviado. Cerramos esta conversacion por seguridad.",
+                message = "Reporte enviado. Cerramos esta conversacion por seguridad y no volveremos a cruzarte con esta persona.",
             )
 
             is ApiResult.Failure -> SecondChatActionResult.Show(

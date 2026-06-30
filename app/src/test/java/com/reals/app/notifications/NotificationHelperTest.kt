@@ -29,4 +29,12 @@ class NotificationHelperTest {
         assertEquals("available_at", PushNotificationContract.EXTRA_AVAILABLE_AT)
         assertEquals(20_000, PushNotificationContract.SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE)
     }
+
+    @Test
+    fun `scheduling available contract refreshes home instead of deep linking`() {
+        assertEquals("SCHEDULING_AVAILABLE", PushNotificationContract.TYPE_SCHEDULING_AVAILABLE)
+        assertEquals("connection_id", PushNotificationContract.EXTRA_CONNECTION_ID)
+        assertEquals("match_id", PushNotificationContract.EXTRA_MATCH_ID)
+        assertEquals(15_000, PushNotificationContract.SCHEDULING_AVAILABLE_NOTIFICATION_ID_BASE)
+    }
 }

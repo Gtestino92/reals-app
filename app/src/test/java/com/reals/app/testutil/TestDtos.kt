@@ -47,6 +47,7 @@ object TestDtos {
         birthDate = "1998-01-01",
         age = 28,
         identityVerified = true,
+        identityVerificationStatus = "VERIFIED",
         gender = "WOMAN",
         lookingForGender = "MAN",
         intention = "SERIOUS",
@@ -73,6 +74,7 @@ object TestDtos {
         isPersonPhoto = true,
         isFullBody = false,
         validationStatus = validationStatus,
+        moderationStatus = "APPROVED",
     )
 
     fun partner(name: String = "Taylor") = ChatPartnerResponseDto(

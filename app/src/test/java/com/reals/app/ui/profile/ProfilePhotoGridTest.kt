@@ -32,5 +32,6 @@ class ProfilePhotoGridTest {
             isPersonPhoto = true,
             isFullBody = false,
             validationStatus = "APPROVED",
+            moderationStatus = "APPROVED",
         )
 }

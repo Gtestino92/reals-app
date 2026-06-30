@@ -12,7 +12,9 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.reals.app.R
+import com.reals.app.notifications.PushNotificationContract.SCHEDULING_AVAILABLE_NOTIFICATION_ID_BASE
 import com.reals.app.notifications.PushNotificationContract.SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE
+import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_AVAILABLE
 import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_REMINDER
 import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_AVAILABLE
 import com.reals.app.notifications.PushNotificationContract.VISUAL_REVIEW_CHANNEL_ID
@@ -70,7 +72,7 @@ object NotificationHelper {
     }
 
     @SuppressLint("MissingPermission")
-    fun showSecondChatReminder(context: Context, connectionId: String?) {
+    fun showSecondChatReminder(context: Context, connectionId: String?, availableAt: String? = null) {
         if (!canPostNotifications(context)) return
 
         val body = "Entr\u00e1 a Reals para ver el horario y prepararte."
@@ -82,7 +84,7 @@ object NotificationHelper {
             .setPriority(VISUAL_REVIEW_NOTIFICATION_PRIORITY)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
-            .setContentIntent(secondChatReminderPendingIntent(context, connectionId))
+            .setContentIntent(secondChatReminderPendingIntent(context, connectionId, availableAt))
             .build()
 
         try {
@@ -99,6 +101,36 @@ object NotificationHelper {
         }
     }
 
+    @SuppressLint("MissingPermission")
+    fun showSchedulingAvailable(context: Context, connectionId: String?, matchId: String?) {
+        if (!canPostNotifications(context)) return
+
+        val body = "Ya pod\u00e9s coordinar horarios en Reals."
+        val notification = NotificationCompat.Builder(context, VISUAL_REVIEW_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Coordinaci\u00f3n disponible")
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(VISUAL_REVIEW_NOTIFICATION_PRIORITY)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setAutoCancel(true)
+            .setContentIntent(schedulingAvailablePendingIntent(context, connectionId, matchId))
+            .build()
+
+        try {
+            NotificationManagerCompat.from(context).notify(
+                SCHEDULING_AVAILABLE_NOTIFICATION_ID_BASE + notificationSuffix(connectionId ?: matchId),
+                notification,
+            )
+        } catch (exception: SecurityException) {
+            Log.w(
+                TAG,
+                "Could not show scheduling notification because permission was denied.",
+                exception
+            )
+        }
+    }
+
     private fun visualReviewPendingIntent(context: Context, matchId: String?) =
         NotificationPendingIntents.mainActivity(
             context,
@@ -109,10 +141,27 @@ object NotificationHelper {
     private fun secondChatReminderPendingIntent(
         context: Context,
         connectionId: String?,
+        availableAt: String?,
     ) = NotificationPendingIntents.mainActivity(
         context,
         SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE + notificationSuffix(connectionId),
         TYPE_SECOND_CHAT_REMINDER,
+        connectionId,
+        null,
+        availableAt,
+    )
+
+    private fun schedulingAvailablePendingIntent(
+        context: Context,
+        connectionId: String?,
+        matchId: String?,
+    ) = NotificationPendingIntents.mainActivity(
+        context,
+        SCHEDULING_AVAILABLE_NOTIFICATION_ID_BASE + notificationSuffix(connectionId ?: matchId),
+        TYPE_SCHEDULING_AVAILABLE,
+        connectionId,
+        matchId,
+        null,
     )
 
     private fun notificationSuffix(matchId: String?): Int =

@@ -19,6 +19,7 @@ fun ProfileResponseDto.toDomain(): Profile = Profile(
     birthDate = birthDate,
     age = age,
     identityVerified = identityVerified,
+    identityVerificationStatus = identityVerificationStatus,
     gender = gender,
     lookingForGender = lookingForGender,
     intention = intention,
@@ -70,4 +71,5 @@ fun PhotoResponseDto.toDomain(): ProfilePhoto = ProfilePhoto(
     isPersonPhoto = isPersonPhoto,
     isFullBody = isFullBody,
     validationStatus = validationStatus,
+    moderationStatus = moderationStatus,
 )

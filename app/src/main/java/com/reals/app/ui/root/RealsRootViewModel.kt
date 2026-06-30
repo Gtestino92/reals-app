@@ -16,6 +16,7 @@ import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.UpdateProfileInput
 import com.reals.app.domain.model.VisualDecision
 import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_AVAILABLE
+import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_AVAILABLE
 import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_REMINDER
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -93,7 +94,11 @@ class RealsRootViewModel(
     }
 
     fun handleExternalNotificationOpened(type: String?) {
-        if (type != TYPE_VISUAL_REVIEW_AVAILABLE && type != TYPE_SECOND_CHAT_REMINDER) return
+        if (
+            type != TYPE_VISUAL_REVIEW_AVAILABLE &&
+            type != TYPE_SCHEDULING_AVAILABLE &&
+            type != TYPE_SECOND_CHAT_REMINDER
+        ) return
 
         when (val current = _uiState.value) {
             is RealsRootUiState.Ready -> refreshHomeState()

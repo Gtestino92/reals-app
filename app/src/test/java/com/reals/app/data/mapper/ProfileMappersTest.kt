@@ -17,6 +17,7 @@ class ProfileMappersTest {
         assertEquals("user-1", profile.userId)
         assertEquals("Alex", profile.displayName)
         assertEquals(28, profile.age)
+        assertEquals("VERIFIED", profile.identityVerificationStatus)
         assertEquals(ProfileStatus.Active, profile.status)
         assertEquals(2, profile.photoCount)
     }
@@ -43,6 +44,7 @@ class ProfileMappersTest {
         assertEquals(true, photo.isPersonPhoto)
         assertEquals(false, photo.isFullBody)
         assertEquals("PENDING_VALIDATION", photo.validationStatus)
+        assertEquals("APPROVED", photo.moderationStatus)
     }
 
     @Test
