@@ -5,7 +5,6 @@ import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -156,11 +155,12 @@ object NotificationHelper {
     private fun mainActivityNotificationIntent(
         context: Context,
         pushType: String,
-    ): Intent =
-        Intent().apply {
-            setComponent(ComponentName(context, MainActivity::class.java))
-            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra(EXTRA_PUSH_TYPE, pushType)
-            putExtra(EXTRA_REFRESH_HOME, true)
-        }
+    ): Intent {
+        val intent = Intent(context, MainActivity::class.java)
+        intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        intent.setPackage(context.packageName)
+        intent.putExtra(EXTRA_PUSH_TYPE, pushType)
+        intent.putExtra(EXTRA_REFRESH_HOME, true)
+        return intent
+    }
 }
