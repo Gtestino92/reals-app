@@ -10,12 +10,15 @@ import com.reals.app.domain.model.HomeState
 import com.reals.app.domain.model.SearchLocationInput
 import com.reals.app.domain.usecase.DismissSecondChatForConnectionUseCase
 import com.reals.app.domain.usecase.EnqueueMatchmakingUseCase
+import com.reals.app.domain.usecase.GetHomePendingUseCase
+import com.reals.app.domain.usecase.GetHomeStatusUseCase
 import com.reals.app.domain.usecase.GetHomeUseCase
 import com.reals.app.domain.usecase.LeaveQueueUseCase
 import com.reals.app.testutil.FakeAuthTokenProvider
 import com.reals.app.testutil.FakeRealsApi
 import com.reals.app.testutil.TestDomain
 import com.reals.app.testutil.TestDtos
+import com.reals.app.testutil.backendErrorResponse
 import com.reals.app.testutil.testApiExecutor
 import com.reals.app.testutil.testJson
 import com.reals.app.ui.matchmaking.HomeUiMapper
@@ -40,7 +43,7 @@ class HomeCoordinatorCancelTest {
         val gate = CompletableDeferred<Unit>()
         val firstPollStarted = CompletableDeferred<Unit>()
         val api = FakeRealsApi().apply {
-            beforeGetHomeResponse = {
+            beforeGetHomeStatusResponse = {
                 firstPollStarted.complete(Unit)
                 gate.await()
             }
@@ -57,7 +60,7 @@ class HomeCoordinatorCancelTest {
         coordinator.pollHomeStateSilently()
         runCurrent()
 
-        assertEquals(1, api.calls.count { it == "getHome" })
+        assertEquals(1, api.calls.count { it == "getHomeStatus" })
 
         gate.complete(Unit)
         runCurrent()
@@ -65,7 +68,153 @@ class HomeCoordinatorCancelTest {
         coordinator.pollHomeStateSilently()
         runCurrent()
 
-        assertEquals(2, api.calls.count { it == "getHome" })
+        assertEquals(2, api.calls.count { it == "getHomeStatus" })
+        assertEquals(0, api.calls.count { it == "getHome" })
+    }
+
+    @Test
+    fun `silent home poll with unchanged clean version does not load full home`() = runBlocking {
+        val api = FakeRealsApi().apply {
+            homeStatusResponse = Response.success(TestDtos.homeStatus(version = 4, dirty = false))
+        }
+        val state = MutableStateFlow<RealsRootUiState>(
+            ready(phase = MatchmakingSearchUiPhase.Idle, inQueue = false, homeStatusVersion = 4),
+        )
+
+        coordinator(api, state, this).pollHomeStateSilently()
+        yield()
+
+        assertEquals(listOf("getHomeStatus"), api.calls)
+        val ready = state.value as RealsRootUiState.Ready
+        assertEquals(4L, ready.home.homeStatusVersion)
+    }
+
+    @Test
+    fun `silent home poll stores first clean version without loading full home`() = runBlocking {
+        val api = FakeRealsApi().apply {
+            homeStatusResponse = Response.success(TestDtos.homeStatus(version = 5, dirty = false))
+        }
+        val state = MutableStateFlow<RealsRootUiState>(
+            ready(phase = MatchmakingSearchUiPhase.Idle, inQueue = false, homeStatusVersion = null),
+        )
+
+        coordinator(api, state, this).pollHomeStateSilently()
+        yield()
+
+        assertEquals(listOf("getHomeStatus"), api.calls)
+        val ready = state.value as RealsRootUiState.Ready
+        assertEquals(5L, ready.home.homeStatusVersion)
+    }
+
+    @Test
+    fun `silent home poll loads full home when version changes`() = runBlocking {
+        val api = FakeRealsApi().apply {
+            homeStatusResponse = Response.success(TestDtos.homeStatus(version = 6, dirty = false))
+            homeResponse = Response.success(TestDtos.home().copy(pendingActions = emptyList(), nextSteps = emptyList()))
+        }
+        val state = MutableStateFlow<RealsRootUiState>(
+            ready(phase = MatchmakingSearchUiPhase.Idle, inQueue = false, homeStatusVersion = 5),
+        )
+
+        coordinator(api, state, this).pollHomeStateSilently()
+        yield()
+
+        assertEquals(listOf("getHomeStatus", "getHome"), api.calls)
+        val ready = state.value as RealsRootUiState.Ready
+        assertEquals(6L, ready.home.homeStatusVersion)
+        assertEquals(1, ready.home.homeState?.activeInteractionsSummary?.activeInitialCount)
+    }
+
+    @Test
+    fun `silent home poll with unchanged dirty version does not load full home`() = runBlocking {
+        val api = FakeRealsApi().apply {
+            homeStatusResponse = Response.success(TestDtos.homeStatus(version = 7, dirty = true))
+            homeResponse = Response.success(TestDtos.home().copy(pendingActions = emptyList(), nextSteps = emptyList()))
+        }
+        val state = MutableStateFlow<RealsRootUiState>(
+            ready(phase = MatchmakingSearchUiPhase.Idle, inQueue = false, homeStatusVersion = 7),
+        )
+
+        coordinator(api, state, this).pollHomeStateSilently()
+        yield()
+
+        assertEquals(listOf("getHomeStatus"), api.calls)
+        val ready = state.value as RealsRootUiState.Ready
+        assertEquals(7L, ready.home.homeStatusVersion)
+    }
+
+    @Test
+    fun `silent home poll with no known version and dirty status loads full home once`() = runBlocking {
+        val api = FakeRealsApi().apply {
+            homeStatusResponse = Response.success(TestDtos.homeStatus(version = 8, dirty = true))
+            homeResponse = Response.success(TestDtos.home().copy(pendingActions = emptyList(), nextSteps = emptyList()))
+        }
+        val state = MutableStateFlow<RealsRootUiState>(
+            ready(phase = MatchmakingSearchUiPhase.Idle, inQueue = false, homeStatusVersion = null),
+        )
+
+        coordinator(api, state, this).pollHomeStateSilently()
+        yield()
+
+        assertEquals(listOf("getHomeStatus", "getHome"), api.calls)
+        val ready = state.value as RealsRootUiState.Ready
+        assertEquals(8L, ready.home.homeStatusVersion)
+    }
+
+    @Test
+    fun `silent home poll status failure does not overwrite ui with error`() = runBlocking {
+        val api = FakeRealsApi().apply {
+            homeStatusResponse = backendErrorResponse(500, "SERVER_ERROR")
+        }
+        val state = MutableStateFlow<RealsRootUiState>(
+            ready(phase = MatchmakingSearchUiPhase.Idle, inQueue = false, homeStatusVersion = 3),
+        )
+
+        coordinator(api, state, this).pollHomeStateSilently()
+        yield()
+
+        assertEquals(listOf("getHomeStatus"), api.calls)
+        val ready = state.value as RealsRootUiState.Ready
+        assertEquals(null, ready.home.homeError)
+        assertEquals(3L, ready.home.homeStatusVersion)
+    }
+
+    @Test
+    fun `silent home poll full home failure after new version remains silent`() = runBlocking {
+        val api = FakeRealsApi().apply {
+            homeStatusResponse = Response.success(TestDtos.homeStatus(version = 19, dirty = true))
+            homeResponse = backendErrorResponse(500, "SERVER_ERROR")
+        }
+        val state = MutableStateFlow<RealsRootUiState>(
+            ready(phase = MatchmakingSearchUiPhase.Idle, inQueue = false, homeStatusVersion = 18),
+        )
+
+        coordinator(api, state, this).pollHomeStateSilently()
+        yield()
+
+        assertEquals(listOf("getHomeStatus", "getHome"), api.calls)
+        val ready = state.value as RealsRootUiState.Ready
+        assertEquals(null, ready.home.homeError)
+        assertEquals(18L, ready.home.homeStatusVersion)
+        assertEquals(false, ready.home.homeLoading)
+        assertEquals(false, ready.home.homeState?.matchmaking?.inQueue)
+    }
+
+    @Test
+    fun `explicit refresh still loads full home without status precheck`() = runBlocking {
+        val api = FakeRealsApi().apply {
+            homeResponse = Response.success(TestDtos.home().copy(pendingActions = emptyList(), nextSteps = emptyList()))
+        }
+        val state = MutableStateFlow<RealsRootUiState>(
+            ready(phase = MatchmakingSearchUiPhase.Idle, inQueue = false, homeStatusVersion = 8),
+        )
+
+        coordinator(api, state, this).refreshHomeState()
+        yield()
+
+        assertEquals(listOf("getHome"), api.calls)
+        val ready = state.value as RealsRootUiState.Ready
+        assertEquals(8L, ready.home.homeStatusVersion)
     }
 
     @Test
@@ -144,6 +293,8 @@ class HomeCoordinatorCancelTest {
             dependencies = HomeFeatureDependencies(
                 enqueueMatchmaking = EnqueueMatchmakingUseCase(matchmakingRepository),
                 getHome = GetHomeUseCase(meRepository),
+                getHomeStatus = GetHomeStatusUseCase(meRepository),
+                getHomePending = GetHomePendingUseCase(meRepository),
                 leaveQueue = LeaveQueueUseCase(matchmakingRepository),
                 dismissSecondChat = DismissSecondChatForConnectionUseCase(chatRepository),
             ),
@@ -156,12 +307,14 @@ class HomeCoordinatorCancelTest {
     private fun ready(
         phase: MatchmakingSearchUiPhase,
         inQueue: Boolean,
+        homeStatusVersion: Long? = null,
     ): RealsRootUiState.Ready {
         val home = homeState(inQueue)
         return RealsRootUiState.Ready(
             session = TestDomain.session(),
             home = HomeUiState(
                 homeState = home,
+                homeStatusVersion = homeStatusVersion,
                 screenModel = HomeUiMapper().toScreenModel(
                     home = home,
                     localHidden = LocalHiddenInteractions(

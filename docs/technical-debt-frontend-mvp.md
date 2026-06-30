@@ -42,13 +42,16 @@ Acceptance criteria:
 ### 1.3 Polling before push notifications
 
 MVP decision:
-- Keep Home polling and chat/scheduling polling as the pre-notification fallback behavior.
+- Keep Home status polling and chat/scheduling polling as the pre-notification fallback behavior.
+- Android uses `GET /api/me/home/status` for silent Home polling and keeps `GET /api/me/home` as the source of truth for full Home rendering and routing.
+- `GET /api/me/home/pending` is wired for lightweight pending state but is not the primary Android routing source.
 - Push notifications are not required for MVP.
 - Polling remains a temporary frontend/backend strategy for MVP validation.
 
 Acceptance criteria:
 - App remains usable without push notifications.
 - Home, chat, scheduling and second-chat availability can refresh through polling.
+- Silent Home polling fetches full Home only when status indicates a changed version or dirty state.
 - Polling does not overwrite visible user errors or create confusing state jumps.
 - Polling intervals are not unnecessarily aggressive.
 - Repeated polling calls remain stable and idempotent.

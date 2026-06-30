@@ -8,7 +8,8 @@ import java.time.OffsetDateTime
 import java.time.format.DateTimeParseException
 
 private const val SECOND_CHAT_NEAR_WINDOW_MILLIS = 15 * 60 * 1000L
-private const val SECOND_CHAT_POLL_INTERVAL_MILLIS = 60 * 1000L
+internal const val HOME_POLL_INTERVAL_MILLIS = 5 * 1000L
+private const val SECOND_CHAT_POLL_INTERVAL_MILLIS = HOME_POLL_INTERVAL_MILLIS
 
 internal fun ApiError?.isActiveMatchLimitReached(): Boolean {
     if (this !is ApiError.Backend) return false
@@ -45,11 +46,7 @@ internal fun emptyHomeScreenModel(): HomeScreenModel = HomeScreenModel(
 )
 
 internal fun HomeScreenModel.shouldPollHome(): Boolean =
-    matchmaking.inQueue ||
-        pendingActions.isNotEmpty() ||
-        nextSteps.isNotEmpty() ||
-        passiveNotices.isNotEmpty() ||
-        activeInteractionsSummary.hasActiveInteractions()
+    true
 
 internal fun HomeScreenModel.shouldPollSecondChatAvailability(
     nowMillis: Long = System.currentTimeMillis(),
@@ -66,14 +63,6 @@ internal fun HomeScreenModel.nextSecondChatPollDelayMillis(
         .minOrNull()
 
     return nextDueDelay ?: SECOND_CHAT_POLL_INTERVAL_MILLIS
-}
-
-private fun com.reals.app.domain.model.HomeActiveInteractionsSummary?.hasActiveInteractions(): Boolean {
-    if (this == null) return false
-    return activeInitialCount > 0 ||
-        activeConnectionCount > 0 ||
-        pendingSchedulingConnectionCount > 0 ||
-        actionableConnectionCount > 0
 }
 
 private fun HomeNextStepItem.needsSecondChatAvailabilityPolling(nowMillis: Long): Boolean {

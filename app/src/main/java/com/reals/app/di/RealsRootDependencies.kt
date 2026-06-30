@@ -15,6 +15,8 @@ import com.reals.app.domain.usecase.GetChatExitRequestsUseCase
 import com.reals.app.domain.usecase.GetChatMessagesUseCase
 import com.reals.app.domain.usecase.GetChatUseCase
 import com.reals.app.domain.usecase.GetFirstChatForMatchUseCase
+import com.reals.app.domain.usecase.GetHomePendingUseCase
+import com.reals.app.domain.usecase.GetHomeStatusUseCase
 import com.reals.app.domain.usecase.GetHomeUseCase
 import com.reals.app.domain.usecase.GetMatchUseCase
 import com.reals.app.domain.usecase.GetMeUseCase
@@ -78,6 +80,8 @@ data class ProfileFeatureDependencies(
 data class HomeFeatureDependencies(
     val enqueueMatchmaking: EnqueueMatchmakingUseCase,
     val getHome: GetHomeUseCase,
+    val getHomeStatus: GetHomeStatusUseCase,
+    val getHomePending: GetHomePendingUseCase,
     val leaveQueue: LeaveQueueUseCase,
     val dismissSecondChat: DismissSecondChatForConnectionUseCase,
 )

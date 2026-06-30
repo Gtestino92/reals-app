@@ -9,6 +9,20 @@ data class HomeState(
     val passiveNotices: List<HomePassiveNotice>,
 )
 
+data class HomeStatus(
+    val version: Long,
+    val dirty: Boolean,
+    val serverTime: String,
+)
+
+data class HomePendingState(
+    val version: Long,
+    val pendingActions: List<HomePendingAction>,
+    val nextSteps: List<HomeNextStep>,
+    val passiveNotices: List<HomePassiveNotice>,
+    val serverTime: String,
+)
+
 data class HomeMatchmaking(
     val inQueue: Boolean,
     val canSearch: Boolean,

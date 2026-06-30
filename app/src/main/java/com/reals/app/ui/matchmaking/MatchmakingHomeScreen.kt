@@ -233,7 +233,7 @@ fun MatchmakingHomeScreen(
             model.activeInteractionsSummary?.actionableConnectionCount,
         ) {
             while (true) {
-                delay(60_000.milliseconds)
+                delay(HOME_POLL_INTERVAL_MILLIS.milliseconds)
                 nowMillis = System.currentTimeMillis()
                 onPollHome()
             }

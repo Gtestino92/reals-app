@@ -11,8 +11,13 @@ import com.reals.app.data.dto.HomeChatResponseDto
 import com.reals.app.data.dto.HomeMatchmakingResponseDto
 import com.reals.app.data.dto.HomeNextStepResponseDto
 import com.reals.app.data.dto.HomePassiveNoticeResponseDto
+import com.reals.app.data.dto.HomePendingActionLiteResponseDto
 import com.reals.app.data.dto.HomePendingActionResponseDto
+import com.reals.app.data.dto.HomePendingSecondChatLiteResponseDto
+import com.reals.app.data.dto.HomePendingStateResponseDto
 import com.reals.app.data.dto.HomeResponseDto
+import com.reals.app.data.dto.HomeStatusResponseDto
+import com.reals.app.data.dto.HomeNextStepLiteResponseDto
 import com.reals.app.data.dto.MatchResponseDto
 import com.reals.app.data.dto.NegotiationResponseDto
 import com.reals.app.data.dto.PhotoResponseDto
@@ -228,6 +233,47 @@ object TestDtos {
             ),
         ),
         passiveNotices = listOf(HomePassiveNoticeResponseDto("SCHEDULING_PREPARING", 2)),
+    )
+
+    fun homeStatus(version: Long = 1, dirty: Boolean = false) = HomeStatusResponseDto(
+        version = version,
+        dirty = dirty,
+        serverTime = now,
+    )
+
+    fun homePending() = HomePendingStateResponseDto(
+        version = 1,
+        pendingActions = listOf(
+            HomePendingActionLiteResponseDto(
+                type = "FIRST_CHAT",
+                matchId = "match-1",
+                chatId = "chat-1",
+            ),
+            HomePendingActionLiteResponseDto(
+                type = "VISUAL_REVIEW",
+                matchId = "match-2",
+            ),
+        ),
+        nextSteps = listOf(
+            HomeNextStepLiteResponseDto(
+                type = "SCHEDULING",
+                connectionId = "connection-1",
+                matchId = "match-3",
+            ),
+            HomeNextStepLiteResponseDto(
+                type = "SECOND_CHAT_AVAILABLE",
+                connectionId = "connection-2",
+                matchId = "match-4",
+                secondChat = HomePendingSecondChatLiteResponseDto(
+                    chatId = "chat-2",
+                    availableAt = now,
+                    expiresAt = now,
+                    durationMinutes = 120,
+                ),
+            ),
+        ),
+        passiveNotices = listOf(HomePassiveNoticeResponseDto("SCHEDULING_PREPARING", 2)),
+        serverTime = now,
     )
 
     fun connection(state: String = "SCHEDULING_PHASE") = ConnectionResponseDto(

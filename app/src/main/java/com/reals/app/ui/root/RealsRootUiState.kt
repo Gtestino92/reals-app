@@ -185,6 +185,7 @@ data class PhotoManagementUiState(
 
 data class HomeUiState(
     val homeState: HomeState? = null,
+    val homeStatusVersion: Long? = null,
     val screenModel: HomeScreenModel? = null,
     val homeLoading: Boolean = false,
     val homeError: ApiError? = null,

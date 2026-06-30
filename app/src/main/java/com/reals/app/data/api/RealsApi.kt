@@ -12,6 +12,8 @@ import com.reals.app.data.dto.ConnectionResponseDto
 import com.reals.app.data.dto.CreateProfileRequestDto
 import com.reals.app.data.dto.EnqueueMatchmakingRequestDto
 import com.reals.app.data.dto.HomeResponseDto
+import com.reals.app.data.dto.HomePendingStateResponseDto
+import com.reals.app.data.dto.HomeStatusResponseDto
 import com.reals.app.data.dto.MatchResponseDto
 import com.reals.app.data.dto.NegotiationResponseDto
 import com.reals.app.data.dto.PartnerPersonalMessageResponseDto
@@ -63,6 +65,16 @@ interface RealsApi {
     suspend fun getHome(
         @Header("Authorization") authorization: String,
     ): Response<HomeResponseDto>
+
+    @GET("api/me/home/status")
+    suspend fun getHomeStatus(
+        @Header("Authorization") authorization: String,
+    ): Response<HomeStatusResponseDto>
+
+    @GET("api/me/home/pending")
+    suspend fun getHomePending(
+        @Header("Authorization") authorization: String,
+    ): Response<HomePendingStateResponseDto>
 
     @PUT("api/me/push-tokens")
     suspend fun registerPushToken(

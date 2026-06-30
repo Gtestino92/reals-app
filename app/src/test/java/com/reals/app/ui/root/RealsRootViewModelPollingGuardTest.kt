@@ -31,6 +31,8 @@ import com.reals.app.domain.usecase.GetChatExitRequestsUseCase
 import com.reals.app.domain.usecase.GetChatMessagesUseCase
 import com.reals.app.domain.usecase.GetChatUseCase
 import com.reals.app.domain.usecase.GetFirstChatForMatchUseCase
+import com.reals.app.domain.usecase.GetHomePendingUseCase
+import com.reals.app.domain.usecase.GetHomeStatusUseCase
 import com.reals.app.domain.usecase.GetHomeUseCase
 import com.reals.app.domain.usecase.GetMatchUseCase
 import com.reals.app.domain.usecase.GetMeUseCase
@@ -262,6 +264,8 @@ class RealsRootViewModelPollingGuardTest {
             home = HomeFeatureDependencies(
                 enqueueMatchmaking = EnqueueMatchmakingUseCase(matchmakingRepository),
                 getHome = GetHomeUseCase(meRepository),
+                getHomeStatus = GetHomeStatusUseCase(meRepository),
+                getHomePending = GetHomePendingUseCase(meRepository),
                 leaveQueue = LeaveQueueUseCase(matchmakingRepository),
                 dismissSecondChat = DismissSecondChatForConnectionUseCase(chatRepository),
             ),
