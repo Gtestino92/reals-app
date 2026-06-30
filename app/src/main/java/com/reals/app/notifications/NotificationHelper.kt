@@ -4,20 +4,14 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.PendingIntent
-import android.content.ComponentName
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import com.reals.app.MainActivity
 import com.reals.app.R
-import com.reals.app.notifications.PushNotificationContract.EXTRA_PUSH_TYPE
-import com.reals.app.notifications.PushNotificationContract.EXTRA_REFRESH_HOME
 import com.reals.app.notifications.PushNotificationContract.SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE
 import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_REMINDER
 import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_AVAILABLE
@@ -105,40 +99,21 @@ object NotificationHelper {
         }
     }
 
-    private fun visualReviewPendingIntent(context: Context, matchId: String?): PendingIntent {
-        val intent = mainActivityNotificationIntent(
-            context = context,
-            pushType = TYPE_VISUAL_REVIEW_AVAILABLE,
-        )
-
-        return PendingIntent.getActivity(
+    private fun visualReviewPendingIntent(context: Context, matchId: String?) =
+        NotificationPendingIntents.mainActivity(
             context,
             VISUAL_REVIEW_NOTIFICATION_ID_BASE + notificationSuffix(matchId),
-            intent,
-            PendingIntent.FLAG_CANCEL_CURRENT or
-                    PendingIntent.FLAG_ONE_SHOT or
-                    PendingIntent.FLAG_IMMUTABLE,
+            TYPE_VISUAL_REVIEW_AVAILABLE,
         )
-    }
 
     private fun secondChatReminderPendingIntent(
         context: Context,
         connectionId: String?,
-    ): PendingIntent {
-        val intent = mainActivityNotificationIntent(
-            context = context,
-            pushType = TYPE_SECOND_CHAT_REMINDER,
-        )
-
-        return PendingIntent.getActivity(
-            context,
-            SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE + notificationSuffix(connectionId),
-            intent,
-            PendingIntent.FLAG_CANCEL_CURRENT or
-                    PendingIntent.FLAG_ONE_SHOT or
-                    PendingIntent.FLAG_IMMUTABLE,
-        )
-    }
+    ) = NotificationPendingIntents.mainActivity(
+        context,
+        SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE + notificationSuffix(connectionId),
+        TYPE_SECOND_CHAT_REMINDER,
+    )
 
     private fun notificationSuffix(matchId: String?): Int =
         matchId?.hashCode()?.floorMod(9000) ?: 0
@@ -152,15 +127,4 @@ object NotificationHelper {
             Manifest.permission.POST_NOTIFICATIONS,
         ) == PackageManager.PERMISSION_GRANTED
     }
-
-    private fun mainActivityNotificationIntent(
-        context: Context,
-        pushType: String,
-    ): Intent =
-        Intent().apply {
-            setComponent(ComponentName(context, MainActivity::class.java))
-            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra(EXTRA_PUSH_TYPE, pushType)
-            putExtra(EXTRA_REFRESH_HOME, true)
-        }
 }
