@@ -74,6 +74,10 @@ which remains the source of truth for the complete Home contract. Future clients
 can poll `GET /api/me/home/status` and call the full Home endpoint only when the
 persisted version changes.
 
+Bruno debug requests for this `local-firebase` flow live under
+`bruno/reals-backend-happy-path/11 - Home Polling Debug`; they use Firebase
+`Authorization: Bearer ...` tokens, not `X-Dev-User-Id`.
+
 `nextSteps[]` includes `SCHEDULING`, `SECOND_CHAT_SCHEDULED`,
 `SECOND_CHAT_AVAILABLE` and `SECOND_CHAT_READ_ONLY` items. `SCHEDULING_PENDING`
 is not actionable and is surfaced through

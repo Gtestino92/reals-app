@@ -126,7 +126,7 @@ class HomeCoordinatorCancelTest {
     }
 
     @Test
-    fun `silent home poll loads full home when dirty even if version is unchanged`() = runBlocking {
+    fun `silent home poll with unchanged dirty version does not load full home`() = runBlocking {
         val api = FakeRealsApi().apply {
             homeStatusResponse = Response.success(TestDtos.homeStatus(version = 7, dirty = true))
             homeResponse = Response.success(TestDtos.home().copy(pendingActions = emptyList(), nextSteps = emptyList()))
@@ -138,9 +138,27 @@ class HomeCoordinatorCancelTest {
         coordinator(api, state, this).pollHomeStateSilently()
         yield()
 
-        assertEquals(listOf("getHomeStatus", "getHome"), api.calls)
+        assertEquals(listOf("getHomeStatus"), api.calls)
         val ready = state.value as RealsRootUiState.Ready
         assertEquals(7L, ready.home.homeStatusVersion)
+    }
+
+    @Test
+    fun `silent home poll with no known version and dirty status loads full home once`() = runBlocking {
+        val api = FakeRealsApi().apply {
+            homeStatusResponse = Response.success(TestDtos.homeStatus(version = 8, dirty = true))
+            homeResponse = Response.success(TestDtos.home().copy(pendingActions = emptyList(), nextSteps = emptyList()))
+        }
+        val state = MutableStateFlow<RealsRootUiState>(
+            ready(phase = MatchmakingSearchUiPhase.Idle, inQueue = false, homeStatusVersion = null),
+        )
+
+        coordinator(api, state, this).pollHomeStateSilently()
+        yield()
+
+        assertEquals(listOf("getHomeStatus", "getHome"), api.calls)
+        val ready = state.value as RealsRootUiState.Ready
+        assertEquals(8L, ready.home.homeStatusVersion)
     }
 
     @Test
@@ -159,6 +177,27 @@ class HomeCoordinatorCancelTest {
         val ready = state.value as RealsRootUiState.Ready
         assertEquals(null, ready.home.homeError)
         assertEquals(3L, ready.home.homeStatusVersion)
+    }
+
+    @Test
+    fun `silent home poll full home failure after new version remains silent`() = runBlocking {
+        val api = FakeRealsApi().apply {
+            homeStatusResponse = Response.success(TestDtos.homeStatus(version = 19, dirty = true))
+            homeResponse = backendErrorResponse(500, "SERVER_ERROR")
+        }
+        val state = MutableStateFlow<RealsRootUiState>(
+            ready(phase = MatchmakingSearchUiPhase.Idle, inQueue = false, homeStatusVersion = 18),
+        )
+
+        coordinator(api, state, this).pollHomeStateSilently()
+        yield()
+
+        assertEquals(listOf("getHomeStatus", "getHome"), api.calls)
+        val ready = state.value as RealsRootUiState.Ready
+        assertEquals(null, ready.home.homeError)
+        assertEquals(18L, ready.home.homeStatusVersion)
+        assertEquals(false, ready.home.homeLoading)
+        assertEquals(false, ready.home.homeState?.matchmaking?.inQueue)
     }
 
     @Test

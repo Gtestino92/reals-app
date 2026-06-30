@@ -99,8 +99,9 @@ internal class HomeCoordinator(
                     val latest = uiState.value as? RealsRootUiState.Ready ?: return@launch
                     val status = statusResult.value
                     val knownVersion = latest.home.homeStatusVersion
-                    if (!status.dirty && knownVersion == status.version) return@launch
-                    if (!status.dirty && knownVersion == null && latest.home.homeState != null) {
+                    val hasHome = latest.home.homeState != null
+                    if (hasHome && knownVersion == status.version) return@launch
+                    if (hasHome && knownVersion == null && !status.dirty) {
                         uiState.value = latest.copy(
                             home = latest.home.copy(homeStatusVersion = status.version),
                         )
