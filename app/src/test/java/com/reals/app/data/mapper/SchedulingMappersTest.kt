@@ -32,6 +32,7 @@ class SchedulingMappersTest {
 
         assertEquals(TestDtos.now, negotiation.confirmedDateTime)
         assertEquals("chat-2", negotiation.chatId)
+        assertEquals("2026-06-19T21:00:00Z", negotiation.schedulingExpiresAt)
     }
 
     @Test

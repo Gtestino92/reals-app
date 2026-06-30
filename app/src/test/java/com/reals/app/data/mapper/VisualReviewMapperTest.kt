@@ -14,6 +14,7 @@ class VisualReviewMapperTest {
             displayName = "Alex",
             age = 29,
             bio = "Bio",
+            visualExpiresAt = "2026-06-19T21:00:00Z",
             myPersonalMessageSubmitted = true,
             partnerPersonalMessageSubmitted = true,
             partnerPersonalMessageRead = false,
@@ -43,6 +44,7 @@ class VisualReviewMapperTest {
         assertEquals("profile-1", domain.profileId)
         assertEquals("Alex", domain.displayName)
         assertEquals(29, domain.age)
+        assertEquals("2026-06-19T21:00:00Z", domain.visualExpiresAt)
         assertEquals(true, domain.myPersonalMessageSubmitted)
         assertEquals(true, domain.partnerPersonalMessageSubmitted)
         assertEquals(false, domain.partnerPersonalMessageRead)

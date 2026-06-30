@@ -17,6 +17,7 @@ class MatchMappersTest {
         assertEquals("user-2", match.userBId)
         assertEquals(MatchState.VisualPhase, match.state)
         assertEquals("connection-1", match.connectionId)
+        assertEquals("2026-06-19T21:00:00Z", match.visualExpiresAt)
     }
 
     @Test

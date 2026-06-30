@@ -74,6 +74,11 @@ class FirstChatRulesTest {
             "El chat cambio de estado. Actualizamos tu Home.",
             firstChatExitMessage(null),
         )
+        assertEquals("El chat venci\u00f3.", ChatStatus.Expired.firstChatClosedMessage())
+        assertEquals(
+            "La conversaci\u00f3n se cerr\u00f3 por inactividad.",
+            ChatStatus.Abandoned.firstChatClosedMessage(),
+        )
     }
 
     @Test

@@ -28,6 +28,7 @@ fun ChatResponseDto.toDomain(): Chat = Chat(
     activatedAt = activatedAt,
     timeoutAt = timeoutAt,
     expiresAt = expiresAt ?: timeoutAt,
+    inactivityExpiresAt = inactivityExpiresAt,
     partner = partner?.toDomain(),
     myDecision = ChatDecisionState.fromBackend(myDecision),
     partnerDecision = ChatDecisionState.fromBackend(partnerDecision),

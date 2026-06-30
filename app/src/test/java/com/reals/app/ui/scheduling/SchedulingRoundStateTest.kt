@@ -112,6 +112,7 @@ class SchedulingRoundStateTest {
         status = status,
         confirmedDateTime = if (status == NegotiationStatus.Confirmed) "2026-06-18T21:00:00-03:00" else null,
         chatId = if (status == NegotiationStatus.Confirmed) "chat-1" else null,
+        schedulingExpiresAt = "2026-06-19T21:00:00-03:00",
         createdAt = "2026-06-18T10:00:00-03:00",
         updatedAt = "2026-06-18T10:00:00-03:00",
     )

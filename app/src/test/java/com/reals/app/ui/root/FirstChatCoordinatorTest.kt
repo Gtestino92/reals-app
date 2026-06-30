@@ -92,7 +92,9 @@ class FirstChatCoordinatorTest {
     fun `sendMessage appends sent message and refreshes messages`() = runBlocking {
         val current = firstChatState(chatStatus = ChatStatus.Active)
 
-        val state = coordinator.sendMessage(current, "hola", localId = "local-1")
+        val result = coordinator.sendMessage(current, "hola", localId = "local-1")
+        assertTrue(result is FirstChatSendResult.Show)
+        val state = (result as FirstChatSendResult.Show).state
 
         assertEquals(false, state.sending)
         assertTrue(state.messages.any { it.id == "message-1" })
@@ -108,7 +110,9 @@ class FirstChatCoordinatorTest {
         )
         val current = firstChatState(chatStatus = ChatStatus.Active)
 
-        val state = coordinator.sendMessage(current, "", localId = "local-1")
+        val result = coordinator.sendMessage(current, "", localId = "local-1")
+        assertTrue(result is FirstChatSendResult.Show)
+        val state = (result as FirstChatSendResult.Show).state
         val error = state.error as ApiError.Backend
 
         assertEquals(false, state.sending)
@@ -117,6 +121,22 @@ class FirstChatCoordinatorTest {
             "Revisa el mensaje. No puede estar vacio ni superar el limite permitido.",
             error.toUserMessage(ErrorContext.Chat),
         )
+    }
+
+    @Test
+    fun `sendMessage chat abandoned returns home and hides first chat`() = runBlocking {
+        api.chatMessageResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "CHAT_ABANDONED",
+        )
+        val current = firstChatState(chatStatus = ChatStatus.Active)
+
+        val result = coordinator.sendMessage(current, "hola", localId = "local-1")
+
+        assertTrue(result is FirstChatSendResult.ReturnHome)
+        result as FirstChatSendResult.ReturnHome
+        assertEquals("match-1", result.hideFirstChatMatchId)
+        assertEquals("La conversaci\u00f3n se cerr\u00f3 por inactividad.", result.message)
     }
 
     @Test
@@ -175,6 +195,26 @@ class FirstChatCoordinatorTest {
         val state = (result as FirstChatActionResult.Show).state
         assertFalse(state.actionLoading)
         assertTrue(state.error is ApiError.Backend)
+    }
+
+    @Test
+    fun `decision chat abandoned returns home and hides first chat`() = runBlocking {
+        api.matchResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "CHAT_ABANDONED",
+        )
+        val current = firstChatState(chatStatus = ChatStatus.Active)
+
+        val result = coordinator.submitDecision(
+            current = current,
+            decision = ChatContinueDecision.Approved,
+            onPending = {},
+        )
+
+        assertTrue(result is FirstChatActionResult.ReturnHome)
+        result as FirstChatActionResult.ReturnHome
+        assertEquals("match-1", result.hideFirstChatMatchId)
+        assertEquals("La conversaci\u00f3n se cerr\u00f3 por inactividad.", result.message)
     }
 
     @Test

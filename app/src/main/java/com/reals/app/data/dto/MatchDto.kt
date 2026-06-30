@@ -9,6 +9,7 @@ data class MatchResponseDto(
     val userBId: String,
     val state: String,
     val connectionId: String? = null,
+    val visualExpiresAt: String? = null,
     val createdAt: String,
     val updatedAt: String,
 )

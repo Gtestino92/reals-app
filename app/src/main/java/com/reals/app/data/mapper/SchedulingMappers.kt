@@ -28,6 +28,7 @@ fun NegotiationResponseDto.toDomain(): SchedulingNegotiation = SchedulingNegotia
     status = NegotiationStatus.fromBackend(status),
     confirmedDateTime = confirmedDateTime,
     chatId = chatId,
+    schedulingExpiresAt = schedulingExpiresAt,
     createdAt = createdAt,
     updatedAt = updatedAt,
 )

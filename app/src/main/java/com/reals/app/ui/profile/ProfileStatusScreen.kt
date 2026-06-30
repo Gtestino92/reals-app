@@ -234,6 +234,11 @@ private fun ProfileCard(
     var expandedSection by rememberSaveable(profile.id) {
         mutableStateOf(if (profile.status == ProfileStatus.Draft) ProfileSection.Photos else null)
     }
+    val busy = profileUpdateLoading ||
+            matchFiltersLoading ||
+            photosLoading ||
+            photoActionLoading ||
+            activationLoading
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -263,6 +268,7 @@ private fun ProfileCard(
             ProfileEditActions(
                 profile = profile,
                 loading = profileUpdateLoading,
+                busy = busy,
                 error = profileUpdateError,
                 message = profileUpdateMessage,
                 expanded = expandedSection == ProfileSection.Profile,
@@ -274,6 +280,7 @@ private fun ProfileCard(
             MatchFiltersActions(
                 profile = profile,
                 loading = matchFiltersLoading,
+                busy = busy,
                 error = matchFiltersError,
                 message = matchFiltersMessage,
                 expanded = expandedSection == ProfileSection.Filters,
@@ -292,6 +299,7 @@ private fun ProfileCard(
                 photoActionMessage = photoActionMessage,
                 activationLoading = activationLoading,
                 activationError = activationError,
+                busy = busy,
                 expanded = expandedSection == ProfileSection.Photos,
                 onToggleExpanded = {
                     expandedSection = if (expandedSection == ProfileSection.Photos) null else ProfileSection.Photos
@@ -316,6 +324,7 @@ private enum class ProfileSection {
 private fun ProfileEditActions(
     profile: Profile,
     loading: Boolean,
+    busy: Boolean,
     error: ApiError?,
     message: String?,
     expanded: Boolean,
@@ -331,7 +340,7 @@ private fun ProfileEditActions(
     var localError by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
 
     Column(modifier = Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        OutlinedButton(onClick = onToggleExpanded, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = onToggleExpanded, enabled = !loading && !busy, modifier = Modifier.fillMaxWidth()) {
             Text(if (expanded) "Ocultar edicion de perfil" else "Editar perfil")
         }
         if (expanded) {
@@ -372,6 +381,7 @@ private fun ProfileEditActions(
 private fun MatchFiltersActions(
     profile: Profile,
     loading: Boolean,
+    busy: Boolean,
     error: ApiError?,
     message: String?,
     expanded: Boolean,
@@ -384,7 +394,7 @@ private fun MatchFiltersActions(
     var localError by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
 
     Column(modifier = Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        OutlinedButton(onClick = onToggleExpanded, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = onToggleExpanded, enabled = !loading && !busy, modifier = Modifier.fillMaxWidth()) {
             Text(if (expanded) "Ocultar filtros" else "Editar filtros de match")
         }
         if (expanded) {
@@ -431,6 +441,7 @@ private fun PhotoManagerActions(
     photoActionMessage: String?,
     activationLoading: Boolean,
     activationError: ApiError?,
+    busy: Boolean,
     expanded: Boolean,
     onToggleExpanded: () -> Unit,
     onLoadPhotos: () -> Unit,
@@ -462,7 +473,6 @@ private fun PhotoManagerActions(
             onReplacePhotoFile(photoId, position, uri)
         }
     }
-    val busy = photosLoading || photoActionLoading || activationLoading
 
     LaunchedEffect(photoActionLoading, photoActionMessage) {
         if (!photoActionLoading && photoActionMessage != null && pendingAddedPosition != null) {
@@ -767,19 +777,6 @@ private fun String.isPresignedUrl(): Boolean {
 private fun String.isLocalhostPresignedUrl(): Boolean {
     return isPresignedUrl() &&
         (startsWith("http://localhost:") || startsWith("http://127.0.0.1:"))
-}
-
-@Composable
-private fun CheckboxRow(
-    label: String,
-    checked: Boolean,
-    enabled: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Checkbox(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled)
-        Text(label)
-    }
 }
 
 @Composable

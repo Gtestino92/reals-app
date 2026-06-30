@@ -14,6 +14,7 @@ data class ChatResponseDto(
     val activatedAt: String? = null,
     val timeoutAt: String,
     val expiresAt: String? = null,
+    val inactivityExpiresAt: String? = null,
     val partner: ChatPartnerResponseDto? = null,
     val myDecision: String? = null,
     val partnerDecision: String? = null,

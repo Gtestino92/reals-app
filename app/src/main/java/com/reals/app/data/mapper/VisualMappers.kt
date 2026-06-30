@@ -9,6 +9,7 @@ fun VisualProfileResponseDto.toDomain(): VisualProfile = VisualProfile(
     age = age,
     bio = bio,
     photos = photos.map { it.toDomain() }.sortedBy { it.position },
+    visualExpiresAt = visualExpiresAt,
     myPersonalMessageSubmitted = myPersonalMessageSubmitted,
     partnerPersonalMessageSubmitted = partnerPersonalMessageSubmitted,
     partnerPersonalMessageRead = partnerPersonalMessageRead,

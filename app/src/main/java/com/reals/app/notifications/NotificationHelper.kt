@@ -4,20 +4,16 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import com.reals.app.MainActivity
 import com.reals.app.R
-import com.reals.app.notifications.PushNotificationContract.EXTRA_MATCH_ID
-import com.reals.app.notifications.PushNotificationContract.EXTRA_PUSH_TYPE
-import com.reals.app.notifications.PushNotificationContract.EXTRA_REFRESH_HOME
+import com.reals.app.notifications.PushNotificationContract.SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE
+import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_REMINDER
 import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_AVAILABLE
 import com.reals.app.notifications.PushNotificationContract.VISUAL_REVIEW_CHANNEL_ID
 import com.reals.app.notifications.PushNotificationContract.VISUAL_REVIEW_NOTIFICATION_ID_BASE
@@ -28,7 +24,6 @@ object NotificationHelper {
     internal const val VISUAL_REVIEW_NOTIFICATION_PRIORITY = NotificationCompat.PRIORITY_HIGH
 
     fun ensureChannels(context: Context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
 
         val channel = NotificationChannel(
             VISUAL_REVIEW_CHANNEL_ID,
@@ -66,25 +61,59 @@ object NotificationHelper {
                 notification,
             )
         } catch (exception: SecurityException) {
-            Log.w(TAG, "Could not show visual review notification because permission was denied.", exception)
+            Log.w(
+                TAG,
+                "Could not show visual review notification because permission was denied.",
+                exception
+            )
         }
     }
 
-    private fun visualReviewPendingIntent(context: Context, matchId: String?): PendingIntent {
-        val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra(EXTRA_PUSH_TYPE, TYPE_VISUAL_REVIEW_AVAILABLE)
-            putExtra(EXTRA_MATCH_ID, matchId)
-            putExtra(EXTRA_REFRESH_HOME, true)
-        }
+    @SuppressLint("MissingPermission")
+    fun showSecondChatReminder(context: Context, connectionId: String?) {
+        if (!canPostNotifications(context)) return
 
-        return PendingIntent.getActivity(
+        val body = "Entr\u00e1 a Reals para ver el horario y prepararte."
+        val notification = NotificationCompat.Builder(context, VISUAL_REVIEW_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Tu segunda charla empieza pronto")
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(VISUAL_REVIEW_NOTIFICATION_PRIORITY)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setAutoCancel(true)
+            .setContentIntent(secondChatReminderPendingIntent(context, connectionId))
+            .build()
+
+        try {
+            NotificationManagerCompat.from(context).notify(
+                SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE + notificationSuffix(connectionId),
+                notification,
+            )
+        } catch (exception: SecurityException) {
+            Log.w(
+                TAG,
+                "Could not show second chat reminder because permission was denied.",
+                exception
+            )
+        }
+    }
+
+    private fun visualReviewPendingIntent(context: Context, matchId: String?) =
+        NotificationPendingIntents.mainActivity(
             context,
             VISUAL_REVIEW_NOTIFICATION_ID_BASE + notificationSuffix(matchId),
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            TYPE_VISUAL_REVIEW_AVAILABLE,
         )
-    }
+
+    private fun secondChatReminderPendingIntent(
+        context: Context,
+        connectionId: String?,
+    ) = NotificationPendingIntents.mainActivity(
+        context,
+        SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE + notificationSuffix(connectionId),
+        TYPE_SECOND_CHAT_REMINDER,
+    )
 
     private fun notificationSuffix(matchId: String?): Int =
         matchId?.hashCode()?.floorMod(9000) ?: 0

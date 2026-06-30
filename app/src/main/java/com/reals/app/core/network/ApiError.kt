@@ -49,6 +49,7 @@ enum class BackendErrorCode(val raw: String) {
     ChatNotFound("CHAT_NOT_FOUND"),
     ChatNotAvailable("CHAT_NOT_AVAILABLE"),
     ChatExpired("CHAT_EXPIRED"),
+    ChatAbandoned("CHAT_ABANDONED"),
     ChatMessageInvalid("CHAT_MESSAGE_INVALID"),
     ChatDecisionNotAvailable("CHAT_DECISION_NOT_AVAILABLE"),
     ChatDecisionAlreadySubmitted("CHAT_DECISION_ALREADY_SUBMITTED"),
@@ -184,7 +185,8 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.VisualReviewPartnerMessageNotRead -> "Lee el mensaje personal de la otra persona antes de decidir."
     BackendErrorCode.ChatNotFound -> "No encontramos esta conversacion. Actualiza el estado."
     BackendErrorCode.ChatNotAvailable -> "Esta conversacion ya no esta disponible. Actualiza el estado."
-    BackendErrorCode.ChatExpired -> "La conversacion vencio."
+    BackendErrorCode.ChatExpired -> "La conversaci\u00f3n venci\u00f3."
+    BackendErrorCode.ChatAbandoned -> "La conversaci\u00f3n se cerr\u00f3 por inactividad."
     BackendErrorCode.ChatMessageInvalid -> "Revisa el mensaje. No puede estar vacio ni superar el limite permitido."
     BackendErrorCode.ChatDecisionNotAvailable -> "La decision sobre esta conversacion ya no esta disponible. Actualiza el estado."
     BackendErrorCode.ChatDecisionAlreadySubmitted -> "Ya enviaste tu decision para esta conversacion."
