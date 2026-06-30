@@ -7,4 +7,5 @@ data class ProfilePhoto(
     val isPersonPhoto: Boolean,
     val isFullBody: Boolean,
     val validationStatus: String,
+    val moderationStatus: String?,
 )

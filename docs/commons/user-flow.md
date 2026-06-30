@@ -70,7 +70,7 @@ Each user can approve continuation, request mutual cancellation or cancel explic
 - Mutual cancellation request accepted by the other participant cancels the chat without penalty.
 - Mutual cancellation request rejected by the other participant also cancels the chat. Future scoring may apply a lower penalty to the requester, but no penalty is applied today.
 - Mutual cancellation request timeout is resolved by a client call after `chat.exit-request.mutual-timeout-seconds`; it cancels the chat without penalty. This is not a unilateral cancellation, and the requester must not be penalized for resolving an unanswered request.
-- Safety cancellation cancels the chat, exempts the reporter and creates a pending `SafetyReport`. It does not penalize the reported participant until admin/backoffice review confirms the report.
+- Safety cancellation cancels the chat, records `ChatEndReason.SAFETY_REPORT`, exempts the reporter, creates a pending `SafetyReport` and creates a directional block from reporter to reported. It does not penalize the reported participant until admin/backoffice review confirms the report.
 
 Approval still requires both users. Cancellation can end the chat earlier through mutual acceptance, mutual rejection, mutual timeout, unilateral cancellation or safety cancellation.
 
@@ -96,7 +96,7 @@ rejected by the backend.
 
 `ConnectionService.createFromMatch(match)` creates a connection after visual approval.
 
-It validates active connection limits and creates `CONNECTION` locks immediately. A connection starts in `SCHEDULING_PENDING` with `schedulingAvailableAt`; it occupies connection capacity but is not yet actionable in Home.
+It validates active connection limits and creates `CONNECTION` locks immediately. A connection starts in `SCHEDULING_PENDING` with `schedulingAvailableAt`; it occupies connection capacity but is not yet actionable in Home. `SCHEDULING_PENDING` is a deferred activation state, not a user-driven coordination state.
 
 ## 7. Scheduling
 
@@ -106,6 +106,13 @@ Scheduling is activated later by `SchedulingActivationJob` when
 does not include the connection in `nextSteps`; clients can see it only through
 `activeInteractionsSummary.pendingSchedulingConnectionCount` and the passive
 notice `SCHEDULING_PREPARING`.
+
+`SchedulingNegotiationTimeoutJob` applies only after activation, while the
+connection is in `SCHEDULING_PHASE`. The `schedulingExpiresAt` value created
+with `SCHEDULING_PENDING` is provisional; activation recalculates the actionable
+deadline from the moment scheduling becomes available. In local profiles, where
+schedulers are disabled, run `SchedulingActivationJob` manually before testing
+scheduling proposals or scheduling timeout.
 
 Once active, users submit ordered lists of future date/time proposals for the second chat inside the app. This is not the same as scheduling an in-person meeting; any real-world meeting is outside the backend's current scope.
 
@@ -172,6 +179,7 @@ Safety-report chat closure creates:
 
 - an accepted `ChatExitRequest` with `type = SAFETY_REPORT`, used as operational chat-closure history;
 - a `SafetyReport` with `status = PENDING`, used as the moderation source of truth.
+- a directional `UserBlock` from reporter to reported; matchmaking treats any block between two users as a bidirectional rematch exclusion.
 
 Admins access `/api/admin/safety-reports` with `ROLE_ADMIN`. Dismissing a pending report stores review metadata and creates no penalty. Confirming a pending report creates either a temporary or permanent penalty for the reported user, links it through `sourceReportId`/`penaltyId`, removes the reported user from the matchmaking queue if present and blocks future enqueue while the penalty remains active.
 

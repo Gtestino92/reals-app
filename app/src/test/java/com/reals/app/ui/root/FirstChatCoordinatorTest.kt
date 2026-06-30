@@ -285,7 +285,10 @@ class FirstChatCoordinatorTest {
         assertTrue(result is FirstChatActionResult.ReturnHome)
         result as FirstChatActionResult.ReturnHome
         assertEquals("match-1", result.hideFirstChatMatchId)
-        assertEquals("Reporte enviado. Cerramos esta conversacion por seguridad.", result.message)
+        assertEquals(
+            "Reporte enviado. Cerramos esta conversacion por seguridad y no volveremos a cruzarte con esta persona.",
+            result.message,
+        )
         assertEquals(listOf("safetyCancelChat"), api.calls)
     }
 
@@ -319,7 +322,10 @@ class FirstChatCoordinatorTest {
 
         assertTrue(result is SecondChatActionResult.ReturnHome)
         result as SecondChatActionResult.ReturnHome
-        assertEquals("Reporte enviado. Cerramos esta conversacion por seguridad.", result.message)
+        assertEquals(
+            "Reporte enviado. Cerramos esta conversacion por seguridad y no volveremos a cruzarte con esta persona.",
+            result.message,
+        )
         assertEquals(listOf("safetyCancelChat"), api.calls)
     }
 

@@ -2,6 +2,7 @@ package com.reals.app.notifications
 
 object PushNotificationContract {
     const val TYPE_VISUAL_REVIEW_AVAILABLE = "VISUAL_REVIEW_AVAILABLE"
+    const val TYPE_SCHEDULING_AVAILABLE = "SCHEDULING_AVAILABLE"
     const val TYPE_SECOND_CHAT_REMINDER = "SECOND_CHAT_REMINDER"
 
     const val EXTRA_PUSH_TYPE = "push_type"
@@ -12,5 +13,6 @@ object PushNotificationContract {
 
     const val VISUAL_REVIEW_CHANNEL_ID = "visual_review"
     const val VISUAL_REVIEW_NOTIFICATION_ID_BASE = 10_000
+    const val SCHEDULING_AVAILABLE_NOTIFICATION_ID_BASE = 15_000
     const val SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE = 20_000
 }
