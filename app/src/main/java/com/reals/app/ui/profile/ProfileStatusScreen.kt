@@ -907,8 +907,7 @@ private fun FilledPhotoSlot(
     onDragCancel: () -> Unit,
 ) {
     val imageShape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
-    val changeActionShape = RoundedCornerShape(bottomStart = 8.dp)
-    val moveActionShape = RoundedCornerShape(bottomEnd = 8.dp)
+    val actionShape = RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp)
     var moveExpanded by rememberSaveable(photo.id) { mutableStateOf(false) }
     val dragModifier = if (!busy) {
         Modifier.pointerInput(photo.id, slotBounds) {
@@ -994,54 +993,13 @@ private fun FilledPhotoSlot(
                     style = MaterialTheme.typography.labelMedium,
                 )
             }
-            if (busy) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.34f)),
-                )
-            }
-        }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(32.dp),
-        ) {
             Box(
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxSize()
-                    .clip(changeActionShape)
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                    .border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant,
-                        shape = changeActionShape,
-                    )
-                    .clickable(
-                        enabled = !busy,
-                        onClickLabel = "Reemplazar foto ${photo.position}",
-                    ) { onPickReplacementFile(photo.id, photo.position) }
-                    .semantics { contentDescription = "Reemplazar foto ${photo.position}" },
-            ) {
-                Text(
-                    text = "Cambiar",
-                    modifier = Modifier.align(Alignment.Center),
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.labelMedium,
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxSize()
-                    .clip(moveActionShape)
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                    .border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant,
-                        shape = moveActionShape,
-                    )
+                    .align(Alignment.BottomEnd)
+                    .padding(4.dp)
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color.Black.copy(alpha = 0.52f))
                     .clickable(
                         enabled = !busy,
                         onClickLabel = "Mover foto ${photo.position}",
@@ -1049,9 +1007,9 @@ private fun FilledPhotoSlot(
                     .semantics { contentDescription = "Mover foto ${photo.position}" },
             ) {
                 Text(
-                    text = "Mover",
+                    text = "...",
                     modifier = Modifier.align(Alignment.Center),
-                    color = MaterialTheme.colorScheme.primary,
+                    color = Color.White,
                     style = MaterialTheme.typography.labelMedium,
                 )
                 DropdownMenu(
@@ -1069,6 +1027,43 @@ private fun FilledPhotoSlot(
                         )
                     }
                 }
+            }
+            if (busy) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.34f)),
+                )
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(32.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxSize()
+                    .clip(actionShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        shape = actionShape,
+                    )
+                    .clickable(
+                        enabled = !busy,
+                        onClickLabel = "Reemplazar foto ${photo.position}",
+                    ) { onPickReplacementFile(photo.id, photo.position) }
+                    .semantics { contentDescription = "Reemplazar foto ${photo.position}" },
+            ) {
+                Text(
+                    text = "Cambiar",
+                    modifier = Modifier.align(Alignment.Center),
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelMedium,
+                )
             }
         }
     }
