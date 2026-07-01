@@ -156,7 +156,7 @@ fun ApiError.toUserTitle(context: ErrorContext = ErrorContext.General): String =
 
 private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorContext): String = when (code) {
     BackendErrorCode.ProfileRequired -> "Necesitas crear tu perfil antes de seguir."
-    BackendErrorCode.ProfileNotActive -> "Tu perfil esta en borrador. Activa tu perfil para poder buscar chat."
+    BackendErrorCode.ProfileNotActive -> "tu perfil está en borrador. Activa tu perfil para poder buscar chat."
     BackendErrorCode.ActivePenalty -> "Por ahora no podes entrar a la busqueda. Intenta nuevamente mas adelante."
     BackendErrorCode.ActiveMatchLimitReached,
     BackendErrorCode.ActiveConnectionLimitReached -> "Ya tenes conversaciones o experiencias activas. Termina una antes de buscar otra."

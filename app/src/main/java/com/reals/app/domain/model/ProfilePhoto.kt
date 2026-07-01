@@ -9,3 +9,8 @@ data class ProfilePhoto(
     val validationStatus: String,
     val moderationStatus: String?,
 )
+
+data class PhotoPlacementInput(
+    val photoId: String,
+    val position: Int,
+)

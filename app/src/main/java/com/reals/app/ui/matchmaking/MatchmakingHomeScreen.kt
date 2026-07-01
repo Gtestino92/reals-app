@@ -424,7 +424,7 @@ private fun MatchmakingIdleScreen(
             color = MaterialTheme.colorScheme.primary,
         )
         Text(
-            text = "${profile.displayName}, tu perfil esta activo.",
+            text = "${profile.displayName}, tu perfil está activo.",
             modifier = Modifier.padding(top = 8.dp),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

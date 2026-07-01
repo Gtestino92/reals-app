@@ -32,6 +32,7 @@ import com.reals.app.domain.usecase.PutMyPersonalMessageUseCase
 import com.reals.app.domain.usecase.ReactivateAccountUseCase
 import com.reals.app.domain.usecase.RejectChatExitRequestUseCase
 import com.reals.app.domain.usecase.RejectSchedulingRoundUseCase
+import com.reals.app.domain.usecase.ReorderProfilePhotosUseCase
 import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
 import com.reals.app.domain.usecase.SafetyCancelChatUseCase
@@ -74,6 +75,7 @@ data class ProfileFeatureDependencies(
     val addProfilePhotoFile: AddProfilePhotoFileUseCase,
     val replaceProfilePhotoFile: ReplaceProfilePhotoFileUseCase,
     val deleteProfilePhoto: DeleteProfilePhotoUseCase,
+    val reorderProfilePhotos: ReorderProfilePhotosUseCase,
     val activateProfile: ActivateProfileUseCase,
 )
 

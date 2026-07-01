@@ -55,6 +55,7 @@ import com.reals.app.domain.usecase.ReactivateAccountUseCase
 import com.reals.app.domain.usecase.RegisterPushTokenUseCase
 import com.reals.app.domain.usecase.RejectChatExitRequestUseCase
 import com.reals.app.domain.usecase.RejectSchedulingRoundUseCase
+import com.reals.app.domain.usecase.ReorderProfilePhotosUseCase
 import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
 import com.reals.app.domain.usecase.SafetyCancelChatUseCase
@@ -492,6 +493,7 @@ class RealsRootViewModelPasswordResetTest {
                 addProfilePhotoFile = AddProfilePhotoFileUseCase(profileRepository),
                 replaceProfilePhotoFile = ReplaceProfilePhotoFileUseCase(profileRepository),
                 deleteProfilePhoto = DeleteProfilePhotoUseCase(profileRepository),
+                reorderProfilePhotos = ReorderProfilePhotosUseCase(profileRepository),
                 activateProfile = ActivateProfileUseCase(profileRepository),
             ),
             home = HomeFeatureDependencies(

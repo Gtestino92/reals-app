@@ -1,6 +1,7 @@
 package com.reals.app.data.repository
 
 import com.reals.app.core.network.ApiError
+import com.reals.app.domain.model.PhotoPlacementInput
 import com.reals.app.domain.model.CreateProfileInput
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.UpdateMatchFiltersInput
@@ -99,13 +100,22 @@ class ProfileRepositoryTest {
     }
 
     @Test
-    fun `photo read delete and activation operations call API`() = runBlocking {
+    fun `photo read reorder delete and activation operations call API`() = runBlocking {
         repository.getMyProfilePhotos().successValue()
+        repository.reorderMyProfilePhotos(
+            listOf(
+                PhotoPlacementInput(photoId = "photo-1", position = 4),
+                PhotoPlacementInput(photoId = "photo-2", position = 1),
+            )
+        ).successValue()
         repository.deleteMyProfilePhoto("photo-1").successValue()
         repository.activateMyProfile().successValue()
 
+        assertEquals("photo-1", api.reorderPhotosBody?.placements?.firstOrNull()?.photoId)
+        assertEquals(4, api.reorderPhotosBody?.placements?.firstOrNull()?.position)
         assertEquals(listOf(
             "getMyProfilePhotos",
+            "reorderMyProfilePhotos",
             "deleteMyProfilePhoto",
             "activateMyProfile",
         ), api.calls)

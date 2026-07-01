@@ -38,7 +38,7 @@ fun ProfileActivationResultScreen(
         verticalArrangement = Arrangement.Center,
     ) {
         Text(
-            text = "Tu perfil esta activo",
+            text = "tu perfil está activo",
             style = MaterialTheme.typography.headlineLarge,
             color = MaterialTheme.colorScheme.primary,
         )

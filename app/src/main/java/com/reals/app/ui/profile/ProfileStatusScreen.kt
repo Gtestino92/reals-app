@@ -60,6 +60,7 @@ import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
 import com.reals.app.ui.common.userDescription
 import com.reals.app.ui.common.userLabel
+import com.reals.app.domain.model.PhotoPlacementInput
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.ProfileSnapshot
@@ -85,6 +86,10 @@ fun ProfileStatusScreen(
     photoActionLoading: Boolean,
     photoActionError: ApiError?,
     photoActionMessage: String?,
+    pendingPhotoOrder: List<PhotoPlacementInput>?,
+    photoReorderLoading: Boolean,
+    photoReorderError: ApiError?,
+    photoReorderMessage: String?,
     activationLoading: Boolean,
     activationError: ApiError?,
     emailVerificationSending: Boolean,
@@ -104,6 +109,7 @@ fun ProfileStatusScreen(
     onAddPhotoFile: (position: Int, fileUri: Uri) -> Unit,
     onReplacePhotoFile: (photoId: String, position: Int, fileUri: Uri) -> Unit,
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
+    onMovePhoto: (photoId: String, targetPosition: Int) -> Unit,
     onActivateProfile: (Profile) -> Unit,
     onResendEmailVerification: () -> Unit,
     onCheckEmailVerification: () -> Unit,
@@ -115,6 +121,7 @@ fun ProfileStatusScreen(
     val busy = profileUpdateLoading ||
         matchFiltersLoading ||
         photoActionLoading ||
+        photoReorderLoading ||
         activationLoading ||
         emailVerificationSending ||
         emailVerificationChecking ||
@@ -173,6 +180,10 @@ fun ProfileStatusScreen(
                 photoActionLoading = photoActionLoading,
                 photoActionError = photoActionError,
                 photoActionMessage = photoActionMessage,
+                pendingPhotoOrder = pendingPhotoOrder,
+                photoReorderLoading = photoReorderLoading,
+                photoReorderError = photoReorderError,
+                photoReorderMessage = photoReorderMessage,
                 activationLoading = activationLoading,
                 activationError = activationError,
                 emailVerificationSending = emailVerificationSending,
@@ -189,6 +200,7 @@ fun ProfileStatusScreen(
                 onAddPhotoFile = onAddPhotoFile,
                 onReplacePhotoFile = onReplacePhotoFile,
                 onDeletePhoto = onDeletePhoto,
+                onMovePhoto = onMovePhoto,
                 onActivateProfile = onActivateProfile,
                 onResendEmailVerification = onResendEmailVerification,
                 onCheckEmailVerification = onCheckEmailVerification,
@@ -258,6 +270,10 @@ private fun ProfileCard(
     photoActionLoading: Boolean,
     photoActionError: ApiError?,
     photoActionMessage: String?,
+    pendingPhotoOrder: List<PhotoPlacementInput>?,
+    photoReorderLoading: Boolean,
+    photoReorderError: ApiError?,
+    photoReorderMessage: String?,
     activationLoading: Boolean,
     activationError: ApiError?,
     emailVerificationSending: Boolean,
@@ -274,6 +290,7 @@ private fun ProfileCard(
     onAddPhotoFile: (position: Int, fileUri: Uri) -> Unit,
     onReplacePhotoFile: (photoId: String, position: Int, fileUri: Uri) -> Unit,
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
+    onMovePhoto: (photoId: String, targetPosition: Int) -> Unit,
     onActivateProfile: (Profile) -> Unit,
     onResendEmailVerification: () -> Unit,
     onCheckEmailVerification: () -> Unit,
@@ -285,6 +302,7 @@ private fun ProfileCard(
             matchFiltersLoading ||
             photosLoading ||
             photoActionLoading ||
+            photoReorderLoading ||
             activationLoading ||
             emailVerificationSending ||
             emailVerificationChecking
@@ -346,6 +364,10 @@ private fun ProfileCard(
                 photoActionLoading = photoActionLoading,
                 photoActionError = photoActionError,
                 photoActionMessage = photoActionMessage,
+                pendingPhotoOrder = pendingPhotoOrder,
+                photoReorderLoading = photoReorderLoading,
+                photoReorderError = photoReorderError,
+                photoReorderMessage = photoReorderMessage,
                 activationLoading = activationLoading,
                 activationError = activationError,
                 emailVerificationSending = emailVerificationSending,
@@ -365,6 +387,7 @@ private fun ProfileCard(
                 onAddPhotoFile = onAddPhotoFile,
                 onReplacePhotoFile = onReplacePhotoFile,
                 onDeletePhoto = onDeletePhoto,
+                onMovePhoto = onMovePhoto,
                 onActivateProfile = onActivateProfile,
                 onResendEmailVerification = onResendEmailVerification,
                 onCheckEmailVerification = onCheckEmailVerification,
@@ -498,6 +521,10 @@ private fun PhotoManagerActions(
     photoActionLoading: Boolean,
     photoActionError: ApiError?,
     photoActionMessage: String?,
+    pendingPhotoOrder: List<PhotoPlacementInput>?,
+    photoReorderLoading: Boolean,
+    photoReorderError: ApiError?,
+    photoReorderMessage: String?,
     activationLoading: Boolean,
     activationError: ApiError?,
     emailVerificationSending: Boolean,
@@ -515,6 +542,7 @@ private fun PhotoManagerActions(
     onAddPhotoFile: (position: Int, fileUri: Uri) -> Unit,
     onReplacePhotoFile: (photoId: String, position: Int, fileUri: Uri) -> Unit,
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
+    onMovePhoto: (photoId: String, targetPosition: Int) -> Unit,
     onActivateProfile: (Profile) -> Unit,
     onResendEmailVerification: () -> Unit,
     onCheckEmailVerification: () -> Unit,
@@ -542,6 +570,7 @@ private fun PhotoManagerActions(
             onReplacePhotoFile(photoId, position, uri)
         }
     }
+    val displayPhotos = photosWithPendingOrder(photos, pendingPhotoOrder)
 
     LaunchedEffect(photoActionLoading, photoActionMessage) {
         if (!photoActionLoading && photoActionMessage != null && pendingAddedPosition != null) {
@@ -568,8 +597,24 @@ private fun PhotoManagerActions(
                     Text(if (photosLoading) "Cargando fotos..." else "Reintentar carga de fotos")
                 }
             }
+            if (pendingPhotoOrder != null) {
+                FeedbackCard(
+                    title = "Orden pendiente",
+                    message = "El nuevo orden se guardará al salir.",
+                    tone = FeedbackTone.Info,
+                )
+            }
+            if (photoReorderLoading) {
+                FeedbackCard(
+                    title = "Guardando",
+                    message = "Guardando orden de fotos...",
+                    tone = FeedbackTone.Info,
+                )
+            }
+            photoReorderMessage?.let { SuccessFeedback(it) }
+            photoReorderError?.let { ApiErrorFeedbackCard(it, ErrorContext.PhotoUpload) }
             PhotoGrid(
-                photos = photos,
+                photos = displayPhotos,
                 busy = busy,
                 onPickNewFile = { position ->
                     localError = null
@@ -583,6 +628,7 @@ private fun PhotoManagerActions(
                     replaceFileLauncher.launch("image/*")
                 },
                 onDeletePhoto = onDeletePhoto,
+                onMovePhoto = onMovePhoto,
             )
             localError?.let { ErrorFeedback("Revisa las fotos", it) }
             photoActionMessage?.let { SuccessFeedback(it) }
@@ -698,6 +744,7 @@ private fun PhotoGrid(
     onPickNewFile: (position: Int) -> Unit,
     onPickReplacementFile: (photoId: String, position: Int) -> Unit,
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
+    onMovePhoto: (photoId: String, targetPosition: Int) -> Unit,
 ) {
     val photosByPosition = photos.profilePhotosByGridPosition()
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -712,6 +759,7 @@ private fun PhotoGrid(
                         onPickNewFile = onPickNewFile,
                         onPickReplacementFile = onPickReplacementFile,
                         onDeletePhoto = onDeletePhoto,
+                        onMovePhoto = onMovePhoto,
                     )
                 }
             }
@@ -728,6 +776,7 @@ private fun PhotoSlot(
     onPickNewFile: (position: Int) -> Unit,
     onPickReplacementFile: (photoId: String, position: Int) -> Unit,
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
+    onMovePhoto: (photoId: String, targetPosition: Int) -> Unit,
 ) {
     if (photo == null) {
         EmptyPhotoSlot(
@@ -743,6 +792,7 @@ private fun PhotoSlot(
             modifier = modifier,
             onPickReplacementFile = onPickReplacementFile,
             onDeletePhoto = onDeletePhoto,
+            onMovePhoto = onMovePhoto,
         )
     }
 }
@@ -754,10 +804,13 @@ private fun FilledPhotoSlot(
     modifier: Modifier = Modifier,
     onPickReplacementFile: (photoId: String, position: Int) -> Unit,
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
+    onMovePhoto: (photoId: String, targetPosition: Int) -> Unit,
 ) {
     val imageShape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
-    val actionShape = RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp)
+    val changeActionShape = RoundedCornerShape(bottomStart = 8.dp)
+    val moveActionShape = RoundedCornerShape(bottomEnd = 8.dp)
     val displayUrl = photo.url.toEmulatorReachableUrl()
+    var moveExpanded by rememberSaveable(photo.id) { mutableStateOf(false) }
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(0.dp)) {
         Box(
             modifier = Modifier
@@ -836,29 +889,74 @@ private fun FilledPhotoSlot(
                 )
             }
         }
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(32.dp)
-                .clip(actionShape)
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .border(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant,
-                    shape = actionShape,
-                )
-                .clickable(
-                    enabled = !busy,
-                    onClickLabel = "Reemplazar foto ${photo.position}",
-                ) { onPickReplacementFile(photo.id, photo.position) }
-                .semantics { contentDescription = "Reemplazar foto ${photo.position}" },
+                .height(32.dp),
         ) {
-            Text(
-                text = "Cambiar",
-                modifier = Modifier.align(Alignment.Center),
-                color = MaterialTheme.colorScheme.primary,
-                style = MaterialTheme.typography.labelMedium,
-            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxSize()
+                    .clip(changeActionShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        shape = changeActionShape,
+                    )
+                    .clickable(
+                        enabled = !busy,
+                        onClickLabel = "Reemplazar foto ${photo.position}",
+                    ) { onPickReplacementFile(photo.id, photo.position) }
+                    .semantics { contentDescription = "Reemplazar foto ${photo.position}" },
+            ) {
+                Text(
+                    text = "Cambiar",
+                    modifier = Modifier.align(Alignment.Center),
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxSize()
+                    .clip(moveActionShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        shape = moveActionShape,
+                    )
+                    .clickable(
+                        enabled = !busy,
+                        onClickLabel = "Mover foto ${photo.position}",
+                    ) { moveExpanded = true }
+                    .semantics { contentDescription = "Mover foto ${photo.position}" },
+            ) {
+                Text(
+                    text = "Mover",
+                    modifier = Modifier.align(Alignment.Center),
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                DropdownMenu(
+                    expanded = moveExpanded,
+                    onDismissRequest = { moveExpanded = false },
+                ) {
+                    ProfilePhotoGridPositions.forEach { targetPosition ->
+                        DropdownMenuItem(
+                            text = { Text("Foto $targetPosition") },
+                            enabled = !busy,
+                            onClick = {
+                                moveExpanded = false
+                                onMovePhoto(photo.id, targetPosition)
+                            },
+                        )
+                    }
+                }
+            }
         }
     }
 }

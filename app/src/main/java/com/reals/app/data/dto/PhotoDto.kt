@@ -12,3 +12,14 @@ data class PhotoResponseDto(
     val validationStatus: String,
     val moderationStatus: String? = null,
 )
+
+@Serializable
+data class ReorderProfilePhotosRequestDto(
+    val placements: List<PhotoPlacementRequestDto>,
+)
+
+@Serializable
+data class PhotoPlacementRequestDto(
+    val photoId: String,
+    val position: Int,
+)

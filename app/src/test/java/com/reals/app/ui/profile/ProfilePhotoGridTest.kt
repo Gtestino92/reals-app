@@ -1,6 +1,7 @@
 package com.reals.app.ui.profile
 
 import com.reals.app.domain.model.ProfilePhoto
+import com.reals.app.domain.model.PhotoPlacementInput
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
@@ -22,6 +23,100 @@ class ProfilePhotoGridTest {
         assertEquals(firstSlot, photosByPosition[1])
         assertEquals(ninthSlot, photosByPosition[9])
         assertFalse(photosByPosition.containsKey(10))
+    }
+
+    @Test
+    fun movePhotoLocallyMovesToEmptyPositionAndPreservesHoles() {
+        val photos = listOf(
+            testPhoto(id = "photo-1", position = 1),
+            testPhoto(id = "photo-2", position = 4),
+        )
+
+        val placements = movePhotoLocally(
+            photos = photos,
+            pendingOrder = null,
+            photoId = "photo-1",
+            targetPosition = 7,
+        )
+
+        assertEquals(listOf(4, 7), placements.map { it.position }.sorted())
+        assertEquals(7, placements.first { it.photoId == "photo-1" }.position)
+        assertEquals(4, placements.first { it.photoId == "photo-2" }.position)
+    }
+
+    @Test
+    fun movePhotoLocallySwapsWithOccupiedPosition() {
+        val photos = listOf(
+            testPhoto(id = "photo-1", position = 1),
+            testPhoto(id = "photo-2", position = 4),
+        )
+
+        val placements = movePhotoLocally(
+            photos = photos,
+            pendingOrder = null,
+            photoId = "photo-1",
+            targetPosition = 4,
+        )
+
+        assertEquals(4, placements.first { it.photoId == "photo-1" }.position)
+        assertEquals(1, placements.first { it.photoId == "photo-2" }.position)
+    }
+
+    @Test
+    fun movePhotoLocallySamePositionIsNoOp() {
+        val photos = listOf(
+            testPhoto(id = "photo-1", position = 1),
+            testPhoto(id = "photo-2", position = 4),
+        )
+
+        val placements = movePhotoLocally(
+            photos = photos,
+            pendingOrder = null,
+            photoId = "photo-1",
+            targetPosition = 1,
+        )
+
+        assertEquals(buildCompletePhotoPlacements(photos), placements)
+    }
+
+    @Test
+    fun movePhotoLocallyDoesNotDuplicatePositionsOrDropPhotoIds() {
+        val photos = listOf(
+            testPhoto(id = "photo-1", position = 1),
+            testPhoto(id = "photo-2", position = 2),
+            testPhoto(id = "photo-3", position = 9),
+        )
+
+        val placements = movePhotoLocally(
+            photos = photos,
+            pendingOrder = null,
+            photoId = "photo-3",
+            targetPosition = 2,
+        )
+
+        assertEquals(placements.size, placements.map { it.position }.toSet().size)
+        assertEquals(
+            photos.map { it.id }.sorted(),
+            placements.map { it.photoId }.sorted(),
+        )
+    }
+
+    @Test
+    fun photosWithPendingOrderOverridesDisplayPositions() {
+        val photos = listOf(
+            testPhoto(id = "photo-1", position = 1),
+            testPhoto(id = "photo-2", position = 4),
+        )
+        val pending = listOf(
+            PhotoPlacementInput(photoId = "photo-1", position = 4),
+            PhotoPlacementInput(photoId = "photo-2", position = 1),
+        )
+
+        val display = photosWithPendingOrder(photos, pending)
+
+        assertEquals(listOf("photo-2", "photo-1"), display.map { it.id })
+        assertEquals(listOf(1, 4), display.map { it.position })
+        assertEquals(photos.first().url, display.first { it.id == "photo-1" }.url)
     }
 
     private fun testPhoto(id: String, position: Int): ProfilePhoto =
