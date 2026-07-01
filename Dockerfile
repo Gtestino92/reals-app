@@ -21,6 +21,12 @@ RUN apt-get update \
     && apt-get upgrade -y \
     && rm -rf /var/lib/apt/lists/*
 
+# The Android SDK command-line tools bundled in the base image currently ship
+# Bouncy Castle 1.79 jars that are not used by this app build but are still
+# detected by image scanners. Remove them from the final builder image so Trivy
+# does not report CVE-2025-14813 from unused SDK tool jars.
+RUN rm -rf /opt/android-sdk-linux/cmdline-tools/latest/lib/external/org/bouncycastle
+
 WORKDIR /workspace
 
 COPY gradle gradle
