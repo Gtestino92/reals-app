@@ -96,7 +96,7 @@ class RealsRootViewModel(
             is RealsRootUiState.Ready -> {
                 val profile = (current.session.profileSnapshot as? ProfileSnapshot.Found)?.profile
                 if (current.editingActiveProfile && profile?.status == ProfileStatus.Active) {
-                    closeProfileManagementSavingPendingChanges()
+                    closeProfileManagement()
                 }
             }
 
@@ -189,12 +189,6 @@ class RealsRootViewModel(
     fun closeProfileManagement() {
         val current = _uiState.value as? RealsRootUiState.Ready ?: return
         closeProfileManagement(current)
-    }
-
-    fun closeProfileManagementSavingPendingChanges() {
-        profileHandler.closeProfileManagementSavingPendingChanges { ready ->
-            closeProfileManagement(ready)
-        }
     }
 
     private fun closeProfileManagement(current: RealsRootUiState.Ready) {
@@ -808,8 +802,8 @@ class RealsRootViewModel(
         profileHandler.deleteProfilePhoto(photoId, position)
     }
 
-    fun moveProfilePhotoLocally(photoId: String, targetPosition: Int) {
-        profileHandler.moveProfilePhotoLocally(photoId, targetPosition)
+    fun moveProfilePhoto(photoId: String, targetPosition: Int) {
+        profileHandler.moveProfilePhoto(photoId, targetPosition)
     }
 
     fun activateProfile() {

@@ -8,7 +8,6 @@ import com.reals.app.data.repository.EmailVerificationSendResult
 import com.reals.app.data.repository.FirebaseAuthRepository
 import com.reals.app.data.repository.ProfileRepository
 import com.reals.app.di.ProfileFeatureDependencies
-import com.reals.app.domain.model.PhotoPlacementInput
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.ProfileSnapshot
@@ -28,10 +27,12 @@ import com.reals.app.testutil.TestDomain
 import com.reals.app.testutil.TestDtos
 import com.reals.app.testutil.backendErrorResponse
 import com.reals.app.testutil.testApiExecutor
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -42,148 +43,98 @@ import retrofit2.Response
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProfileOperationHandlerPhotoReorderTest {
     @Test
-    fun `local move sets pending photo order`() = runTest {
-        val harness = harness()
+    fun `move photo optimistically updates photos and calls reorder once`() = runTest {
+        val api = FakeRealsApi()
+        val releaseResponse = CompletableDeferred<Unit>()
+        api.beforeReorderPhotosResponse = { releaseResponse.await() }
+        api.reorderPhotosResponse = Response.success(
+            listOf(TestDtos.photo("photo-2", 1), TestDtos.photo("photo-1", 4)),
+        )
+        val harness = harness(api = api)
         harness.state.value = ready(photos = listOf(photo("photo-1", 1), photo("photo-2", 4)))
 
-        harness.handler.moveProfilePhotoLocally("photo-1", 4)
+        harness.handler.moveProfilePhoto("photo-1", 4)
 
-        val state = harness.readyState()
-        assertEquals(4, state.pendingPhotoOrder?.first { it.photoId == "photo-1" }?.position)
-        assertEquals(1, state.pendingPhotoOrder?.first { it.photoId == "photo-2" }?.position)
+        val optimistic = harness.readyState()
+        assertEquals(listOf("photo-2", "photo-1"), optimistic.profilePhotos.map { it.id })
+        assertTrue(optimistic.reorderingPhotos)
+        runCurrent()
+        assertEquals(listOf("reorderMyProfilePhotos"), api.calls)
+
+        releaseResponse.complete(Unit)
+        advanceUntilIdle()
     }
 
     @Test
-    fun `local move clears previous reorder feedback`() = runTest {
-        val harness = harness()
+    fun `move photo success uses backend response and clears reorder error`() = runTest {
+        val api = FakeRealsApi()
+        api.reorderPhotosResponse = Response.success(
+            listOf(TestDtos.photo("photo-2", 1), TestDtos.photo("photo-1", 4)),
+        )
+        val harness = harness(api = api)
         harness.state.value = ready(
-            photos = listOf(photo("photo-1", 1), photo("photo-2", 4)),
             photosState = PhotoManagementUiState(
                 profilePhotos = listOf(photo("photo-1", 1), photo("photo-2", 4)),
-                photoReorderError = ApiError.Network("failed"),
-                photoReorderMessage = "old",
+                photoReorderError = ApiError.Network("old"),
             ),
         )
 
-        harness.handler.moveProfilePhotoLocally("photo-1", 4)
+        harness.handler.moveProfilePhoto("photo-1", 4)
+        advanceUntilIdle()
 
         val state = harness.readyState()
+        assertEquals(listOf("photo-2", "photo-1"), state.profilePhotos.map { it.id })
+        assertFalse(state.reorderingPhotos)
         assertEquals(null, state.photoReorderError)
+        assertEquals(null, state.photoReorderMessage)
+        assertEquals(listOf("reorderMyProfilePhotos"), api.calls)
+    }
+
+    @Test
+    fun `move photo failure rolls back previous order and sets error`() = runTest {
+        val api = FakeRealsApi()
+        api.reorderPhotosResponse = backendErrorResponse(500, "SERVER_ERROR", "boom")
+        val previousPhotos = listOf(photo("photo-1", 1), photo("photo-2", 4))
+        val harness = harness(api = api)
+        harness.state.value = ready(photos = previousPhotos)
+
+        harness.handler.moveProfilePhoto("photo-1", 4)
+        advanceUntilIdle()
+
+        val state = harness.readyState()
+        assertEquals(previousPhotos.map { it.id to it.position }, state.profilePhotos.map { it.id to it.position })
+        assertFalse(state.reorderingPhotos)
+        assertTrue(state.photoReorderError is ApiError.Backend)
         assertEquals(null, state.photoReorderMessage)
     }
 
     @Test
-    fun `close with pending reorder success calls use case once and closes`() = runTest {
+    fun `second move while reorder in flight is ignored`() = runTest {
         val api = FakeRealsApi()
-        api.reorderPhotosResponse = Response.success(listOf(TestDtos.photo("photo-1", 4), TestDtos.photo("photo-2", 1)))
-        val harness = harness(api = api)
-        harness.state.value = ready(
-            profile = activeProfile(),
-            photosState = PhotoManagementUiState(
-                profilePhotos = listOf(photo("photo-1", 1), photo("photo-2", 4)),
-                pendingPhotoOrder = listOf(
-                    PhotoPlacementInput("photo-1", 4),
-                    PhotoPlacementInput("photo-2", 1),
-                ),
-            ),
-            editingActiveProfile = true,
+        val releaseResponse = CompletableDeferred<Unit>()
+        api.beforeReorderPhotosResponse = { releaseResponse.await() }
+        api.reorderPhotosResponse = Response.success(
+            listOf(TestDtos.photo("photo-2", 1), TestDtos.photo("photo-1", 4)),
         )
+        val harness = harness(api = api)
+        harness.state.value = ready(photos = listOf(photo("photo-1", 1), photo("photo-2", 4)))
 
-        harness.handler.closeProfileManagementSavingPendingChanges { ready ->
-            harness.state.value = ready.copy(editingActiveProfile = false)
-        }
-        advanceUntilIdle()
+        harness.handler.moveProfilePhoto("photo-1", 4)
+        harness.handler.moveProfilePhoto("photo-2", 7)
 
-        val state = harness.readyState()
+        runCurrent()
         assertEquals(listOf("reorderMyProfilePhotos"), api.calls)
-        assertEquals(listOf(1, 4), state.profilePhotos.map { it.position })
-        assertEquals(null, state.pendingPhotoOrder)
-        assertFalse(state.editingActiveProfile)
-    }
-
-    @Test
-    fun `close with pending reorder failure keeps pending order and does not close`() = runTest {
-        val api = FakeRealsApi()
-        api.reorderPhotosResponse = backendErrorResponse(500, "SERVER_ERROR", "boom")
-        val pendingOrder = listOf(PhotoPlacementInput("photo-1", 4), PhotoPlacementInput("photo-2", 1))
-        val harness = harness(api = api)
-        harness.state.value = ready(
-            profile = activeProfile(),
-            photosState = PhotoManagementUiState(
-                profilePhotos = listOf(photo("photo-1", 1), photo("photo-2", 4)),
-                pendingPhotoOrder = pendingOrder,
-            ),
-            editingActiveProfile = true,
-        )
-
-        harness.handler.closeProfileManagementSavingPendingChanges { ready ->
-            harness.state.value = ready.copy(editingActiveProfile = false)
-        }
+        releaseResponse.complete(Unit)
         advanceUntilIdle()
-
-        val state = harness.readyState()
-        assertEquals(listOf("reorderMyProfilePhotos"), api.calls)
-        assertEquals(pendingOrder, state.pendingPhotoOrder)
-        assertTrue(state.photoReorderError is ApiError.Backend)
-        assertTrue(state.editingActiveProfile)
     }
 
     @Test
-    fun `activation with pending reorder success proceeds to activation`() = runTest {
-        val api = FakeRealsApi()
-        api.reorderPhotosResponse = Response.success(listOf(TestDtos.photo("photo-1", 4), TestDtos.photo("photo-2", 1)))
-        val harness = harness(api = api)
-        harness.state.value = ready(
-            profile = draftProfile(),
-            photosState = PhotoManagementUiState(
-                profilePhotos = listOf(photo("photo-1", 1), photo("photo-2", 4)),
-                pendingPhotoOrder = listOf(
-                    PhotoPlacementInput("photo-1", 4),
-                    PhotoPlacementInput("photo-2", 1),
-                ),
-            ),
-            profileOp = ProfileManagementState(emailVerificationLocallyVerified = true),
-        )
-
-        harness.handler.activateProfile()
-        advanceUntilIdle()
-
-        assertEquals(listOf("reorderMyProfilePhotos", "activateMyProfile"), api.calls)
-        assertTrue(harness.state.value is RealsRootUiState.ActivationComplete)
-    }
-
-    @Test
-    fun `activation with pending reorder failure does not activate`() = runTest {
-        val api = FakeRealsApi()
-        api.reorderPhotosResponse = backendErrorResponse(500, "SERVER_ERROR", "boom")
-        val harness = harness(api = api)
-        harness.state.value = ready(
-            profile = draftProfile(),
-            photosState = PhotoManagementUiState(
-                profilePhotos = listOf(photo("photo-1", 1), photo("photo-2", 4)),
-                pendingPhotoOrder = listOf(
-                    PhotoPlacementInput("photo-1", 4),
-                    PhotoPlacementInput("photo-2", 1),
-                ),
-            ),
-            profileOp = ProfileManagementState(emailVerificationLocallyVerified = true),
-        )
-
-        harness.handler.activateProfile()
-        advanceUntilIdle()
-
-        val state = harness.readyState()
-        assertEquals(listOf("reorderMyProfilePhotos"), api.calls)
-        assertTrue(state.photoReorderError is ApiError.Backend)
-        assertEquals(2, state.pendingPhotoOrder?.size)
-    }
-
-    @Test
-    fun `activation without pending reorder behaves as before`() = runTest {
+    fun `activation does not autosave reorder`() = runTest {
         val api = FakeRealsApi()
         val harness = harness(api = api)
         harness.state.value = ready(
             profile = draftProfile(),
+            photos = listOf(photo("photo-1", 1), photo("photo-2", 4)),
             profileOp = ProfileManagementState(emailVerificationLocallyVerified = true),
         )
 
@@ -192,6 +143,45 @@ class ProfileOperationHandlerPhotoReorderTest {
 
         assertEquals(listOf("activateMyProfile"), api.calls)
         assertTrue(harness.state.value is RealsRootUiState.ActivationComplete)
+    }
+
+    @Test
+    fun `activation is blocked while reorder is in flight`() = runTest {
+        val api = FakeRealsApi()
+        val harness = harness(api = api)
+        harness.state.value = ready(
+            profile = draftProfile(),
+            photosState = PhotoManagementUiState(
+                profilePhotos = listOf(photo("photo-1", 1), photo("photo-2", 4)),
+                reorderingPhotos = true,
+            ),
+            profileOp = ProfileManagementState(emailVerificationLocallyVerified = true),
+        )
+
+        harness.handler.activateProfile()
+        advanceUntilIdle()
+
+        assertEquals(emptyList<String>(), api.calls)
+        assertTrue(harness.state.value is RealsRootUiState.Ready)
+    }
+
+    @Test
+    fun `photo load add replace and delete are blocked while reorder is in flight`() = runTest {
+        val api = FakeRealsApi()
+        val harness = harness(api = api)
+        harness.state.value = ready(
+            photosState = PhotoManagementUiState(
+                profilePhotos = listOf(photo("photo-1", 1), photo("photo-2", 4)),
+                reorderingPhotos = true,
+            ),
+        )
+        harness.handler.loadProfilePhotos()
+        harness.handler.addProfilePhotoFile(3, null)
+        harness.handler.replaceProfilePhotoFile("photo-1", 1, null)
+        harness.handler.deleteProfilePhoto("photo-1", 1)
+        advanceUntilIdle()
+
+        assertEquals(emptyList<String>(), api.calls)
     }
 
     private fun TestScope.harness(

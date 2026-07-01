@@ -10,7 +10,6 @@ import com.reals.app.data.repository.EmailVerificationSendResult
 import com.reals.app.data.repository.FirebaseAuthRepository
 import com.reals.app.di.ProfileFeatureDependencies
 import com.reals.app.domain.model.CreateProfileInput
-import com.reals.app.domain.model.PhotoPlacementInput
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfileActivationResult
 import com.reals.app.domain.model.ProfilePhoto
@@ -158,9 +157,9 @@ class ProfileOperationHandler(
     fun loadProfilePhotos() {
         val current = requireReady() ?: return
         if (current.session.profileSnapshot !is ProfileSnapshot.Found) return
+        if (current.reorderingPhotos) return
         scope.launch {
-            val afterReorder = persistPendingPhotoReorderIfNeeded(current) ?: return@launch
-            val cleared = afterReorder.clearProfileFeedback()
+            val cleared = current.clearProfileFeedback()
             val pending = cleared.copy(photos = cleared.photos.copy(loadingPhotos = true))
             uiState.value = pending
             when (val result = getProfilePhotosUseCase()) {
@@ -185,47 +184,74 @@ class ProfileOperationHandler(
         }
     }
 
-    fun moveProfilePhotoLocally(
+    fun moveProfilePhoto(
         photoId: String,
         targetPosition: Int,
     ) {
         val current = requireReady() ?: return
         if (current.reorderingPhotos) return
 
-        val currentDisplayPhotos = photosWithPendingOrder(
-            photos = current.profilePhotos,
-            pendingOrder = current.pendingPhotoOrder,
-        )
+        val previousPhotos = current.profilePhotos.sortedBy { it.position }
         val newPlacements = movePhotoLocally(
-            photos = currentDisplayPhotos,
+            photos = previousPhotos,
             pendingOrder = null,
             photoId = photoId,
             targetPosition = targetPosition,
         )
-        if (current.pendingPhotoOrder == null &&
-            newPlacements == currentDisplayPhotos
-                .sortedBy { it.position }
-                .map { PhotoPlacementInput(it.id, it.position) }
-        ) {
-            return
-        }
+        val optimisticPhotos = photosWithPendingOrder(
+            photos = previousPhotos,
+            pendingOrder = newPlacements,
+        ).sortedBy { it.position }
+        val previousOrder = previousPhotos.map { it.id to it.position }
+        val nextOrder = optimisticPhotos.map { it.id to it.position }
+        if (previousOrder == nextOrder) return
 
         uiState.value = current.copy(
             photos = current.photos.copy(
-                pendingPhotoOrder = newPlacements,
+                profilePhotos = optimisticPhotos,
+                reorderingPhotos = true,
                 photoReorderError = null,
                 photoReorderMessage = null,
                 photoActionError = null,
                 photoActionMessage = null,
             ),
         )
+
+        scope.launch {
+            when (val result = dependencies.reorderProfilePhotos(newPlacements)) {
+                is ApiResult.Success -> {
+                    val latest = requireReady() ?: return@launch
+                    uiState.value = latest.copy(
+                        photos = latest.photos.copy(
+                            profilePhotos = result.value.sortedBy { it.position },
+                            reorderingPhotos = false,
+                            photoReorderError = null,
+                            photoReorderMessage = null,
+                        ),
+                    )
+                }
+
+                is ApiResult.Failure -> {
+                    val latest = requireReady() ?: return@launch
+                    uiState.value = latest.copy(
+                        photos = latest.photos.copy(
+                            profilePhotos = previousPhotos,
+                            reorderingPhotos = false,
+                            photoReorderError = result.error,
+                            photoReorderMessage = null,
+                        ),
+                    )
+                }
+            }
+        }
     }
 
-    fun addProfilePhotoFile(position: Int, fileUri: Uri) {
+    fun addProfilePhotoFile(position: Int, fileUri: Uri?) {
         val current = requireReady() ?: return
+        if (current.reorderingPhotos) return
+        if (fileUri == null) return
         scope.launch {
-            val afterReorder = persistPendingPhotoReorderIfNeeded(current) ?: return@launch
-            val cleared = afterReorder.clearProfileFeedback()
+            val cleared = current.clearProfileFeedback()
             val pending = cleared.copy(photos = cleared.photos.copy(addingPhoto = true))
             uiState.value = pending
             when (val result = dependencies.addProfilePhotoFile(fileUri, position)) {
@@ -244,11 +270,12 @@ class ProfileOperationHandler(
         }
     }
 
-    fun replaceProfilePhotoFile(photoId: String, position: Int, fileUri: Uri) {
+    fun replaceProfilePhotoFile(photoId: String, position: Int, fileUri: Uri?) {
         val current = requireReady() ?: return
+        if (current.reorderingPhotos) return
+        if (fileUri == null) return
         scope.launch {
-            val afterReorder = persistPendingPhotoReorderIfNeeded(current) ?: return@launch
-            val cleared = afterReorder.clearProfileFeedback()
+            val cleared = current.clearProfileFeedback()
             val pending = cleared.copy(photos = cleared.photos.copy(addingPhoto = true))
             uiState.value = pending
             when (val result = dependencies.replaceProfilePhotoFile(photoId, fileUri)) {
@@ -269,9 +296,9 @@ class ProfileOperationHandler(
 
     fun deleteProfilePhoto(photoId: String, position: Int) {
         val current = requireReady() ?: return
+        if (current.reorderingPhotos) return
         scope.launch {
-            val afterReorder = persistPendingPhotoReorderIfNeeded(current) ?: return@launch
-            val cleared = afterReorder.clearProfileFeedback()
+            val cleared = current.clearProfileFeedback()
             val pending = cleared.copy(photos = cleared.photos.copy(addingPhoto = true))
             uiState.value = pending
             when (val result = dependencies.deleteProfilePhoto(photoId)) {
@@ -295,15 +322,14 @@ class ProfileOperationHandler(
 
     fun activateProfile() {
         val current = requireReady() ?: return
+        if (current.reorderingPhotos) return
+
+        if (current.emailVerificationRequired && !current.emailVerificationLocallyVerified) {
+            return
+        }
 
         scope.launch {
-            val afterReorder = persistPendingPhotoReorderIfNeeded(current) ?: return@launch
-
-            if (afterReorder.emailVerificationRequired && !afterReorder.emailVerificationLocallyVerified) {
-                return@launch
-            }
-
-            val cleared = afterReorder.clearProfileFeedback()
+            val cleared = current.clearProfileFeedback()
             val pending = cleared.copy(
                 profileOp = cleared.profileOp.copy(
                     activatingProfile = true,
@@ -312,7 +338,7 @@ class ProfileOperationHandler(
             uiState.value = pending
 
             val verificationResult =
-                if (afterReorder.emailVerificationLocallyVerified) {
+                if (current.emailVerificationLocallyVerified) {
                     EmailVerificationCheckResult.Verified
                 } else {
                     authRepository.reloadAndRefreshEmailVerification()
@@ -403,17 +429,6 @@ class ProfileOperationHandler(
         }
     }
 
-    fun closeProfileManagementSavingPendingChanges(
-        closeProfileManagement: (RealsRootUiState.Ready) -> Unit,
-    ) {
-        val current = requireReady() ?: return
-        if (current.reorderingPhotos) return
-        scope.launch {
-            val afterReorder = persistPendingPhotoReorderIfNeeded(current) ?: return@launch
-            closeProfileManagement(afterReorder)
-        }
-    }
-    
     // ── Private helpers ──
 
     fun resendEmailVerification() {
@@ -535,49 +550,6 @@ class ProfileOperationHandler(
     private fun requireReady(): RealsRootUiState.Ready? =
         uiState.value as? RealsRootUiState.Ready
 
-    private suspend fun persistPendingPhotoReorderIfNeeded(
-        current: RealsRootUiState.Ready,
-    ): RealsRootUiState.Ready? {
-        val pendingOrder = current.pendingPhotoOrder ?: return current
-        if (current.reorderingPhotos) return null
-
-        val saving = current.copy(
-            photos = current.photos.copy(
-                reorderingPhotos = true,
-                photoReorderError = null,
-                photoReorderMessage = null,
-            ),
-        )
-        uiState.value = saving
-
-        return when (val result = dependencies.reorderProfilePhotos(pendingOrder)) {
-            is ApiResult.Success -> {
-                val updated = saving.copy(
-                    photos = saving.photos.copy(
-                        profilePhotos = result.value.sortedBy { it.position },
-                        pendingPhotoOrder = null,
-                        reorderingPhotos = false,
-                        photoReorderError = null,
-                        photoReorderMessage = "Orden de fotos guardado.",
-                    ),
-                )
-                uiState.value = updated
-                updated
-            }
-
-            is ApiResult.Failure -> {
-                uiState.value = saving.copy(
-                    photos = saving.photos.copy(
-                        reorderingPhotos = false,
-                        photoReorderError = result.error,
-                        pendingPhotoOrder = pendingOrder,
-                    ),
-                )
-                null
-            }
-        }
-    }
-
     private fun completePhotoAdded(
         previous: RealsRootUiState.Ready,
         addedPhoto: ProfilePhoto,
@@ -649,7 +621,6 @@ internal fun photoAddedState(
             profilePhotos = upsertPhoto(previous.profilePhotos, addedPhoto),
             profilePhotosError = null,
             addingPhoto = false,
-            pendingPhotoOrder = null,
             reorderingPhotos = false,
             photoReorderError = null,
             photoReorderMessage = null,
@@ -669,7 +640,6 @@ internal fun photoReplacedState(
         profilePhotos = replacePhoto(previous.profilePhotos, replacedPhoto),
         profilePhotosError = null,
         addingPhoto = false,
-        pendingPhotoOrder = null,
         reorderingPhotos = false,
         photoReorderError = null,
         photoReorderMessage = null,
@@ -693,7 +663,6 @@ internal fun photoDeletedState(
             .sortedBy { it.position },
         profilePhotosError = null,
         addingPhoto = false,
-        pendingPhotoOrder = null,
         reorderingPhotos = false,
         photoReorderError = null,
         photoReorderMessage = null,

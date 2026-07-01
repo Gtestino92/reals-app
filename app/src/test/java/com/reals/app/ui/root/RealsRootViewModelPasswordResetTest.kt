@@ -430,7 +430,8 @@ class RealsRootViewModelPasswordResetTest {
 
     @Test
     fun `system back closes active profile management`() = runTest(dispatcher) {
-        val viewModel = viewModel(FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically))
+        val api = FakeRealsApi()
+        val viewModel = viewModel(FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically), api)
         viewModel.setState(
             RealsRootUiState.Ready(
                 session = TestDomain.session(),
@@ -443,6 +444,26 @@ class RealsRootViewModelPasswordResetTest {
 
         val state = viewModel.uiState.value as RealsRootUiState.Ready
         assertEquals(false, state.editingActiveProfile)
+        assertEquals(0, api.calls.count { it == "reorderMyProfilePhotos" })
+    }
+
+    @Test
+    fun `explicit profile management close does not autosave reorder`() = runTest(dispatcher) {
+        val api = FakeRealsApi()
+        val viewModel = viewModel(FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically), api)
+        viewModel.setState(
+            RealsRootUiState.Ready(
+                session = TestDomain.session(),
+                editingActiveProfile = true,
+            )
+        )
+
+        viewModel.closeProfileManagement()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Ready
+        assertEquals(false, state.editingActiveProfile)
+        assertEquals(0, api.calls.count { it == "reorderMyProfilePhotos" })
     }
 
     private fun viewModel(

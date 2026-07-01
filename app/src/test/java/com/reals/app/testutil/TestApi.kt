@@ -106,6 +106,7 @@ class FakeRealsApi : RealsApi {
     var beforeGetFirstChatForMatchResponse: suspend () -> Unit = {}
     var beforeGetChatResponse: suspend () -> Unit = {}
     var beforeGetConnectionNegotiationResponse: suspend () -> Unit = {}
+    var beforeReorderPhotosResponse: suspend () -> Unit = {}
 
     var pingResponse: Response<PingResponseDto> = Response.success(PingResponseDto("ok"))
     var userResponse: Response<UserResponseDto> = Response.success(TestDtos.user())
@@ -207,7 +208,7 @@ class FakeRealsApi : RealsApi {
         authorization: String,
         body: ReorderProfilePhotosRequestDto,
     ): Response<List<PhotoResponseDto>> =
-        record("reorderMyProfilePhotos", authorization) {
+        record("reorderMyProfilePhotos", authorization, beforeResponse = beforeReorderPhotosResponse) {
             reorderPhotosBody = body
             reorderPhotosResponse
         }

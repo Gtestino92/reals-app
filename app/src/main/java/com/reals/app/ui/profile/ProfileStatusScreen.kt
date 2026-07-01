@@ -6,6 +6,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -36,20 +38,33 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.BackendErrorCode
 import com.reals.app.core.network.ErrorContext
@@ -60,7 +75,6 @@ import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
 import com.reals.app.ui.common.userDescription
 import com.reals.app.ui.common.userLabel
-import com.reals.app.domain.model.PhotoPlacementInput
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.ProfileSnapshot
@@ -69,6 +83,7 @@ import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.UpdateProfileInput
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
@@ -86,7 +101,6 @@ fun ProfileStatusScreen(
     photoActionLoading: Boolean,
     photoActionError: ApiError?,
     photoActionMessage: String?,
-    pendingPhotoOrder: List<PhotoPlacementInput>?,
     photoReorderLoading: Boolean,
     photoReorderError: ApiError?,
     photoReorderMessage: String?,
@@ -180,7 +194,6 @@ fun ProfileStatusScreen(
                 photoActionLoading = photoActionLoading,
                 photoActionError = photoActionError,
                 photoActionMessage = photoActionMessage,
-                pendingPhotoOrder = pendingPhotoOrder,
                 photoReorderLoading = photoReorderLoading,
                 photoReorderError = photoReorderError,
                 photoReorderMessage = photoReorderMessage,
@@ -270,7 +283,6 @@ private fun ProfileCard(
     photoActionLoading: Boolean,
     photoActionError: ApiError?,
     photoActionMessage: String?,
-    pendingPhotoOrder: List<PhotoPlacementInput>?,
     photoReorderLoading: Boolean,
     photoReorderError: ApiError?,
     photoReorderMessage: String?,
@@ -364,7 +376,6 @@ private fun ProfileCard(
                 photoActionLoading = photoActionLoading,
                 photoActionError = photoActionError,
                 photoActionMessage = photoActionMessage,
-                pendingPhotoOrder = pendingPhotoOrder,
                 photoReorderLoading = photoReorderLoading,
                 photoReorderError = photoReorderError,
                 photoReorderMessage = photoReorderMessage,
@@ -521,7 +532,6 @@ private fun PhotoManagerActions(
     photoActionLoading: Boolean,
     photoActionError: ApiError?,
     photoActionMessage: String?,
-    pendingPhotoOrder: List<PhotoPlacementInput>?,
     photoReorderLoading: Boolean,
     photoReorderError: ApiError?,
     photoReorderMessage: String?,
@@ -570,8 +580,6 @@ private fun PhotoManagerActions(
             onReplacePhotoFile(photoId, position, uri)
         }
     }
-    val displayPhotos = photosWithPendingOrder(photos, pendingPhotoOrder)
-
     LaunchedEffect(photoActionLoading, photoActionMessage) {
         if (!photoActionLoading && photoActionMessage != null && pendingAddedPosition != null) {
             pendingAddedPosition = null
@@ -597,13 +605,6 @@ private fun PhotoManagerActions(
                     Text(if (photosLoading) "Cargando fotos..." else "Reintentar carga de fotos")
                 }
             }
-            if (pendingPhotoOrder != null) {
-                FeedbackCard(
-                    title = "Orden pendiente",
-                    message = "El nuevo orden se guardará al salir.",
-                    tone = FeedbackTone.Info,
-                )
-            }
             if (photoReorderLoading) {
                 FeedbackCard(
                     title = "Guardando",
@@ -614,7 +615,7 @@ private fun PhotoManagerActions(
             photoReorderMessage?.let { SuccessFeedback(it) }
             photoReorderError?.let { ApiErrorFeedbackCard(it, ErrorContext.PhotoUpload) }
             PhotoGrid(
-                photos = displayPhotos,
+                photos = photos,
                 busy = busy,
                 onPickNewFile = { position ->
                     localError = null
@@ -747,22 +748,93 @@ private fun PhotoGrid(
     onMovePhoto: (photoId: String, targetPosition: Int) -> Unit,
 ) {
     val photosByPosition = photos.profilePhotosByGridPosition()
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        ProfilePhotoGridPositions.chunked(3).forEach { rowPositions ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                rowPositions.forEach { position ->
-                    PhotoSlot(
-                        position = position,
-                        photo = photosByPosition[position],
-                        busy = busy,
-                        modifier = Modifier.weight(1f),
-                        onPickNewFile = onPickNewFile,
-                        onPickReplacementFile = onPickReplacementFile,
-                        onDeletePhoto = onDeletePhoto,
-                        onMovePhoto = onMovePhoto,
-                    )
+    val slotBoundsByPosition = remember { mutableStateMapOf<Int, Rect>() }
+    var gridBounds by remember { mutableStateOf<Rect?>(null) }
+    var dragState by remember { mutableStateOf<PhotoGridDragState?>(null) }
+
+    fun targetPositionAt(pointerPosition: Offset): Int? =
+        slotBoundsByPosition.entries.firstOrNull { (_, bounds) ->
+            bounds.contains(pointerPosition)
+        }?.key
+
+    Box(
+        modifier = Modifier.onGloballyPositioned { coordinates ->
+            gridBounds = coordinates.boundsInRoot()
+        },
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            ProfilePhotoGridPositions.chunked(3).forEach { rowPositions ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    rowPositions.forEach { position ->
+                        val currentDragState = dragState
+                        PhotoSlot(
+                            position = position,
+                            photo = photosByPosition[position],
+                            busy = busy,
+                            isDragTarget = currentDragState?.targetPosition == position,
+                            isDraggingSource = currentDragState?.sourcePosition == position,
+                            modifier = Modifier.weight(1f),
+                            onSlotBoundsChanged = { slotPosition, bounds ->
+                                slotBoundsByPosition[slotPosition] = bounds
+                            },
+                            onPickNewFile = onPickNewFile,
+                            onPickReplacementFile = onPickReplacementFile,
+                            onDeletePhoto = onDeletePhoto,
+                            onMovePhoto = onMovePhoto,
+                            onDragStart = { photoId, sourcePosition, pointerPosition ->
+                                dragState = PhotoGridDragState(
+                                    photoId = photoId,
+                                    sourcePosition = sourcePosition,
+                                    currentPosition = pointerPosition,
+                                    targetPosition = targetPositionAt(pointerPosition),
+                                )
+                            },
+                            onDrag = { dragAmount ->
+                                val activeDrag = dragState
+                                if (activeDrag != null) {
+                                    val nextPosition = activeDrag.currentPosition + dragAmount
+                                    dragState = activeDrag.copy(
+                                        currentPosition = nextPosition,
+                                        targetPosition = targetPositionAt(nextPosition),
+                                    )
+                                }
+                            },
+                            onDragEnd = {
+                                val completedDrag = dragState
+                                dragState = null
+                                val targetPosition = completedDrag?.targetPosition
+                                if (
+                                    completedDrag != null &&
+                                    targetPosition != null &&
+                                    targetPosition != completedDrag.sourcePosition
+                                ) {
+                                    onMovePhoto(completedDrag.photoId, targetPosition)
+                                }
+                            },
+                            onDragCancel = {
+                                dragState = null
+                            },
+                        )
+                    }
                 }
             }
+        }
+        val activeDrag = dragState
+        val draggedPhoto = activeDrag?.let { photosByPosition[it.sourcePosition] }
+        val sourceBounds = activeDrag?.let { slotBoundsByPosition[it.sourcePosition] }
+        val currentGridBounds = gridBounds
+        if (
+            activeDrag != null &&
+            draggedPhoto != null &&
+            sourceBounds != null &&
+            currentGridBounds != null
+        ) {
+            DraggedPhotoGhost(
+                photo = draggedPhoto,
+                pointerPosition = activeDrag.currentPosition,
+                sourceBounds = sourceBounds,
+                gridBounds = currentGridBounds,
+            )
         }
     }
 }
@@ -772,27 +844,48 @@ private fun PhotoSlot(
     position: Int,
     photo: ProfilePhoto?,
     busy: Boolean,
+    isDragTarget: Boolean,
+    isDraggingSource: Boolean,
     modifier: Modifier = Modifier,
+    onSlotBoundsChanged: (position: Int, bounds: Rect) -> Unit,
     onPickNewFile: (position: Int) -> Unit,
     onPickReplacementFile: (photoId: String, position: Int) -> Unit,
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
     onMovePhoto: (photoId: String, targetPosition: Int) -> Unit,
+    onDragStart: (photoId: String, sourcePosition: Int, pointerPosition: Offset) -> Unit,
+    onDrag: (dragAmount: Offset) -> Unit,
+    onDragEnd: () -> Unit,
+    onDragCancel: () -> Unit,
 ) {
+    var slotBounds by remember { mutableStateOf<Rect?>(null) }
+    val positionedModifier = modifier.onGloballyPositioned { coordinates ->
+        val bounds = coordinates.boundsInRoot()
+        slotBounds = bounds
+        onSlotBoundsChanged(position, bounds)
+    }
     if (photo == null) {
         EmptyPhotoSlot(
             position = position,
             busy = busy,
-            modifier = modifier,
+            isDragTarget = isDragTarget,
+            modifier = positionedModifier,
             onPickNewFile = onPickNewFile,
         )
     } else {
         FilledPhotoSlot(
             photo = photo,
             busy = busy,
-            modifier = modifier,
+            isDragTarget = isDragTarget,
+            isDraggingSource = isDraggingSource,
+            slotBounds = slotBounds,
+            modifier = positionedModifier,
             onPickReplacementFile = onPickReplacementFile,
             onDeletePhoto = onDeletePhoto,
             onMovePhoto = onMovePhoto,
+            onDragStart = onDragStart,
+            onDrag = onDrag,
+            onDragEnd = onDragEnd,
+            onDragCancel = onDragCancel,
         )
     }
 }
@@ -801,57 +894,77 @@ private fun PhotoSlot(
 private fun FilledPhotoSlot(
     photo: ProfilePhoto,
     busy: Boolean,
+    isDragTarget: Boolean,
+    isDraggingSource: Boolean,
+    slotBounds: Rect?,
     modifier: Modifier = Modifier,
     onPickReplacementFile: (photoId: String, position: Int) -> Unit,
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
     onMovePhoto: (photoId: String, targetPosition: Int) -> Unit,
+    onDragStart: (photoId: String, sourcePosition: Int, pointerPosition: Offset) -> Unit,
+    onDrag: (dragAmount: Offset) -> Unit,
+    onDragEnd: () -> Unit,
+    onDragCancel: () -> Unit,
 ) {
     val imageShape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
     val changeActionShape = RoundedCornerShape(bottomStart = 8.dp)
     val moveActionShape = RoundedCornerShape(bottomEnd = 8.dp)
-    val displayUrl = photo.url.toEmulatorReachableUrl()
     var moveExpanded by rememberSaveable(photo.id) { mutableStateOf(false) }
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(0.dp)) {
+    val dragModifier = if (!busy) {
+        Modifier.pointerInput(photo.id, slotBounds) {
+            detectDragGesturesAfterLongPress(
+                onDragStart = { localOffset ->
+                    val bounds = slotBounds ?: return@detectDragGesturesAfterLongPress
+                    onDragStart(
+                        photo.id,
+                        photo.position,
+                        Offset(bounds.left + localOffset.x, bounds.top + localOffset.y),
+                    )
+                },
+                onDrag = { change, dragAmount ->
+                    change.consume()
+                    onDrag(dragAmount)
+                },
+                onDragEnd = onDragEnd,
+                onDragCancel = onDragCancel,
+            )
+        }
+    } else {
+        Modifier
+    }
+    Column(
+        modifier = modifier
+            .then(dragModifier)
+            .alpha(if (isDraggingSource) 0.42f else 1f)
+            .semantics {
+                when {
+                    isDraggingSource -> stateDescription = "Dragging"
+                    isDragTarget -> stateDescription = "Drop target"
+                }
+            },
+        verticalArrangement = Arrangement.spacedBy(0.dp),
+    ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
                 .clip(imageShape)
                 .background(MaterialTheme.colorScheme.surfaceContainer)
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, imageShape),
+                .border(
+                    width = if (isDragTarget) 2.dp else 1.dp,
+                    color = if (isDragTarget) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.outlineVariant
+                    },
+                    shape = imageShape,
+                ),
         ) {
-            when {
-                photo.url.isLocalhostPresignedUrl() -> {
-                    Text(
-                        text = "URL local firmada no renderizable en emulador.",
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .padding(8.dp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-
-                displayUrl.isRenderableImageUrl() -> {
-                    AsyncImage(
-                        model = displayUrl,
-                        contentDescription = "Foto de perfil ${photo.position}",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-
-                else -> {
-                    Text(
-                        text = "Sin URL publica.",
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .padding(8.dp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            }
+            ProfilePhotoImage(
+                photo = photo,
+                contentDescription = "Foto de perfil ${photo.position}",
+                modifier = Modifier.fillMaxSize(),
+            )
             Text(
                 text = "Foto ${photo.position}",
                 modifier = Modifier
@@ -965,6 +1078,7 @@ private fun FilledPhotoSlot(
 private fun EmptyPhotoSlot(
     position: Int,
     busy: Boolean,
+    isDragTarget: Boolean,
     modifier: Modifier = Modifier,
     onPickNewFile: (position: Int) -> Unit,
 ) {
@@ -972,9 +1086,20 @@ private fun EmptyPhotoSlot(
     Box(
         modifier = modifier
             .aspectRatio(1f)
+            .semantics {
+                if (isDragTarget) stateDescription = "Drop target"
+            }
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceContainer)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+            .border(
+                width = if (isDragTarget) 2.dp else 1.dp,
+                color = if (isDragTarget) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.outlineVariant
+                },
+                shape = shape,
+            )
             .clickable(
                 enabled = !busy,
                 onClickLabel = "Agregar foto $position",
@@ -1015,17 +1140,103 @@ private fun EmptyPhotoSlot(
     }
 }
 
+@Composable
+private fun DraggedPhotoGhost(
+    photo: ProfilePhoto,
+    pointerPosition: Offset,
+    sourceBounds: Rect,
+    gridBounds: Rect,
+) {
+    val sizePx = sourceBounds.width.coerceAtLeast(1f)
+    val sizeDp = with(LocalDensity.current) { sizePx.toDp() }
+    val shape = RoundedCornerShape(8.dp)
+    Box(
+        modifier = Modifier
+            .offset {
+                IntOffset(
+                    x = (pointerPosition.x - gridBounds.left - sizePx / 2f).roundToInt(),
+                    y = (pointerPosition.y - gridBounds.top - sizePx / 2f).roundToInt(),
+                )
+            }
+            .size(sizeDp)
+            .alpha(0.82f)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .border(2.dp, MaterialTheme.colorScheme.primary, shape),
+    ) {
+        ProfilePhotoImage(
+            photo = photo,
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
+}
+
+@Composable
+private fun ProfilePhotoImage(
+    photo: ProfilePhoto,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+) {
+    val displayUrl = photo.url.toEmulatorReachableUrl()
+    val context = LocalContext.current
+    val imageRequest = remember(context, displayUrl) {
+        ImageRequest.Builder(context)
+            .data(displayUrl)
+            .memoryCacheKey(displayUrl.stablePhotoCacheKey())
+            .diskCacheKey(displayUrl.stablePhotoCacheKey())
+            .build()
+    }
+    when {
+        photo.url.isLocalhostPresignedUrl() -> {
+            Text(
+                text = "URL local firmada no renderizable en emulador.",
+                modifier = modifier.padding(8.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+
+        displayUrl.isRenderableImageUrl() -> {
+            AsyncImage(
+                model = imageRequest,
+                contentDescription = contentDescription,
+                contentScale = ContentScale.Crop,
+                modifier = modifier,
+            )
+        }
+
+        else -> {
+            Text(
+                text = "Sin URL publica.",
+                modifier = modifier.padding(8.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
+
 internal val ProfilePhotoGridPositions: IntRange = 1..9
 
 internal fun List<ProfilePhoto>.profilePhotosByGridPosition(): Map<Int, ProfilePhoto> =
     filter { it.position in ProfilePhotoGridPositions }
         .associateBy { it.position }
 
+private data class PhotoGridDragState(
+    val photoId: String,
+    val sourcePosition: Int,
+    val currentPosition: Offset,
+    val targetPosition: Int?,
+)
+
 private fun String.toEmulatorReachableUrl(): String {
     if (isPresignedUrl()) return this
     return replace("http://localhost:", "http://10.0.2.2:")
         .replace("http://127.0.0.1:", "http://10.0.2.2:")
 }
+
+private fun String.stablePhotoCacheKey(): String = substringBefore("?")
 
 private fun String.isRenderableImageUrl(): Boolean {
     return startsWith("http://") || startsWith("https://")

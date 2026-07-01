@@ -139,7 +139,6 @@ fun RealsApp(
                             photoActionLoading = current.addingPhoto,
                             photoActionError = current.photoActionError,
                             photoActionMessage = current.photoActionMessage,
-                            pendingPhotoOrder = current.pendingPhotoOrder,
                             photoReorderLoading = current.reorderingPhotos,
                             photoReorderError = current.photoReorderError,
                             photoReorderMessage = current.photoReorderMessage,
@@ -163,7 +162,7 @@ fun RealsApp(
                             onAddPhotoFile = viewModel::addProfilePhotoFile,
                             onReplacePhotoFile = viewModel::replaceProfilePhotoFile,
                             onDeletePhoto = { photoId, position -> viewModel.deleteProfilePhoto(photoId, position) },
-                            onMovePhoto = viewModel::moveProfilePhotoLocally,
+                            onMovePhoto = viewModel::moveProfilePhoto,
                             onActivateProfile = { viewModel.activateProfile() },
                             onResendEmailVerification = viewModel::resendEmailVerification,
                             onCheckEmailVerification = viewModel::checkEmailVerification,
@@ -176,7 +175,7 @@ fun RealsApp(
                                 current.editingActiveProfile &&
                                 profile.status == ProfileStatus.Active
                             ) {
-                                viewModel::closeProfileManagementSavingPendingChanges
+                                viewModel::closeProfileManagement
                             } else {
                                 null
                             },
