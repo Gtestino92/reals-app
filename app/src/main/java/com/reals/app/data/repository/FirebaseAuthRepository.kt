@@ -23,6 +23,20 @@ sealed interface PasswordResetResult {
     data object SilentFailure : PasswordResetResult
 }
 
+sealed interface EmailVerificationSendResult {
+    data object Sent : EmailVerificationSendResult
+    data object AlreadyVerified : EmailVerificationSendResult
+    data object NotSignedIn : EmailVerificationSendResult
+    data object Failure : EmailVerificationSendResult
+}
+
+sealed interface EmailVerificationCheckResult {
+    data object Verified : EmailVerificationCheckResult
+    data object NotVerified : EmailVerificationCheckResult
+    data object NotSignedIn : EmailVerificationCheckResult
+    data object Failure : EmailVerificationCheckResult
+}
+
 open class FirebaseAuthRepository(private val context: Context) {
     open fun isConfigured(): Boolean = FirebaseApp.getApps(context).isNotEmpty()
 
@@ -30,7 +44,7 @@ open class FirebaseAuthRepository(private val context: Context) {
 
     fun currentUserEmail(): String? = authOrNull()?.currentUser?.email
 
-    suspend fun signIn(email: String, password: String): AuthOperationResult {
+    open suspend fun signIn(email: String, password: String): AuthOperationResult {
         val auth = authOrNull()
             ?: return AuthOperationResult.Failure(firebaseMissingMessage)
 
@@ -42,7 +56,7 @@ open class FirebaseAuthRepository(private val context: Context) {
         )
     }
 
-    suspend fun signUp(email: String, password: String): AuthOperationResult {
+    open suspend fun signUp(email: String, password: String): AuthOperationResult {
         val auth = authOrNull()
             ?: return AuthOperationResult.Failure(firebaseMissingMessage)
         return runCatching {
@@ -66,6 +80,40 @@ open class FirebaseAuthRepository(private val context: Context) {
             onSuccess = { PasswordResetResult.SentOrHandledGenerically },
             onFailure = { it.toPasswordResetResult() },
         )
+    }
+
+    open suspend fun sendEmailVerificationEmail(): EmailVerificationSendResult {
+        val user = authOrNull()?.currentUser
+            ?: return EmailVerificationSendResult.NotSignedIn
+
+        return runCatching {
+            user.reload().await()
+            if (user.isEmailVerified) {
+                EmailVerificationSendResult.AlreadyVerified
+            } else {
+                user.sendEmailVerification().await()
+                EmailVerificationSendResult.Sent
+            }
+        }.getOrElse {
+            EmailVerificationSendResult.Failure
+        }
+    }
+
+    open suspend fun reloadAndRefreshEmailVerification(): EmailVerificationCheckResult {
+        val user = authOrNull()?.currentUser
+            ?: return EmailVerificationCheckResult.NotSignedIn
+
+        return runCatching {
+            user.reload().await()
+            user.getIdToken(true).await()
+            if (user.isEmailVerified) {
+                EmailVerificationCheckResult.Verified
+            } else {
+                EmailVerificationCheckResult.NotVerified
+            }
+        }.getOrElse {
+            EmailVerificationCheckResult.Failure
+        }
     }
 
     fun signOut() {

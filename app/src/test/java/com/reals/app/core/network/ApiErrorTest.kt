@@ -49,6 +49,17 @@ class ApiErrorTest {
     }
 
     @Test
+    fun `email not verified maps to profile activation message`() {
+        val error = backendError("EMAIL_NOT_VERIFIED")
+
+        assertEquals(BackendErrorCode.EmailNotVerified, error.backendErrorCode)
+        assertEquals(
+            "Verificá tu email antes de activar el perfil.",
+            error.toUserMessage(ErrorContext.ProfileActivation),
+        )
+    }
+
+    @Test
     fun `fromRaw parses chat backend codes`() {
         mapOf(
             "CHAT_NOT_FOUND" to BackendErrorCode.ChatNotFound,

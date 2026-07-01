@@ -2,8 +2,23 @@ package com.reals.app.data.repository
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import android.content.ContextWrapper
 
 class FirebaseAuthRepositoryPasswordResetTest {
+    @Test
+    fun `send email verification returns not signed in when Firebase user is missing`() = kotlinx.coroutines.test.runTest {
+        val result = unconfiguredRepository().sendEmailVerificationEmail()
+
+        assertEquals(EmailVerificationSendResult.NotSignedIn, result)
+    }
+
+    @Test
+    fun `check email verification returns not signed in when Firebase user is missing`() = kotlinx.coroutines.test.runTest {
+        val result = unconfiguredRepository().reloadAndRefreshEmailVerification()
+
+        assertEquals(EmailVerificationCheckResult.NotSignedIn, result)
+    }
+
     @Test
     fun `valid local email passes simple validation`() {
         assertEquals(true, isLocallyValidEmail("alex@example.com"))
@@ -39,4 +54,9 @@ class FirebaseAuthRepositoryPasswordResetTest {
 
         assertEquals(PasswordResetResult.SilentFailure, result)
     }
+
+    private fun unconfiguredRepository(): FirebaseAuthRepository =
+        object : FirebaseAuthRepository(ContextWrapper(null)) {
+            override fun isConfigured(): Boolean = false
+        }
 }

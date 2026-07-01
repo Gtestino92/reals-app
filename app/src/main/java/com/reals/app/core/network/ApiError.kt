@@ -30,6 +30,7 @@ enum class BackendErrorCode(val raw: String) {
     ProfileAlreadyExists("PROFILE_ALREADY_EXISTS"),
     ProfileNotFound("PROFILE_NOT_FOUND"),
     ProfileNotActivatable("PROFILE_NOT_ACTIVATABLE"),
+    EmailNotVerified("EMAIL_NOT_VERIFIED"),
     ProfilePhotosRequired("PROFILE_PHOTOS_REQUIRED"),
     ProfilePersonPhotoRequired("PROFILE_PERSON_PHOTO_REQUIRED"),
     ProfileFullBodyPhotoRequired("PROFILE_FULL_BODY_PHOTO_REQUIRED"),
@@ -163,6 +164,7 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.ProfileAlreadyExists -> "Ya tenes un perfil creado."
     BackendErrorCode.ProfileNotFound -> "No encontramos tu perfil. Actualiza la sesion e intenta nuevamente."
     BackendErrorCode.ProfileNotActivatable -> "Tu perfil necesita completarse antes de activarlo."
+    BackendErrorCode.EmailNotVerified -> "Verificá tu email antes de activar el perfil."
     BackendErrorCode.ProfilePhotosRequired -> "Subi mas fotos para poder activar tu perfil."
     BackendErrorCode.ProfilePersonPhotoRequired -> "Necesitamos al menos una foto clara tuya para activar tu perfil."
     BackendErrorCode.ProfileFullBodyPhotoRequired -> "Necesitamos una foto de cuerpo completo para activar tu perfil."

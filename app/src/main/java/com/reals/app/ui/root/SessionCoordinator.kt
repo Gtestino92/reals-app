@@ -58,8 +58,22 @@ internal class SessionCoordinator(
     }
 
     fun signUp(email: String, password: String) {
-        authenticate(email, password) { cleanEmail, cleanPassword ->
-            authRepository.signUp(cleanEmail, cleanPassword)
+        val cleanEmail = email.trim()
+        if (cleanEmail.isBlank() || password.isBlank()) {
+            uiState.value = RealsRootUiState.Login(error = "Email y password son requeridos.")
+            return
+        }
+        scope.launch {
+            uiState.value = RealsRootUiState.Login(loading = true)
+            when (val result = authRepository.signUp(cleanEmail, password)) {
+                AuthOperationResult.Success -> {
+                    authRepository.sendEmailVerificationEmail()
+                    loadBackendSession()
+                }
+
+                is AuthOperationResult.Failure -> uiState.value =
+                    RealsRootUiState.Login(error = result.message)
+            }
         }
     }
 
