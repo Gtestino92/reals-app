@@ -67,6 +67,7 @@ import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.UpdateProfileInput
 import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 fun ProfileStatusScreen(
@@ -576,7 +577,10 @@ private fun PhotoManagerActions(
             photoActionMessage?.let { SuccessFeedback(it) }
             photoActionError?.let { ApiErrorFeedbackCard(it, ErrorContext.PhotoUpload) }
             activationError?.let { ApiErrorFeedbackCard(it, ErrorContext.ProfileActivation) }
-            val showEmailVerificationActions = activationError.isEmailNotVerified() || emailVerificationRequired
+            val showEmailVerificationActions =
+                !emailVerificationLocallyVerified &&
+                        (activationError.isEmailNotVerified() || emailVerificationRequired)
+
             if (showEmailVerificationActions) {
                 EmailVerificationActions(
                     sending = emailVerificationSending,
@@ -584,6 +588,7 @@ private fun PhotoManagerActions(
                     message = emailVerificationMessage,
                     error = emailVerificationError,
                     busy = busy,
+                    emailVerificationLocallyVerified = emailVerificationLocallyVerified,
                     resendAvailableAtMillis = resendEmailVerificationAvailableAtMillis,
                     checkAvailableAtMillis = checkEmailVerificationAvailableAtMillis,
                     onResendEmailVerification = onResendEmailVerification,
@@ -591,7 +596,7 @@ private fun PhotoManagerActions(
                 )
             }
             if (profile.status == ProfileStatus.Draft) {
-                if (!showEmailVerificationActions) {
+                if (!showEmailVerificationActions && !emailVerificationLocallyVerified) {
                     FeedbackCard(
                         title = "Verificación de email",
                         message = "Antes de activar tu perfil, vas a necesitar verificar tu email. " +
@@ -619,6 +624,7 @@ private fun EmailVerificationActions(
     message: String?,
     error: String?,
     busy: Boolean,
+    emailVerificationLocallyVerified: Boolean,
     resendAvailableAtMillis: Long?,
     checkAvailableAtMillis: Long?,
     onResendEmailVerification: () -> Unit,
@@ -633,7 +639,7 @@ private fun EmailVerificationActions(
 
     LaunchedEffect(nextAvailableAt) {
         if (nextAvailableAt != null) {
-            delay((nextAvailableAt - System.currentTimeMillis()).coerceAtLeast(0L))
+            delay((nextAvailableAt - System.currentTimeMillis()).coerceAtLeast(0L).milliseconds)
             nowMillis = System.currentTimeMillis()
         }
     }
@@ -658,14 +664,14 @@ private fun EmailVerificationActions(
             error?.let { ErrorFeedback("No pudimos verificar el email", it) }
             OutlinedButton(
                 onClick = onResendEmailVerification,
-                enabled = !busy && !resendCoolingDown,
+                enabled = !busy && !resendCoolingDown && !emailVerificationLocallyVerified,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(if (sending) "Enviando..." else "Reenviar email")
             }
             Button(
                 onClick = onCheckEmailVerification,
-                enabled = !busy && !checkCoolingDown,
+                enabled = !busy && !checkCoolingDown && !emailVerificationLocallyVerified,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(if (checking) "Comprobando..." else "Ya verifiqué")
