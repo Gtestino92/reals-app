@@ -39,6 +39,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -119,6 +120,14 @@ fun ProfileStatusScreen(
         emailVerificationChecking ||
         accountDeleteLoading
     val scrollState = rememberScrollState()
+    var accountExpanded by rememberSaveable(session.user.id) { mutableStateOf(false) }
+
+    LaunchedEffect(accountExpanded) {
+        if (!accountExpanded) return@LaunchedEffect
+        withFrameNanos { }
+        scrollState.animateScrollTo(scrollState.maxValue)
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -202,6 +211,8 @@ fun ProfileStatusScreen(
             busy = busy,
             loading = accountDeleteLoading,
             error = accountDeleteError,
+            expanded = accountExpanded,
+            onExpandedChange = { accountExpanded = it },
             onSignOut = onSignOut,
             onDeleteAccount = onDeleteAccount,
         )

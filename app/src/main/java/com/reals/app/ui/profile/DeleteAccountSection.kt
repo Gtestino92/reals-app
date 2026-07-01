@@ -30,10 +30,11 @@ fun DeleteAccountSection(
     busy: Boolean,
     loading: Boolean,
     error: ApiError?,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit,
 ) {
-    var expanded by rememberSaveable { mutableStateOf(false) }
     var confirmingDeleteAccount by rememberSaveable { mutableStateOf(false) }
 
     if (confirmingDeleteAccount) {
@@ -94,7 +95,7 @@ fun DeleteAccountSection(
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                     )
                 }
-                TextButton(onClick = { expanded = !expanded }, enabled = !busy) {
+                TextButton(onClick = { onExpandedChange(!expanded) }, enabled = !busy) {
                     Text(if (expanded) "Ocultar" else "Abrir")
                 }
             }

@@ -427,6 +427,23 @@ class RealsRootViewModelPasswordResetTest {
         assertEquals(false, state.emailVerificationRequired)
     }
 
+    @Test
+    fun `system back closes active profile management`() = runTest(dispatcher) {
+        val viewModel = viewModel(FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically))
+        viewModel.setState(
+            RealsRootUiState.Ready(
+                session = TestDomain.session(),
+                editingActiveProfile = true,
+            )
+        )
+
+        viewModel.onSystemBack()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Ready
+        assertEquals(false, state.editingActiveProfile)
+    }
+
     private fun viewModel(
         authRepository: FirebaseAuthRepository,
         api: FakeRealsApi = FakeRealsApi(),

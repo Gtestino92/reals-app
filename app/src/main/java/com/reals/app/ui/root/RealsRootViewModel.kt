@@ -88,6 +88,36 @@ class RealsRootViewModel(
 
     fun reactivateAccount() = sessionCoordinator.reactivateAccount()
 
+    fun onSystemBack() {
+        val current = _uiState.value
+        if (!current.canHandleSystemBack()) return
+
+        when (current) {
+            is RealsRootUiState.Ready -> {
+                val profile = (current.session.profileSnapshot as? ProfileSnapshot.Found)?.profile
+                if (current.editingActiveProfile && profile?.status == ProfileStatus.Active) {
+                    closeProfileManagement()
+                }
+            }
+
+            is RealsRootUiState.SecondChat -> closeSecondChat()
+            is RealsRootUiState.VisualApproval -> closeVisualApproval()
+            is RealsRootUiState.Scheduling -> closeScheduling()
+            is RealsRootUiState.PartnerProfile -> closePartnerProfile()
+            is RealsRootUiState.PendingEngagement -> returnToHomeFromPendingEngagement()
+            is RealsRootUiState.ActivationComplete -> refreshSession()
+
+            is RealsRootUiState.AccountDeletionPending,
+            is RealsRootUiState.AccountDeletionScheduled,
+            RealsRootUiState.Checking,
+            is RealsRootUiState.Failure,
+            is RealsRootUiState.FirstChat,
+            is RealsRootUiState.LoadingSession,
+            is RealsRootUiState.Login,
+            is RealsRootUiState.MissingFirebase -> Unit
+        }
+    }
+
     fun refreshHomeState() {
         homeCoordinator.refreshHomeState()
     }
