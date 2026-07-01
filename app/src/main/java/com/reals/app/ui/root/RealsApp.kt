@@ -3,6 +3,7 @@ package com.reals.app.ui.root
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
@@ -56,6 +57,10 @@ fun RealsApp(
     }
 
     NotificationPermissionGate(enabled = state is RealsRootUiState.Ready)
+
+    BackHandler(enabled = state.canHandleSystemBack()) {
+        viewModel.onSystemBack()
+    }
 
     Surface(modifier = Modifier.fillMaxSize()) {
         when (val current = state) {

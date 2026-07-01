@@ -9,6 +9,8 @@ import com.reals.app.domain.model.HomeState
 import com.reals.app.domain.model.Match
 import com.reals.app.domain.model.ProfileActivationResult
 import com.reals.app.domain.model.ProfilePhoto
+import com.reals.app.domain.model.ProfileSnapshot
+import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.SchedulingNegotiation
 import com.reals.app.domain.model.SchedulingProposal
@@ -291,3 +293,26 @@ fun RealsRootUiState.Ready.clearProfileFeedback(): RealsRootUiState.Ready = copy
         photoActionMessage = null,
     ),
 )
+
+fun RealsRootUiState.canHandleSystemBack(): Boolean = when (this) {
+    is RealsRootUiState.Ready -> {
+        val profile = (session.profileSnapshot as? ProfileSnapshot.Found)?.profile
+        editingActiveProfile && profile?.status == ProfileStatus.Active
+    }
+
+    is RealsRootUiState.SecondChat -> !sending && !actionLoading
+    is RealsRootUiState.VisualApproval -> !deciding && !writingMessage && !readingPartnerMessage
+    is RealsRootUiState.Scheduling -> !submitting
+    is RealsRootUiState.PartnerProfile -> true
+    is RealsRootUiState.PendingEngagement -> true
+    is RealsRootUiState.ActivationComplete -> true
+
+    RealsRootUiState.Checking,
+    is RealsRootUiState.MissingFirebase,
+    is RealsRootUiState.Login,
+    is RealsRootUiState.LoadingSession,
+    is RealsRootUiState.AccountDeletionScheduled,
+    is RealsRootUiState.AccountDeletionPending,
+    is RealsRootUiState.FirstChat,
+    is RealsRootUiState.Failure -> false
+}

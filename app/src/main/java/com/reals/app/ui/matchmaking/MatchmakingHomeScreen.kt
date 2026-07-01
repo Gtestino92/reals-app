@@ -34,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -396,16 +397,24 @@ private fun MatchmakingIdleScreen(
     var latitude by rememberSaveable(profile.id) { mutableStateOf("-34.6037") }
     var longitude by rememberSaveable(profile.id) { mutableStateOf("-58.3816") }
     var accuracy by rememberSaveable(profile.id) { mutableStateOf("50") }
+    var accountExpanded by rememberSaveable(profile.id) { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
     val busy = homeLoading || accountDeleteLoading
     val canSearch = screenModel.matchmaking.canSearch
     val blockedReason = screenModel.matchmaking.blockedReason
+
+    LaunchedEffect(accountExpanded) {
+        if (!accountExpanded) return@LaunchedEffect
+        withFrameNanos { }
+        scrollState.animateScrollTo(scrollState.maxValue)
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .safeDrawingPadding()
             .imePadding()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(24.dp),
         verticalArrangement = Arrangement.Center,
     ) {
@@ -513,6 +522,8 @@ private fun MatchmakingIdleScreen(
             busy = busy,
             accountDeleteLoading = accountDeleteLoading,
             accountDeleteError = accountDeleteError,
+            expanded = accountExpanded,
+            onExpandedChange = { accountExpanded = it },
             onSignOut = onSignOut,
             onDeleteAccount = onDeleteAccount,
         )

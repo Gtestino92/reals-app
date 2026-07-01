@@ -24,10 +24,12 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -62,14 +64,22 @@ fun CreateProfileScreen(
     var preferredMaxAge by rememberSaveable { mutableStateOf("45") }
     var maxDistanceKm by rememberSaveable { mutableStateOf("50") }
     var localError by rememberSaveable { mutableStateOf<String?>(null) }
+    var accountExpanded by rememberSaveable { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
     val busy = loading || accountDeleteLoading
+
+    LaunchedEffect(accountExpanded) {
+        if (!accountExpanded) return@LaunchedEffect
+        withFrameNanos { }
+        scrollState.animateScrollTo(scrollState.maxValue)
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .safeDrawingPadding()
             .imePadding()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -224,6 +234,8 @@ fun CreateProfileScreen(
             busy = busy,
             loading = accountDeleteLoading,
             error = accountDeleteError,
+            expanded = accountExpanded,
+            onExpandedChange = { accountExpanded = it },
             onSignOut = onSignOut,
             onDeleteAccount = onDeleteAccount,
         )

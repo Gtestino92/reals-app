@@ -29,10 +29,11 @@ internal fun AccountSection(
     busy: Boolean,
     accountDeleteLoading: Boolean,
     accountDeleteError: ApiError?,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit,
 ) {
-    var expanded by rememberSaveable { mutableStateOf(false) }
     var confirmingDelete by rememberSaveable { mutableStateOf(false) }
 
     if (confirmingDelete) {
@@ -82,7 +83,7 @@ internal fun AccountSection(
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
-                TextButton(onClick = { expanded = !expanded }, enabled = !busy) {
+                TextButton(onClick = { onExpandedChange(!expanded) }, enabled = !busy) {
                     Text(if (expanded) "Ocultar" else "Abrir")
                 }
             }
