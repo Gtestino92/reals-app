@@ -4,6 +4,7 @@ import android.content.Context
 import com.google.firebase.Firebase
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
@@ -16,8 +17,14 @@ sealed interface AuthOperationResult {
     data class Failure(val message: String) : AuthOperationResult
 }
 
-class FirebaseAuthRepository(private val context: Context) {
-    fun isConfigured(): Boolean = FirebaseApp.getApps(context).isNotEmpty()
+sealed interface PasswordResetResult {
+    data object SentOrHandledGenerically : PasswordResetResult
+    data object InvalidEmailFormat : PasswordResetResult
+    data object SilentFailure : PasswordResetResult
+}
+
+open class FirebaseAuthRepository(private val context: Context) {
+    open fun isConfigured(): Boolean = FirebaseApp.getApps(context).isNotEmpty()
 
     fun hasSignedInUser(): Boolean = authOrNull()?.currentUser != null
 
@@ -43,6 +50,21 @@ class FirebaseAuthRepository(private val context: Context) {
         }.fold(
             onSuccess = { AuthOperationResult.Success },
             onFailure = { AuthOperationResult.Failure(it.toSignUpMessage()) },
+        )
+    }
+
+    open suspend fun sendPasswordResetEmail(email: String): PasswordResetResult {
+        val cleanEmail = email.trim()
+        if (!isLocallyValidEmail(cleanEmail)) return PasswordResetResult.InvalidEmailFormat
+
+        val auth = authOrNull()
+            ?: return PasswordResetResult.SilentFailure
+
+        return runCatching {
+            auth.sendPasswordResetEmail(cleanEmail).await()
+        }.fold(
+            onSuccess = { PasswordResetResult.SentOrHandledGenerically },
+            onFailure = { it.toPasswordResetResult() },
         )
     }
 
@@ -87,3 +109,42 @@ class FirebaseAuthRepository(private val context: Context) {
             "Firebase no esta configurado. Registra com.reals.app y agrega app/google-services.json."
     }
 }
+
+internal fun isLocallyValidEmail(email: String): Boolean {
+    if (email.isBlank()) return false
+    val atIndex = email.indexOf('@')
+    val dotIndex = email.lastIndexOf('.')
+    return atIndex > 0 &&
+        dotIndex > atIndex + 1 &&
+        dotIndex < email.lastIndex - 1 &&
+        !email.any(Char::isWhitespace)
+}
+
+internal fun Throwable.toPasswordResetResult(): PasswordResetResult {
+    passwordResetResultForFirebaseErrorCode((this as? FirebaseAuthException)?.errorCode)
+        .takeIf { it != PasswordResetResult.SilentFailure }
+        ?.let { return it }
+
+    return when {
+        isEnumerationProneResetFailure() -> PasswordResetResult.SentOrHandledGenerically
+        else -> PasswordResetResult.SilentFailure
+    }
+}
+
+internal fun passwordResetResultForFirebaseErrorCode(errorCode: String?): PasswordResetResult {
+    return when (errorCode) {
+        "ERROR_INVALID_EMAIL" -> PasswordResetResult.InvalidEmailFormat
+        in enumerationPronePasswordResetErrorCodes -> PasswordResetResult.SentOrHandledGenerically
+        else -> PasswordResetResult.SilentFailure
+    }
+}
+
+private fun Throwable.isEnumerationProneResetFailure(): Boolean {
+    return this is FirebaseAuthInvalidUserException
+}
+
+private val enumerationPronePasswordResetErrorCodes = setOf(
+    "ERROR_USER_NOT_FOUND",
+    "ERROR_INVALID_USER",
+    "ERROR_EMAIL_NOT_FOUND",
+)

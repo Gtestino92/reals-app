@@ -20,7 +20,12 @@ sealed interface RealsRootUiState {
 
     data class MissingFirebase(val message: String) : RealsRootUiState
 
-    data class Login(val loading: Boolean = false, val error: String? = null) : RealsRootUiState
+    data class Login(
+        val loading: Boolean = false,
+        val error: String? = null,
+        val passwordResetLoading: Boolean = false,
+        val passwordResetMessage: String? = null,
+    ) : RealsRootUiState
 
     data class LoadingSession(val email: String?) : RealsRootUiState
 

@@ -74,8 +74,11 @@ fun RealsApp(
             is RealsRootUiState.Login -> LoginScreen(
                 loading = current.loading,
                 error = current.error,
+                passwordResetLoading = current.passwordResetLoading,
+                passwordResetMessage = current.passwordResetMessage,
                 onSignIn = viewModel::signIn,
                 onSignUp = viewModel::signUp,
+                onPasswordReset = viewModel::requestPasswordReset,
             )
 
             is RealsRootUiState.LoadingSession -> FullScreenMessage(

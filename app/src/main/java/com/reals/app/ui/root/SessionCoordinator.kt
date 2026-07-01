@@ -5,6 +5,8 @@ import com.reals.app.core.network.ApiResult
 import com.reals.app.core.network.isAccountDeleted
 import com.reals.app.data.repository.AuthOperationResult
 import com.reals.app.data.repository.FirebaseAuthRepository
+import com.reals.app.data.repository.PasswordResetResult
+import com.reals.app.data.repository.isLocallyValidEmail
 import com.reals.app.di.AccountFeatureDependencies
 import com.reals.app.di.SessionFeatureDependencies
 import com.reals.app.domain.model.BackendUser
@@ -58,6 +60,40 @@ internal class SessionCoordinator(
     fun signUp(email: String, password: String) {
         authenticate(email, password) { cleanEmail, cleanPassword ->
             authRepository.signUp(cleanEmail, cleanPassword)
+        }
+    }
+
+    fun requestPasswordReset(email: String) {
+        val current = uiState.value as? RealsRootUiState.Login ?: return
+        if (current.loading || current.passwordResetLoading) return
+
+        val cleanEmail = email.trim()
+        if (!isLocallyValidEmail(cleanEmail)) {
+            uiState.value = current.copy(
+                error = invalidPasswordResetEmailMessage,
+                passwordResetLoading = false,
+                passwordResetMessage = null,
+            )
+            return
+        }
+
+        scope.launch {
+            uiState.value = current.copy(
+                error = null,
+                passwordResetLoading = true,
+                passwordResetMessage = null,
+            )
+            when (authRepository.sendPasswordResetEmail(cleanEmail)) {
+                PasswordResetResult.SentOrHandledGenerically -> uiState.value =
+                    RealsRootUiState.Login(
+                        passwordResetMessage = genericPasswordResetMessage,
+                    )
+
+                PasswordResetResult.InvalidEmailFormat -> uiState.value =
+                    RealsRootUiState.Login(error = invalidPasswordResetEmailMessage)
+
+                PasswordResetResult.SilentFailure -> uiState.value = RealsRootUiState.Login()
+            }
         }
     }
 
@@ -230,5 +266,11 @@ internal class SessionCoordinator(
         scope.launch {
             pushTokenRegistrationService.registerCurrentTokenIfPossible()
         }
+    }
+
+    private companion object {
+        const val invalidPasswordResetEmailMessage = "Ingresá un email válido."
+        const val genericPasswordResetMessage =
+            "Si existe una cuenta con ese email, te enviamos instrucciones para recuperar la contraseña."
     }
 }

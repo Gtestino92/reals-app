@@ -79,6 +79,8 @@ class RealsRootViewModel(
 
     fun signUp(email: String, password: String) = sessionCoordinator.signUp(email, password)
 
+    fun requestPasswordReset(email: String) = sessionCoordinator.requestPasswordReset(email)
+
     fun signOut() = sessionCoordinator.signOut()
 
     fun deleteAccount() = sessionCoordinator.deleteAccount()
