@@ -50,7 +50,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.reals.app.core.network.ApiError
+import com.reals.app.core.network.BackendErrorCode
 import com.reals.app.core.network.ErrorContext
+import com.reals.app.core.network.backendErrorCode
 import com.reals.app.core.security.TextSafety
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
@@ -64,6 +66,8 @@ import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.UpdateProfileInput
+import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 fun ProfileStatusScreen(
@@ -82,6 +86,14 @@ fun ProfileStatusScreen(
     photoActionMessage: String?,
     activationLoading: Boolean,
     activationError: ApiError?,
+    emailVerificationSending: Boolean,
+    emailVerificationChecking: Boolean,
+    emailVerificationMessage: String?,
+    emailVerificationError: String?,
+    emailVerificationRequired: Boolean,
+    emailVerificationLocallyVerified: Boolean,
+    resendEmailVerificationAvailableAtMillis: Long?,
+    checkEmailVerificationAvailableAtMillis: Long?,
     accountDeleteLoading: Boolean,
     accountDeleteError: ApiError?,
     showDraftAfterEditNotice: Boolean = false,
@@ -92,6 +104,8 @@ fun ProfileStatusScreen(
     onReplacePhotoFile: (photoId: String, position: Int, fileUri: Uri) -> Unit,
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
     onActivateProfile: (Profile) -> Unit,
+    onResendEmailVerification: () -> Unit,
+    onCheckEmailVerification: () -> Unit,
     onRefresh: () -> Unit,
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit,
@@ -101,6 +115,8 @@ fun ProfileStatusScreen(
         matchFiltersLoading ||
         photoActionLoading ||
         activationLoading ||
+        emailVerificationSending ||
+        emailVerificationChecking ||
         accountDeleteLoading
     val scrollState = rememberScrollState()
     Column(
@@ -150,6 +166,14 @@ fun ProfileStatusScreen(
                 photoActionMessage = photoActionMessage,
                 activationLoading = activationLoading,
                 activationError = activationError,
+                emailVerificationSending = emailVerificationSending,
+                emailVerificationChecking = emailVerificationChecking,
+                emailVerificationMessage = emailVerificationMessage,
+                emailVerificationError = emailVerificationError,
+                emailVerificationRequired = emailVerificationRequired,
+                emailVerificationLocallyVerified = emailVerificationLocallyVerified,
+                resendEmailVerificationAvailableAtMillis = resendEmailVerificationAvailableAtMillis,
+                checkEmailVerificationAvailableAtMillis = checkEmailVerificationAvailableAtMillis,
                 onUpdateProfile = onUpdateProfile,
                 onUpdateMatchFilters = onUpdateMatchFilters,
                 onLoadPhotos = onLoadPhotos,
@@ -157,6 +181,8 @@ fun ProfileStatusScreen(
                 onReplacePhotoFile = onReplacePhotoFile,
                 onDeletePhoto = onDeletePhoto,
                 onActivateProfile = onActivateProfile,
+                onResendEmailVerification = onResendEmailVerification,
+                onCheckEmailVerification = onCheckEmailVerification,
             )
         }
         if (onBackHome != null) {
@@ -223,6 +249,14 @@ private fun ProfileCard(
     photoActionMessage: String?,
     activationLoading: Boolean,
     activationError: ApiError?,
+    emailVerificationSending: Boolean,
+    emailVerificationChecking: Boolean,
+    emailVerificationMessage: String?,
+    emailVerificationError: String?,
+    emailVerificationRequired: Boolean,
+    emailVerificationLocallyVerified: Boolean,
+    resendEmailVerificationAvailableAtMillis: Long?,
+    checkEmailVerificationAvailableAtMillis: Long?,
     onUpdateProfile: (UpdateProfileInput) -> Unit,
     onUpdateMatchFilters: (UpdateMatchFiltersInput) -> Unit,
     onLoadPhotos: () -> Unit,
@@ -230,6 +264,8 @@ private fun ProfileCard(
     onReplacePhotoFile: (photoId: String, position: Int, fileUri: Uri) -> Unit,
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
     onActivateProfile: (Profile) -> Unit,
+    onResendEmailVerification: () -> Unit,
+    onCheckEmailVerification: () -> Unit,
 ) {
     var expandedSection by rememberSaveable(profile.id) {
         mutableStateOf(if (profile.status == ProfileStatus.Draft) ProfileSection.Photos else null)
@@ -238,7 +274,9 @@ private fun ProfileCard(
             matchFiltersLoading ||
             photosLoading ||
             photoActionLoading ||
-            activationLoading
+            activationLoading ||
+            emailVerificationSending ||
+            emailVerificationChecking
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -299,6 +337,14 @@ private fun ProfileCard(
                 photoActionMessage = photoActionMessage,
                 activationLoading = activationLoading,
                 activationError = activationError,
+                emailVerificationSending = emailVerificationSending,
+                emailVerificationChecking = emailVerificationChecking,
+                emailVerificationMessage = emailVerificationMessage,
+                emailVerificationError = emailVerificationError,
+                emailVerificationRequired = emailVerificationRequired,
+                emailVerificationLocallyVerified = emailVerificationLocallyVerified,
+                resendEmailVerificationAvailableAtMillis = resendEmailVerificationAvailableAtMillis,
+                checkEmailVerificationAvailableAtMillis = checkEmailVerificationAvailableAtMillis,
                 busy = busy,
                 expanded = expandedSection == ProfileSection.Photos,
                 onToggleExpanded = {
@@ -309,6 +355,8 @@ private fun ProfileCard(
                 onReplacePhotoFile = onReplacePhotoFile,
                 onDeletePhoto = onDeletePhoto,
                 onActivateProfile = onActivateProfile,
+                onResendEmailVerification = onResendEmailVerification,
+                onCheckEmailVerification = onCheckEmailVerification,
             )
         }
     }
@@ -441,6 +489,14 @@ private fun PhotoManagerActions(
     photoActionMessage: String?,
     activationLoading: Boolean,
     activationError: ApiError?,
+    emailVerificationSending: Boolean,
+    emailVerificationChecking: Boolean,
+    emailVerificationMessage: String?,
+    emailVerificationError: String?,
+    emailVerificationRequired: Boolean,
+    emailVerificationLocallyVerified: Boolean,
+    resendEmailVerificationAvailableAtMillis: Long?,
+    checkEmailVerificationAvailableAtMillis: Long?,
     busy: Boolean,
     expanded: Boolean,
     onToggleExpanded: () -> Unit,
@@ -449,6 +505,8 @@ private fun PhotoManagerActions(
     onReplacePhotoFile: (photoId: String, position: Int, fileUri: Uri) -> Unit,
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
     onActivateProfile: (Profile) -> Unit,
+    onResendEmailVerification: () -> Unit,
+    onCheckEmailVerification: () -> Unit,
 ) {
     var localError by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
     var replacePhotoId by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
@@ -519,10 +577,104 @@ private fun PhotoManagerActions(
             photoActionMessage?.let { SuccessFeedback(it) }
             photoActionError?.let { ApiErrorFeedbackCard(it, ErrorContext.PhotoUpload) }
             activationError?.let { ApiErrorFeedbackCard(it, ErrorContext.ProfileActivation) }
+            val showEmailVerificationActions =
+                !emailVerificationLocallyVerified &&
+                        (activationError.isEmailNotVerified() || emailVerificationRequired)
+
+            if (showEmailVerificationActions) {
+                EmailVerificationActions(
+                    sending = emailVerificationSending,
+                    checking = emailVerificationChecking,
+                    message = emailVerificationMessage,
+                    error = emailVerificationError,
+                    busy = busy,
+                    emailVerificationLocallyVerified = emailVerificationLocallyVerified,
+                    resendAvailableAtMillis = resendEmailVerificationAvailableAtMillis,
+                    checkAvailableAtMillis = checkEmailVerificationAvailableAtMillis,
+                    onResendEmailVerification = onResendEmailVerification,
+                    onCheckEmailVerification = onCheckEmailVerification,
+                )
+            }
             if (profile.status == ProfileStatus.Draft) {
-                OutlinedButton(onClick = { onActivateProfile(profile) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                if (!showEmailVerificationActions && !emailVerificationLocallyVerified) {
+                    FeedbackCard(
+                        title = "Verificación de email",
+                        message = "Antes de activar tu perfil, vas a necesitar verificar tu email. " +
+                            "Revisá tu bandeja de entrada o spam.",
+                        tone = FeedbackTone.Warning,
+                    )
+                }
+                val activationEnabled = !busy && (!emailVerificationRequired || emailVerificationLocallyVerified)
+                OutlinedButton(
+                    onClick = { onActivateProfile(profile) },
+                    enabled = activationEnabled,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     Text(if (activationLoading) "Activando..." else "Intentar activar perfil")
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmailVerificationActions(
+    sending: Boolean,
+    checking: Boolean,
+    message: String?,
+    error: String?,
+    busy: Boolean,
+    emailVerificationLocallyVerified: Boolean,
+    resendAvailableAtMillis: Long?,
+    checkAvailableAtMillis: Long?,
+    onResendEmailVerification: () -> Unit,
+    onCheckEmailVerification: () -> Unit,
+) {
+    var nowMillis by rememberSaveable { mutableStateOf(System.currentTimeMillis()) }
+    val resendCoolingDown = resendAvailableAtMillis?.let { nowMillis < it } == true
+    val checkCoolingDown = checkAvailableAtMillis?.let { nowMillis < it } == true
+    val nextAvailableAt = listOfNotNull(resendAvailableAtMillis, checkAvailableAtMillis)
+        .filter { nowMillis < it }
+        .minOrNull()
+
+    LaunchedEffect(nextAvailableAt) {
+        if (nextAvailableAt != null) {
+            delay((nextAvailableAt - System.currentTimeMillis()).coerceAtLeast(0L).milliseconds)
+            nowMillis = System.currentTimeMillis()
+        }
+    }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = "Verificá tu email antes de activar el perfil.",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(
+                text = "Te enviamos un correo de verificación. Revisá tu bandeja de entrada o spam.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            message?.let { SuccessFeedback(it) }
+            error?.let { ErrorFeedback("No pudimos verificar el email", it) }
+            OutlinedButton(
+                onClick = onResendEmailVerification,
+                enabled = !busy && !resendCoolingDown && !emailVerificationLocallyVerified,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (sending) "Enviando..." else "Reenviar email")
+            }
+            Button(
+                onClick = onCheckEmailVerification,
+                enabled = !busy && !checkCoolingDown && !emailVerificationLocallyVerified,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (checking) "Comprobando..." else "Ya verifiqué")
             }
         }
     }
@@ -892,3 +1044,7 @@ private fun validateMatchFiltersInput(
 }
 
 private fun yesNo(value: Boolean): String = if (value) "si" else "no"
+
+private fun ApiError?.isEmailNotVerified(): Boolean =
+    this is ApiError.Backend &&
+        backendErrorCode == BackendErrorCode.EmailNotVerified

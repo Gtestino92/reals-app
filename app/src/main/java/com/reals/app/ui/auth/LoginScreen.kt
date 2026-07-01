@@ -34,8 +34,11 @@ import androidx.compose.ui.unit.dp
 fun LoginScreen(
     loading: Boolean,
     error: String?,
+    passwordResetLoading: Boolean,
+    passwordResetMessage: String?,
     onSignIn: (email: String, password: String) -> Unit,
     onSignUp: (email: String, password: String) -> Unit,
+    onPasswordReset: (email: String) -> Unit,
 ) {
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
@@ -94,6 +97,13 @@ fun LoginScreen(
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
+                if (passwordResetMessage != null) {
+                    Text(
+                        text = passwordResetMessage,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
                 Button(
                     onClick = { onSignIn(email, password) },
                     enabled = !loading,
@@ -107,6 +117,13 @@ fun LoginScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text("Crear cuenta")
+                }
+                OutlinedButton(
+                    onClick = { onPasswordReset(email) },
+                    enabled = !loading && !passwordResetLoading,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (passwordResetLoading) "Enviando..." else "Olvidé mi contraseña")
                 }
             }
         }

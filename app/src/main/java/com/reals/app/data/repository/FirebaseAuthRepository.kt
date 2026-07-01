@@ -4,6 +4,7 @@ import android.content.Context
 import com.google.firebase.Firebase
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
@@ -16,14 +17,34 @@ sealed interface AuthOperationResult {
     data class Failure(val message: String) : AuthOperationResult
 }
 
-class FirebaseAuthRepository(private val context: Context) {
-    fun isConfigured(): Boolean = FirebaseApp.getApps(context).isNotEmpty()
+sealed interface PasswordResetResult {
+    data object SentOrHandledGenerically : PasswordResetResult
+    data object InvalidEmailFormat : PasswordResetResult
+    data object SilentFailure : PasswordResetResult
+}
+
+sealed interface EmailVerificationSendResult {
+    data object Sent : EmailVerificationSendResult
+    data object AlreadyVerified : EmailVerificationSendResult
+    data object NotSignedIn : EmailVerificationSendResult
+    data object Failure : EmailVerificationSendResult
+}
+
+sealed interface EmailVerificationCheckResult {
+    data object Verified : EmailVerificationCheckResult
+    data object NotVerified : EmailVerificationCheckResult
+    data object NotSignedIn : EmailVerificationCheckResult
+    data object Failure : EmailVerificationCheckResult
+}
+
+open class FirebaseAuthRepository(private val context: Context) {
+    open fun isConfigured(): Boolean = FirebaseApp.getApps(context).isNotEmpty()
 
     fun hasSignedInUser(): Boolean = authOrNull()?.currentUser != null
 
     fun currentUserEmail(): String? = authOrNull()?.currentUser?.email
 
-    suspend fun signIn(email: String, password: String): AuthOperationResult {
+    open suspend fun signIn(email: String, password: String): AuthOperationResult {
         val auth = authOrNull()
             ?: return AuthOperationResult.Failure(firebaseMissingMessage)
 
@@ -35,7 +56,7 @@ class FirebaseAuthRepository(private val context: Context) {
         )
     }
 
-    suspend fun signUp(email: String, password: String): AuthOperationResult {
+    open suspend fun signUp(email: String, password: String): AuthOperationResult {
         val auth = authOrNull()
             ?: return AuthOperationResult.Failure(firebaseMissingMessage)
         return runCatching {
@@ -44,6 +65,55 @@ class FirebaseAuthRepository(private val context: Context) {
             onSuccess = { AuthOperationResult.Success },
             onFailure = { AuthOperationResult.Failure(it.toSignUpMessage()) },
         )
+    }
+
+    open suspend fun sendPasswordResetEmail(email: String): PasswordResetResult {
+        val cleanEmail = email.trim()
+        if (!isLocallyValidEmail(cleanEmail)) return PasswordResetResult.InvalidEmailFormat
+
+        val auth = authOrNull()
+            ?: return PasswordResetResult.SilentFailure
+
+        return runCatching {
+            auth.sendPasswordResetEmail(cleanEmail).await()
+        }.fold(
+            onSuccess = { PasswordResetResult.SentOrHandledGenerically },
+            onFailure = { it.toPasswordResetResult() },
+        )
+    }
+
+    open suspend fun sendEmailVerificationEmail(): EmailVerificationSendResult {
+        val user = authOrNull()?.currentUser
+            ?: return EmailVerificationSendResult.NotSignedIn
+
+        return runCatching {
+            user.reload().await()
+            if (user.isEmailVerified) {
+                EmailVerificationSendResult.AlreadyVerified
+            } else {
+                user.sendEmailVerification().await()
+                EmailVerificationSendResult.Sent
+            }
+        }.getOrElse {
+            EmailVerificationSendResult.Failure
+        }
+    }
+
+    open suspend fun reloadAndRefreshEmailVerification(): EmailVerificationCheckResult {
+        val user = authOrNull()?.currentUser
+            ?: return EmailVerificationCheckResult.NotSignedIn
+
+        return runCatching {
+            user.reload().await()
+            user.getIdToken(true).await()
+            if (user.isEmailVerified) {
+                EmailVerificationCheckResult.Verified
+            } else {
+                EmailVerificationCheckResult.NotVerified
+            }
+        }.getOrElse {
+            EmailVerificationCheckResult.Failure
+        }
     }
 
     fun signOut() {
@@ -87,3 +157,42 @@ class FirebaseAuthRepository(private val context: Context) {
             "Firebase no esta configurado. Registra com.reals.app y agrega app/google-services.json."
     }
 }
+
+internal fun isLocallyValidEmail(email: String): Boolean {
+    if (email.isBlank()) return false
+    val atIndex = email.indexOf('@')
+    val dotIndex = email.lastIndexOf('.')
+    return atIndex > 0 &&
+        dotIndex > atIndex + 1 &&
+        dotIndex < email.lastIndex - 1 &&
+        !email.any(Char::isWhitespace)
+}
+
+internal fun Throwable.toPasswordResetResult(): PasswordResetResult {
+    passwordResetResultForFirebaseErrorCode((this as? FirebaseAuthException)?.errorCode)
+        .takeIf { it != PasswordResetResult.SilentFailure }
+        ?.let { return it }
+
+    return when {
+        isEnumerationProneResetFailure() -> PasswordResetResult.SentOrHandledGenerically
+        else -> PasswordResetResult.SilentFailure
+    }
+}
+
+internal fun passwordResetResultForFirebaseErrorCode(errorCode: String?): PasswordResetResult {
+    return when (errorCode) {
+        "ERROR_INVALID_EMAIL" -> PasswordResetResult.InvalidEmailFormat
+        in enumerationPronePasswordResetErrorCodes -> PasswordResetResult.SentOrHandledGenerically
+        else -> PasswordResetResult.SilentFailure
+    }
+}
+
+private fun Throwable.isEnumerationProneResetFailure(): Boolean {
+    return this is FirebaseAuthInvalidUserException
+}
+
+private val enumerationPronePasswordResetErrorCodes = setOf(
+    "ERROR_USER_NOT_FOUND",
+    "ERROR_INVALID_USER",
+    "ERROR_EMAIL_NOT_FOUND",
+)

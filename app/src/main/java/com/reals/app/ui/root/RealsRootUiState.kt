@@ -20,7 +20,12 @@ sealed interface RealsRootUiState {
 
     data class MissingFirebase(val message: String) : RealsRootUiState
 
-    data class Login(val loading: Boolean = false, val error: String? = null) : RealsRootUiState
+    data class Login(
+        val loading: Boolean = false,
+        val error: String? = null,
+        val passwordResetLoading: Boolean = false,
+        val passwordResetMessage: String? = null,
+    ) : RealsRootUiState
 
     data class LoadingSession(val email: String?) : RealsRootUiState
 
@@ -52,6 +57,16 @@ sealed interface RealsRootUiState {
         val matchFiltersMessage: String? get() = profileOp.matchFiltersMessage
         val activatingProfile: Boolean get() = profileOp.activatingProfile
         val profileActivationError: ApiError? get() = profileOp.profileActivationError
+        val sendingEmailVerification: Boolean get() = profileOp.sendingEmailVerification
+        val checkingEmailVerification: Boolean get() = profileOp.checkingEmailVerification
+        val emailVerificationMessage: String? get() = profileOp.emailVerificationMessage
+        val emailVerificationError: String? get() = profileOp.emailVerificationError
+        val emailVerificationRequired: Boolean get() = profileOp.emailVerificationRequired
+        val emailVerificationLocallyVerified: Boolean get() = profileOp.emailVerificationLocallyVerified
+        val resendEmailVerificationAvailableAtMillis: Long? get() =
+            profileOp.resendEmailVerificationAvailableAtMillis
+        val checkEmailVerificationAvailableAtMillis: Long? get() =
+            profileOp.checkEmailVerificationAvailableAtMillis
         val loadingPhotos: Boolean get() = photos.loadingPhotos
         val profilePhotos: List<ProfilePhoto> get() = photos.profilePhotos
         val profilePhotosError: ApiError? get() = photos.profilePhotosError
@@ -172,6 +187,14 @@ data class ProfileManagementState(
     val matchFiltersMessage: String? = null,
     val activatingProfile: Boolean = false,
     val profileActivationError: ApiError? = null,
+    val sendingEmailVerification: Boolean = false,
+    val checkingEmailVerification: Boolean = false,
+    val emailVerificationMessage: String? = null,
+    val emailVerificationError: String? = null,
+    val emailVerificationRequired: Boolean = false,
+    val emailVerificationLocallyVerified: Boolean = false,
+    val resendEmailVerificationAvailableAtMillis: Long? = null,
+    val checkEmailVerificationAvailableAtMillis: Long? = null,
 )
 
 data class PhotoManagementUiState(
@@ -259,6 +282,8 @@ fun RealsRootUiState.Ready.clearProfileFeedback(): RealsRootUiState.Ready = copy
         matchFiltersError = null,
         matchFiltersMessage = null,
         profileActivationError = null,
+        emailVerificationMessage = null,
+        emailVerificationError = null,
     ),
     photos = photos.copy(
         profilePhotosError = null,

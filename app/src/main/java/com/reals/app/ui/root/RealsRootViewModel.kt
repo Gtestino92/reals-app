@@ -33,6 +33,7 @@ class RealsRootViewModel(
     private val profileHandler = ProfileOperationHandler(
         uiState = _uiState,
         dependencies = dependencies.profile,
+        authRepository = dependencies.session.authRepository,
         getProfilePhotosUseCase = getProfilePhotosUseCase,
         scope = viewModelScope,
     )
@@ -78,6 +79,8 @@ class RealsRootViewModel(
     fun signIn(email: String, password: String) = sessionCoordinator.signIn(email, password)
 
     fun signUp(email: String, password: String) = sessionCoordinator.signUp(email, password)
+
+    fun requestPasswordReset(email: String) = sessionCoordinator.requestPasswordReset(email)
 
     fun signOut() = sessionCoordinator.signOut()
 
@@ -767,6 +770,14 @@ class RealsRootViewModel(
 
     fun activateProfile() {
         profileHandler.activateProfile()
+    }
+
+    fun resendEmailVerification() {
+        profileHandler.resendEmailVerification()
+    }
+
+    fun checkEmailVerification() {
+        profileHandler.checkEmailVerification()
     }
 
     private suspend fun applyVisualApprovalFlowResult(result: VisualApprovalFlowResult) {

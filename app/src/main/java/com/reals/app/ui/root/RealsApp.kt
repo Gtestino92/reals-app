@@ -74,8 +74,11 @@ fun RealsApp(
             is RealsRootUiState.Login -> LoginScreen(
                 loading = current.loading,
                 error = current.error,
+                passwordResetLoading = current.passwordResetLoading,
+                passwordResetMessage = current.passwordResetMessage,
                 onSignIn = viewModel::signIn,
                 onSignUp = viewModel::signUp,
+                onPasswordReset = viewModel::requestPasswordReset,
             )
 
             is RealsRootUiState.LoadingSession -> FullScreenMessage(
@@ -133,6 +136,16 @@ fun RealsApp(
                             photoActionMessage = current.photoActionMessage,
                             activationLoading = current.activatingProfile,
                             activationError = current.profileActivationError,
+                            emailVerificationSending = current.sendingEmailVerification,
+                            emailVerificationChecking = current.checkingEmailVerification,
+                            emailVerificationMessage = current.emailVerificationMessage,
+                            emailVerificationError = current.emailVerificationError,
+                            emailVerificationRequired = current.emailVerificationRequired,
+                            emailVerificationLocallyVerified = current.emailVerificationLocallyVerified,
+                            resendEmailVerificationAvailableAtMillis =
+                                current.resendEmailVerificationAvailableAtMillis,
+                            checkEmailVerificationAvailableAtMillis =
+                                current.checkEmailVerificationAvailableAtMillis,
                             showDraftAfterEditNotice = current.editingActiveProfile &&
                                 profile.status != ProfileStatus.Active,
                             onUpdateProfile = viewModel::updateProfile,
@@ -142,6 +155,8 @@ fun RealsApp(
                             onReplacePhotoFile = viewModel::replaceProfilePhotoFile,
                             onDeletePhoto = { photoId, position -> viewModel.deleteProfilePhoto(photoId, position) },
                             onActivateProfile = { viewModel.activateProfile() },
+                            onResendEmailVerification = viewModel::resendEmailVerification,
+                            onCheckEmailVerification = viewModel::checkEmailVerification,
                             onRefresh = viewModel::refreshSession,
                             onSignOut = viewModel::signOut,
                             accountDeleteLoading = current.deletingAccount,

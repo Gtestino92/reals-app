@@ -1,7 +1,13 @@
 package com.reals.app.ui.root
 
 import android.net.Uri
+import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ApiResult
+import com.reals.app.core.network.BackendErrorCode
+import com.reals.app.core.network.backendErrorCode
+import com.reals.app.data.repository.EmailVerificationCheckResult
+import com.reals.app.data.repository.EmailVerificationSendResult
+import com.reals.app.data.repository.FirebaseAuthRepository
 import com.reals.app.di.ProfileFeatureDependencies
 import com.reals.app.domain.model.CreateProfileInput
 import com.reals.app.domain.model.Profile
@@ -32,6 +38,7 @@ import kotlinx.coroutines.launch
 class ProfileOperationHandler(
     private val uiState: MutableStateFlow<RealsRootUiState>,
     private val dependencies: ProfileFeatureDependencies,
+    private val authRepository: FirebaseAuthRepository,
     private val getProfilePhotosUseCase: GetProfilePhotosUseCase,
     private val scope: CoroutineScope,
 ) {
@@ -245,15 +252,87 @@ class ProfileOperationHandler(
 
     fun activateProfile() {
         val current = requireReady() ?: return
+
+        if (current.emailVerificationRequired && !current.emailVerificationLocallyVerified) {
+            return
+        }
+
         scope.launch {
             val cleared = current.clearProfileFeedback()
-            val pending = cleared.copy(profileOp = cleared.profileOp.copy(activatingProfile = true))
+            val pending = cleared.copy(
+                profileOp = cleared.profileOp.copy(
+                    activatingProfile = true,
+                ),
+            )
             uiState.value = pending
+
+            val verificationResult =
+                if (current.emailVerificationLocallyVerified) {
+                    EmailVerificationCheckResult.Verified
+                } else {
+                    authRepository.reloadAndRefreshEmailVerification()
+                }
+
+            val verifiedPending = when (verificationResult) {
+                EmailVerificationCheckResult.Verified -> {
+                    pending.copy(
+                        profileOp = pending.profileOp.copy(
+                            emailVerificationRequired = false,
+                            emailVerificationLocallyVerified = true,
+                            emailVerificationMessage = null,
+                            emailVerificationError = null,
+                            profileActivationError = null,
+                        ),
+                    )
+                }
+
+                EmailVerificationCheckResult.NotVerified -> {
+                    uiState.value = pending.copy(
+                        profileOp = pending.profileOp.copy(
+                            activatingProfile = false,
+                            profileActivationError = null,
+                            emailVerificationRequired = true,
+                            emailVerificationLocallyVerified = false,
+                            emailVerificationMessage = null,
+                            emailVerificationError = "Todavía no vemos el email verificado. Abrí el link del correo y volvé a intentar.",
+                            checkEmailVerificationAvailableAtMillis =
+                                System.currentTimeMillis() + CHECK_EMAIL_VERIFICATION_COOLDOWN_MILLIS,
+                        ),
+                    )
+                    return@launch
+                }
+
+                EmailVerificationCheckResult.NotSignedIn -> {
+                    uiState.value = pending.copy(
+                        profileOp = pending.profileOp.copy(
+                            activatingProfile = false,
+                            emailVerificationMessage = null,
+                            emailVerificationError = "Tu sesión necesita renovarse. Volvé a iniciar sesión.",
+                        ),
+                    )
+                    return@launch
+                }
+
+                EmailVerificationCheckResult.Failure -> {
+                    uiState.value = pending.copy(
+                        profileOp = pending.profileOp.copy(
+                            activatingProfile = false,
+                            emailVerificationMessage = null,
+                            emailVerificationError = "No pudimos comprobar la verificación. Intentá nuevamente.",
+                        ),
+                    )
+                    return@launch
+                }
+            }
+
+            uiState.value = verifiedPending
+
             when (val result = dependencies.activateProfile()) {
                 is ApiResult.Success -> {
-                    val updatedSession = pending.session.copy(
+                    val updatedSession = verifiedPending.session.copy(
                         profileSnapshot = ProfileSnapshot.Found(result.value.profile),
                     )
+
                     uiState.value = RealsRootUiState.ActivationComplete(
                         session = updatedSession,
                         result = result.value,
@@ -261,18 +340,141 @@ class ProfileOperationHandler(
                 }
 
                 is ApiResult.Failure -> {
-                    uiState.value = pending.copy(
-                        profileOp = pending.profileOp.copy(
+                    val emailNotVerified = result.error.isEmailNotVerified()
+
+                    uiState.value = verifiedPending.copy(
+                        profileOp = verifiedPending.profileOp.copy(
                             activatingProfile = false,
                             profileActivationError = result.error,
+                            emailVerificationRequired = emailNotVerified,
+                            emailVerificationLocallyVerified =
+                                if (emailNotVerified) false else verifiedPending.emailVerificationLocallyVerified,
+                            emailVerificationMessage = null,
+                            emailVerificationError = null,
                         ),
                     )
                 }
             }
         }
     }
-
+    
     // ── Private helpers ──
+
+    fun resendEmailVerification() {
+        val current = requireReady() ?: return
+        if (current.isEmailVerificationActionBusy()) return
+        val now = System.currentTimeMillis()
+        if (current.resendEmailVerificationAvailableAtMillis.isInFuture(now)) {
+            uiState.value = current.copy(
+                profileOp = current.profileOp.copy(
+                    emailVerificationMessage = "Podés pedir otro correo en unos segundos.",
+                    emailVerificationError = null,
+                ),
+            )
+            return
+        }
+
+        scope.launch {
+            val pending = current.copy(
+                profileOp = current.profileOp.copy(
+                    sendingEmailVerification = true,
+                    emailVerificationMessage = null,
+                    emailVerificationError = null,
+                ),
+            )
+            uiState.value = pending
+            val feedback = when (authRepository.sendEmailVerificationEmail()) {
+                EmailVerificationSendResult.Sent -> EmailVerificationFeedback(
+                    resendAvailableAtMillis = System.currentTimeMillis() + RESEND_EMAIL_VERIFICATION_COOLDOWN_MILLIS,
+                    message = "Te enviamos un nuevo correo de verificación.",
+                )
+
+                EmailVerificationSendResult.AlreadyVerified -> EmailVerificationFeedback(
+                    emailVerificationRequired = false,
+                    emailVerificationLocallyVerified = true,
+                    message = "Email verificado. Ya podés activar tu perfil.",
+                )
+
+                EmailVerificationSendResult.NotSignedIn -> EmailVerificationFeedback(
+                    error = "Tu sesión necesita renovarse. Volvé a iniciar sesión.",
+                )
+
+                EmailVerificationSendResult.Failure -> EmailVerificationFeedback(
+                    error = "No pudimos enviar el correo de verificación. Intentá nuevamente.",
+                )
+            }
+            uiState.value = pending.copy(
+                profileOp = pending.profileOp.copy(
+                    sendingEmailVerification = false,
+                    emailVerificationMessage = feedback.message,
+                    emailVerificationError = feedback.error,
+                    emailVerificationRequired = feedback.emailVerificationRequired
+                        ?: pending.emailVerificationRequired,
+                    emailVerificationLocallyVerified = feedback.emailVerificationLocallyVerified
+                        ?: pending.emailVerificationLocallyVerified,
+                    resendEmailVerificationAvailableAtMillis = feedback.resendAvailableAtMillis
+                        ?: pending.resendEmailVerificationAvailableAtMillis,
+                ),
+            )
+        }
+    }
+
+    fun checkEmailVerification() {
+        val current = requireReady() ?: return
+        if (current.isEmailVerificationActionBusy()) return
+        val now = System.currentTimeMillis()
+        if (current.checkEmailVerificationAvailableAtMillis.isInFuture(now)) return
+
+        scope.launch {
+            val pending = current.copy(
+                profileOp = current.profileOp.copy(
+                    checkingEmailVerification = true,
+                    emailVerificationMessage = null,
+                    emailVerificationError = null,
+                ),
+            )
+            uiState.value = pending
+            val feedback = when (authRepository.reloadAndRefreshEmailVerification()) {
+                EmailVerificationCheckResult.Verified -> EmailVerificationFeedback(
+                    emailVerificationRequired = false,
+                    emailVerificationLocallyVerified = true,
+                    checkAvailableAtMillis = 0L,
+                    message = "Email verificado. Ya podés activar tu perfil.",
+                )
+
+                EmailVerificationCheckResult.NotVerified -> EmailVerificationFeedback(
+                    emailVerificationRequired = true,
+                    emailVerificationLocallyVerified = false,
+                    checkAvailableAtMillis = System.currentTimeMillis() + CHECK_EMAIL_VERIFICATION_COOLDOWN_MILLIS,
+                    error = "Todavía no vemos el email verificado. Abrí el link del correo y volvé a intentar.",
+                )
+
+                EmailVerificationCheckResult.NotSignedIn -> EmailVerificationFeedback(
+                    error = "Tu sesión necesita renovarse. Volvé a iniciar sesión.",
+                )
+
+                EmailVerificationCheckResult.Failure -> EmailVerificationFeedback(
+                    error = "No pudimos comprobar la verificación. Intentá nuevamente.",
+                )
+            }
+            uiState.value = pending.copy(
+                profileOp = pending.profileOp.copy(
+                    checkingEmailVerification = false,
+                    emailVerificationMessage = feedback.message,
+                    emailVerificationError = feedback.error,
+                    profileActivationError = if (
+                        feedback.emailVerificationLocallyVerified == true
+                    ) null else pending.profileOp.profileActivationError,
+                    emailVerificationRequired = feedback.emailVerificationRequired
+                        ?: pending.emailVerificationRequired,
+                    emailVerificationLocallyVerified = feedback.emailVerificationLocallyVerified
+                        ?: pending.emailVerificationLocallyVerified,
+                    checkEmailVerificationAvailableAtMillis = feedback.checkAvailableAtMillis
+                        ?: pending.checkEmailVerificationAvailableAtMillis,
+                ),
+            )
+        }
+    }
 
     private fun requireReady(): RealsRootUiState.Ready? =
         uiState.value as? RealsRootUiState.Ready
@@ -302,6 +504,33 @@ class ProfileOperationHandler(
         uiState.value = photoDeletedState(previous, deletedPhotoId, updatedProfile, successMessage)
     }
 }
+
+private data class EmailVerificationFeedback(
+    val message: String? = null,
+    val error: String? = null,
+    val emailVerificationRequired: Boolean? = null,
+    val emailVerificationLocallyVerified: Boolean? = null,
+    val resendAvailableAtMillis: Long? = null,
+    val checkAvailableAtMillis: Long? = null,
+)
+
+private const val CHECK_EMAIL_VERIFICATION_COOLDOWN_MILLIS = 10_000L
+private const val RESEND_EMAIL_VERIFICATION_COOLDOWN_MILLIS = 60_000L
+
+private fun Long?.isInFuture(nowMillis: Long): Boolean = this != null && nowMillis < this
+
+private fun ApiError.isEmailNotVerified(): Boolean =
+    this is ApiError.Backend &&
+        backendErrorCode == BackendErrorCode.EmailNotVerified
+
+private fun RealsRootUiState.Ready.isEmailVerificationActionBusy(): Boolean =
+    updatingProfile ||
+        updatingMatchFilters ||
+        loadingPhotos ||
+        addingPhoto ||
+        activatingProfile ||
+        sendingEmailVerification ||
+        checkingEmailVerification
 
 internal fun photoAddedState(
     previous: RealsRootUiState.Ready,
