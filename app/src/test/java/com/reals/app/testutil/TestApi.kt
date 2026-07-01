@@ -25,6 +25,7 @@ import com.reals.app.data.dto.ProfileResponseDto
 import com.reals.app.data.dto.QueueStatusResponseDto
 import com.reals.app.data.dto.RegisterPushTokenRequestDto
 import com.reals.app.data.dto.RegisterPushTokenResponseDto
+import com.reals.app.data.dto.ReorderProfilePhotosRequestDto
 import com.reals.app.data.dto.ScheduleProposalResponseDto
 import com.reals.app.data.dto.SendMessageRequestDto
 import com.reals.app.data.dto.UpdateMatchFiltersRequestDto
@@ -95,6 +96,8 @@ class FakeRealsApi : RealsApi {
         private set
     var updateFiltersBody: UpdateMatchFiltersRequestDto? = null
         private set
+    var reorderPhotosBody: ReorderProfilePhotosRequestDto? = null
+        private set
     var registerPushTokenBody: RegisterPushTokenRequestDto? = null
         private set
 
@@ -103,6 +106,7 @@ class FakeRealsApi : RealsApi {
     var beforeGetFirstChatForMatchResponse: suspend () -> Unit = {}
     var beforeGetChatResponse: suspend () -> Unit = {}
     var beforeGetConnectionNegotiationResponse: suspend () -> Unit = {}
+    var beforeReorderPhotosResponse: suspend () -> Unit = {}
 
     var pingResponse: Response<PingResponseDto> = Response.success(PingResponseDto("ok"))
     var userResponse: Response<UserResponseDto> = Response.success(TestDtos.user())
@@ -114,6 +118,7 @@ class FakeRealsApi : RealsApi {
         Response.success(RegisterPushTokenResponseDto(registered = true))
     var profileResponse: Response<ProfileResponseDto> = Response.success(TestDtos.profile())
     var photosResponse: Response<List<PhotoResponseDto>> = Response.success(listOf(TestDtos.photo()))
+    var reorderPhotosResponse: Response<List<PhotoResponseDto>> = Response.success(listOf(TestDtos.photo()))
     var photoResponse: Response<PhotoResponseDto> = Response.success(TestDtos.photo())
     var queueResponse: Response<QueueStatusResponseDto> = Response.success(TestDtos.queueStatus())
     var matchResponse: Response<MatchResponseDto> = Response.success(TestDtos.match())
@@ -198,6 +203,15 @@ class FakeRealsApi : RealsApi {
 
     override suspend fun getMyProfilePhotos(authorization: String): Response<List<PhotoResponseDto>> =
         record("getMyProfilePhotos", authorization) { photosResponse }
+
+    override suspend fun reorderMyProfilePhotos(
+        authorization: String,
+        body: ReorderProfilePhotosRequestDto,
+    ): Response<List<PhotoResponseDto>> =
+        record("reorderMyProfilePhotos", authorization, beforeResponse = beforeReorderPhotosResponse) {
+            reorderPhotosBody = body
+            reorderPhotosResponse
+        }
 
     override suspend fun addMyProfilePhotoFile(
         authorization: String,

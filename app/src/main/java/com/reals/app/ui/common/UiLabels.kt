@@ -16,9 +16,9 @@ fun ProfileStatus.userLabel(): String = when (this) {
 }
 
 fun ProfileStatus.userDescription(): String = when (this) {
-    ProfileStatus.Active -> "Tu perfil esta listo para buscar chat."
+    ProfileStatus.Active -> "Tu perfil está listo para buscar chat."
     ProfileStatus.Draft -> "Tu perfil todavia esta en borrador. Activalo cuando termines de completar tus fotos."
-    ProfileStatus.Inactive -> "Tu perfil esta pausado por el momento."
+    ProfileStatus.Inactive -> "Tu perfil está pausado por el momento."
     is ProfileStatus.Unknown -> "No pudimos leer el estado actual de tu perfil."
 }
 

@@ -24,6 +24,7 @@ import com.reals.app.data.dto.ProfileResponseDto
 import com.reals.app.data.dto.QueueStatusResponseDto
 import com.reals.app.data.dto.RegisterPushTokenRequestDto
 import com.reals.app.data.dto.RegisterPushTokenResponseDto
+import com.reals.app.data.dto.ReorderProfilePhotosRequestDto
 import com.reals.app.data.dto.ScheduleProposalResponseDto
 import com.reals.app.data.dto.SendMessageRequestDto
 import com.reals.app.data.dto.UpdateMatchFiltersRequestDto
@@ -118,6 +119,12 @@ interface RealsApi {
     @GET("api/me/profile/photos")
     suspend fun getMyProfilePhotos(
         @Header("Authorization") authorization: String,
+    ): Response<List<PhotoResponseDto>>
+
+    @PUT("api/me/profile/photos/reorder")
+    suspend fun reorderMyProfilePhotos(
+        @Header("Authorization") authorization: String,
+        @Body body: ReorderProfilePhotosRequestDto,
     ): Response<List<PhotoResponseDto>>
 
     @Multipart

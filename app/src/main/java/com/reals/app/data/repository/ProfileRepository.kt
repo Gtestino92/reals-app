@@ -9,9 +9,12 @@ import com.reals.app.core.network.ApiResult
 import com.reals.app.core.network.map
 import com.reals.app.data.api.AuthTokenProvider
 import com.reals.app.data.api.RealsApi
+import com.reals.app.data.dto.PhotoPlacementRequestDto
+import com.reals.app.data.dto.ReorderProfilePhotosRequestDto
 import com.reals.app.data.mapper.toDto
 import com.reals.app.data.mapper.toDomain
 import com.reals.app.domain.model.CreateProfileInput
+import com.reals.app.domain.model.PhotoPlacementInput
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.ProfileSnapshot
@@ -58,6 +61,23 @@ class ProfileRepository(
     suspend fun getMyProfilePhotos(): ApiResult<List<ProfilePhoto>> =
         authorizedCall { authorization -> api.getMyProfilePhotos(authorization) }
             .map { photos -> photos.map { it.toDomain() } }
+
+    suspend fun reorderMyProfilePhotos(
+        placements: List<PhotoPlacementInput>,
+    ): ApiResult<List<ProfilePhoto>> =
+        authorizedCall { authorization ->
+            api.reorderMyProfilePhotos(
+                authorization = authorization,
+                body = ReorderProfilePhotosRequestDto(
+                    placements = placements.map {
+                        PhotoPlacementRequestDto(
+                            photoId = it.photoId,
+                            position = it.position,
+                        )
+                    },
+                ),
+            )
+        }.map { photos -> photos.map { it.toDomain() } }
 
     suspend fun addMyProfilePhotoFile(
         fileUri: Uri,

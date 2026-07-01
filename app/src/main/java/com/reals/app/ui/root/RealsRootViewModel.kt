@@ -188,6 +188,10 @@ class RealsRootViewModel(
 
     fun closeProfileManagement() {
         val current = _uiState.value as? RealsRootUiState.Ready ?: return
+        closeProfileManagement(current)
+    }
+
+    private fun closeProfileManagement(current: RealsRootUiState.Ready) {
         val profile = (current.session.profileSnapshot as? ProfileSnapshot.Found)?.profile ?: return
         if (profile.status != ProfileStatus.Active) return
 
@@ -796,6 +800,10 @@ class RealsRootViewModel(
 
     fun deleteProfilePhoto(photoId: String, position: Int) {
         profileHandler.deleteProfilePhoto(photoId, position)
+    }
+
+    fun moveProfilePhoto(photoId: String, targetPosition: Int) {
+        profileHandler.moveProfilePhoto(photoId, targetPosition)
     }
 
     fun activateProfile() {

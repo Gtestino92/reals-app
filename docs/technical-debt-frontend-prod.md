@@ -370,3 +370,22 @@ Deferred:
 
 Constraint:
 - Do not introduce attractiveness, popularity or ELO-style ranking UI unless product principles change explicitly.
+
+---
+
+## Profile photo thumbnails
+
+Current profile photo grid loads the same presigned image URL used for full-size profile photos. Android now uses stable Coil cache keys that ignore changing presigned query parameters, which improves cache reuse, but the app can still download full-size image bytes for small grid slots.
+
+Future production improvement:
+- Backend should generate and store thumbnail variants on upload/replace.
+- `PhotoResponse` should expose both:
+  - `url` for full-size/profile detail use;
+  - `thumbnailUrl` for grid/list use.
+- Android `PhotoGrid` should load `thumbnailUrl`.
+- Full-size/profile detail screens should continue using `url`.
+- This should reduce bandwidth, improve grid load speed, and reduce memory pressure without degrading full-size image quality.
+
+Priority:
+- Not required for local MVP.
+- Recommended before broader beta/production usage.

@@ -45,6 +45,7 @@ import com.reals.app.domain.usecase.ReactivateAccountUseCase
 import com.reals.app.domain.usecase.RejectChatExitRequestUseCase
 import com.reals.app.domain.usecase.RejectSchedulingRoundUseCase
 import com.reals.app.domain.usecase.RegisterPushTokenUseCase
+import com.reals.app.domain.usecase.ReorderProfilePhotosUseCase
 import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
 import com.reals.app.domain.usecase.SafetyCancelChatUseCase
@@ -92,6 +93,7 @@ class AppContainer(context: Context) {
     val addProfilePhotoFileUseCase = AddProfilePhotoFileUseCase(profileRepository)
     val replaceProfilePhotoFileUseCase = ReplaceProfilePhotoFileUseCase(profileRepository)
     val deleteProfilePhotoUseCase = DeleteProfilePhotoUseCase(profileRepository)
+    val reorderProfilePhotosUseCase = ReorderProfilePhotosUseCase(profileRepository)
     val activateProfileUseCase = ActivateProfileUseCase(profileRepository)
     val reactivateAccountUseCase = ReactivateAccountUseCase(meRepository)
     val deleteAccountUseCase = DeleteAccountUseCase(meRepository, authRepository)
@@ -142,6 +144,7 @@ class AppContainer(context: Context) {
             addProfilePhotoFile = addProfilePhotoFileUseCase,
             replaceProfilePhotoFile = replaceProfilePhotoFileUseCase,
             deleteProfilePhoto = deleteProfilePhotoUseCase,
+            reorderProfilePhotos = reorderProfilePhotosUseCase,
             activateProfile = activateProfileUseCase,
         ),
         home = HomeFeatureDependencies(

@@ -73,6 +73,9 @@ sealed interface RealsRootUiState {
         val profilePhotos: List<ProfilePhoto> get() = photos.profilePhotos
         val profilePhotosError: ApiError? get() = photos.profilePhotosError
         val addingPhoto: Boolean get() = photos.addingPhoto
+        val reorderingPhotos: Boolean get() = photos.reorderingPhotos
+        val photoReorderError: ApiError? get() = photos.photoReorderError
+        val photoReorderMessage: String? get() = photos.photoReorderMessage
         val photoActionError: ApiError? get() = photos.photoActionError
         val photoActionMessage: String? get() = photos.photoActionMessage
         val homeState: HomeState? get() = home.homeState
@@ -204,6 +207,9 @@ data class PhotoManagementUiState(
     val profilePhotos: List<ProfilePhoto> = emptyList(),
     val profilePhotosError: ApiError? = null,
     val addingPhoto: Boolean = false,
+    val reorderingPhotos: Boolean = false,
+    val photoReorderError: ApiError? = null,
+    val photoReorderMessage: String? = null,
     val photoActionError: ApiError? = null,
     val photoActionMessage: String? = null,
 )
@@ -289,6 +295,8 @@ fun RealsRootUiState.Ready.clearProfileFeedback(): RealsRootUiState.Ready = copy
     ),
     photos = photos.copy(
         profilePhotosError = null,
+        photoReorderError = null,
+        photoReorderMessage = null,
         photoActionError = null,
         photoActionMessage = null,
     ),
@@ -297,7 +305,7 @@ fun RealsRootUiState.Ready.clearProfileFeedback(): RealsRootUiState.Ready = copy
 fun RealsRootUiState.canHandleSystemBack(): Boolean = when (this) {
     is RealsRootUiState.Ready -> {
         val profile = (session.profileSnapshot as? ProfileSnapshot.Found)?.profile
-        editingActiveProfile && profile?.status == ProfileStatus.Active
+        editingActiveProfile && profile?.status == ProfileStatus.Active && !photos.reorderingPhotos
     }
 
     is RealsRootUiState.SecondChat -> !sending && !actionLoading

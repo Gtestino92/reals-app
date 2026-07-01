@@ -55,6 +55,7 @@ import com.reals.app.domain.usecase.ReactivateAccountUseCase
 import com.reals.app.domain.usecase.RegisterPushTokenUseCase
 import com.reals.app.domain.usecase.RejectChatExitRequestUseCase
 import com.reals.app.domain.usecase.RejectSchedulingRoundUseCase
+import com.reals.app.domain.usecase.ReorderProfilePhotosUseCase
 import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
 import com.reals.app.domain.usecase.SafetyCancelChatUseCase
@@ -429,7 +430,8 @@ class RealsRootViewModelPasswordResetTest {
 
     @Test
     fun `system back closes active profile management`() = runTest(dispatcher) {
-        val viewModel = viewModel(FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically))
+        val api = FakeRealsApi()
+        val viewModel = viewModel(FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically), api)
         viewModel.setState(
             RealsRootUiState.Ready(
                 session = TestDomain.session(),
@@ -442,6 +444,26 @@ class RealsRootViewModelPasswordResetTest {
 
         val state = viewModel.uiState.value as RealsRootUiState.Ready
         assertEquals(false, state.editingActiveProfile)
+        assertEquals(0, api.calls.count { it == "reorderMyProfilePhotos" })
+    }
+
+    @Test
+    fun `explicit profile management close does not autosave reorder`() = runTest(dispatcher) {
+        val api = FakeRealsApi()
+        val viewModel = viewModel(FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically), api)
+        viewModel.setState(
+            RealsRootUiState.Ready(
+                session = TestDomain.session(),
+                editingActiveProfile = true,
+            )
+        )
+
+        viewModel.closeProfileManagement()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Ready
+        assertEquals(false, state.editingActiveProfile)
+        assertEquals(0, api.calls.count { it == "reorderMyProfilePhotos" })
     }
 
     private fun viewModel(
@@ -492,6 +514,7 @@ class RealsRootViewModelPasswordResetTest {
                 addProfilePhotoFile = AddProfilePhotoFileUseCase(profileRepository),
                 replaceProfilePhotoFile = ReplaceProfilePhotoFileUseCase(profileRepository),
                 deleteProfilePhoto = DeleteProfilePhotoUseCase(profileRepository),
+                reorderProfilePhotos = ReorderProfilePhotosUseCase(profileRepository),
                 activateProfile = ActivateProfileUseCase(profileRepository),
             ),
             home = HomeFeatureDependencies(
