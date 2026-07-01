@@ -303,6 +303,43 @@ paths:
                   $ref: '#/components/schemas/PhotoResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/me/profile/photos/reorder:
+    put:
+      tags: [Profiles]
+      summary: Reorder authenticated user's profile photos
+      description: Authenticated endpoint. The request must include all current photos for the user's profile exactly once. Positions are final user-facing positions from 1 to 9, holes are allowed, and only the position field changes. Reorder does not reupload files, re-run validation or moderation, or move an active profile back to draft.
+      requestBody:
+        $ref: '#/components/requestBodies/ReorderProfilePhotos'
+      responses:
+        '200':
+          description: Photos sorted by final position
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PhotoResponse'
+              example:
+                - id: 11111111-1111-1111-1111-111111111111
+                  url: https://storage.example/profile/photo-1.jpg
+                  position: 1
+                  isPersonPhoto: true
+                  isFullBody: false
+                  validationStatus: VALIDATED
+                  moderationStatus: APPROVED
+                - id: 22222222-2222-2222-2222-222222222222
+                  url: https://storage.example/profile/photo-2.jpg
+                  position: 4
+                  isPersonPhoto: true
+                  isFullBody: true
+                  validationStatus: VALIDATED
+                  moderationStatus: APPROVED
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /api/me/profile/photos/{photoId}:
     parameters:
       - $ref: '#/components/parameters/PhotoId'
@@ -987,6 +1024,12 @@ components:
         multipart/form-data:
           schema:
             $ref: '#/components/schemas/UploadPhotoFileRequest'
+    ReorderProfilePhotos:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ReorderProfilePhotosRequest'
     ReplacePhotoFile:
       required: true
       content:
@@ -1146,7 +1189,7 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     ChatMessageInvalid:
-      description: Invalid chat message or chat-action text. Stable code: `CHAT_MESSAGE_INVALID`.
+      description: 'Invalid chat message or chat-action text. Stable code: CHAT_MESSAGE_INVALID.'
       content:
         application/json:
           schema:
@@ -1156,7 +1199,7 @@ components:
             error: Bad Request
             message: Chat message is invalid
     ChatNotFound:
-      description: Chat not found. Stable code: `CHAT_NOT_FOUND`.
+      description: 'Chat not found. Stable code: CHAT_NOT_FOUND.'
       content:
         application/json:
           schema:
@@ -1271,7 +1314,7 @@ components:
                 error: Conflict
                 message: Chat exit request is not available
     SchedulingInvalidProposals:
-      description: Invalid scheduling proposal list. Stable code: `SCHEDULING_INVALID_PROPOSALS`.
+      description: 'Invalid scheduling proposal list. Stable code: SCHEDULING_INVALID_PROPOSALS.'
       content:
         application/json:
           schema:
@@ -1293,7 +1336,7 @@ components:
                 error: Not Found
                 message: Scheduling negotiation was not found
     SchedulingProposalNotFound:
-      description: Scheduling proposal not found. Stable code: `SCHEDULING_PROPOSAL_NOT_AVAILABLE`.
+      description: 'Scheduling proposal not found. Stable code: SCHEDULING_PROPOSAL_NOT_AVAILABLE.'
       content:
         application/json:
           schema:
@@ -1659,6 +1702,33 @@ components:
         file:
           type: string
           format: binary
+    ReorderProfilePhotosRequest:
+      type: object
+      required: [placements]
+      example:
+        placements:
+          - photoId: 11111111-1111-1111-1111-111111111111
+            position: 1
+          - photoId: 22222222-2222-2222-2222-222222222222
+            position: 4
+      properties:
+        placements:
+          type: array
+          minItems: 1
+          maxItems: 9
+          description: Complete set of current profile photos with one final position per photo.
+          items:
+            $ref: '#/components/schemas/PhotoPlacementRequest'
+    PhotoPlacementRequest:
+      type: object
+      required: [photoId, position]
+      properties:
+        photoId: { type: string, format: uuid }
+        position:
+          type: integer
+          minimum: 1
+          maximum: 9
+          description: Final user-facing position. Holes across the set are allowed.
     ProfileResponse:
       type: object
       required: [id, userId, displayName, birthDate, age, identityVerified, identityVerificationStatus, gender, lookingForGender, intention, city, country, preferredMinAge, preferredMaxAge, maxDistanceKm, status, photoCount, createdAt, updatedAt]
