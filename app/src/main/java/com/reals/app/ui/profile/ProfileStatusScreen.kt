@@ -595,7 +595,7 @@ private fun PhotoManagerActions(
         }
         if (expanded) {
             Text(
-                text = "Subi, reemplaza o borra fotos. Si cambias fotos importantes, puede que tengamos que revisar tu perfil otra vez.",
+                text = "Subi, reemplaza o borra fotos. Para reordenarlas, mantené presionada una foto y arrastrala a otro lugar.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -777,11 +777,10 @@ private fun PhotoGrid(
                             onSlotBoundsChanged = { slotPosition, bounds ->
                                 slotBoundsByPosition[slotPosition] = bounds
                             },
-                            onPickNewFile = onPickNewFile,
-                            onPickReplacementFile = onPickReplacementFile,
-                            onDeletePhoto = onDeletePhoto,
-                            onMovePhoto = onMovePhoto,
-                            onDragStart = { photoId, sourcePosition, pointerPosition ->
+                        onPickNewFile = onPickNewFile,
+                        onPickReplacementFile = onPickReplacementFile,
+                        onDeletePhoto = onDeletePhoto,
+                        onDragStart = { photoId, sourcePosition, pointerPosition ->
                                 dragState = PhotoGridDragState(
                                     photoId = photoId,
                                     sourcePosition = sourcePosition,
@@ -851,7 +850,6 @@ private fun PhotoSlot(
     onPickNewFile: (position: Int) -> Unit,
     onPickReplacementFile: (photoId: String, position: Int) -> Unit,
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
-    onMovePhoto: (photoId: String, targetPosition: Int) -> Unit,
     onDragStart: (photoId: String, sourcePosition: Int, pointerPosition: Offset) -> Unit,
     onDrag: (dragAmount: Offset) -> Unit,
     onDragEnd: () -> Unit,
@@ -881,7 +879,6 @@ private fun PhotoSlot(
             modifier = positionedModifier,
             onPickReplacementFile = onPickReplacementFile,
             onDeletePhoto = onDeletePhoto,
-            onMovePhoto = onMovePhoto,
             onDragStart = onDragStart,
             onDrag = onDrag,
             onDragEnd = onDragEnd,
@@ -900,7 +897,6 @@ private fun FilledPhotoSlot(
     modifier: Modifier = Modifier,
     onPickReplacementFile: (photoId: String, position: Int) -> Unit,
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
-    onMovePhoto: (photoId: String, targetPosition: Int) -> Unit,
     onDragStart: (photoId: String, sourcePosition: Int, pointerPosition: Offset) -> Unit,
     onDrag: (dragAmount: Offset) -> Unit,
     onDragEnd: () -> Unit,
@@ -908,7 +904,6 @@ private fun FilledPhotoSlot(
 ) {
     val imageShape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
     val actionShape = RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp)
-    var moveExpanded by rememberSaveable(photo.id) { mutableStateOf(false) }
     val dragModifier = if (!busy) {
         Modifier.pointerInput(photo.id, slotBounds) {
             detectDragGesturesAfterLongPress(
@@ -992,41 +987,6 @@ private fun FilledPhotoSlot(
                     color = Color.White,
                     style = MaterialTheme.typography.labelMedium,
                 )
-            }
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(4.dp)
-                    .size(28.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color.Black.copy(alpha = 0.52f))
-                    .clickable(
-                        enabled = !busy,
-                        onClickLabel = "Mover foto ${photo.position}",
-                    ) { moveExpanded = true }
-                    .semantics { contentDescription = "Mover foto ${photo.position}" },
-            ) {
-                Text(
-                    text = "...",
-                    modifier = Modifier.align(Alignment.Center),
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelMedium,
-                )
-                DropdownMenu(
-                    expanded = moveExpanded,
-                    onDismissRequest = { moveExpanded = false },
-                ) {
-                    ProfilePhotoGridPositions.forEach { targetPosition ->
-                        DropdownMenuItem(
-                            text = { Text("Foto $targetPosition") },
-                            enabled = !busy,
-                            onClick = {
-                                moveExpanded = false
-                                onMovePhoto(photo.id, targetPosition)
-                            },
-                        )
-                    }
-                }
             }
             if (busy) {
                 Box(
