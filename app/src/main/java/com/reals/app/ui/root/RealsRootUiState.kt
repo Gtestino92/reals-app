@@ -27,6 +27,7 @@ sealed interface RealsRootUiState {
         val error: String? = null,
         val passwordResetLoading: Boolean = false,
         val passwordResetMessage: String? = null,
+        val passwordResetAvailableAtMillis: Long? = null,
     ) : RealsRootUiState
 
     data class LoadingSession(val email: String?) : RealsRootUiState
@@ -85,6 +86,9 @@ sealed interface RealsRootUiState {
         val matchmakingBlockedReason: ApiError? get() = home.matchmakingBlockedReason
         val deletingAccount: Boolean get() = account.deletingAccount
         val accountDeleteError: ApiError? get() = account.accountDeleteError
+        val changingPassword: Boolean get() = account.changingPassword
+        val changePasswordError: String? get() = account.changePasswordError
+        val changePasswordMessage: String? get() = account.changePasswordMessage
     }
 
     data class FirstChat(
@@ -236,6 +240,9 @@ enum class MatchmakingSearchUiPhase {
 data class AccountUiState(
     val deletingAccount: Boolean = false,
     val accountDeleteError: ApiError? = null,
+    val changingPassword: Boolean = false,
+    val changePasswordError: String? = null,
+    val changePasswordMessage: String? = null,
 )
 
 enum class OutgoingMessageDeliveryState {

@@ -86,6 +86,9 @@ class RealsRootViewModel(
 
     fun deleteAccount() = sessionCoordinator.deleteAccount()
 
+    fun changePassword(currentPassword: String, newPassword: String) =
+        sessionCoordinator.changePassword(currentPassword, newPassword)
+
     fun reactivateAccount() = sessionCoordinator.reactivateAccount()
 
     fun onSystemBack() {

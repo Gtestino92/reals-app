@@ -4,6 +4,7 @@ import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ApiResult
 import com.reals.app.core.network.isAccountDeleted
 import com.reals.app.data.repository.AuthOperationResult
+import com.reals.app.data.repository.ChangePasswordResult
 import com.reals.app.data.repository.FirebaseAuthRepository
 import com.reals.app.data.repository.PasswordResetResult
 import com.reals.app.data.repository.isLocallyValidEmail
@@ -59,12 +60,19 @@ internal class SessionCoordinator(
 
     fun signUp(email: String, password: String) {
         val cleanEmail = email.trim()
+        val loginState = uiState.value as? RealsRootUiState.Login
         if (cleanEmail.isBlank() || password.isBlank()) {
-            uiState.value = RealsRootUiState.Login(error = "Email y password son requeridos.")
+            uiState.value = RealsRootUiState.Login(
+                error = "Email y password son requeridos.",
+                passwordResetAvailableAtMillis = loginState?.passwordResetAvailableAtMillis,
+            )
             return
         }
         scope.launch {
-            uiState.value = RealsRootUiState.Login(loading = true)
+            uiState.value = RealsRootUiState.Login(
+                loading = true,
+                passwordResetAvailableAtMillis = loginState?.passwordResetAvailableAtMillis,
+            )
             when (val result = authRepository.signUp(cleanEmail, password)) {
                 AuthOperationResult.Success -> {
                     authRepository.sendEmailVerificationEmail()
@@ -72,7 +80,10 @@ internal class SessionCoordinator(
                 }
 
                 is AuthOperationResult.Failure -> uiState.value =
-                    RealsRootUiState.Login(error = result.message)
+                    RealsRootUiState.Login(
+                        error = result.message,
+                        passwordResetAvailableAtMillis = loginState?.passwordResetAvailableAtMillis,
+                    )
             }
         }
     }
@@ -80,6 +91,8 @@ internal class SessionCoordinator(
     fun requestPasswordReset(email: String) {
         val current = uiState.value as? RealsRootUiState.Login ?: return
         if (current.loading || current.passwordResetLoading) return
+        val nowMillis = System.currentTimeMillis()
+        if (current.passwordResetAvailableAtMillis.isInFuture(nowMillis)) return
 
         val cleanEmail = email.trim()
         if (!isLocallyValidEmail(cleanEmail)) {
@@ -92,21 +105,31 @@ internal class SessionCoordinator(
         }
 
         scope.launch {
-            uiState.value = current.copy(
+            val pending = current.copy(
                 error = null,
                 passwordResetLoading = true,
                 passwordResetMessage = null,
+                passwordResetAvailableAtMillis = nowMillis + PASSWORD_RESET_COOLDOWN_MILLIS,
             )
+            uiState.value = pending
             when (authRepository.sendPasswordResetEmail(cleanEmail)) {
                 PasswordResetResult.SentOrHandledGenerically -> uiState.value =
-                    RealsRootUiState.Login(
+                    pending.copy(
+                        passwordResetLoading = false,
                         passwordResetMessage = genericPasswordResetMessage,
                     )
 
                 PasswordResetResult.InvalidEmailFormat -> uiState.value =
-                    RealsRootUiState.Login(error = invalidPasswordResetEmailMessage)
+                    pending.copy(
+                        error = invalidPasswordResetEmailMessage,
+                        passwordResetLoading = false,
+                        passwordResetMessage = null,
+                    )
 
-                PasswordResetResult.SilentFailure -> uiState.value = RealsRootUiState.Login()
+                PasswordResetResult.SilentFailure -> uiState.value = pending.copy(
+                    passwordResetLoading = false,
+                    passwordResetMessage = null,
+                )
             }
         }
     }
@@ -118,12 +141,15 @@ internal class SessionCoordinator(
 
     fun deleteAccount() {
         val current = uiState.value as? RealsRootUiState.Ready ?: return
+        if (current.changingPassword) return
 
         scope.launch {
             uiState.value = current.copy(
                 account = current.account.copy(
                     deletingAccount = true,
                     accountDeleteError = null,
+                    changePasswordError = null,
+                    changePasswordMessage = null,
                 ),
             )
 
@@ -143,6 +169,39 @@ internal class SessionCoordinator(
                     )
                 }
             }
+        }
+    }
+
+    fun changePassword(currentPassword: String, newPassword: String) {
+        val current = uiState.value as? RealsRootUiState.Ready ?: return
+        if (current.changingPassword || current.deletingAccount) return
+
+        scope.launch {
+            val pending = current.copy(
+                account = current.account.copy(
+                    changingPassword = true,
+                    changePasswordError = null,
+                    changePasswordMessage = null,
+                    accountDeleteError = null,
+                ),
+            )
+            uiState.value = pending
+
+            val result = authRepository.changePassword(
+                currentPassword = currentPassword,
+                newPassword = newPassword,
+            )
+            uiState.value = pending.copy(
+                account = pending.account.copy(
+                    changingPassword = false,
+                    changePasswordMessage = if (result == ChangePasswordResult.Success) {
+                        "Contraseña actualizada."
+                    } else {
+                        null
+                    },
+                    changePasswordError = result.toChangePasswordMessageOrNull(),
+                ),
+            )
         }
     }
 
@@ -227,16 +286,26 @@ internal class SessionCoordinator(
         action: suspend (email: String, password: String) -> AuthOperationResult,
     ) {
         val cleanEmail = email.trim()
+        val loginState = uiState.value as? RealsRootUiState.Login
         if (cleanEmail.isBlank() || password.isBlank()) {
-            uiState.value = RealsRootUiState.Login(error = "Email y password son requeridos.")
+            uiState.value = RealsRootUiState.Login(
+                error = "Email y password son requeridos.",
+                passwordResetAvailableAtMillis = loginState?.passwordResetAvailableAtMillis,
+            )
             return
         }
         scope.launch {
-            uiState.value = RealsRootUiState.Login(loading = true)
+            uiState.value = RealsRootUiState.Login(
+                loading = true,
+                passwordResetAvailableAtMillis = loginState?.passwordResetAvailableAtMillis,
+            )
             when (val result = action(cleanEmail, password)) {
                 AuthOperationResult.Success -> loadBackendSession()
                 is AuthOperationResult.Failure -> uiState.value =
-                    RealsRootUiState.Login(error = result.message)
+                    RealsRootUiState.Login(
+                        error = result.message,
+                        passwordResetAvailableAtMillis = loginState?.passwordResetAvailableAtMillis,
+                    )
             }
         }
     }
@@ -283,8 +352,21 @@ internal class SessionCoordinator(
     }
 
     private companion object {
+        const val PASSWORD_RESET_COOLDOWN_MILLIS = 60_000L
         const val invalidPasswordResetEmailMessage = "Ingresá un email válido."
         const val genericPasswordResetMessage =
-            "Si existe una cuenta con ese email, te enviamos instrucciones para recuperar la contraseña."
+            "Si el email está registrado, te enviamos instrucciones para recuperar el acceso."
     }
+}
+
+private fun Long?.isInFuture(nowMillis: Long): Boolean = this != null && nowMillis < this
+
+private fun ChangePasswordResult.toChangePasswordMessageOrNull(): String? = when (this) {
+    ChangePasswordResult.Success -> null
+    ChangePasswordResult.WrongCurrentPassword -> "La contraseña actual no es correcta."
+    ChangePasswordResult.WeakNewPassword -> "La nueva contraseña es demasiado débil."
+    ChangePasswordResult.InvalidNewPassword -> "La nueva contraseña no tiene un formato válido."
+    ChangePasswordResult.NotSignedIn -> "Tu sesión necesita renovarse. Volvé a iniciar sesión."
+    ChangePasswordResult.MissingEmail -> "No pudimos confirmar tu email de sesión. Volvé a iniciar sesión."
+    ChangePasswordResult.Failure -> "No pudimos cambiar la contraseña. Intentá nuevamente."
 }

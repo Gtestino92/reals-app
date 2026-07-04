@@ -74,6 +74,9 @@ fun MatchmakingHomeScreen(
     matchmakingSearchPhase: MatchmakingSearchUiPhase,
     accountDeleteLoading: Boolean,
     accountDeleteError: ApiError?,
+    changePasswordLoading: Boolean,
+    changePasswordError: String?,
+    changePasswordMessage: String?,
     onEnqueue: (SearchLocationInput) -> Unit,
     onDeviceLocationResolved: (SearchLocationInput) -> Unit,
     onCancelSearch: () -> Unit,
@@ -89,6 +92,7 @@ fun MatchmakingHomeScreen(
     onDismissSecondChat: (connectionId: String) -> Unit,
     onEditProfile: () -> Unit,
     onSignOut: () -> Unit,
+    onChangePassword: (currentPassword: String, newPassword: String) -> Unit,
     onDeleteAccount: () -> Unit,
 ) {
     if (screenModel == null && homeLoading) {
@@ -302,6 +306,9 @@ fun MatchmakingHomeScreen(
             nowMillis = nowMillis,
             accountDeleteLoading = accountDeleteLoading,
             accountDeleteError = accountDeleteError,
+            changePasswordLoading = changePasswordLoading,
+            changePasswordError = changePasswordError,
+            changePasswordMessage = changePasswordMessage,
             localError = localError,
             manualExpanded = manualExpanded,
             showManualLocationFallback = showManualLocationFallback,
@@ -335,6 +342,7 @@ fun MatchmakingHomeScreen(
             onDismissSecondChat = onDismissSecondChat,
             onEditProfile = onEditProfile,
             onSignOut = onSignOut,
+            onChangePassword = onChangePassword,
             onDeleteAccount = onDeleteAccount,
         )
     }
@@ -376,6 +384,9 @@ private fun MatchmakingIdleScreen(
     nowMillis: Long,
     accountDeleteLoading: Boolean,
     accountDeleteError: ApiError?,
+    changePasswordLoading: Boolean,
+    changePasswordError: String?,
+    changePasswordMessage: String?,
     localError: String?,
     manualExpanded: Boolean,
     showManualLocationFallback: Boolean,
@@ -392,6 +403,7 @@ private fun MatchmakingIdleScreen(
     onDismissSecondChat: (connectionId: String) -> Unit,
     onEditProfile: () -> Unit,
     onSignOut: () -> Unit,
+    onChangePassword: (currentPassword: String, newPassword: String) -> Unit,
     onDeleteAccount: () -> Unit,
 ) {
     var latitude by rememberSaveable(profile.id) { mutableStateOf("-34.6037") }
@@ -399,7 +411,7 @@ private fun MatchmakingIdleScreen(
     var accuracy by rememberSaveable(profile.id) { mutableStateOf("50") }
     var accountExpanded by rememberSaveable(profile.id) { mutableStateOf(false) }
     val scrollState = rememberScrollState()
-    val busy = homeLoading || accountDeleteLoading
+    val busy = homeLoading || accountDeleteLoading || changePasswordLoading
     val canSearch = screenModel.matchmaking.canSearch
     val blockedReason = screenModel.matchmaking.blockedReason
 
@@ -522,9 +534,13 @@ private fun MatchmakingIdleScreen(
             busy = busy,
             accountDeleteLoading = accountDeleteLoading,
             accountDeleteError = accountDeleteError,
+            changePasswordLoading = changePasswordLoading,
+            changePasswordError = changePasswordError,
+            changePasswordMessage = changePasswordMessage,
             expanded = accountExpanded,
             onExpandedChange = { accountExpanded = it },
             onSignOut = onSignOut,
+            onChangePassword = onChangePassword,
             onDeleteAccount = onDeleteAccount,
         )
     }

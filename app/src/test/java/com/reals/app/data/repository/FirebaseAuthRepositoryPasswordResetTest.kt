@@ -1,8 +1,8 @@
 package com.reals.app.data.repository
 
+import android.content.ContextWrapper
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import android.content.ContextWrapper
 
 class FirebaseAuthRepositoryPasswordResetTest {
     @Test
@@ -53,6 +53,34 @@ class FirebaseAuthRepositoryPasswordResetTest {
         val result = IllegalStateException("network or configuration failure").toPasswordResetResult()
 
         assertEquals(PasswordResetResult.SilentFailure, result)
+    }
+
+    @Test
+    fun `change password returns not signed in when Firebase user is missing`() = kotlinx.coroutines.test.runTest {
+        val result = unconfiguredRepository().changePassword("current-password", "new-password")
+
+        assertEquals(ChangePasswordResult.NotSignedIn, result)
+    }
+
+    @Test
+    fun `change password reauthentication maps wrong current password`() {
+        val result = changePasswordReauthenticationResultForFirebaseErrorCode("ERROR_INVALID_CREDENTIAL")
+
+        assertEquals(ChangePasswordResult.WrongCurrentPassword, result)
+    }
+
+    @Test
+    fun `change password update maps weak new password`() {
+        val result = changePasswordUpdateResultForFirebaseErrorCode("ERROR_WEAK_PASSWORD")
+
+        assertEquals(ChangePasswordResult.WeakNewPassword, result)
+    }
+
+    @Test
+    fun `change password update maps invalid new password`() {
+        val result = changePasswordUpdateResultForFirebaseErrorCode("ERROR_INVALID_PASSWORD")
+
+        assertEquals(ChangePasswordResult.InvalidNewPassword, result)
     }
 
     private fun unconfiguredRepository(): FirebaseAuthRepository =

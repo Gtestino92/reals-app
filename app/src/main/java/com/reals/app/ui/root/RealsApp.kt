@@ -81,6 +81,7 @@ fun RealsApp(
                 error = current.error,
                 passwordResetLoading = current.passwordResetLoading,
                 passwordResetMessage = current.passwordResetMessage,
+                passwordResetAvailableAtMillis = current.passwordResetAvailableAtMillis,
                 onSignIn = viewModel::signIn,
                 onSignUp = viewModel::signUp,
                 onPasswordReset = viewModel::requestPasswordReset,
@@ -190,6 +191,9 @@ fun RealsApp(
                             matchmakingSearchPhase = current.home.matchmakingSearchPhase,
                             accountDeleteLoading = current.deletingAccount,
                             accountDeleteError = current.accountDeleteError,
+                            changePasswordLoading = current.changingPassword,
+                            changePasswordError = current.changePasswordError,
+                            changePasswordMessage = current.changePasswordMessage,
                             onEnqueue = viewModel::enqueueMatchmaking,
                             onDeviceLocationResolved = viewModel::enqueueMatchmakingFromResolvedDeviceLocation,
                             onCancelSearch = viewModel::cancelMatchmakingSearch,
@@ -205,6 +209,7 @@ fun RealsApp(
                             onDismissSecondChat = viewModel::dismissSecondChatFromHome,
                             onEditProfile = viewModel::openProfileManagement,
                             onSignOut = viewModel::signOut,
+                            onChangePassword = viewModel::changePassword,
                             onDeleteAccount = viewModel::deleteAccount,
                         )
                     }

@@ -9,6 +9,7 @@ import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.FirebaseAuthWeakPasswordException
+import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.tasks.await
 
@@ -35,6 +36,16 @@ sealed interface EmailVerificationCheckResult {
     data object NotVerified : EmailVerificationCheckResult
     data object NotSignedIn : EmailVerificationCheckResult
     data object Failure : EmailVerificationCheckResult
+}
+
+sealed interface ChangePasswordResult {
+    data object Success : ChangePasswordResult
+    data object NotSignedIn : ChangePasswordResult
+    data object MissingEmail : ChangePasswordResult
+    data object WrongCurrentPassword : ChangePasswordResult
+    data object WeakNewPassword : ChangePasswordResult
+    data object InvalidNewPassword : ChangePasswordResult
+    data object Failure : ChangePasswordResult
 }
 
 open class FirebaseAuthRepository(private val context: Context) {
@@ -113,6 +124,31 @@ open class FirebaseAuthRepository(private val context: Context) {
             }
         }.getOrElse {
             EmailVerificationCheckResult.Failure
+        }
+    }
+
+    open suspend fun changePassword(
+        currentPassword: String,
+        newPassword: String,
+    ): ChangePasswordResult {
+        val user = authOrNull()?.currentUser
+            ?: return ChangePasswordResult.NotSignedIn
+        val email = user.email?.trim()?.takeIf { it.isNotBlank() }
+            ?: return ChangePasswordResult.MissingEmail
+        val credential = EmailAuthProvider.getCredential(email, currentPassword)
+
+        runCatching {
+            user.reauthenticate(credential).await()
+        }.getOrElse {
+            return it.toChangePasswordReauthenticationResult()
+        }
+
+        return runCatching {
+            user.updatePassword(newPassword).await()
+            user.getIdToken(true).await()
+            ChangePasswordResult.Success
+        }.getOrElse {
+            it.toChangePasswordUpdateResult()
         }
     }
 
@@ -196,3 +232,36 @@ private val enumerationPronePasswordResetErrorCodes = setOf(
     "ERROR_INVALID_USER",
     "ERROR_EMAIL_NOT_FOUND",
 )
+
+internal fun Throwable.toChangePasswordReauthenticationResult(): ChangePasswordResult {
+    return changePasswordReauthenticationResultForFirebaseErrorCode((this as? FirebaseAuthException)?.errorCode)
+}
+
+internal fun changePasswordReauthenticationResultForFirebaseErrorCode(errorCode: String?): ChangePasswordResult {
+    return when (errorCode) {
+        "ERROR_WRONG_PASSWORD",
+        "ERROR_INVALID_CREDENTIAL",
+        "ERROR_INVALID_LOGIN_CREDENTIAL" -> ChangePasswordResult.WrongCurrentPassword
+        "ERROR_USER_DISABLED",
+        "ERROR_USER_NOT_FOUND",
+        "ERROR_USER_TOKEN_EXPIRED",
+        "ERROR_INVALID_USER_TOKEN" -> ChangePasswordResult.NotSignedIn
+        else -> ChangePasswordResult.Failure
+    }
+}
+
+internal fun Throwable.toChangePasswordUpdateResult(): ChangePasswordResult {
+    return changePasswordUpdateResultForFirebaseErrorCode((this as? FirebaseAuthException)?.errorCode)
+}
+
+internal fun changePasswordUpdateResultForFirebaseErrorCode(errorCode: String?): ChangePasswordResult {
+    return when (errorCode) {
+        "ERROR_WEAK_PASSWORD" -> ChangePasswordResult.WeakNewPassword
+        "ERROR_INVALID_PASSWORD" -> ChangePasswordResult.InvalidNewPassword
+        "ERROR_USER_DISABLED",
+        "ERROR_USER_NOT_FOUND",
+        "ERROR_USER_TOKEN_EXPIRED",
+        "ERROR_INVALID_USER_TOKEN" -> ChangePasswordResult.NotSignedIn
+        else -> ChangePasswordResult.Failure
+    }
+}

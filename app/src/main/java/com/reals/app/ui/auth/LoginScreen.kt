@@ -20,7 +20,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -29,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 
 @Composable
 fun LoginScreen(
@@ -36,12 +39,26 @@ fun LoginScreen(
     error: String?,
     passwordResetLoading: Boolean,
     passwordResetMessage: String?,
+    passwordResetAvailableAtMillis: Long?,
     onSignIn: (email: String, password: String) -> Unit,
     onSignUp: (email: String, password: String) -> Unit,
     onPasswordReset: (email: String) -> Unit,
 ) {
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
+    var nowMillis by rememberSaveable { mutableLongStateOf(System.currentTimeMillis()) }
+    val cooldownRemainingSeconds = passwordResetCooldownRemainingSeconds(
+        availableAtMillis = passwordResetAvailableAtMillis,
+        nowMillis = nowMillis,
+    )
+
+    LaunchedEffect(passwordResetAvailableAtMillis) {
+        while (passwordResetCooldownRemainingSeconds(passwordResetAvailableAtMillis, System.currentTimeMillis()) > 0) {
+            nowMillis = System.currentTimeMillis()
+            delay(1_000L)
+        }
+        nowMillis = System.currentTimeMillis()
+    }
 
     Column(
         modifier = Modifier
@@ -120,12 +137,44 @@ fun LoginScreen(
                 }
                 OutlinedButton(
                     onClick = { onPasswordReset(email) },
-                    enabled = !loading && !passwordResetLoading,
+                    enabled = passwordResetButtonEnabled(
+                        loginLoading = loading,
+                        passwordResetLoading = passwordResetLoading,
+                        cooldownRemainingSeconds = cooldownRemainingSeconds,
+                    ),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(if (passwordResetLoading) "Enviando..." else "Olvidé mi contraseña")
+                    Text(
+                        passwordResetButtonText(
+                            loading = passwordResetLoading,
+                            cooldownRemainingSeconds = cooldownRemainingSeconds,
+                        )
+                    )
                 }
             }
         }
     }
 }
+
+internal fun passwordResetCooldownRemainingSeconds(
+    availableAtMillis: Long?,
+    nowMillis: Long,
+): Long {
+    val remainingMillis = ((availableAtMillis ?: 0L) - nowMillis).coerceAtLeast(0L)
+    return (remainingMillis + 999L) / 1_000L
+}
+
+internal fun passwordResetButtonText(
+    loading: Boolean,
+    cooldownRemainingSeconds: Long,
+): String = when {
+    loading -> "Enviando..."
+    cooldownRemainingSeconds > 0L -> "Reenviar en ${cooldownRemainingSeconds}s"
+    else -> "Olvidé mi contraseña"
+}
+
+internal fun passwordResetButtonEnabled(
+    loginLoading: Boolean,
+    passwordResetLoading: Boolean,
+    cooldownRemainingSeconds: Long,
+): Boolean = !loginLoading && !passwordResetLoading && cooldownRemainingSeconds <= 0L
