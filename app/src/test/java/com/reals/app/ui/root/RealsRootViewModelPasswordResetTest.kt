@@ -5,6 +5,7 @@ import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.BackendErrorCode
 import com.reals.app.core.network.backendErrorCode
 import com.reals.app.data.repository.AuthOperationResult
+import com.reals.app.data.repository.ChangePasswordResult
 import com.reals.app.data.repository.ChatRepository
 import com.reals.app.data.repository.EmailVerificationCheckResult
 import com.reals.app.data.repository.EmailVerificationSendResult
@@ -86,6 +87,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -115,6 +117,7 @@ class RealsRootViewModelPasswordResetTest {
         assertEquals("Ingresá un email válido.", state.error)
         assertNull(state.passwordResetMessage)
         assertEquals(false, state.passwordResetLoading)
+        assertNull(state.passwordResetAvailableAtMillis)
         assertEquals(emptyList<String>(), authRepository.resetRequests)
     }
 
@@ -130,10 +133,12 @@ class RealsRootViewModelPasswordResetTest {
         val state = viewModel.uiState.value as RealsRootUiState.Login
         assertNull(state.error)
         assertEquals(
-            "Si existe una cuenta con ese email, te enviamos instrucciones para recuperar la contraseña.",
+            "Si el email está registrado, te enviamos instrucciones para recuperar el acceso.",
             state.passwordResetMessage,
         )
         assertEquals(false, state.passwordResetLoading)
+        assertNotNull(state.passwordResetAvailableAtMillis)
+        assertTrue(state.passwordResetAvailableAtMillis!! > System.currentTimeMillis())
         assertEquals(listOf("alex@example.com"), authRepository.resetRequests)
     }
 
@@ -150,6 +155,44 @@ class RealsRootViewModelPasswordResetTest {
         assertNull(state.error)
         assertNull(state.passwordResetMessage)
         assertEquals(false, state.passwordResetLoading)
+        assertNotNull(state.passwordResetAvailableAtMillis)
+    }
+
+    @Test
+    fun `password reset during cooldown is ignored`() = runTest(dispatcher) {
+        val authRepository = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
+        val viewModel = viewModel(authRepository)
+        val availableAtMillis = System.currentTimeMillis() + 60_000L
+        viewModel.setState(RealsRootUiState.Login(passwordResetAvailableAtMillis = availableAtMillis))
+
+        viewModel.requestPasswordReset("alex@example.com")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Login
+        assertEquals(emptyList<String>(), authRepository.resetRequests)
+        assertEquals(availableAtMillis, state.passwordResetAvailableAtMillis)
+    }
+
+    @Test
+    fun `sign in and sign up remain available during password reset cooldown`() = runTest(dispatcher) {
+        val authRepository = FakeFirebaseAuthRepository(
+            passwordResetResult = PasswordResetResult.SentOrHandledGenerically,
+            signInResult = AuthOperationResult.Failure("nope"),
+            signUpResult = AuthOperationResult.Failure("nope"),
+        )
+        val viewModel = viewModel(authRepository)
+        val availableAtMillis = System.currentTimeMillis() + 60_000L
+
+        viewModel.setState(RealsRootUiState.Login(passwordResetAvailableAtMillis = availableAtMillis))
+        viewModel.signIn("alex@example.com", "password")
+        advanceUntilIdle()
+
+        viewModel.setState(RealsRootUiState.Login(passwordResetAvailableAtMillis = availableAtMillis))
+        viewModel.signUp("alex@example.com", "password")
+        advanceUntilIdle()
+
+        assertEquals(listOf("alex@example.com"), authRepository.signInRequests)
+        assertEquals(listOf("alex@example.com"), authRepository.signUpRequests)
     }
 
     @Test
@@ -466,6 +509,124 @@ class RealsRootViewModelPasswordResetTest {
         assertEquals(0, api.calls.count { it == "reorderMyProfilePhotos" })
     }
 
+    @Test
+    fun `change password success keeps user signed in and shows account message`() = runTest(dispatcher) {
+        val authRepository = FakeFirebaseAuthRepository(
+            passwordResetResult = PasswordResetResult.SentOrHandledGenerically,
+            changePasswordResult = ChangePasswordResult.Success,
+        )
+        val viewModel = viewModel(authRepository)
+        viewModel.setState(RealsRootUiState.Ready(session = TestDomain.session()))
+
+        viewModel.changePassword("current-password", "new-password")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Ready
+        assertFalse(state.changingPassword)
+        assertEquals("Contraseña actualizada.", state.changePasswordMessage)
+        assertNull(state.changePasswordError)
+        assertEquals(listOf("current-password" to "new-password"), authRepository.changePasswordRequests)
+    }
+
+    @Test
+    fun `change password wrong current password shows safe account error`() = runTest(dispatcher) {
+        val authRepository = FakeFirebaseAuthRepository(
+            passwordResetResult = PasswordResetResult.SentOrHandledGenerically,
+            changePasswordResult = ChangePasswordResult.WrongCurrentPassword,
+        )
+        val viewModel = viewModel(authRepository)
+        viewModel.setState(RealsRootUiState.Ready(session = TestDomain.session()))
+
+        viewModel.changePassword("bad-current", "new-password")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Ready
+        assertFalse(state.changingPassword)
+        assertNull(state.changePasswordMessage)
+        assertEquals("La contraseña actual no es correcta.", state.changePasswordError)
+    }
+
+    @Test
+    fun `change password weak new password shows safe account error`() = runTest(dispatcher) {
+        val authRepository = FakeFirebaseAuthRepository(
+            passwordResetResult = PasswordResetResult.SentOrHandledGenerically,
+            changePasswordResult = ChangePasswordResult.WeakNewPassword,
+        )
+        val viewModel = viewModel(authRepository)
+        viewModel.setState(RealsRootUiState.Ready(session = TestDomain.session()))
+
+        viewModel.changePassword("current-password", "weak")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Ready
+        assertEquals("La nueva contraseña es demasiado débil.", state.changePasswordError)
+    }
+
+    @Test
+    fun `change password invalid new password shows safe account error`() = runTest(dispatcher) {
+        val authRepository = FakeFirebaseAuthRepository(
+            passwordResetResult = PasswordResetResult.SentOrHandledGenerically,
+            changePasswordResult = ChangePasswordResult.InvalidNewPassword,
+        )
+        val viewModel = viewModel(authRepository)
+        viewModel.setState(RealsRootUiState.Ready(session = TestDomain.session()))
+
+        viewModel.changePassword("current-password", "invalid-password")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Ready
+        assertEquals("La nueva contraseña no tiene un formato válido.", state.changePasswordError)
+    }
+
+    @Test
+    fun `change password missing session is handled safely`() = runTest(dispatcher) {
+        val authRepository = FakeFirebaseAuthRepository(
+            passwordResetResult = PasswordResetResult.SentOrHandledGenerically,
+            changePasswordResult = ChangePasswordResult.NotSignedIn,
+        )
+        val viewModel = viewModel(authRepository)
+        viewModel.setState(RealsRootUiState.Ready(session = TestDomain.session()))
+
+        viewModel.changePassword("current-password", "new-password")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Ready
+        assertEquals("Tu sesión necesita renovarse. Volvé a iniciar sesión.", state.changePasswordError)
+    }
+
+    @Test
+    fun `change password missing email is handled safely`() = runTest(dispatcher) {
+        val authRepository = FakeFirebaseAuthRepository(
+            passwordResetResult = PasswordResetResult.SentOrHandledGenerically,
+            changePasswordResult = ChangePasswordResult.MissingEmail,
+        )
+        val viewModel = viewModel(authRepository)
+        viewModel.setState(RealsRootUiState.Ready(session = TestDomain.session()))
+
+        viewModel.changePassword("current-password", "new-password")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Ready
+        assertEquals("No pudimos confirmar tu email de sesión. Volvé a iniciar sesión.", state.changePasswordError)
+    }
+
+    @Test
+    fun `change password duplicate calls are ignored while loading`() = runTest(dispatcher) {
+        val authRepository = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
+        val viewModel = viewModel(authRepository)
+        viewModel.setState(
+            RealsRootUiState.Ready(
+                session = TestDomain.session(),
+                account = AccountUiState(changingPassword = true),
+            )
+        )
+
+        viewModel.changePassword("current-password", "new-password")
+        advanceUntilIdle()
+
+        assertEquals(emptyList<Pair<String, String>>(), authRepository.changePasswordRequests)
+    }
+
     private fun viewModel(
         authRepository: FirebaseAuthRepository,
         api: FakeRealsApi = FakeRealsApi(),
@@ -566,15 +727,19 @@ class RealsRootViewModelPasswordResetTest {
             EmailVerificationSendResult.Sent,
         private val emailVerificationCheckResult: EmailVerificationCheckResult =
             EmailVerificationCheckResult.Verified,
+        private val changePasswordResult: ChangePasswordResult = ChangePasswordResult.Success,
     ) : FirebaseAuthRepository(ContextWrapper(null)) {
         val resetRequests = mutableListOf<String>()
+        val signInRequests = mutableListOf<String>()
         val signUpRequests = mutableListOf<String>()
+        val changePasswordRequests = mutableListOf<Pair<String, String>>()
         var emailVerificationSendCalls = 0
             private set
         var emailVerificationCheckCalls = 0
             private set
 
         override suspend fun signIn(email: String, password: String): AuthOperationResult {
+            signInRequests += email
             return signInResult
         }
 
@@ -596,6 +761,14 @@ class RealsRootViewModelPasswordResetTest {
         override suspend fun reloadAndRefreshEmailVerification(): EmailVerificationCheckResult {
             emailVerificationCheckCalls++
             return emailVerificationCheckResult
+        }
+
+        override suspend fun changePassword(
+            currentPassword: String,
+            newPassword: String,
+        ): ChangePasswordResult {
+            changePasswordRequests += currentPassword to newPassword
+            return changePasswordResult
         }
     }
 }
