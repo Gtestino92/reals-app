@@ -363,6 +363,8 @@ private fun Long?.isInFuture(nowMillis: Long): Boolean = this != null && nowMill
 
 private fun ChangePasswordResult.toChangePasswordMessageOrNull(): String? = when (this) {
     ChangePasswordResult.Success -> null
+    ChangePasswordResult.PasswordProviderUnavailable ->
+        "El cambio de contraseña no está disponible para este método de inicio de sesión."
     ChangePasswordResult.WrongCurrentPassword -> "La contraseña actual no es correcta."
     ChangePasswordResult.WeakNewPassword -> "La nueva contraseña es demasiado débil."
     ChangePasswordResult.InvalidNewPassword -> "La nueva contraseña no tiene un formato válido."

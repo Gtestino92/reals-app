@@ -611,6 +611,27 @@ class RealsRootViewModelPasswordResetTest {
     }
 
     @Test
+    fun `change password provider unavailable is handled safely`() = runTest(dispatcher) {
+        val authRepository = FakeFirebaseAuthRepository(
+            passwordResetResult = PasswordResetResult.SentOrHandledGenerically,
+            changePasswordResult = ChangePasswordResult.PasswordProviderUnavailable,
+            canChangePassword = false,
+        )
+        val viewModel = viewModel(authRepository)
+        viewModel.setState(RealsRootUiState.Ready(session = TestDomain.session()))
+
+        viewModel.changePassword("current-password", "new-password")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Ready
+        assertEquals(
+            "El cambio de contraseña no está disponible para este método de inicio de sesión.",
+            state.changePasswordError,
+        )
+        assertEquals(false, viewModel.currentUserHasPasswordProvider())
+    }
+
+    @Test
     fun `change password duplicate calls are ignored while loading`() = runTest(dispatcher) {
         val authRepository = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
         val viewModel = viewModel(authRepository)
@@ -728,6 +749,7 @@ class RealsRootViewModelPasswordResetTest {
         private val emailVerificationCheckResult: EmailVerificationCheckResult =
             EmailVerificationCheckResult.Verified,
         private val changePasswordResult: ChangePasswordResult = ChangePasswordResult.Success,
+        private val canChangePassword: Boolean = true,
     ) : FirebaseAuthRepository(ContextWrapper(null)) {
         val resetRequests = mutableListOf<String>()
         val signInRequests = mutableListOf<String>()
@@ -762,6 +784,8 @@ class RealsRootViewModelPasswordResetTest {
             emailVerificationCheckCalls++
             return emailVerificationCheckResult
         }
+
+        override fun currentUserHasPasswordProvider(): Boolean = canChangePassword
 
         override suspend fun changePassword(
             currentPassword: String,
