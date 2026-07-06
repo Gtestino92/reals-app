@@ -41,6 +41,7 @@ sealed interface EmailVerificationCheckResult {
 sealed interface ChangePasswordResult {
     data object Success : ChangePasswordResult
     data object NotSignedIn : ChangePasswordResult
+    data object PasswordProviderUnavailable : ChangePasswordResult
     data object MissingEmail : ChangePasswordResult
     data object WrongCurrentPassword : ChangePasswordResult
     data object WeakNewPassword : ChangePasswordResult
@@ -54,6 +55,11 @@ open class FirebaseAuthRepository(private val context: Context) {
     fun hasSignedInUser(): Boolean = authOrNull()?.currentUser != null
 
     fun currentUserEmail(): String? = authOrNull()?.currentUser?.email
+
+    open fun currentUserHasPasswordProvider(): Boolean {
+        val user = authOrNull()?.currentUser ?: return false
+        return providerIdsHavePasswordProvider(user.providerData.map { it.providerId })
+    }
 
     open suspend fun signIn(email: String, password: String): AuthOperationResult {
         val auth = authOrNull()
@@ -133,6 +139,9 @@ open class FirebaseAuthRepository(private val context: Context) {
     ): ChangePasswordResult {
         val user = authOrNull()?.currentUser
             ?: return ChangePasswordResult.NotSignedIn
+        if (!providerIdsHavePasswordProvider(user.providerData.map { it.providerId })) {
+            return ChangePasswordResult.PasswordProviderUnavailable
+        }
         val email = user.email?.trim()?.takeIf { it.isNotBlank() }
             ?: return ChangePasswordResult.MissingEmail
         val credential = EmailAuthProvider.getCredential(email, currentPassword)
@@ -232,6 +241,10 @@ private val enumerationPronePasswordResetErrorCodes = setOf(
     "ERROR_INVALID_USER",
     "ERROR_EMAIL_NOT_FOUND",
 )
+
+internal fun providerIdsHavePasswordProvider(providerIds: Iterable<String>): Boolean {
+    return providerIds.any { it == EmailAuthProvider.PROVIDER_ID }
+}
 
 internal fun Throwable.toChangePasswordReauthenticationResult(): ChangePasswordResult {
     return changePasswordReauthenticationResultForFirebaseErrorCode((this as? FirebaseAuthException)?.errorCode)

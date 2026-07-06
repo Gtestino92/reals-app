@@ -39,6 +39,7 @@ internal fun AccountSection(
     changePasswordLoading: Boolean,
     changePasswordError: String?,
     changePasswordMessage: String?,
+    canChangePassword: Boolean,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     onSignOut: () -> Unit,
@@ -101,7 +102,7 @@ internal fun AccountSection(
         )
     }
 
-    if (changingPassword) {
+    if (changingPassword && canChangePassword) {
         ChangePasswordDialog(
             currentPassword = currentPassword,
             newPassword = newPassword,
@@ -169,15 +170,17 @@ internal fun AccountSection(
                 OutlinedButton(onClick = onSignOut, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
                     Text("Cerrar sesion")
                 }
-                OutlinedButton(
-                    onClick = {
-                        clearChangePasswordDialog()
-                        changingPassword = true
-                    },
-                    enabled = !busy,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Cambiar contraseña")
+                if (canChangePassword) {
+                    OutlinedButton(
+                        onClick = {
+                            clearChangePasswordDialog()
+                            changingPassword = true
+                        },
+                        enabled = !busy,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Cambiar contraseña")
+                    }
                 }
                 changePasswordMessage?.let {
                     Text(
@@ -294,3 +297,11 @@ internal fun changePasswordValidationError(
 
 internal const val changePasswordSuccessMessage = "Contraseña actualizada."
 internal const val wrongCurrentPasswordMessage = "La contraseña actual no es correcta."
+
+internal fun expandedAccountActionLabels(canChangePassword: Boolean): List<String> {
+    return buildList {
+        add("Cerrar sesion")
+        if (canChangePassword) add("Cambiar contraseña")
+        add("Eliminar cuenta")
+    }
+}

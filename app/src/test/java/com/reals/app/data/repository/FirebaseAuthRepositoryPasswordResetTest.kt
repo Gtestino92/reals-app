@@ -1,6 +1,7 @@
 package com.reals.app.data.repository
 
 import android.content.ContextWrapper
+import com.google.firebase.auth.EmailAuthProvider
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -60,6 +61,26 @@ class FirebaseAuthRepositoryPasswordResetTest {
         val result = unconfiguredRepository().changePassword("current-password", "new-password")
 
         assertEquals(ChangePasswordResult.NotSignedIn, result)
+    }
+
+    @Test
+    fun `current user without Firebase config cannot change password`() {
+        assertEquals(false, unconfiguredRepository().currentUserHasPasswordProvider())
+    }
+
+    @Test
+    fun `password provider enables password change capability`() {
+        assertEquals(true, providerIdsHavePasswordProvider(listOf(EmailAuthProvider.PROVIDER_ID)))
+    }
+
+    @Test
+    fun `google only provider disables password change capability`() {
+        assertEquals(false, providerIdsHavePasswordProvider(listOf("google.com")))
+    }
+
+    @Test
+    fun `linked password provider enables password change capability`() {
+        assertEquals(true, providerIdsHavePasswordProvider(listOf("google.com", EmailAuthProvider.PROVIDER_ID)))
     }
 
     @Test

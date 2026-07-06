@@ -29,11 +29,12 @@ class RealsRootViewModel(
     autoRefreshSession: Boolean = true,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<RealsRootUiState>(RealsRootUiState.Checking)
+    private val authRepository = dependencies.session.authRepository
     private val getProfilePhotosUseCase = dependencies.profile.getProfilePhotos
     private val profileHandler = ProfileOperationHandler(
         uiState = _uiState,
         dependencies = dependencies.profile,
-        authRepository = dependencies.session.authRepository,
+        authRepository = authRepository,
         getProfilePhotosUseCase = getProfilePhotosUseCase,
         scope = viewModelScope,
     )
@@ -81,6 +82,8 @@ class RealsRootViewModel(
     fun signUp(email: String, password: String) = sessionCoordinator.signUp(email, password)
 
     fun requestPasswordReset(email: String) = sessionCoordinator.requestPasswordReset(email)
+
+    fun currentUserHasPasswordProvider(): Boolean = authRepository.currentUserHasPasswordProvider()
 
     fun signOut() = sessionCoordinator.signOut()
 
