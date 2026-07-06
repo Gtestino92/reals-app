@@ -1,4 +1,5 @@
 package com.reals.app.ui.chat
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -19,6 +21,12 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -35,9 +43,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.reals.app.R
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
 import com.reals.app.core.security.TextSafety
@@ -49,17 +59,16 @@ import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.ChatStatus
-import com.reals.app.domain.model.Match
-import com.reals.app.domain.model.MatchState
 import com.reals.app.domain.model.ChatType
 import com.reals.app.domain.model.FirstChatGuidance
+import com.reals.app.domain.model.Match
+import com.reals.app.domain.model.MatchState
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
 import com.reals.app.ui.common.SearchingDotsIndicator
 import com.reals.app.ui.common.formatBackendDateTime
 import com.reals.app.ui.common.formatBackendTime
-import com.reals.app.ui.common.userLabel
 import com.reals.app.ui.root.OptimisticOutgoingMessage
 import com.reals.app.ui.root.OutgoingMessageDeliveryState
 import kotlinx.coroutines.delay
@@ -107,7 +116,7 @@ fun ChatScreen(
     var draft by rememberSaveable(chat?.id) { mutableStateOf("") }
     var safetyDetails by rememberSaveable(chat?.id) { mutableStateOf("") }
     var showingSafetyDialog by rememberSaveable(chat?.id) { mutableStateOf(false) }
-    var showingActionsDialog by rememberSaveable(chat?.id) { mutableStateOf(false) }
+    var actionsMenuExpanded by rememberSaveable(chat?.id) { mutableStateOf(false) }
     var nowMillis by rememberSaveable(chat?.id) { mutableStateOf(System.currentTimeMillis()) }
     var firstChatExpiryHandled by rememberSaveable(chat?.id) { mutableStateOf(false) }
     var secondChatUnavailableHandled by rememberSaveable(chat?.id) { mutableStateOf(false) }
@@ -115,25 +124,25 @@ fun ChatScreen(
     val firstChatLocallyExpired = firstChatLifecycle?.expired == true
     val readOnlyUntilInstant = backendInstantOrNull(chat?.readOnlyUntil)
     val secondChatReadOnlyFuture = chat?.chatType == ChatType.SecondChat &&
-        chat.status == ChatStatus.Expired &&
-        readOnlyUntilInstant != null &&
-        java.time.Instant.ofEpochMilli(nowMillis).isBefore(readOnlyUntilInstant)
+            chat.status == ChatStatus.Expired &&
+            readOnlyUntilInstant != null &&
+            java.time.Instant.ofEpochMilli(nowMillis).isBefore(readOnlyUntilInstant)
     val secondChatUnavailable = chat?.chatType == ChatType.SecondChat &&
-        (
-            chat.status in listOf(
-                ChatStatus.Closed,
-                ChatStatus.Cancelled,
-                ChatStatus.Abandoned,
-                ChatStatus.Finished,
-            ) ||
-                (chat.status == ChatStatus.Expired && !secondChatReadOnlyFuture)
-            )
+            (
+                    chat.status in listOf(
+                        ChatStatus.Closed,
+                        ChatStatus.Cancelled,
+                        ChatStatus.Abandoned,
+                        ChatStatus.Finished,
+                    ) ||
+                            (chat.status == ChatStatus.Expired && !secondChatReadOnlyFuture)
+                    )
     val canChat = !firstChatLocallyExpired &&
             !secondChatReadOnlyFuture &&
             !secondChatUnavailable &&
             (chat?.status == ChatStatus.Active ||
-            (allowAvailableChat && chat?.status == ChatStatus.Available)
-            )
+                    (allowAvailableChat && chat?.status == ChatStatus.Available)
+                    )
     val sendingMessage = sending
     val loadingChatAction = actionLoading
     val canEditDraft = canChat && !loadingChatAction
@@ -144,6 +153,8 @@ fun ChatScreen(
         .filter { it.status == ChatExitRequestStatus.Pending }
         .maxByOrNull { it.createdAt }
     val exitFlowLocked = pendingExitRequest != null
+    val canOpenOverflowActions = !loadingChatAction &&
+            ((!exitFlowLocked && canUseChatActions) || !showMutualExitActions)
     val canDecide = showDecisionActions &&
             match?.state == MatchState.ChatActive &&
             chat?.status == ChatStatus.Active &&
@@ -215,6 +226,33 @@ fun ChatScreen(
                 myDecision = chat?.myDecision,
                 partnerDecision = chat?.partnerDecision,
                 showDecisionSummary = showDecisionActions,
+                trailingContent = if (showExitActions) {
+                    {
+                        ChatOverflowMenu(
+                            expanded = actionsMenuExpanded,
+                            enabled = canOpenOverflowActions,
+                            actionLoading = loadingChatAction,
+                            canChat = canChat,
+                            canDecide = canDecide,
+                            showMutualExitActions = showMutualExitActions,
+                            onExpandedChange = { actionsMenuExpanded = it },
+                            onRequestMutualExit = {
+                                actionsMenuExpanded = false
+                                onRequestMutualExit()
+                            },
+                            onRejectChat = {
+                                actionsMenuExpanded = false
+                                onReject()
+                            },
+                            onShowSafety = {
+                                actionsMenuExpanded = false
+                                showingSafetyDialog = true
+                            },
+                        )
+                    }
+                } else {
+                    null
+                },
             )
             error?.let { ApiErrorFeedbackCard(it, ErrorContext.Chat) }
             message?.let { SuccessFeedback(it) }
@@ -231,14 +269,10 @@ fun ChatScreen(
                 loadingChatAction = loadingChatAction,
                 actionLoadingLabel = actionLoadingLabel,
                 canDecide = canDecide,
-                canOpenActions = !exitFlowLocked && canUseChatActions,
                 canUseNavigationActions = canUseNavigationActions,
                 showDecisionActions = showDecisionActions,
-                showExitActions = showExitActions,
-                showMutualExitActions = showMutualExitActions,
                 onBackHome = onBackHome,
                 onApprove = onApprove,
-                onShowActions = { showingActionsDialog = true },
                 onAcceptExitRequest = onAcceptExitRequest,
                 onRejectExitRequest = onRejectExitRequest,
                 onExitRequestTimeout = onExitRequestTimeout,
@@ -270,8 +304,8 @@ fun ChatScreen(
                 },
             ) {
                 MessageComposer(
-                draft = draft,
-                canChat = canChat,
+                    draft = draft,
+                    canChat = canChat,
                     canEditDraft = canEditDraft,
                     sendingMessage = sendingMessage,
                     loadingChatAction = loadingChatAction,
@@ -298,31 +332,6 @@ fun ChatScreen(
                 onSafetyCancel(safetyDetails)
                 safetyDetails = ""
                 showingSafetyDialog = false
-            },
-        )
-    }
-
-    if (showingActionsDialog && showExitActions) {
-        ChatActionsDialog(
-            actionLoading = actionLoading,
-            canChat = canChat,
-            canDecide = canDecide,
-            exitRequests = exitRequests,
-            showMutualExitActions = showMutualExitActions,
-            onDismiss = {
-                if (!actionLoading) showingActionsDialog = false
-            },
-            onRequestMutualExit = {
-                showingActionsDialog = false
-                onRequestMutualExit()
-            },
-            onRejectChat = {
-                showingActionsDialog = false
-                onReject()
-            },
-            onShowSafety = {
-                showingActionsDialog = false
-                showingSafetyDialog = true
             },
         )
     }
@@ -367,6 +376,7 @@ private fun ChatHeader(
     myDecision: ChatDecisionState?,
     partnerDecision: ChatDecisionState?,
     showDecisionSummary: Boolean,
+    trailingContent: (@Composable () -> Unit)? = null,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -378,17 +388,30 @@ private fun ChatHeader(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(
-                text = partnerName?.let { "$titlePrefix con ${TextSafety.safeDisplay(it)}" }
-                    ?: "Cargando $titlePrefix",
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = partnerName?.let { "$titlePrefix con ${TextSafety.safeDisplay(it)}" }
+                        ?: "Cargando $titlePrefix",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+
+                trailingContent?.invoke()
+            }
             val deadlineLabel = firstChatLifecycle?.deadline ?: expiresAt
             Text(
                 text = when {
                     secondChatReadOnlyUntil != null ->
-                        "Este segundo chat venci\u00f3. Pod\u00e9s leerlo hasta ${formatBackendDateTime(secondChatReadOnlyUntil)}."
+                        "Este segundo chat venci\u00f3. Pod\u00e9s leerlo hasta ${
+                            formatBackendDateTime(
+                                secondChatReadOnlyUntil
+                            )
+                        }."
+
                     secondChatUnavailable -> "Este segundo chat ya no est\u00e1 disponible."
                     else -> "V\u00e1lido hasta ${formatBackendDateTime(deadlineLabel)}"
                 },
@@ -410,6 +433,61 @@ private fun ChatHeader(
 }
 
 @Composable
+private fun ChatOverflowMenu(
+    expanded: Boolean,
+    enabled: Boolean,
+    actionLoading: Boolean,
+    canChat: Boolean,
+    canDecide: Boolean,
+    showMutualExitActions: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onRequestMutualExit: () -> Unit,
+    onRejectChat: () -> Unit,
+    onShowSafety: () -> Unit,
+) {
+    Box {
+        IconButton(
+            onClick = { onExpandedChange(true) },
+            enabled = enabled,
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_more_vert),
+                contentDescription = "Más acciones",
+            )
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = {
+                if (!actionLoading) {
+                    onExpandedChange(false)
+                }
+            },
+        ) {
+            if (showMutualExitActions) {
+                DropdownMenuItem(
+                    text = { Text("Salida consensuada") },
+                    enabled = !actionLoading && canChat,
+                    onClick = onRequestMutualExit,
+                )
+
+                DropdownMenuItem(
+                    text = { Text("Rechazar chat") },
+                    enabled = !actionLoading && canDecide,
+                    onClick = onRejectChat,
+                )
+            }
+
+            DropdownMenuItem(
+                text = { Text("Reportar y cerrar chat") },
+                enabled = !actionLoading && canChat,
+                onClick = onShowSafety,
+            )
+        }
+    }
+}
+
+@Composable
 private fun MessageList(
     currentUserId: String,
     messages: List<ChatMessage>,
@@ -420,7 +498,8 @@ private fun MessageList(
 ) {
     val sortedMessages = messages.sortedBy { it.sentAt }
     val messageItems = sortedMessages.map { ChatMessageListItem.Backend(it) } +
-        optimisticMessages.sortedBy { it.createdAtMillis }.map { ChatMessageListItem.Optimistic(it) }
+            optimisticMessages.sortedBy { it.createdAtMillis }
+                .map { ChatMessageListItem.Optimistic(it) }
     val listState = rememberLazyListState()
     val latestMessage = messageItems.lastOrNull()
     val latestMessageId = latestMessage?.stableId
@@ -514,33 +593,34 @@ private fun FirstChatGuidancePanel(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        ),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                text = "Pregunta disparadora",
+                text = TextSafety.safeDisplay(state.questionText),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
-            Text(
-                text = TextSafety.safeDisplay(state.questionText),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
+
             if (state.showButton) {
                 OutlinedButton(
                     onClick = { onRequestNext?.invoke() },
-                    enabled = state.buttonEnabled && !actionLoading && onRequestNext != null,
+                    enabled = state.buttonEnabled &&
+                            !actionLoading &&
+                            onRequestNext != null,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text("Otra pregunta")
                 }
             }
+
             if (state.showWaitingCopy) {
                 Text(
                     text = "Cambiaremos la pregunta cuando ambos quieran seguir.",
@@ -577,21 +657,16 @@ private fun ChatActionsPanel(
     loadingChatAction: Boolean,
     actionLoadingLabel: String?,
     canDecide: Boolean,
-    canOpenActions: Boolean,
     canUseNavigationActions: Boolean,
     showDecisionActions: Boolean,
-    showExitActions: Boolean,
-    showMutualExitActions: Boolean,
     onBackHome: (() -> Unit)?,
     onApprove: () -> Unit,
-    onShowActions: () -> Unit,
     onAcceptExitRequest: (String) -> Unit,
     onRejectExitRequest: (String) -> Unit,
     onExitRequestTimeout: (String) -> Unit,
 ) {
     if (
         activeExitRequest == null &&
-        !showExitActions &&
         !showDecisionActions &&
         onBackHome == null
     ) {
@@ -617,29 +692,13 @@ private fun ChatActionsPanel(
                     onExitRequestTimeout = onExitRequestTimeout,
                 )
             }
-            if (showExitActions || onBackHome != null) {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    if (showExitActions) {
-                        OutlinedButton(
-                            onClick = onShowActions,
-                            enabled = !loadingChatAction && (canOpenActions || !showMutualExitActions),
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Text(
-                                if (loadingChatAction) actionLoadingLabel
-                                    ?: "Procesando..." else "Mas acciones"
-                            )
-                        }
-                    }
-                    onBackHome?.let { back ->
-                        OutlinedButton(
-                            onClick = back,
-                            enabled = canUseNavigationActions,
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Text("Volver a Home")
-                        }
-                    }
+            onBackHome?.let { back ->
+                OutlinedButton(
+                    onClick = back,
+                    enabled = canUseNavigationActions,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Volver a Home")
                 }
             }
             if (showDecisionActions) {
@@ -649,7 +708,8 @@ private fun ChatActionsPanel(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
-                        if (loadingChatAction) actionLoadingLabel ?: "Procesando..." else "Aprobar chat"
+                        if (loadingChatAction) actionLoadingLabel
+                            ?: "Procesando..." else "Aprobar chat"
                     )
                 }
             }
@@ -669,11 +729,13 @@ private fun MessageComposer(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        ),
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             if (!canChat) {
                 Text(
@@ -681,21 +743,41 @@ private fun MessageComposer(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            OutlinedTextField(
-                value = draft,
-                onValueChange = onDraftChange,
-                label = { Text("Mensaje") },
-                enabled = canEditDraft,
-                minLines = 1,
-                maxLines = 4,
+
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-            )
-            Button(
-                onClick = onSend,
-                enabled = canChat && !sendingMessage && !loadingChatAction && draft.isNotBlank(),
-                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(if (sendingMessage) "Enviando..." else "Enviar")
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = onDraftChange,
+                    placeholder = { Text("Mensaje") },
+                    enabled = canEditDraft,
+                    minLines = 1,
+                    maxLines = 4,
+                    modifier = Modifier.weight(1f),
+                )
+
+                FilledIconButton(
+                    onClick = onSend,
+                    enabled = canChat &&
+                            !sendingMessage &&
+                            !loadingChatAction &&
+                            draft.isNotBlank(),
+                ) {
+                    if (sendingMessage) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_send),
+                            contentDescription = "Enviar",
+                        )
+                    }
+                }
             }
         }
     }
@@ -760,14 +842,20 @@ private fun TimedExitRequestCard(
                         enabled = !actionsDisabled,
                         modifier = Modifier.weight(1f),
                     ) {
-                        Text(if (actionsDisabled) actionLoadingLabel ?: "Procesando..." else "Aceptar")
+                        Text(
+                            if (actionsDisabled) actionLoadingLabel
+                                ?: "Procesando..." else "Aceptar"
+                        )
                     }
                     OutlinedButton(
                         onClick = { onRejectExitRequest(request.id) },
                         enabled = !actionsDisabled,
                         modifier = Modifier.weight(1f),
                     ) {
-                        Text(if (actionsDisabled) actionLoadingLabel ?: "Procesando..." else "Rechazar")
+                        Text(
+                            if (actionsDisabled) actionLoadingLabel
+                                ?: "Procesando..." else "Rechazar"
+                        )
                     }
                 }
             }
@@ -858,66 +946,6 @@ private fun OptimisticMessageBubble(
             }
         }
     }
-}
-
-@Composable
-private fun ChatActionsDialog(
-    actionLoading: Boolean,
-    canChat: Boolean,
-    canDecide: Boolean,
-    exitRequests: List<ChatExitRequest>,
-    showMutualExitActions: Boolean,
-    onDismiss: () -> Unit,
-    onRequestMutualExit: () -> Unit,
-    onRejectChat: () -> Unit,
-    onShowSafety: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Acciones del chat") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Opciones menos frecuentes para cerrar o reportar esta conversacion.")
-                if (exitRequests.isNotEmpty()) {
-                    Text(
-                        text = "Solicitudes: ${exitRequests.joinToString { "${it.type.userLabel()} (${it.status.userLabel()})" }}",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (showMutualExitActions) {
-                    OutlinedButton(
-                        enabled = !actionLoading && canChat,
-                        onClick = onRequestMutualExit,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Salida consensuada")
-                    }
-                    OutlinedButton(
-                        enabled = !actionLoading && canDecide,
-                        onClick = onRejectChat,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Rechazar chat")
-                    }
-                }
-                OutlinedButton(
-                    enabled = !actionLoading && canChat,
-                    onClick = onShowSafety,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Reportar y cerrar chat")
-                }
-                TextButton(enabled = !actionLoading, onClick = onDismiss) {
-                    Text("Cerrar")
-                }
-            }
-        },
-    )
 }
 
 @Composable
