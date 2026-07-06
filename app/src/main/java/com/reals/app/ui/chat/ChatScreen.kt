@@ -52,6 +52,7 @@ import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.Match
 import com.reals.app.domain.model.MatchState
 import com.reals.app.domain.model.ChatType
+import com.reals.app.domain.model.FirstChatGuidance
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
@@ -78,6 +79,8 @@ fun ChatScreen(
     sending: Boolean,
     actionLoading: Boolean,
     actionLoadingLabel: String?,
+    guidance: FirstChatGuidance? = null,
+    guidanceActionLoading: Boolean = false,
     error: ApiError?,
     message: String?,
     chatTitlePrefix: String = "Chat",
@@ -90,6 +93,7 @@ fun ChatScreen(
     onRefresh: () -> Unit,
     onFirstChatLocalExpiry: (inactivity: Boolean) -> Unit = {},
     onSecondChatUnavailable: () -> Unit = {},
+    onRequestNextGuidanceQuestion: (() -> Unit)? = null,
     onSendMessage: (String) -> Boolean,
     onRetryOptimisticMessage: (localId: String, content: String) -> Unit,
     onApprove: () -> Unit,
@@ -135,6 +139,7 @@ fun ChatScreen(
     val canEditDraft = canChat && !loadingChatAction
     val canUseChatActions = canChat && !loadingChatAction
     val canUseNavigationActions = !loadingChatAction
+    val guidancePanelState = firstChatGuidancePanelState(guidance)
     val pendingExitRequest = exitRequests
         .filter { it.status == ChatExitRequestStatus.Pending }
         .maxByOrNull { it.createdAt }
@@ -237,6 +242,11 @@ fun ChatScreen(
                 onAcceptExitRequest = onAcceptExitRequest,
                 onRejectExitRequest = onRejectExitRequest,
                 onExitRequestTimeout = onExitRequestTimeout,
+            )
+            FirstChatGuidancePanel(
+                state = guidancePanelState,
+                actionLoading = guidanceActionLoading,
+                onRequestNext = onRequestNextGuidanceQuestion,
             )
             MessageList(
                 currentUserId = currentUserId,
@@ -472,6 +482,74 @@ private fun LazyListState.isNearBottom(bufferItems: Int = 2): Boolean {
 
     val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: return true
     return lastVisibleIndex >= totalItems - 1 - bufferItems
+}
+
+internal data class FirstChatGuidancePanelState(
+    val questionText: String,
+    val showButton: Boolean,
+    val buttonEnabled: Boolean,
+    val showWaitingCopy: Boolean,
+)
+
+internal fun firstChatGuidancePanelState(
+    guidance: FirstChatGuidance?,
+): FirstChatGuidancePanelState? {
+    if (guidance == null) return null
+    val finalQuestion = guidance.questionOrdinal >= guidance.maxQuestions
+    return FirstChatGuidancePanelState(
+        questionText = guidance.question.text,
+        showButton = !guidance.completed && !finalQuestion && !guidance.myNextRequested,
+        buttonEnabled = !guidance.completed && !finalQuestion && !guidance.myNextRequested && guidance.canRequestNext,
+        showWaitingCopy = !guidance.completed && guidance.myNextRequested,
+    )
+}
+
+@Composable
+private fun FirstChatGuidancePanel(
+    state: FirstChatGuidancePanelState?,
+    actionLoading: Boolean,
+    onRequestNext: (() -> Unit)?,
+) {
+    if (state == null) return
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = "Pregunta disparadora",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            Text(
+                text = TextSafety.safeDisplay(state.questionText),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            if (state.showButton) {
+                OutlinedButton(
+                    onClick = { onRequestNext?.invoke() },
+                    enabled = state.buttonEnabled && !actionLoading && onRequestNext != null,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Otra pregunta")
+                }
+            }
+            if (state.showWaitingCopy) {
+                Text(
+                    text = "Cambiaremos la pregunta cuando ambos quieran seguir.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
+        }
+    }
 }
 
 private sealed interface ChatMessageListItem {

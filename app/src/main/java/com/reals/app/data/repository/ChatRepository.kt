@@ -15,6 +15,7 @@ import com.reals.app.domain.model.ChatExitOutcome
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.FirstChatGuidance
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -55,6 +56,14 @@ class ChatRepository(
                 authorization = authorization,
                 chatId = chatId,
                 body = SendMessageRequestDto(content),
+            )
+        }.map { it.toDomain() }
+
+    suspend fun requestNextFirstChatGuidanceQuestion(chatId: String): ApiResult<FirstChatGuidance> =
+        authorizedCall { authorization ->
+            api.requestNextFirstChatGuidanceQuestion(
+                authorization = authorization,
+                chatId = chatId,
             )
         }.map { it.toDomain() }
 

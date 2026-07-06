@@ -35,6 +35,7 @@ import com.reals.app.domain.usecase.RejectSchedulingRoundUseCase
 import com.reals.app.domain.usecase.ReorderProfilePhotosUseCase
 import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
+import com.reals.app.domain.usecase.RequestNextFirstChatGuidanceQuestionUseCase
 import com.reals.app.domain.usecase.SafetyCancelChatUseCase
 import com.reals.app.domain.usecase.SendChatMessageUseCase
 import com.reals.app.domain.usecase.SubmitChatDecisionUseCase
@@ -96,6 +97,7 @@ data class FirstChatFeatureDependencies(
     val submitChatDecision: SubmitChatDecisionUseCase,
     val getChatMessages: GetChatMessagesUseCase,
     val sendChatMessage: SendChatMessageUseCase,
+    val requestNextFirstChatGuidanceQuestion: RequestNextFirstChatGuidanceQuestionUseCase,
     val getChatExitRequests: GetChatExitRequestsUseCase,
     val requestMutualChatExit: RequestMutualChatExitUseCase,
     val acceptChatExitRequest: AcceptChatExitRequestUseCase,

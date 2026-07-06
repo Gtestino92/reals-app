@@ -52,6 +52,7 @@ import com.reals.app.domain.usecase.RejectSchedulingRoundUseCase
 import com.reals.app.domain.usecase.ReorderProfilePhotosUseCase
 import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
+import com.reals.app.domain.usecase.RequestNextFirstChatGuidanceQuestionUseCase
 import com.reals.app.domain.usecase.SafetyCancelChatUseCase
 import com.reals.app.domain.usecase.SendChatMessageUseCase
 import com.reals.app.domain.usecase.SubmitChatDecisionUseCase
@@ -279,6 +280,7 @@ class RealsRootViewModelPollingGuardTest {
                 submitChatDecision = SubmitChatDecisionUseCase(matchRepository),
                 getChatMessages = GetChatMessagesUseCase(chatRepository),
                 sendChatMessage = SendChatMessageUseCase(chatRepository),
+                requestNextFirstChatGuidanceQuestion = RequestNextFirstChatGuidanceQuestionUseCase(chatRepository),
                 getChatExitRequests = GetChatExitRequestsUseCase(chatRepository),
                 requestMutualChatExit = RequestMutualChatExitUseCase(chatRepository),
                 acceptChatExitRequest = AcceptChatExitRequestUseCase(chatRepository),

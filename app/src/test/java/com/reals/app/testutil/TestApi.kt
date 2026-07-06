@@ -13,6 +13,7 @@ import com.reals.app.data.dto.ConnectionDismissalResponseDto
 import com.reals.app.data.dto.ConnectionResponseDto
 import com.reals.app.data.dto.CreateProfileRequestDto
 import com.reals.app.data.dto.EnqueueMatchmakingRequestDto
+import com.reals.app.data.dto.FirstChatGuidanceResponseDto
 import com.reals.app.data.dto.HomeResponseDto
 import com.reals.app.data.dto.HomePendingStateResponseDto
 import com.reals.app.data.dto.HomeStatusResponseDto
@@ -130,6 +131,8 @@ class FakeRealsApi : RealsApi {
         Response.success(PartnerPersonalMessageResponseDto("hola"))
     var chatMessageResponse: Response<ChatMessageResponseDto> = Response.success(TestDtos.chatMessage())
     var chatMessagesResponse: Response<JsonElement> = Response.success(TestDtos.chatMessagesArrayPayload())
+    var firstChatGuidanceResponse: Response<FirstChatGuidanceResponseDto> =
+        Response.success(TestDtos.firstChatGuidance())
     var exitRequestResponse: Response<ChatExitRequestResponseDto> = Response.success(TestDtos.exitRequest())
     var exitRequestsResponse: Response<List<ChatExitRequestResponseDto>> = Response.success(listOf(TestDtos.exitRequest()))
     var exitOutcomeResponse: Response<ChatExitOutcomeResponseDto> = Response.success(TestDtos.exitOutcome())
@@ -333,6 +336,12 @@ class FakeRealsApi : RealsApi {
         afterMessageIdAlias: String?,
     ): Response<JsonElement> =
         record("getChatMessages", authorization, chatId) { chatMessagesResponse }
+
+    override suspend fun requestNextFirstChatGuidanceQuestion(
+        authorization: String,
+        chatId: String,
+    ): Response<FirstChatGuidanceResponseDto> =
+        record("requestNextFirstChatGuidanceQuestion", authorization, chatId) { firstChatGuidanceResponse }
 
     override suspend fun requestChatExit(
         authorization: String,

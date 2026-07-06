@@ -5,6 +5,7 @@ import com.reals.app.core.network.BackendErrorCode
 import com.reals.app.core.network.ErrorContext
 import com.reals.app.core.network.backendErrorCode
 import com.reals.app.core.network.toUserMessage
+import com.reals.app.data.dto.FirstChatGuidanceResponseDto
 import com.reals.app.data.repository.ChatRepository
 import com.reals.app.data.repository.MatchRepository
 import com.reals.app.di.FirstChatFeatureDependencies
@@ -21,6 +22,7 @@ import com.reals.app.domain.usecase.GetMatchUseCase
 import com.reals.app.domain.usecase.GetSecondChatForConnectionUseCase
 import com.reals.app.domain.usecase.RejectChatExitRequestUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
+import com.reals.app.domain.usecase.RequestNextFirstChatGuidanceQuestionUseCase
 import com.reals.app.domain.usecase.SafetyCancelChatUseCase
 import com.reals.app.domain.usecase.SendChatMessageUseCase
 import com.reals.app.domain.usecase.SubmitChatDecisionUseCase
@@ -218,6 +220,225 @@ class FirstChatCoordinatorTest {
     }
 
     @Test
+    fun `guidance request is ignored when guidance is null`() = runBlocking {
+        val current = firstChatState(chatStatus = ChatStatus.Active, guidance = null)
+
+        val result = coordinator.requestNextGuidanceQuestion(current, onPending = {})
+
+        assertEquals(FirstChatActionResult.Ignore, result)
+        assertTrue(api.calls.isEmpty())
+    }
+
+    @Test
+    fun `guidance request is not sent when completed`() = runBlocking {
+        val current = firstChatState(
+            chatStatus = ChatStatus.Active,
+            guidance = TestDtos.firstChatGuidance(completed = true, canRequestNext = false),
+        )
+
+        val result = coordinator.requestNextGuidanceQuestion(current, onPending = {})
+
+        assertEquals(FirstChatActionResult.Ignore, result)
+        assertTrue(api.calls.isEmpty())
+    }
+
+    @Test
+    fun `guidance request is not sent when already requested`() = runBlocking {
+        val current = firstChatState(
+            chatStatus = ChatStatus.Active,
+            guidance = TestDtos.firstChatGuidance(myNextRequested = true),
+        )
+
+        val result = coordinator.requestNextGuidanceQuestion(current, onPending = {})
+
+        assertEquals(FirstChatActionResult.Ignore, result)
+        assertTrue(api.calls.isEmpty())
+    }
+
+    @Test
+    fun `guidance request is not sent when user cannot request next`() = runBlocking {
+        val current = firstChatState(
+            chatStatus = ChatStatus.Active,
+            guidance = TestDtos.firstChatGuidance(canRequestNext = false),
+        )
+
+        val result = coordinator.requestNextGuidanceQuestion(current, onPending = {})
+
+        assertEquals(FirstChatActionResult.Ignore, result)
+        assertTrue(api.calls.isEmpty())
+    }
+
+    @Test
+    fun `valid guidance request calls dependency with current chat id and stores same question response`() = runBlocking {
+        var pending: RealsRootUiState.FirstChat? = null
+        api.firstChatGuidanceResponse = Response.success(
+            TestDtos.firstChatGuidance(
+                questionId = "Q027",
+                questionText = "Pregunta inicial",
+                myNextRequested = true,
+            )
+        )
+        val current = firstChatState(
+            chatStatus = ChatStatus.Active,
+            guidance = TestDtos.firstChatGuidance(questionId = "Q027", questionText = "Pregunta inicial"),
+        )
+
+        val result = coordinator.requestNextGuidanceQuestion(
+            current = current,
+            onPending = { pending = it },
+        )
+
+        assertEquals(true, pending?.guidanceActionLoading)
+        assertTrue(result is FirstChatActionResult.Show)
+        val state = (result as FirstChatActionResult.Show).state
+        assertEquals(listOf("requestNextFirstChatGuidanceQuestion"), api.calls)
+        assertEquals("chat-1", api.lastPathId)
+        assertEquals(false, state.guidanceActionLoading)
+        assertEquals("Q027", state.chat?.guidance?.question?.id)
+        assertEquals(true, state.chat?.guidance?.myNextRequested)
+    }
+
+    @Test
+    fun `advanced guidance success replaces question and returned request state`() = runBlocking {
+        api.firstChatGuidanceResponse = Response.success(
+            TestDtos.firstChatGuidance(
+                questionId = "Q028",
+                questionText = "Pregunta siguiente",
+                questionOrdinal = 2,
+                myNextRequested = false,
+            )
+        )
+        val current = firstChatState(
+            chatStatus = ChatStatus.Active,
+            guidance = TestDtos.firstChatGuidance(questionId = "Q027", questionText = "Pregunta inicial"),
+        )
+
+        val result = coordinator.requestNextGuidanceQuestion(current, onPending = {})
+
+        assertTrue(result is FirstChatActionResult.Show)
+        val guidance = (result as FirstChatActionResult.Show).state.chat?.guidance
+        assertEquals("Q028", guidance?.question?.id)
+        assertEquals("Pregunta siguiente", guidance?.question?.text)
+        assertEquals(2, guidance?.questionOrdinal)
+        assertEquals(false, guidance?.myNextRequested)
+    }
+
+    @Test
+    fun `completed guidance response preserves Q3 and clears loading`() = runBlocking {
+        api.firstChatGuidanceResponse = Response.success(
+            TestDtos.firstChatGuidance(
+                questionId = "Q003",
+                questionText = "Pregunta final",
+                questionOrdinal = 3,
+                canRequestNext = false,
+                myNextRequested = false,
+                completed = true,
+            )
+        )
+        val current = firstChatState(
+            chatStatus = ChatStatus.Active,
+            guidance = TestDtos.firstChatGuidance(questionId = "Q003", questionOrdinal = 3),
+        )
+
+        val result = coordinator.requestNextGuidanceQuestion(current, onPending = {})
+
+        assertTrue(result is FirstChatActionResult.Show)
+        val state = (result as FirstChatActionResult.Show).state
+        assertEquals(false, state.guidanceActionLoading)
+        assertEquals("Q003", state.chat?.guidance?.question?.id)
+        assertEquals("Pregunta final", state.chat?.guidance?.question?.text)
+        assertEquals(true, state.chat?.guidance?.completed)
+        assertEquals(false, state.chat?.guidance?.myNextRequested)
+    }
+
+    @Test
+    fun `guidance request failure clears loading and exposes chat error`() = runBlocking {
+        api.firstChatGuidanceResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "FIRST_CHAT_GUIDANCE_PARTICIPATION_REQUIRED",
+        )
+        val current = firstChatState(
+            chatStatus = ChatStatus.Active,
+            guidance = TestDtos.firstChatGuidance(),
+        )
+
+        val result = coordinator.requestNextGuidanceQuestion(current, onPending = {})
+
+        assertTrue(result is FirstChatActionResult.Show)
+        val state = (result as FirstChatActionResult.Show).state
+        val error = state.error as ApiError.Backend
+        assertEquals(false, state.guidanceActionLoading)
+        assertEquals(BackendErrorCode.FirstChatGuidanceParticipationRequired, error.backendErrorCode)
+        assertEquals(
+            "Particip\u00e1 un poco m\u00e1s antes de pedir otra pregunta.",
+            error.toUserMessage(ErrorContext.Chat),
+        )
+    }
+
+    @Test
+    fun `guidance request preserves unrelated first chat state`() = runBlocking {
+        val message = TestDtos.chatMessage("message-old").toDomain()
+        val optimistic = newOptimisticOutgoingMessage(
+            chatId = "chat-1",
+            senderId = "user-1",
+            content = "hola",
+            localId = "local-old",
+            createdAtMillis = 1L,
+        )
+        val exitRequest = TestDtos.exitRequest(status = "PENDING").toDomain()
+        api.firstChatGuidanceResponse = Response.success(TestDtos.firstChatGuidance(myNextRequested = true))
+        val current = firstChatState(
+            chatStatus = ChatStatus.Active,
+            guidance = TestDtos.firstChatGuidance(),
+        ).copy(
+            messages = listOf(message),
+            optimisticMessages = listOf(optimistic),
+            exitRequests = listOf(exitRequest),
+        )
+
+        val result = coordinator.requestNextGuidanceQuestion(current, onPending = {})
+
+        assertTrue(result is FirstChatActionResult.Show)
+        val state = (result as FirstChatActionResult.Show).state
+        assertEquals(listOf(message), state.messages)
+        assertEquals(listOf(optimistic), state.optimisticMessages)
+        assertEquals(listOf(exitRequest), state.exitRequests)
+        assertEquals(current.match, state.match)
+    }
+
+    @Test
+    fun `refresh replaces stale guidance from first chat response`() = runBlocking {
+        api.chatResponse = Response.success(
+            TestDtos.chat(
+                status = "ACTIVE",
+                guidance = TestDtos.firstChatGuidance(
+                    questionId = "Q028",
+                    questionText = "Pregunta actualizada",
+                    questionOrdinal = 2,
+                    myNextRequested = false,
+                )
+            )
+        )
+        val current = firstChatState(
+            chatStatus = ChatStatus.Active,
+            guidance = TestDtos.firstChatGuidance(
+                questionId = "Q027",
+                questionText = "Pregunta anterior",
+                myNextRequested = true,
+            ),
+        )
+
+        val result = coordinator.refresh(current, silent = false)
+
+        assertTrue(result is FirstChatRefreshResult.Show)
+        val guidance = (result as FirstChatRefreshResult.Show).state.chat?.guidance
+        assertEquals("Q028", guidance?.question?.id)
+        assertEquals("Pregunta actualizada", guidance?.question?.text)
+        assertEquals(2, guidance?.questionOrdinal)
+        assertEquals(false, guidance?.myNextRequested)
+    }
+
+    @Test
     fun `mutual exit refreshes chat and exit requests when chat remains open`() = runBlocking {
         api.exitRequestResponse = Response.success(TestDtos.exitRequest(status = "PENDING"))
         api.chatResponse = Response.success(TestDtos.chat(status = "ACTIVE"))
@@ -347,13 +568,16 @@ class FirstChatCoordinatorTest {
         assertTrue(listOf(message).withoutOptimisticMessage("local-123").isEmpty())
     }
 
-    private fun firstChatState(chatStatus: ChatStatus): RealsRootUiState.FirstChat =
+    private fun firstChatState(
+        chatStatus: ChatStatus,
+        guidance: FirstChatGuidanceResponseDto? = null,
+    ): RealsRootUiState.FirstChat =
         RealsRootUiState.FirstChat(
             session = TestDomain.session(),
             matchId = "match-1",
             chatId = "chat-1",
             match = TestDtos.match("CHAT_ACTIVE").toDomain(),
-            chat = TestDtos.chat(status = chatStatus.rawValue).toDomain(),
+            chat = TestDtos.chat(status = chatStatus.rawValue, guidance = guidance).toDomain(),
         )
 
     private fun secondChatState(): RealsRootUiState.SecondChat =
@@ -377,6 +601,7 @@ class FirstChatCoordinatorTest {
             submitChatDecision = SubmitChatDecisionUseCase(matchRepository),
             getChatMessages = GetChatMessagesUseCase(chatRepository),
             sendChatMessage = SendChatMessageUseCase(chatRepository),
+            requestNextFirstChatGuidanceQuestion = RequestNextFirstChatGuidanceQuestionUseCase(chatRepository),
             getChatExitRequests = GetChatExitRequestsUseCase(chatRepository),
             requestMutualChatExit = RequestMutualChatExitUseCase(chatRepository),
             acceptChatExitRequest = AcceptChatExitRequestUseCase(chatRepository),
