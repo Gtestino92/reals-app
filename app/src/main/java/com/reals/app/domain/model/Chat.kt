@@ -18,6 +18,7 @@ data class Chat(
     val endedAt: String?,
     val readOnlyUntil: String?,
     val lastMessageAt: String?,
+    val guidance: FirstChatGuidance?,
 )
 
 data class ChatPartner(
@@ -52,6 +53,21 @@ data class ChatExitOutcome(
     val exitRequest: ChatExitRequest,
     val penaltyApplied: Boolean,
     val penalizedUserId: String?,
+)
+
+data class FirstChatGuidanceQuestion(
+    val id: String,
+    val text: String,
+)
+
+data class FirstChatGuidance(
+    val question: FirstChatGuidanceQuestion,
+    val questionOrdinal: Int,
+    val maxQuestions: Int,
+    val requiredCharacters: Int,
+    val canRequestNext: Boolean,
+    val myNextRequested: Boolean,
+    val completed: Boolean,
 )
 
 sealed interface ChatType {

@@ -284,6 +284,45 @@ internal class FirstChatCoordinator(
         }
     }
 
+    suspend fun requestNextGuidanceQuestion(
+        current: RealsRootUiState.FirstChat,
+        onPending: (RealsRootUiState.FirstChat) -> Unit,
+    ): FirstChatActionResult {
+        if (current.loading || current.refreshing || current.actionLoading || current.guidanceActionLoading) {
+            return FirstChatActionResult.Ignore
+        }
+        val chat = current.chat ?: return FirstChatActionResult.Ignore
+        val guidance = chat.guidance ?: return FirstChatActionResult.Ignore
+        if (guidance.completed || guidance.myNextRequested || !guidance.canRequestNext) {
+            return FirstChatActionResult.Ignore
+        }
+
+        val pending = current.copy(
+            guidanceActionLoading = true,
+            error = null,
+            message = null,
+        )
+        onPending(pending)
+
+        return when (val result = dependencies.requestNextFirstChatGuidanceQuestion(chat.id)) {
+            is ApiResult.Success -> FirstChatActionResult.Show(
+                pending.copy(
+                    chat = chat.copy(guidance = result.value),
+                    guidanceActionLoading = false,
+                    error = null,
+                )
+            )
+
+            is ApiResult.Failure -> result.error.firstChatActionExpiryRoute(current)
+                ?: FirstChatActionResult.Show(
+                    pending.copy(
+                        guidanceActionLoading = false,
+                        error = result.error,
+                    )
+                )
+        }
+    }
+
     suspend fun requestMutualExit(
         current: RealsRootUiState.FirstChat,
         onPending: (RealsRootUiState.FirstChat) -> Unit,

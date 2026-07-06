@@ -15,6 +15,7 @@ import com.reals.app.data.dto.HomeResponseDto
 import com.reals.app.data.dto.HomePendingStateResponseDto
 import com.reals.app.data.dto.HomeStatusResponseDto
 import com.reals.app.data.dto.MatchResponseDto
+import com.reals.app.data.dto.FirstChatGuidanceResponseDto
 import com.reals.app.data.dto.NegotiationResponseDto
 import com.reals.app.data.dto.PartnerPersonalMessageResponseDto
 import com.reals.app.data.dto.PersonalMessageRequestDto
@@ -235,6 +236,12 @@ interface RealsApi {
         @Query("after") afterMessageId: String? = null,
         @Query("afterMessageId") afterMessageIdAlias: String? = null,
     ): Response<JsonElement>
+
+    @POST("api/chats/{chatId}/guidance/next-request")
+    suspend fun requestNextFirstChatGuidanceQuestion(
+        @Header("Authorization") authorization: String,
+        @Path("chatId") chatId: String,
+    ): Response<FirstChatGuidanceResponseDto>
 
     @POST("api/chats/{chatId}/exit-requests")
     suspend fun requestChatExit(

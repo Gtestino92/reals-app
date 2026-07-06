@@ -51,9 +51,31 @@ Home also returns `matchmaking`, `activeInteractionsSummary`, `nextSteps` and
 raw `MatchState`, `ConnectionState` or expiration timestamps.
 
 `GET /api/matches/{matchId}/chat` returns the active first chat plus `partner`,
-`myDecision`, `partnerDecision`, `expiresAt` and `inactivityExpiresAt`. The
-decision fields are API-facing statuses from the current user's perspective:
-`PENDING`, `APPROVED`, `REJECTED` or `ABANDONED`.
+`myDecision`, `partnerDecision`, `expiresAt`, `inactivityExpiresAt` and nullable
+`guidance` metadata. New first chats initialize guidance; legacy chats may have
+`guidance = null`. The decision fields are API-facing statuses from the current
+user's perspective: `PENDING`, `APPROVED`, `REJECTED` or `ABANDONED`.
+
+First-chat guidance is an MVP conversation prompt mechanic owned by the backend.
+The Spanish question catalog is a static resource, and each first chat derives a
+deterministic sequence from the chat id and catalog order. One active question is
+shared by both participants and persisted as an id/text snapshot when activated.
+Users can chat freely; the backend does not semantically evaluate answers. A
+participant can request another question only after sending at least 40
+accumulated persisted characters during the current question interval. One long
+message can satisfy this threshold. The question advances only after both
+participants independently request it, and partner readiness/request state is not
+exposed. A first chat has at most 3 questions. When both users request
+continuation from the penultimate question and the final configured question
+becomes active, guidance completes immediately, no question 4 is selected, and
+the final question remains available as the final prompt. Clients observe
+question changes through the existing first-chat polling response. No analytics
+events are implemented for guidance.
+
+For compatibility with rows created before this completion semantics change, a
+guidance row already at the final configured ordinal with `completedAt = null`
+is treated as completed. The backend normalizes `completedAt` and clears
+next-request timestamps when that row is read or mutated.
 
 Client countdowns are advisory. The backend remains the source of truth and
 rejects first-chat mutations with `CHAT_EXPIRED` after the absolute deadline or
@@ -182,6 +204,8 @@ Safety-report chat closure creates:
 - a directional `UserBlock` from reporter to reported; matchmaking treats any block between two users as a bidirectional rematch exclusion.
 
 Admins access `/api/admin/safety-reports` with `ROLE_ADMIN`. Dismissing a pending report stores review metadata and creates no penalty. Confirming a pending report creates either a temporary or permanent penalty for the reported user, links it through `sourceReportId`/`penaltyId`, removes the reported user from the matchmaking queue if present and blocks future enqueue while the penalty remains active.
+
+Admins can also dismiss a report as abusive or unjustified. That resolution creates no safety penalty; when user reliability is enabled, it records an internal reliability event against the reporter. Pending reports, ordinary insufficient-evidence dismissals and confirmed reports against the reported user do not create reliability events.
 
 ## 10. Completion
 

@@ -56,6 +56,9 @@ enum class BackendErrorCode(val raw: String) {
     ChatDecisionAlreadySubmitted("CHAT_DECISION_ALREADY_SUBMITTED"),
     ChatMinMessagesRequired("CHAT_MIN_MESSAGES_REQUIRED"),
     ChatMutualCancellationPending("CHAT_MUTUAL_CANCELLATION_PENDING"),
+    FirstChatGuidanceParticipationRequired("FIRST_CHAT_GUIDANCE_PARTICIPATION_REQUIRED"),
+    FirstChatGuidanceNextAlreadyRequested("FIRST_CHAT_GUIDANCE_NEXT_ALREADY_REQUESTED"),
+    FirstChatGuidanceCompleted("FIRST_CHAT_GUIDANCE_COMPLETED"),
     ChatExitRequestNotFound("CHAT_EXIT_REQUEST_NOT_FOUND"),
     ChatExitRequestNotAvailable("CHAT_EXIT_REQUEST_NOT_AVAILABLE"),
     ChatExitRequestAlreadyPending("CHAT_EXIT_REQUEST_ALREADY_PENDING"),
@@ -194,6 +197,10 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.ChatDecisionAlreadySubmitted -> "Ya enviaste tu decision para esta conversacion."
     BackendErrorCode.ChatMinMessagesRequired -> "Antes de decidir, envia al menos un poco mas de conversacion."
     BackendErrorCode.ChatMutualCancellationPending -> "Hay una solicitud de salida pendiente. Resolvela antes de decidir."
+    BackendErrorCode.FirstChatGuidanceParticipationRequired ->
+        "Particip\u00e1 un poco m\u00e1s antes de pedir otra pregunta."
+    BackendErrorCode.FirstChatGuidanceNextAlreadyRequested -> "Ya pediste cambiar esta pregunta."
+    BackendErrorCode.FirstChatGuidanceCompleted -> "Ya completaron las preguntas de esta conversaci\u00f3n."
     BackendErrorCode.ChatExitRequestNotFound -> "No encontramos esa solicitud de salida. Actualiza la conversacion."
     BackendErrorCode.ChatExitRequestNotAvailable -> "Esa solicitud de salida ya no esta disponible."
     BackendErrorCode.ChatExitRequestAlreadyPending -> "Ya hay una solicitud de salida pendiente."

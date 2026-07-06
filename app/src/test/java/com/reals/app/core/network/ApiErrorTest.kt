@@ -71,6 +71,9 @@ class ApiErrorTest {
             "CHAT_DECISION_ALREADY_SUBMITTED" to BackendErrorCode.ChatDecisionAlreadySubmitted,
             "CHAT_MIN_MESSAGES_REQUIRED" to BackendErrorCode.ChatMinMessagesRequired,
             "CHAT_MUTUAL_CANCELLATION_PENDING" to BackendErrorCode.ChatMutualCancellationPending,
+            "FIRST_CHAT_GUIDANCE_PARTICIPATION_REQUIRED" to BackendErrorCode.FirstChatGuidanceParticipationRequired,
+            "FIRST_CHAT_GUIDANCE_NEXT_ALREADY_REQUESTED" to BackendErrorCode.FirstChatGuidanceNextAlreadyRequested,
+            "FIRST_CHAT_GUIDANCE_COMPLETED" to BackendErrorCode.FirstChatGuidanceCompleted,
             "CHAT_EXIT_REQUEST_NOT_FOUND" to BackendErrorCode.ChatExitRequestNotFound,
             "CHAT_EXIT_REQUEST_NOT_AVAILABLE" to BackendErrorCode.ChatExitRequestNotAvailable,
             "CHAT_EXIT_REQUEST_ALREADY_PENDING" to BackendErrorCode.ChatExitRequestAlreadyPending,
@@ -96,6 +99,12 @@ class ApiErrorTest {
                 "Antes de decidir, envia al menos un poco mas de conversacion.",
             "CHAT_MUTUAL_CANCELLATION_PENDING" to
                 "Hay una solicitud de salida pendiente. Resolvela antes de decidir.",
+            "FIRST_CHAT_GUIDANCE_PARTICIPATION_REQUIRED" to
+                "Particip\u00e1 un poco m\u00e1s antes de pedir otra pregunta.",
+            "FIRST_CHAT_GUIDANCE_NEXT_ALREADY_REQUESTED" to
+                "Ya pediste cambiar esta pregunta.",
+            "FIRST_CHAT_GUIDANCE_COMPLETED" to
+                "Ya completaron las preguntas de esta conversaci\u00f3n.",
             "CHAT_EXIT_REQUEST_NOT_FOUND" to
                 "No encontramos esa solicitud de salida. Actualiza la conversacion.",
             "CHAT_EXIT_REQUEST_NOT_AVAILABLE" to

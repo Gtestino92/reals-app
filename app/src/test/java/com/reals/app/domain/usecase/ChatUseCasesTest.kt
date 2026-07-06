@@ -29,6 +29,15 @@ class ChatUseCasesTest {
     }
 
     @Test
+    fun `RequestNextFirstChatGuidanceQuestionUseCase delegates chat id`() = runBlocking {
+        val guidance = RequestNextFirstChatGuidanceQuestionUseCase(repository)("chat-1").successValue()
+
+        assertEquals("requestNextFirstChatGuidanceQuestion", api.calls.single())
+        assertEquals("chat-1", api.lastPathId)
+        assertEquals("Q027", guidance.question.id)
+    }
+
+    @Test
     fun `exit resolution use cases delegate ids`() = runBlocking {
         AcceptChatExitRequestUseCase(repository)("chat-1", "exit-1").successValue()
         RejectChatExitRequestUseCase(repository)("chat-1", "exit-2").successValue()

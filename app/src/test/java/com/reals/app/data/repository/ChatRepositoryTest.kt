@@ -72,6 +72,20 @@ class ChatRepositoryTest {
     }
 
     @Test
+    fun `requestNextFirstChatGuidanceQuestion posts without body and maps response`() = runBlocking {
+        api.firstChatGuidanceResponse = Response.success(
+            TestDtos.firstChatGuidance(questionId = "Q028", questionText = "Pregunta siguiente")
+        )
+
+        val guidance = repository.requestNextFirstChatGuidanceQuestion("chat-1").successValue()
+
+        assertEquals("requestNextFirstChatGuidanceQuestion", api.calls.single())
+        assertEquals("chat-1", api.lastPathId)
+        assertEquals("Q028", guidance.question.id)
+        assertEquals("Pregunta siguiente", guidance.question.text)
+    }
+
+    @Test
     fun `sendMessage failure surfaces chat backend code`() = runBlocking {
         api.chatMessageResponse = backendErrorResponse(
             statusCode = 400,

@@ -21,6 +21,7 @@ data class ChatResponseDto(
     val endedAt: String? = null,
     val readOnlyUntil: String? = null,
     val lastMessageAt: String? = null,
+    val guidance: FirstChatGuidanceResponseDto? = null,
 )
 
 @Serializable
@@ -28,6 +29,23 @@ data class ChatPartnerResponseDto(
     val userId: String,
     val profileId: String,
     val displayName: String,
+)
+
+@Serializable
+data class FirstChatGuidanceQuestionResponseDto(
+    val id: String,
+    val text: String,
+)
+
+@Serializable
+data class FirstChatGuidanceResponseDto(
+    val question: FirstChatGuidanceQuestionResponseDto,
+    val questionOrdinal: Int,
+    val maxQuestions: Int,
+    val requiredCharacters: Int,
+    val canRequestNext: Boolean,
+    val myNextRequested: Boolean,
+    val completed: Boolean,
 )
 
 @Serializable

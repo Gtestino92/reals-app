@@ -48,6 +48,7 @@ import com.reals.app.domain.usecase.RegisterPushTokenUseCase
 import com.reals.app.domain.usecase.ReorderProfilePhotosUseCase
 import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
+import com.reals.app.domain.usecase.RequestNextFirstChatGuidanceQuestionUseCase
 import com.reals.app.domain.usecase.SafetyCancelChatUseCase
 import com.reals.app.domain.usecase.SendChatMessageUseCase
 import com.reals.app.domain.usecase.SubmitChatDecisionUseCase
@@ -112,6 +113,7 @@ class AppContainer(context: Context) {
     val dismissSecondChatForConnectionUseCase = DismissSecondChatForConnectionUseCase(chatRepository)
     val getChatMessagesUseCase = GetChatMessagesUseCase(chatRepository)
     val sendChatMessageUseCase = SendChatMessageUseCase(chatRepository)
+    val requestNextFirstChatGuidanceQuestionUseCase = RequestNextFirstChatGuidanceQuestionUseCase(chatRepository)
     val getChatExitRequestsUseCase = GetChatExitRequestsUseCase(chatRepository)
     val requestMutualChatExitUseCase = RequestMutualChatExitUseCase(chatRepository)
     val acceptChatExitRequestUseCase = AcceptChatExitRequestUseCase(chatRepository)
@@ -163,6 +165,7 @@ class AppContainer(context: Context) {
             submitChatDecision = submitChatDecisionUseCase,
             getChatMessages = getChatMessagesUseCase,
             sendChatMessage = sendChatMessageUseCase,
+            requestNextFirstChatGuidanceQuestion = requestNextFirstChatGuidanceQuestionUseCase,
             getChatExitRequests = getChatExitRequestsUseCase,
             requestMutualChatExit = requestMutualChatExitUseCase,
             acceptChatExitRequest = acceptChatExitRequestUseCase,

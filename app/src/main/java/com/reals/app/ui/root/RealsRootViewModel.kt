@@ -7,7 +7,9 @@ import androidx.lifecycle.viewModelScope
 import com.reals.app.di.AppContainer
 import com.reals.app.di.RealsRootDependencies
 import com.reals.app.domain.model.ChatContinueDecision
+import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.CreateProfileInput
+import com.reals.app.domain.model.FirstChatGuidance
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.ProvisionedSession
@@ -539,7 +541,7 @@ class RealsRootViewModel(
 
     fun refreshFirstChat(silent: Boolean = false) {
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
-        if (current.refreshing || current.sending || current.actionLoading) return
+        if (current.refreshing || current.sending || current.actionLoading || current.guidanceActionLoading) return
         if (silent && silentFirstChatRefreshJob?.isActive == true) return
         if (current.chat == null) return openFirstChat(current.matchId, current.chatId)
 
@@ -556,13 +558,14 @@ class RealsRootViewModel(
             if (silent && (
                     latest.matchId != current.matchId ||
                         latest.sending ||
-                        latest.actionLoading
+                        latest.actionLoading ||
+                        latest.guidanceActionLoading
                     )
             ) {
                 return@launch
             }
             when (result) {
-                is FirstChatRefreshResult.Show -> _uiState.value = result.state
+                is FirstChatRefreshResult.Show -> _uiState.value = result.state.withFreshGuidanceFrom(latest)
                 is FirstChatRefreshResult.Reopen -> openFirstChat(result.matchId, result.chatId)
                 is FirstChatRefreshResult.Closed -> {
                     homeCoordinator.hideFirstChatLocally(current.matchId)
@@ -584,6 +587,19 @@ class RealsRootViewModel(
         }
         if (silent) {
             silentFirstChatRefreshJob = job
+        }
+    }
+
+    fun requestNextFirstChatGuidanceQuestion() {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        viewModelScope.launch {
+            applyFirstChatGuidanceActionResult(
+                result = firstChatCoordinator.requestNextGuidanceQuestion(
+                    current = current,
+                    onPending = { _uiState.value = it },
+                ),
+                original = current,
+            )
         }
     }
 
@@ -859,7 +875,10 @@ class RealsRootViewModel(
     private suspend fun applyFirstChatActionResult(result: FirstChatActionResult) {
         when (result) {
             FirstChatActionResult.Ignore -> Unit
-            is FirstChatActionResult.Show -> _uiState.value = result.state
+            is FirstChatActionResult.Show -> {
+                val latest = _uiState.value as? RealsRootUiState.FirstChat
+                _uiState.value = latest?.let { result.state.withFreshGuidanceFrom(it) } ?: result.state
+            }
             is FirstChatActionResult.ReturnHome -> {
                 result.hideFirstChatMatchId?.let(homeCoordinator::hideFirstChatLocally)
                 homeCoordinator.returnHome(
@@ -886,9 +905,35 @@ class RealsRootViewModel(
         }
     }
 
+    private suspend fun applyFirstChatGuidanceActionResult(
+        result: FirstChatActionResult,
+        original: RealsRootUiState.FirstChat,
+    ) {
+        if (result !is FirstChatActionResult.Show) {
+            applyFirstChatActionResult(result)
+            return
+        }
+
+        val latest = _uiState.value as? RealsRootUiState.FirstChat
+        if (latest == null || latest.matchId != original.matchId || latest.chatId != original.chatId) return
+
+        val returnedGuidance = result.state.chat?.guidance.takeIf { result.state.error == null }
+        _uiState.value = latest.copy(
+            chat = latest.chat?.let { chat ->
+                if (returnedGuidance != null) chat.copy(guidance = returnedGuidance) else chat
+            } ?: result.state.chat,
+            guidanceActionLoading = false,
+            error = result.state.error,
+            message = result.state.message,
+        )
+    }
+
     private suspend fun applyFirstChatSendResult(result: FirstChatSendResult) {
         when (result) {
-            is FirstChatSendResult.Show -> _uiState.value = result.state
+            is FirstChatSendResult.Show -> {
+                val latest = _uiState.value as? RealsRootUiState.FirstChat
+                _uiState.value = latest?.let { result.state.withFreshGuidanceFrom(it) } ?: result.state
+            }
             is FirstChatSendResult.ReturnHome -> {
                 homeCoordinator.hideFirstChatLocally(result.hideFirstChatMatchId)
                 homeCoordinator.returnHome(
@@ -945,6 +990,41 @@ class RealsRootViewModel(
             homeCoordinator.returnHome(session)
         }
     }
+}
+
+private fun RealsRootUiState.FirstChat.withFreshGuidanceFrom(
+    displayed: RealsRootUiState.FirstChat,
+): RealsRootUiState.FirstChat {
+    if (matchId != displayed.matchId || chatId != displayed.chatId) return this
+    return copy(chat = chat.withFreshGuidanceFrom(displayed.chat))
+}
+
+private fun Chat?.withFreshGuidanceFrom(displayed: Chat?): Chat? {
+    if (this == null || displayed == null || id != displayed.id) return this
+    return copy(guidance = guidance.freshOrDisplayed(displayed.guidance))
+}
+
+private fun FirstChatGuidance?.freshOrDisplayed(
+    displayed: FirstChatGuidance?,
+): FirstChatGuidance? {
+    if (displayed == null) return this
+    if (this == null) return displayed
+    if (questionOrdinal < displayed.questionOrdinal) return displayed
+    if (questionOrdinal > displayed.questionOrdinal) return this
+
+    val sameQuestion = question.id == displayed.question.id
+    if (sameQuestion && displayed.completed && !completed) return displayed
+    if (
+        sameQuestion &&
+        displayed.myNextRequested &&
+        !myNextRequested &&
+        !displayed.completed &&
+        !completed
+    ) {
+        return displayed
+    }
+
+    return this
 }
 
 class RealsRootViewModelFactory(

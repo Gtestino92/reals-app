@@ -7,6 +7,7 @@ import com.reals.app.domain.model.ChatExitOutcome
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.FirstChatGuidance
 
 class GetChatUseCase(
     private val chatRepository: ChatRepository,
@@ -41,6 +42,13 @@ class SendChatMessageUseCase(
 ) {
     suspend operator fun invoke(chatId: String, content: String): ApiResult<ChatMessage> =
         chatRepository.sendMessage(chatId, content)
+}
+
+class RequestNextFirstChatGuidanceQuestionUseCase(
+    private val chatRepository: ChatRepository,
+) {
+    suspend operator fun invoke(chatId: String): ApiResult<FirstChatGuidance> =
+        chatRepository.requestNextFirstChatGuidanceQuestion(chatId)
 }
 
 class GetChatExitRequestsUseCase(

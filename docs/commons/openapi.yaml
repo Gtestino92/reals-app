@@ -319,21 +319,6 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/PhotoResponse'
-              example:
-                - id: 11111111-1111-1111-1111-111111111111
-                  url: https://storage.example/profile/photo-1.jpg
-                  position: 1
-                  isPersonPhoto: true
-                  isFullBody: false
-                  validationStatus: VALIDATED
-                  moderationStatus: APPROVED
-                - id: 22222222-2222-2222-2222-222222222222
-                  url: https://storage.example/profile/photo-2.jpg
-                  position: 4
-                  isPersonPhoto: true
-                  isFullBody: true
-                  validationStatus: VALIDATED
-                  moderationStatus: APPROVED
         '400':
           $ref: '#/components/responses/BadRequest'
         '404':
@@ -575,6 +560,24 @@ paths:
           $ref: '#/components/responses/ChatNotFound'
         '409':
           $ref: '#/components/responses/ChatAvailabilityConflict'
+  /api/chats/{chatId}/guidance/next-request:
+    post:
+      tags: [Chats]
+      summary: Request next first-chat guidance question
+      description: Authenticated first-chat participant requests advancement from the current guided question. The request has no body. The question advances only after both participants have independently requested it and each requester has met the configured participation threshold for the active question interval. Partner request/readiness metadata is never returned.
+      parameters:
+        - $ref: '#/components/parameters/ChatId'
+      responses:
+        '200':
+          description: Current user-scoped first-chat guidance state after applying the request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FirstChatGuidanceResponse'
+        '404':
+          $ref: '#/components/responses/ChatNotFound'
+        '409':
+          $ref: '#/components/responses/FirstChatGuidanceConflict'
   /api/chats/{chatId}/exit-requests:
     post:
       tags: [Chats]
@@ -1189,7 +1192,7 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     ChatMessageInvalid:
-      description: 'Invalid chat message or chat-action text. Stable code: CHAT_MESSAGE_INVALID.'
+      description: Invalid chat message or chat-action text. Stable code: `CHAT_MESSAGE_INVALID`.
       content:
         application/json:
           schema:
@@ -1199,7 +1202,7 @@ components:
             error: Bad Request
             message: Chat message is invalid
     ChatNotFound:
-      description: 'Chat not found. Stable code: CHAT_NOT_FOUND.'
+      description: Chat not found. Stable code: `CHAT_NOT_FOUND`.
       content:
         application/json:
           schema:
@@ -1225,6 +1228,33 @@ components:
                 code: CHAT_EXPIRED
                 error: Conflict
                 message: Chat has expired
+    FirstChatGuidanceConflict:
+      description: First-chat guidance cannot be advanced in the current state.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            participationRequired:
+              value:
+                code: FIRST_CHAT_GUIDANCE_PARTICIPATION_REQUIRED
+                error: Conflict
+                message: Minimum participation is required before requesting another question
+            alreadyRequested:
+              value:
+                code: FIRST_CHAT_GUIDANCE_NEXT_ALREADY_REQUESTED
+                error: Conflict
+                message: Next question has already been requested
+            completed:
+              value:
+                code: FIRST_CHAT_GUIDANCE_COMPLETED
+                error: Conflict
+                message: First-chat guidance is completed
+            chatNotAvailable:
+              value:
+                code: CHAT_NOT_AVAILABLE
+                error: Conflict
+                message: Chat is not available
     ChatDecisionConflict:
       description: First-chat continuation decision is not currently available.
       content:
@@ -1314,7 +1344,7 @@ components:
                 error: Conflict
                 message: Chat exit request is not available
     SchedulingInvalidProposals:
-      description: 'Invalid scheduling proposal list. Stable code: SCHEDULING_INVALID_PROPOSALS.'
+      description: Invalid scheduling proposal list. Stable code: `SCHEDULING_INVALID_PROPOSALS`.
       content:
         application/json:
           schema:
@@ -1336,7 +1366,7 @@ components:
                 error: Not Found
                 message: Scheduling negotiation was not found
     SchedulingProposalNotFound:
-      description: 'Scheduling proposal not found. Stable code: SCHEDULING_PROPOSAL_NOT_AVAILABLE.'
+      description: Scheduling proposal not found. Stable code: `SCHEDULING_PROPOSAL_NOT_AVAILABLE`.
       content:
         application/json:
           schema:
@@ -1705,12 +1735,6 @@ components:
     ReorderProfilePhotosRequest:
       type: object
       required: [placements]
-      example:
-        placements:
-          - photoId: 11111111-1111-1111-1111-111111111111
-            position: 1
-          - photoId: 22222222-2222-2222-2222-222222222222
-            position: 4
       properties:
         placements:
           type: array
@@ -1885,6 +1909,49 @@ components:
             partner: { $ref: '#/components/schemas/PartnerSummaryResponse' }
             myDecision: { $ref: '#/components/schemas/ChatParticipantDecisionStatus' }
             partnerDecision: { $ref: '#/components/schemas/ChatParticipantDecisionStatus' }
+            guidance:
+              allOf:
+                - $ref: '#/components/schemas/FirstChatGuidanceResponse'
+              nullable: true
+              description: Nullable for legacy first-chat rows created before guidance existed. New first chats initialize guidance.
+    FirstChatGuidanceQuestionResponse:
+      type: object
+      required: [id, text]
+      properties:
+        id: { type: string }
+        text: { type: string }
+    FirstChatGuidanceResponse:
+      type: object
+      required:
+        - question
+        - questionOrdinal
+        - maxQuestions
+        - requiredCharacters
+        - canRequestNext
+        - myNextRequested
+        - completed
+      properties:
+        question:
+          $ref: '#/components/schemas/FirstChatGuidanceQuestionResponse'
+        questionOrdinal:
+          type: integer
+          minimum: 1
+          maximum: 3
+        maxQuestions:
+          type: integer
+          example: 3
+        requiredCharacters:
+          type: integer
+          example: 40
+        canRequestNext:
+          type: boolean
+          description: Eligibility for the authenticated user only.
+        myNextRequested:
+          type: boolean
+          description: Whether the authenticated user has requested continuation for the current question.
+        completed:
+          type: boolean
+          description: True when the final configured guidance question is active. The final question remains returned as `question`, and no further next-request action is available.
     SendMessageRequest:
       type: object
       required: [content]
