@@ -5,5 +5,4 @@ data class UpdateProfileInput(
     val bio: String?,
     val city: String,
     val country: String,
-    val intention: String,
 )

@@ -73,7 +73,7 @@ internal fun GenderPreferenceSelector(
     }
 }
 
-private fun genderPreferenceSummary(selected: Set<String>): String {
+internal fun genderPreferenceSummary(selected: Set<String>): String {
     val ordered = GenderPreferenceOptions.filter { it in selected }
     return if (ordered.size == GenderPreferenceOptions.size) {
         "Todos"

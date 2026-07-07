@@ -8,5 +8,4 @@ data class UpdateProfileRequestDto(
     val bio: String? = null,
     val city: String? = null,
     val country: String? = null,
-    val intention: String? = null,
 )

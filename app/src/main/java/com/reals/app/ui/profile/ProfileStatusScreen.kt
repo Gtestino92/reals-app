@@ -73,7 +73,6 @@ import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
 import com.reals.app.ui.common.userDescription
-import com.reals.app.ui.common.userLabel
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.ProfileSnapshot
@@ -158,12 +157,12 @@ fun ProfileStatusScreen(
         verticalArrangement = Arrangement.Center,
     ) {
         Text(
-            text = if (onBackHome == null) "Estado de Reals" else "Perfil y filtros",
+            text = if (onBackHome == null) "Estado de Reals" else "Perfil y preferencias",
             style = MaterialTheme.typography.headlineLarge,
             color = MaterialTheme.colorScheme.primary,
         )
         Text(
-            text = "Gestiona tu perfil, tus fotos y tus preferencias.",
+            text = "Gestioná tu perfil, tus preferencias y tus fotos.",
             modifier = Modifier.padding(top = 8.dp),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -318,6 +317,86 @@ private fun ProfileCard(
             emailVerificationSending ||
             emailVerificationChecking
 
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        ProfileDetailsCard(
+            profile = profile,
+            loading = profileUpdateLoading,
+            busy = busy,
+            error = profileUpdateError,
+            message = profileUpdateMessage,
+            expanded = expandedSection == ProfileSection.Profile,
+            onToggleExpanded = {
+                expandedSection = if (expandedSection == ProfileSection.Profile) null else ProfileSection.Profile
+            },
+            onUpdateProfile = onUpdateProfile,
+        )
+        MatchPreferencesCard(
+            profile = profile,
+            loading = matchFiltersLoading,
+            busy = busy,
+            error = matchFiltersError,
+            message = matchFiltersMessage,
+            expanded = expandedSection == ProfileSection.Filters,
+            onToggleExpanded = {
+                expandedSection = if (expandedSection == ProfileSection.Filters) null else ProfileSection.Filters
+            },
+            onUpdateMatchFilters = onUpdateMatchFilters,
+        )
+        PhotosCard(
+            profile = profile,
+            photosLoading = photosLoading,
+            photos = photos,
+            photosError = photosError,
+            photoActionLoading = photoActionLoading,
+            photoActionError = photoActionError,
+            photoActionMessage = photoActionMessage,
+            photoReorderLoading = photoReorderLoading,
+            photoReorderError = photoReorderError,
+            photoReorderMessage = photoReorderMessage,
+            activationLoading = activationLoading,
+            activationError = activationError,
+            emailVerificationSending = emailVerificationSending,
+            emailVerificationChecking = emailVerificationChecking,
+            emailVerificationMessage = emailVerificationMessage,
+            emailVerificationError = emailVerificationError,
+            emailVerificationRequired = emailVerificationRequired,
+            emailVerificationLocallyVerified = emailVerificationLocallyVerified,
+            resendEmailVerificationAvailableAtMillis = resendEmailVerificationAvailableAtMillis,
+            checkEmailVerificationAvailableAtMillis = checkEmailVerificationAvailableAtMillis,
+            busy = busy,
+            expanded = expandedSection == ProfileSection.Photos,
+            onToggleExpanded = {
+                expandedSection = if (expandedSection == ProfileSection.Photos) null else ProfileSection.Photos
+            },
+            onLoadPhotos = onLoadPhotos,
+            onAddPhotoFile = onAddPhotoFile,
+            onReplacePhotoFile = onReplacePhotoFile,
+            onDeletePhoto = onDeletePhoto,
+            onMovePhoto = onMovePhoto,
+            onActivateProfile = onActivateProfile,
+            onResendEmailVerification = onResendEmailVerification,
+            onCheckEmailVerification = onCheckEmailVerification,
+        )
+    }
+}
+
+private enum class ProfileSection {
+    Profile,
+    Filters,
+    Photos,
+}
+
+@Composable
+private fun ProfileDetailsCard(
+    profile: Profile,
+    loading: Boolean,
+    busy: Boolean,
+    error: ApiError?,
+    message: String?,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    onUpdateProfile: (UpdateProfileInput) -> Unit,
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
@@ -326,15 +405,18 @@ private fun ProfileCard(
             modifier = Modifier.padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(text = TextSafety.safeDisplay(profile.displayName, maxLength = 100), style = MaterialTheme.typography.titleLarge)
-            Text("Estado: ${profile.status.userLabel()}")
+            Text("Tu perfil", style = MaterialTheme.typography.titleLarge)
             Text(
-                "Edad: ${profile.age}. Ubicacion: ${
-                    TextSafety.safeDisplay(profile.city, maxLength = 100)
-                }, ${TextSafety.safeDisplay(profile.country, maxLength = 100)}"
+                text = TextSafety.safeDisplay(profile.displayName, maxLength = 100),
+                style = MaterialTheme.typography.titleMedium,
             )
-            Text("Fotos: ${profile.photoCount}. Identidad verificada: ${yesNo(profile.identityVerified)}")
-            Text("Filtros: ${profile.preferredMinAge}-${profile.preferredMaxAge} anos, ${profile.maxDistanceKm} km")
+            Text(
+                text = "${profile.age} años · ${
+                    TextSafety.safeDisplay(profile.city, maxLength = 100)
+                }, ${TextSafety.safeDisplay(profile.country, maxLength = 100)}",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+            )
             profile.bio?.takeIf { it.isNotBlank() }?.let {
                 Text(TextSafety.safeDisplay(it, maxLength = 1_000))
             }
@@ -345,27 +427,111 @@ private fun ProfileCard(
             )
             ProfileEditActions(
                 profile = profile,
-                loading = profileUpdateLoading,
+                loading = loading,
                 busy = busy,
-                error = profileUpdateError,
-                message = profileUpdateMessage,
-                expanded = expandedSection == ProfileSection.Profile,
-                onToggleExpanded = {
-                    expandedSection = if (expandedSection == ProfileSection.Profile) null else ProfileSection.Profile
-                },
+                error = error,
+                message = message,
+                expanded = expanded,
+                onToggleExpanded = onToggleExpanded,
                 onUpdateProfile = onUpdateProfile,
+            )
+        }
+    }
+}
+
+@Composable
+private fun MatchPreferencesCard(
+    profile: Profile,
+    loading: Boolean,
+    busy: Boolean,
+    error: ApiError?,
+    message: String?,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    onUpdateMatchFilters: (UpdateMatchFiltersInput) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text("Preferencias de match", style = MaterialTheme.typography.titleLarge)
+            Text(profile.intention.intentionLabel(), style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = genderPreferenceSummary(profile.lookingForGenders),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text = "${profile.preferredMinAge}–${profile.preferredMaxAge} años · hasta ${profile.maxDistanceKm} km",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
             )
             MatchFiltersActions(
                 profile = profile,
-                loading = matchFiltersLoading,
+                loading = loading,
                 busy = busy,
-                error = matchFiltersError,
-                message = matchFiltersMessage,
-                expanded = expandedSection == ProfileSection.Filters,
-                onToggleExpanded = {
-                    expandedSection = if (expandedSection == ProfileSection.Filters) null else ProfileSection.Filters
-                },
+                error = error,
+                message = message,
+                expanded = expanded,
+                onToggleExpanded = onToggleExpanded,
                 onUpdateMatchFilters = onUpdateMatchFilters,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PhotosCard(
+    profile: Profile,
+    photosLoading: Boolean,
+    photos: List<ProfilePhoto>,
+    photosError: ApiError?,
+    photoActionLoading: Boolean,
+    photoActionError: ApiError?,
+    photoActionMessage: String?,
+    photoReorderLoading: Boolean,
+    photoReorderError: ApiError?,
+    photoReorderMessage: String?,
+    activationLoading: Boolean,
+    activationError: ApiError?,
+    emailVerificationSending: Boolean,
+    emailVerificationChecking: Boolean,
+    emailVerificationMessage: String?,
+    emailVerificationError: String?,
+    emailVerificationRequired: Boolean,
+    emailVerificationLocallyVerified: Boolean,
+    resendEmailVerificationAvailableAtMillis: Long?,
+    checkEmailVerificationAvailableAtMillis: Long?,
+    busy: Boolean,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    onLoadPhotos: () -> Unit,
+    onAddPhotoFile: (position: Int, fileUri: Uri) -> Unit,
+    onReplacePhotoFile: (photoId: String, position: Int, fileUri: Uri) -> Unit,
+    onDeletePhoto: (photoId: String, position: Int) -> Unit,
+    onMovePhoto: (photoId: String, targetPosition: Int) -> Unit,
+    onActivateProfile: (Profile) -> Unit,
+    onResendEmailVerification: () -> Unit,
+    onCheckEmailVerification: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text("Fotos", style = MaterialTheme.typography.titleLarge)
+            Text("${profile.photoCount} de 9 fotos", style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = "Identidad verificada: ${yesNo(profile.identityVerified)}",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
             )
             PhotoManagerActions(
                 profile = profile,
@@ -389,10 +555,8 @@ private fun ProfileCard(
                 resendEmailVerificationAvailableAtMillis = resendEmailVerificationAvailableAtMillis,
                 checkEmailVerificationAvailableAtMillis = checkEmailVerificationAvailableAtMillis,
                 busy = busy,
-                expanded = expandedSection == ProfileSection.Photos,
-                onToggleExpanded = {
-                    expandedSection = if (expandedSection == ProfileSection.Photos) null else ProfileSection.Photos
-                },
+                expanded = expanded,
+                onToggleExpanded = onToggleExpanded,
                 onLoadPhotos = onLoadPhotos,
                 onAddPhotoFile = onAddPhotoFile,
                 onReplacePhotoFile = onReplacePhotoFile,
@@ -404,12 +568,6 @@ private fun ProfileCard(
             )
         }
     }
-}
-
-private enum class ProfileSection {
-    Profile,
-    Filters,
-    Photos,
 }
 
 @Composable
@@ -427,7 +585,6 @@ private fun ProfileEditActions(
     var bio by rememberSaveable(profile.id, profile.bio) { mutableStateOf(profile.bio.orEmpty()) }
     var city by rememberSaveable(profile.id, profile.city) { mutableStateOf(profile.city) }
     var country by rememberSaveable(profile.id, profile.country) { mutableStateOf(profile.country) }
-    var intention by rememberSaveable(profile.id, profile.intention) { mutableStateOf(profile.intention) }
     var localError by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
 
     Column(modifier = Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -436,7 +593,7 @@ private fun ProfileEditActions(
         }
         if (expanded) {
             Text(
-                text = "Campos editables: nombre, bio, ciudad, pais e intencion.",
+                text = "Campos editables: nombre, bio, ciudad y pais.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -444,20 +601,12 @@ private fun ProfileEditActions(
             OutlinedTextField(bio, { bio = it.take(1_000) }, label = { Text("Bio") }, enabled = !loading, minLines = 3, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(city, { city = it.take(100) }, label = { Text("Ciudad") }, enabled = !loading, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(country, { country = it.take(100) }, label = { Text("Pais") }, enabled = !loading, singleLine = true, modifier = Modifier.fillMaxWidth())
-            EnumDropdown(
-                label = "Intención",
-                value = intention,
-                options = listOf("DATE", "FRIENDSHIP", "CASUAL"),
-                enabled = !loading,
-                optionLabel = { it.intentionLabel() },
-                onValueChange = { intention = it },
-            )
             localError?.let { ErrorFeedback("Revisa los datos", it) }
             error?.let { ApiErrorFeedbackCard(it, ErrorContext.ProfileUpdate) }
             message?.let { SuccessFeedback(it) }
             Button(
                 onClick = {
-                    val input = validateUpdateProfileInput(displayName, bio, city, country, intention)
+                    val input = validateUpdateProfileInput(displayName, bio, city, country)
                     if (input == null) {
                         localError = "Revisa nombre, ciudad, pais y bio. No uses etiquetas o formato HTML."
                     } else {
@@ -486,6 +635,9 @@ private fun MatchFiltersActions(
     onUpdateMatchFilters: (UpdateMatchFiltersInput) -> Unit,
 ) {
     val profileGenderPreferenceKey = profile.lookingForGenders.sorted().joinToString("|")
+    var intention by rememberSaveable(profile.id, profile.intention) {
+        mutableStateOf(profile.intention)
+    }
     var lookingForGenders by rememberSaveable(
         profile.id,
         profileGenderPreferenceKey,
@@ -506,13 +658,21 @@ private fun MatchFiltersActions(
 
     Column(modifier = Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         OutlinedButton(onClick = onToggleExpanded, enabled = !loading && !busy, modifier = Modifier.fillMaxWidth()) {
-            Text(if (expanded) "Ocultar filtros" else "Editar filtros de match")
+            Text(if (expanded) "Ocultar preferencias" else "Editar preferencias")
         }
         if (expanded) {
             Text(
                 text = "Estas preferencias nos ayudan a encontrar personas compatibles para vos.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
+            )
+            EnumDropdown(
+                label = "Intención",
+                value = intention,
+                options = listOf("DATE", "FRIENDSHIP", "CASUAL"),
+                enabled = !loading,
+                optionLabel = { it.intentionLabel() },
+                onValueChange = { intention = it },
             )
             GenderPreferenceSelector(
                 selected = lookingForGenders,
@@ -525,12 +685,12 @@ private fun MatchFiltersActions(
                 NumberField(maxAge, { maxAge = it }, "Edad max", !loading, Modifier.weight(1f))
             }
             NumberField(distance, { distance = it }, "Distancia maxima km", !loading, Modifier.fillMaxWidth())
-            localError?.let { ErrorFeedback("Revisa los filtros", it) }
+            localError?.let { ErrorFeedback("Revisá las preferencias", it) }
             error?.let { ApiErrorFeedbackCard(it, ErrorContext.MatchFilters) }
             message?.let { SuccessFeedback(it) }
             Button(
                 onClick = {
-                    val input = validateMatchFiltersInput(lookingForGenders, minAge, maxAge, distance)
+                    val input = validateMatchFiltersInput(intention, lookingForGenders, minAge, maxAge, distance)
                     if (input == null) {
                         localError = "Elegí al menos una preferencia. Edades entre 18 y 99, min <= max, distancia entre 1 y 1000."
                     } else {
@@ -541,7 +701,7 @@ private fun MatchFiltersActions(
                 enabled = !loading,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (loading) "Guardando filtros..." else "Guardar filtros")
+                Text(if (loading) "Guardando preferencias..." else "Guardar preferencias")
             }
         }
     }
@@ -1296,7 +1456,6 @@ private fun validateUpdateProfileInput(
     bio: String,
     city: String,
     country: String,
-    intention: String,
 ): UpdateProfileInput? {
     val cleanDisplayName = TextSafety.normalizeSingleLine(displayName, maxLength = 100)
     val cleanBio = TextSafety.normalizeMultiline(bio, maxLength = 1_000)
@@ -1311,18 +1470,17 @@ private fun validateUpdateProfileInput(
     if (TextSafety.containsHtmlLikeMarkup(cleanBio)) return null
     if (TextSafety.containsHtmlLikeMarkup(cleanCity)) return null
     if (TextSafety.containsHtmlLikeMarkup(cleanCountry)) return null
-    if (intention !in listOf("DATE", "FRIENDSHIP", "CASUAL")) return null
 
     return UpdateProfileInput(
         displayName = cleanDisplayName,
         bio = cleanBio.ifBlank { null },
         city = cleanCity,
         country = cleanCountry,
-        intention = intention,
     )
 }
 
 private fun validateMatchFiltersInput(
+    intention: String,
     lookingForGenders: Set<String>,
     minAge: String,
     maxAge: String,
@@ -1331,11 +1489,13 @@ private fun validateMatchFiltersInput(
     val parsedMin = minAge.toIntOrNull()
     val parsedMax = maxAge.toIntOrNull()
     val parsedDistance = distance.toIntOrNull()
+    if (intention !in listOf("DATE", "FRIENDSHIP", "CASUAL")) return null
     if (!isValidGenderPreferenceSet(lookingForGenders)) return null
     if (parsedMin == null || parsedMax == null || parsedDistance == null) return null
     if (parsedMin !in 18..99 || parsedMax !in 18..99 || parsedMin > parsedMax) return null
     if (parsedDistance !in 1..1000) return null
     return UpdateMatchFiltersInput(
+        intention = intention,
         lookingForGenders = lookingForGenders,
         preferredMinAge = parsedMin,
         preferredMaxAge = parsedMax,
@@ -1343,7 +1503,7 @@ private fun validateMatchFiltersInput(
     )
 }
 
-private fun yesNo(value: Boolean): String = if (value) "si" else "no"
+private fun yesNo(value: Boolean): String = if (value) "Sí" else "No"
 
 private fun ApiError?.isEmailNotVerified(): Boolean =
     this is ApiError.Backend &&

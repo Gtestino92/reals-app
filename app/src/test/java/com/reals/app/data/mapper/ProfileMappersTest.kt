@@ -54,25 +54,25 @@ class ProfileMappersTest {
             bio = "Bio",
             city = "CABA",
             country = "AR",
-            intention = "SERIOUS",
         ).toDto()
 
         assertEquals("Alex", dto.displayName)
         assertEquals("Bio", dto.bio)
         assertEquals("CABA", dto.city)
         assertEquals("AR", dto.country)
-        assertEquals("SERIOUS", dto.intention)
     }
 
     @Test
     fun `UpdateMatchFiltersInput maps filters`() {
         val dto = UpdateMatchFiltersInput(
+            intention = "DATE",
             lookingForGenders = setOf("FEMALE", "NON_BINARY"),
             preferredMinAge = 25,
             preferredMaxAge = 35,
             maxDistanceKm = 12,
         ).toDto()
 
+        assertEquals("DATE", dto.intention)
         assertEquals(setOf("FEMALE", "NON_BINARY"), dto.lookingForGenders)
         assertEquals(25, dto.preferredMinAge)
         assertEquals(35, dto.preferredMaxAge)
