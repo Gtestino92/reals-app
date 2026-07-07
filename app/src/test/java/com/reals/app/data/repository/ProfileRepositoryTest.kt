@@ -54,8 +54,8 @@ class ProfileRepositoryTest {
             CreateProfileInput(
                 displayName = "Alex",
                 birthDate = "1998-01-01",
-                gender = "WOMAN",
-                lookingForGender = "MAN",
+                gender = "FEMALE",
+                lookingForGenders = setOf("MALE"),
                 intention = "SERIOUS",
                 city = "Buenos Aires",
                 country = "AR",
@@ -76,7 +76,6 @@ class ProfileRepositoryTest {
                 city = "CABA",
                 country = "AR",
                 intention = "CASUAL",
-                lookingForGender = "WOMAN",
             )
         ).successValue()
 
@@ -88,12 +87,14 @@ class ProfileRepositoryTest {
     fun `update match filters sends DTO`() = runBlocking {
         repository.updateMyMatchFilters(
             UpdateMatchFiltersInput(
+                lookingForGenders = setOf("FEMALE"),
                 preferredMinAge = 24,
                 preferredMaxAge = 36,
                 maxDistanceKm = 20,
             )
         ).successValue()
 
+        assertEquals(setOf("FEMALE"), api.updateFiltersBody?.lookingForGenders)
         assertEquals(24, api.updateFiltersBody?.preferredMinAge)
         assertEquals(36, api.updateFiltersBody?.preferredMaxAge)
         assertEquals(20, api.updateFiltersBody?.maxDistanceKm)

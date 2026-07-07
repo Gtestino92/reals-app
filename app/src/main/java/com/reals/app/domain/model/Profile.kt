@@ -9,7 +9,7 @@ data class Profile(
     val identityVerified: Boolean,
     val identityVerificationStatus: String?,
     val gender: String,
-    val lookingForGender: String,
+    val lookingForGenders: Set<String>,
     val intention: String,
     val city: String,
     val country: String,

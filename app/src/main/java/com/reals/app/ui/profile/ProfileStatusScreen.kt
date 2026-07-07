@@ -28,7 +28,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -424,12 +423,11 @@ private fun ProfileEditActions(
     onToggleExpanded: () -> Unit,
     onUpdateProfile: (UpdateProfileInput) -> Unit,
 ) {
-    var displayName by rememberSaveable(profile.id) { mutableStateOf(profile.displayName) }
-    var bio by rememberSaveable(profile.id) { mutableStateOf(profile.bio.orEmpty()) }
-    var city by rememberSaveable(profile.id) { mutableStateOf(profile.city) }
-    var country by rememberSaveable(profile.id) { mutableStateOf(profile.country) }
-    var intention by rememberSaveable(profile.id) { mutableStateOf(profile.intention) }
-    var lookingForGender by rememberSaveable(profile.id) { mutableStateOf(profile.lookingForGender) }
+    var displayName by rememberSaveable(profile.id, profile.displayName) { mutableStateOf(profile.displayName) }
+    var bio by rememberSaveable(profile.id, profile.bio) { mutableStateOf(profile.bio.orEmpty()) }
+    var city by rememberSaveable(profile.id, profile.city) { mutableStateOf(profile.city) }
+    var country by rememberSaveable(profile.id, profile.country) { mutableStateOf(profile.country) }
+    var intention by rememberSaveable(profile.id, profile.intention) { mutableStateOf(profile.intention) }
     var localError by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
 
     Column(modifier = Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -438,7 +436,7 @@ private fun ProfileEditActions(
         }
         if (expanded) {
             Text(
-                text = "Campos editables: nombre, bio, ciudad, pais, intencion y busqueda.",
+                text = "Campos editables: nombre, bio, ciudad, pais e intencion.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -446,14 +444,20 @@ private fun ProfileEditActions(
             OutlinedTextField(bio, { bio = it.take(1_000) }, label = { Text("Bio") }, enabled = !loading, minLines = 3, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(city, { city = it.take(100) }, label = { Text("Ciudad") }, enabled = !loading, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(country, { country = it.take(100) }, label = { Text("Pais") }, enabled = !loading, singleLine = true, modifier = Modifier.fillMaxWidth())
-            EnumDropdown("Intencion", intention, listOf("DATE", "FRIENDSHIP", "CASUAL"), !loading) { intention = it }
-            EnumDropdown("Busco", lookingForGender, listOf("MEN", "WOMEN", "EVERYONE", "OTHER"), !loading) { lookingForGender = it }
+            EnumDropdown(
+                label = "Intención",
+                value = intention,
+                options = listOf("DATE", "FRIENDSHIP", "CASUAL"),
+                enabled = !loading,
+                optionLabel = { it.intentionLabel() },
+                onValueChange = { intention = it },
+            )
             localError?.let { ErrorFeedback("Revisa los datos", it) }
             error?.let { ApiErrorFeedbackCard(it, ErrorContext.ProfileUpdate) }
             message?.let { SuccessFeedback(it) }
             Button(
                 onClick = {
-                    val input = validateUpdateProfileInput(displayName, bio, city, country, intention, lookingForGender)
+                    val input = validateUpdateProfileInput(displayName, bio, city, country, intention)
                     if (input == null) {
                         localError = "Revisa nombre, ciudad, pais y bio. No uses etiquetas o formato HTML."
                     } else {
@@ -481,9 +485,23 @@ private fun MatchFiltersActions(
     onToggleExpanded: () -> Unit,
     onUpdateMatchFilters: (UpdateMatchFiltersInput) -> Unit,
 ) {
-    var minAge by rememberSaveable(profile.id) { mutableStateOf(profile.preferredMinAge.toString()) }
-    var maxAge by rememberSaveable(profile.id) { mutableStateOf(profile.preferredMaxAge.toString()) }
-    var distance by rememberSaveable(profile.id) { mutableStateOf(profile.maxDistanceKm.toString()) }
+    val profileGenderPreferenceKey = profile.lookingForGenders.sorted().joinToString("|")
+    var lookingForGenders by rememberSaveable(
+        profile.id,
+        profileGenderPreferenceKey,
+        saver = GenderPreferenceStateSaver,
+    ) {
+        mutableStateOf(profile.lookingForGenders)
+    }
+    var minAge by rememberSaveable(profile.id, profile.preferredMinAge) {
+        mutableStateOf(profile.preferredMinAge.toString())
+    }
+    var maxAge by rememberSaveable(profile.id, profile.preferredMaxAge) {
+        mutableStateOf(profile.preferredMaxAge.toString())
+    }
+    var distance by rememberSaveable(profile.id, profile.maxDistanceKm) {
+        mutableStateOf(profile.maxDistanceKm.toString())
+    }
     var localError by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
 
     Column(modifier = Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -496,6 +514,12 @@ private fun MatchFiltersActions(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
+            GenderPreferenceSelector(
+                selected = lookingForGenders,
+                enabled = !loading,
+                onSelectionChange = { lookingForGenders = it },
+                label = "Me interesa conocer",
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 NumberField(minAge, { minAge = it }, "Edad min", !loading, Modifier.weight(1f))
                 NumberField(maxAge, { maxAge = it }, "Edad max", !loading, Modifier.weight(1f))
@@ -506,9 +530,9 @@ private fun MatchFiltersActions(
             message?.let { SuccessFeedback(it) }
             Button(
                 onClick = {
-                    val input = validateMatchFiltersInput(minAge, maxAge, distance)
+                    val input = validateMatchFiltersInput(lookingForGenders, minAge, maxAge, distance)
                     if (input == null) {
-                        localError = "Edades deben estar entre 18 y 99, min <= max, distancia entre 1 y 1000."
+                        localError = "Elegí al menos una preferencia. Edades entre 18 y 99, min <= max, distancia entre 1 y 1000."
                     } else {
                         localError = null
                         onUpdateMatchFilters(input)
@@ -1245,17 +1269,18 @@ private fun EnumDropdown(
     value: String,
     options: List<String>,
     enabled: Boolean,
+    optionLabel: (String) -> String = { it },
     onValueChange: (String) -> Unit,
 ) {
     var expanded by rememberSaveable(label, value) { mutableStateOf(false) }
     Column {
         OutlinedButton(onClick = { expanded = true }, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
-            Text("$label: $value")
+            Text("$label: ${optionLabel(value)}")
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             options.forEach { option ->
                 DropdownMenuItem(
-                    text = { Text(option) },
+                    text = { Text(optionLabel(option)) },
                     onClick = {
                         onValueChange(option)
                         expanded = false
@@ -1272,7 +1297,6 @@ private fun validateUpdateProfileInput(
     city: String,
     country: String,
     intention: String,
-    lookingForGender: String,
 ): UpdateProfileInput? {
     val cleanDisplayName = TextSafety.normalizeSingleLine(displayName, maxLength = 100)
     val cleanBio = TextSafety.normalizeMultiline(bio, maxLength = 1_000)
@@ -1288,7 +1312,6 @@ private fun validateUpdateProfileInput(
     if (TextSafety.containsHtmlLikeMarkup(cleanCity)) return null
     if (TextSafety.containsHtmlLikeMarkup(cleanCountry)) return null
     if (intention !in listOf("DATE", "FRIENDSHIP", "CASUAL")) return null
-    if (lookingForGender !in listOf("MEN", "WOMEN", "EVERYONE", "OTHER")) return null
 
     return UpdateProfileInput(
         displayName = cleanDisplayName,
@@ -1296,11 +1319,11 @@ private fun validateUpdateProfileInput(
         city = cleanCity,
         country = cleanCountry,
         intention = intention,
-        lookingForGender = lookingForGender,
     )
 }
 
 private fun validateMatchFiltersInput(
+    lookingForGenders: Set<String>,
     minAge: String,
     maxAge: String,
     distance: String,
@@ -1308,10 +1331,12 @@ private fun validateMatchFiltersInput(
     val parsedMin = minAge.toIntOrNull()
     val parsedMax = maxAge.toIntOrNull()
     val parsedDistance = distance.toIntOrNull()
+    if (!isValidGenderPreferenceSet(lookingForGenders)) return null
     if (parsedMin == null || parsedMax == null || parsedDistance == null) return null
     if (parsedMin !in 18..99 || parsedMax !in 18..99 || parsedMin > parsedMax) return null
     if (parsedDistance !in 1..1000) return null
     return UpdateMatchFiltersInput(
+        lookingForGenders = lookingForGenders,
         preferredMinAge = parsedMin,
         preferredMaxAge = parsedMax,
         maxDistanceKm = parsedDistance,
