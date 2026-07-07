@@ -4,7 +4,7 @@ data class CreateProfileInput(
     val displayName: String,
     val birthDate: String,
     val gender: String,
-    val lookingForGender: String,
+    val lookingForGenders: Set<String>,
     val intention: String,
     val city: String,
     val country: String,

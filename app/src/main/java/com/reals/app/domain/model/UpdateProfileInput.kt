@@ -6,5 +6,4 @@ data class UpdateProfileInput(
     val city: String,
     val country: String,
     val intention: String,
-    val lookingForGender: String,
 )

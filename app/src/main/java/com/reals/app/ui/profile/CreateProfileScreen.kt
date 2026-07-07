@@ -55,7 +55,7 @@ fun CreateProfileScreen(
     var displayName by rememberSaveable { mutableStateOf("") }
     var birthDate by rememberSaveable { mutableStateOf("1995-01-01") }
     var gender by rememberSaveable { mutableStateOf("MALE") }
-    var lookingForGender by rememberSaveable { mutableStateOf("WOMEN") }
+    var lookingForGenders by rememberSaveable(saver = GenderPreferenceStateSaver) { mutableStateOf(setOf("FEMALE")) }
     var intention by rememberSaveable { mutableStateOf("DATE") }
     var city by rememberSaveable { mutableStateOf("") }
     var country by rememberSaveable { mutableStateOf("") }
@@ -119,24 +119,24 @@ fun CreateProfileScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 EnumDropdown(
-                    label = "Genero",
+                    label = "Género",
                     value = gender,
                     options = listOf("MALE", "FEMALE", "NON_BINARY", "OTHER"),
                     enabled = !busy,
+                    optionLabel = { it.genderIdentityLabel() },
                     onValueChange = { gender = it },
                 )
-                EnumDropdown(
-                    label = "Busco",
-                    value = lookingForGender,
-                    options = listOf("MEN", "WOMEN", "EVERYONE", "OTHER"),
+                GenderPreferenceSelector(
+                    selected = lookingForGenders,
                     enabled = !busy,
-                    onValueChange = { lookingForGender = it },
+                    onSelectionChange = { lookingForGenders = it },
                 )
                 EnumDropdown(
-                    label = "Intencion",
+                    label = "Intención",
                     value = intention,
                     options = listOf("DATE", "FRIENDSHIP", "CASUAL"),
                     enabled = !busy,
+                    optionLabel = { it.intentionLabel() },
                     onValueChange = { intention = it },
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -208,7 +208,7 @@ fun CreateProfileScreen(
                             displayName = displayName,
                             birthDate = birthDate,
                             gender = gender,
-                            lookingForGender = lookingForGender,
+                            lookingForGenders = lookingForGenders,
                             intention = intention,
                             city = city,
                             country = country,
@@ -218,7 +218,7 @@ fun CreateProfileScreen(
                             maxDistanceKm = maxDistanceKm,
                         )
                         if (input == null) {
-                            localError = "Revisa los campos. No uses etiquetas o formato HTML; nombre, fecha, ciudad, pais, edades y distancia son requeridos."
+                            localError = "Revisa los campos. No uses etiquetas o formato HTML; nombre, fecha, ciudad, pais, busqueda, edades y distancia son requeridos."
                         } else {
                             localError = null
                             onSubmit(input)
@@ -249,6 +249,7 @@ private fun EnumDropdown(
     value: String,
     options: List<String>,
     enabled: Boolean,
+    optionLabel: (String) -> String = { it },
     onValueChange: (String) -> Unit,
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
@@ -258,7 +259,7 @@ private fun EnumDropdown(
             enabled = enabled,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("$label: $value")
+            Text("$label: ${optionLabel(value)}")
         }
         DropdownMenu(
             expanded = expanded,
@@ -266,7 +267,7 @@ private fun EnumDropdown(
         ) {
             options.forEach { option ->
                 DropdownMenuItem(
-                    text = { Text(option) },
+                    text = { Text(optionLabel(option)) },
                     onClick = {
                         onValueChange(option)
                         expanded = false
@@ -300,7 +301,7 @@ private fun validateProfileInput(
     displayName: String,
     birthDate: String,
     gender: String,
-    lookingForGender: String,
+    lookingForGenders: Set<String>,
     intention: String,
     city: String,
     country: String,
@@ -330,12 +331,13 @@ private fun validateProfileInput(
     if (minAge == null || maxAge == null || distance == null) return null
     if (minAge !in 18..99 || maxAge !in 18..99 || minAge > maxAge) return null
     if (distance !in 1..1000) return null
+    if (!isValidGenderPreferenceSet(lookingForGenders)) return null
 
     return CreateProfileInput(
         displayName = cleanDisplayName,
         birthDate = cleanBirthDate,
         gender = gender,
-        lookingForGender = lookingForGender,
+        lookingForGenders = lookingForGenders,
         intention = intention,
         city = cleanCity,
         country = cleanCountry,

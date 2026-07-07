@@ -9,5 +9,4 @@ data class UpdateProfileRequestDto(
     val city: String? = null,
     val country: String? = null,
     val intention: String? = null,
-    val lookingForGender: String? = null,
 )
