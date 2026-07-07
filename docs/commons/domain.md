@@ -11,6 +11,7 @@ The domain is state-driven and anonymous-first. Business transitions are validat
 - `Match`
 - `Chat`
 - `ChatMessage`
+- `FirstChatGuidance`
 - `ChatDecision`
 - `ChatExitRequest`
 - `SafetyReport`
@@ -46,7 +47,7 @@ Matching and chat:
 - `ChatExitRequestType`: `MUTUAL_CANCEL`, `UNILATERAL_CANCEL`, `SAFETY_REPORT`
 - `ChatExitRequestStatus`: `PENDING`, `ACCEPTED`, `REJECTED`, `TIMED_OUT`
 - `ChatExitReason`: `NO_LONGER_INTERESTED`, `INAPPROPRIATE_BEHAVIOR`, `HARASSMENT`, `OTHER`
-- `SafetyReportStatus`: `PENDING`, `DISMISSED`, `CONFIRMED`
+- `SafetyReportStatus`: `PENDING`, `DISMISSED`, `DISMISSED_ABUSIVE_OR_UNJUSTIFIED`, `CONFIRMED`
 - `SafetyReportReason`: `INAPPROPRIATE_BEHAVIOR`, `HARASSMENT`, `OTHER`
 - `SafetyReportContextType`: `CHAT`, `VISUAL_PROFILE`, `PERSONAL_MESSAGE`, `PROFILE_PHOTO`, `USER`
 - `SafetyReportSource`: `USER`, `ADMIN`, `SYSTEM`
@@ -93,6 +94,7 @@ Push notifications:
 - A `Profile` has many `ProfilePhoto` records.
 - A `Match` has `userAId` and `userBId`.
 - A `Chat` belongs to a `Match`; `SECOND_CHAT` also has `connectionId`.
+- `FirstChatGuidance` belongs to one `FIRST_CHAT` through a unique `chatId`. It stores the active question id/text snapshot, ordinal, activation timestamp, per-participant next-question request timestamps and optional completion timestamp. It does not store message counters or the full selected sequence.
 - `ChatDecision` belongs to a chat and match.
 - `ChatExitRequest` records mutual cancellation requests, unilateral cancellations and safety-report chat closures.
 - `SafetyReport` is the moderation source of truth for reported safety incidents. It stores an explicit source, context type and context id; chat safety cancellation uses `CHAT` with the chat id, visual profile and personal message reports use the match id, profile photo reports use the photo id, and admin-only general user reports use `USER` with the reported user id.
@@ -143,6 +145,7 @@ Chats can end through approval/normal completion, timeout, inactivity abandonmen
 - `SafetyReportContextType.USER` is admin-only for now. User-facing `POST /api/safety/reports` rejects it.
 - Creating a safety report also captures a `SafetyReportEvidenceSnapshot` and records a `SAFETY_REPORT_CREATED` audit event. Evidence capture uses message content only as hash input and does not persist a second copy of message text.
 - Dismissing or confirming a safety report records `SAFETY_REPORT_DISMISSED` or `SAFETY_REPORT_CONFIRMED`; audit metadata excludes report details, verdict notes and penalty reasons.
+- Dismissing a report as `DISMISSED_ABUSIVE_OR_UNJUSTIFIED` creates no safety penalty. If user reliability is enabled and the report has a user reporter, it records the internal `SAFETY_REPORT_DETERMINED_ABUSIVE` reliability event against the reporter.
 - `ChatStatus` remains the operational state; `ChatEndReason` records why a chat ended.
 - Temporary penalties have `PenaltyType.TEMPORARY_BAN` and a non-null `expiresAt`; the penalty expiration job deactivates them after expiry.
 - Permanent penalties have `PenaltyType.PERMANENT_BAN`, `expiresAt = null` and are never expired by the job.

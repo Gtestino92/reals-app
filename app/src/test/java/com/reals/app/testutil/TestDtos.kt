@@ -6,6 +6,8 @@ import com.reals.app.data.dto.ChatMessageResponseDto
 import com.reals.app.data.dto.ChatPartnerResponseDto
 import com.reals.app.data.dto.ChatResponseDto
 import com.reals.app.data.dto.ConnectionResponseDto
+import com.reals.app.data.dto.FirstChatGuidanceQuestionResponseDto
+import com.reals.app.data.dto.FirstChatGuidanceResponseDto
 import com.reals.app.data.dto.HomeActiveInteractionsSummaryResponseDto
 import com.reals.app.data.dto.HomeChatResponseDto
 import com.reals.app.data.dto.HomeMatchmakingResponseDto
@@ -103,6 +105,7 @@ object TestDtos {
         status: String = "ACTIVE",
         myDecision: String? = "PENDING",
         partnerDecision: String? = "PENDING",
+        guidance: FirstChatGuidanceResponseDto? = null,
     ) = ChatResponseDto(
         id = "chat-1",
         matchId = "match-1",
@@ -120,6 +123,29 @@ object TestDtos {
         partnerDecision = partnerDecision,
         endedAt = null,
         lastMessageAt = now,
+        guidance = guidance,
+    )
+
+    fun firstChatGuidance(
+        questionId: String = "Q027",
+        questionText: String = "Que cosa pequena te mejora mucho el dia?",
+        questionOrdinal: Int = 1,
+        maxQuestions: Int = 3,
+        requiredCharacters: Int = 40,
+        canRequestNext: Boolean = true,
+        myNextRequested: Boolean = false,
+        completed: Boolean = false,
+    ) = FirstChatGuidanceResponseDto(
+        question = FirstChatGuidanceQuestionResponseDto(
+            id = questionId,
+            text = questionText,
+        ),
+        questionOrdinal = questionOrdinal,
+        maxQuestions = maxQuestions,
+        requiredCharacters = requiredCharacters,
+        canRequestNext = canRequestNext,
+        myNextRequested = myNextRequested,
+        completed = completed,
     )
 
     fun chatMessage(id: String = "message-1") = ChatMessageResponseDto(

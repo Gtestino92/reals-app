@@ -105,6 +105,7 @@ sealed interface RealsRootUiState {
         val sending: Boolean = false,
         val actionLoading: Boolean = false,
         val actionLoadingLabel: String? = null,
+        val guidanceActionLoading: Boolean = false,
         val error: ApiError? = null,
         val message: String? = null,
     ) : RealsRootUiState
