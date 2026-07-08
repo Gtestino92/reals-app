@@ -1,6 +1,9 @@
 package com.reals.app.ui.root
 
 import android.content.ContextWrapper
+import com.reals.app.core.network.ApiError
+import com.reals.app.data.mapper.toDomain
+import com.reals.app.data.repository.AuthOperationResult
 import com.reals.app.data.repository.ChatRepository
 import com.reals.app.data.repository.FirebaseAuthRepository
 import com.reals.app.data.repository.LegalRepository
@@ -9,7 +12,6 @@ import com.reals.app.data.repository.MatchmakingRepository
 import com.reals.app.data.repository.MeRepository
 import com.reals.app.data.repository.ProfileRepository
 import com.reals.app.data.repository.SchedulingRepository
-import com.reals.app.data.mapper.toDomain
 import com.reals.app.di.AccountFeatureDependencies
 import com.reals.app.di.FirstChatFeatureDependencies
 import com.reals.app.di.HomeFeatureDependencies
@@ -19,6 +21,9 @@ import com.reals.app.di.RealsRootDependencies
 import com.reals.app.di.SchedulingFeatureDependencies
 import com.reals.app.di.SessionFeatureDependencies
 import com.reals.app.di.VisualApprovalFeatureDependencies
+import com.reals.app.domain.model.SearchLocationInput
+import com.reals.app.domain.model.LegalDocumentAction
+import com.reals.app.domain.model.LegalDocumentType
 import com.reals.app.domain.usecase.AcceptChatExitRequestUseCase
 import com.reals.app.domain.usecase.AcceptSchedulingProposalUseCase
 import com.reals.app.domain.usecase.ActivateProfileUseCase
@@ -50,14 +55,14 @@ import com.reals.app.domain.usecase.LeaveQueueUseCase
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
 import com.reals.app.domain.usecase.PutMyPersonalMessageUseCase
 import com.reals.app.domain.usecase.ReactivateAccountUseCase
-import com.reals.app.domain.usecase.RegisterPushTokenUseCase
 import com.reals.app.domain.usecase.RejectChatExitRequestUseCase
 import com.reals.app.domain.usecase.RejectSchedulingRoundUseCase
+import com.reals.app.domain.usecase.RecordLegalDocumentActionUseCase
+import com.reals.app.domain.usecase.RegisterPushTokenUseCase
 import com.reals.app.domain.usecase.ReorderProfilePhotosUseCase
 import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
 import com.reals.app.domain.usecase.RequestNextFirstChatGuidanceQuestionUseCase
-import com.reals.app.domain.usecase.RecordLegalDocumentActionUseCase
 import com.reals.app.domain.usecase.SafetyCancelChatUseCase
 import com.reals.app.domain.usecase.SendChatMessageUseCase
 import com.reals.app.domain.usecase.SubmitChatDecisionUseCase
@@ -73,9 +78,8 @@ import com.reals.app.testutil.TestDomain
 import com.reals.app.testutil.TestDtos
 import com.reals.app.testutil.testApiExecutor
 import com.reals.app.testutil.testJson
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -85,11 +89,14 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import retrofit2.Response
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class RealsRootViewModelPollingGuardTest {
+class RealsRootViewModelLegalRoutingTest {
     private val dispatcher = StandardTestDispatcher()
 
     @Before
@@ -103,100 +110,187 @@ class RealsRootViewModelPollingGuardTest {
     }
 
     @Test
-    fun `silent first chat refresh ignores overlapping call`() = runTest(dispatcher) {
-        val gate = CompletableDeferred<Unit>()
-        val firstCallStarted = CompletableDeferred<Unit>()
+    fun `unsatisfied bootstrap can be deferred without recording legal actions`() = runTest(dispatcher) {
         val api = FakeRealsApi().apply {
-            beforeGetFirstChatForMatchResponse = {
-                firstCallStarted.complete(Unit)
-                gate.await()
-            }
+            configureUnsatisfiedLegal()
+            homeResponse = Response.success(emptyHome())
         }
         val viewModel = viewModel(api)
-        viewModel.setState(firstChatState())
-
-        viewModel.refreshFirstChat(silent = true)
-        runCurrent()
-        firstCallStarted.await()
-
-        viewModel.refreshFirstChat(silent = true)
         runCurrent()
 
-        assertEquals(1, api.calls.count { it == "getFirstChatForMatch" })
-
-        gate.complete(Unit)
+        viewModel.signIn("user@example.com", "password")
         advanceUntilIdle()
 
-        viewModel.refreshFirstChat(silent = true)
-        runCurrent()
+        assertTrue(viewModel.uiState.value is RealsRootUiState.LegalRequirements)
 
-        assertEquals(2, api.calls.count { it == "getFirstChatForMatch" })
+        viewModel.deferLegalRequirements()
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value is RealsRootUiState.Ready)
+        assertEquals(0, api.calls.count { it == "recordMyLegalDocumentAction" })
     }
 
     @Test
-    fun `silent second chat refresh ignores overlapping call`() = runTest(dispatcher) {
-        val gate = CompletableDeferred<Unit>()
-        val firstCallStarted = CompletableDeferred<Unit>()
-        val api = FakeRealsApi().apply {
-            beforeGetChatResponse = {
-                firstCallStarted.complete(Unit)
-                gate.await()
-            }
-        }
+    fun `existing first chat is restored after reactive legal rejection and defer`() = runTest(dispatcher) {
+        val api = FakeRealsApi().apply { configureUnsatisfiedLegal() }
         val viewModel = viewModel(api)
-        viewModel.setState(secondChatState())
-
-        viewModel.refreshSecondChat(silent = true)
         runCurrent()
-        firstCallStarted.await()
+        val message = TestDtos.chatMessage("message-42").toDomain()
+        val optimistic = newOptimisticOutgoingMessage(
+            chatId = "chat-42",
+            senderId = "user-1",
+            content = "mensaje pendiente",
+            localId = "local-42",
+        ).copy(deliveryState = OutgoingMessageDeliveryState.Failed)
+        val firstChat = RealsRootUiState.FirstChat(
+            session = TestDomain.session(),
+            matchId = "match-42",
+            chatId = "chat-42",
+            messages = listOf(message),
+            optimisticMessages = listOf(optimistic),
+            error = legalActionRequiredError(),
+        )
 
-        viewModel.refreshSecondChat(silent = true)
-        runCurrent()
-
-        assertEquals(1, api.calls.count { it == "getChat" })
-
-        gate.complete(Unit)
+        viewModel.setState(firstChat)
         advanceUntilIdle()
 
-        viewModel.refreshSecondChat(silent = true)
-        runCurrent()
+        assertTrue(viewModel.uiState.value is RealsRootUiState.LegalRequirements)
 
-        assertEquals(2, api.calls.count { it == "getChat" })
+        viewModel.deferLegalRequirements()
+        advanceUntilIdle()
+
+        val restored = viewModel.uiState.value as RealsRootUiState.FirstChat
+        assertEquals("match-42", restored.matchId)
+        assertEquals("chat-42", restored.chatId)
+        assertEquals(listOf(message), restored.messages)
+        assertEquals(listOf(optimistic), restored.optimisticMessages)
+        assertNull(restored.error)
+        assertEquals(0, api.calls.count { it == "sendChatMessage" })
+        assertEquals(0, api.calls.count { it == "submitChatDecision" })
     }
 
     @Test
-    fun `silent scheduling refresh ignores overlapping call while non silent still starts`() = runTest(dispatcher) {
-        val gate = CompletableDeferred<Unit>()
-        val firstCallStarted = CompletableDeferred<Unit>()
+    fun `post reactivation defer uses normal session entry without enqueueing matchmaking`() = runTest(dispatcher) {
         val api = FakeRealsApi().apply {
-            beforeGetConnectionNegotiationResponse = {
-                firstCallStarted.complete(Unit)
-                gate.await()
-            }
+            configureUnsatisfiedLegal()
+            homeResponse = Response.success(emptyHome())
         }
         val viewModel = viewModel(api)
-        viewModel.setState(schedulingState())
-
-        viewModel.refreshScheduling(silent = true)
         runCurrent()
-        firstCallStarted.await()
-
-        viewModel.refreshScheduling(silent = true)
-        runCurrent()
-
-        assertEquals(1, api.calls.count { it == "getConnectionNegotiation" })
-
-        viewModel.refreshScheduling(silent = false)
-        runCurrent()
-
-        assertEquals(2, api.calls.count { it == "getConnectionNegotiation" })
-
-        gate.complete(Unit)
+        viewModel.setState(RealsRootUiState.Ready(TestDomain.session()))
+        viewModel.enqueueMatchmaking(SearchLocationInput(-34.6, -58.4, 20))
         advanceUntilIdle()
+        val enqueueCallsBeforeReactivation = api.calls.count { it == "enqueueMatchmaking" }
+
+        viewModel.setState(
+            RealsRootUiState.AccountDeletionPending(
+                user = TestDtos.user(status = "DELETED").toDomain(),
+            )
+        )
+        viewModel.reactivateAccount()
+        advanceUntilIdle()
+
+        val legal = viewModel.uiState.value as RealsRootUiState.LegalRequirements
+        assertTrue(legal.resumeContext is LegalResumeContext.PostReactivation)
+
+        viewModel.deferLegalRequirements()
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value is RealsRootUiState.Ready)
+        assertEquals(enqueueCallsBeforeReactivation, api.calls.count { it == "enqueueMatchmaking" })
     }
+
+    @Test
+    fun `unrelated backend error does not route to legal requirements`() = runTest(dispatcher) {
+        val viewModel = viewModel(FakeRealsApi())
+        runCurrent()
+
+        viewModel.setState(
+            RealsRootUiState.FirstChat(
+                session = TestDomain.session(),
+                matchId = "match-1",
+                chatId = "chat-1",
+                error = ApiError.Backend(
+                    statusCode = 409,
+                    code = "CHAT_DECISION_NOT_AVAILABLE",
+                    error = "Conflict",
+                    message = "decision unavailable",
+                ),
+            )
+        )
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value is RealsRootUiState.FirstChat)
+    }
+
+    @Test
+    fun `defer is ignored while legal requirements are busy`() = runTest(dispatcher) {
+        val viewModel = viewModel(FakeRealsApi())
+        runCurrent()
+
+        val loadingState = legalRequirements(loading = true)
+        viewModel.setState(loadingState)
+        viewModel.deferLegalRequirements()
+        advanceUntilIdle()
+
+        assertEquals(loadingState, viewModel.uiState.value)
+
+        val submittingState = legalRequirements(submittingDocumentType = LegalDocumentType.TermsOfUse)
+        viewModel.setState(submittingState)
+        viewModel.deferLegalRequirements()
+        advanceUntilIdle()
+
+        assertEquals(submittingState, viewModel.uiState.value)
+    }
+
+    private fun FakeRealsApi.configureUnsatisfiedLegal() {
+        legalStatusResponse = Response.success(
+            TestDtos.legalStatus(
+                requirementsSatisfied = false,
+                documents = listOf(TestDtos.legalDocumentStatus()),
+            )
+        )
+        currentLegalDocumentsResponse = Response.success(
+            TestDtos.currentLegalDocuments(listOf(TestDtos.currentLegalDocument()))
+        )
+    }
+
+    private fun emptyHome() = TestDtos.home().copy(
+        pendingActions = emptyList(),
+        nextSteps = emptyList(),
+        passiveNotices = emptyList(),
+    )
+
+    private fun legalActionRequiredError(): ApiError.Backend = ApiError.Backend(
+        statusCode = 409,
+        code = "LEGAL_ACTION_REQUIRED",
+        error = "Conflict",
+        message = "legal action required",
+    )
+
+    private fun legalRequirements(
+        loading: Boolean = false,
+        submittingDocumentType: LegalDocumentType? = null,
+    ): RealsRootUiState.LegalRequirements = RealsRootUiState.LegalRequirements(
+        session = TestDomain.session(),
+        resumeContext = LegalResumeContext.PostSession,
+        loading = loading,
+        submittingDocumentType = submittingDocumentType,
+        documents = listOf(
+            LegalRequirementUiItem(
+                type = LegalDocumentType.TermsOfUse,
+                version = "2026-07-01",
+                url = "https://example.test/terms",
+                requiredAction = LegalDocumentAction.Accepted,
+                recordedAction = null,
+                actedAt = null,
+                satisfied = false,
+            )
+        ),
+    )
 
     private fun viewModel(api: FakeRealsApi): RealsRootViewModel =
-        RealsRootViewModel(rootDependencies(api), autoRefreshSession = false)
+        RealsRootViewModel(rootDependencies(FakeFirebaseAuthRepository(), api), autoRefreshSession = false)
 
     private fun RealsRootViewModel.setState(state: RealsRootUiState) {
         val field = RealsRootViewModel::class.java.getDeclaredField("_uiState")
@@ -206,39 +300,13 @@ class RealsRootViewModelPollingGuardTest {
         stateFlow.value = state
     }
 
-    private fun firstChatState(): RealsRootUiState.FirstChat =
-        RealsRootUiState.FirstChat(
-            session = TestDomain.session(),
-            matchId = "match-1",
-            chatId = "chat-1",
-            match = TestDtos.match("CHAT_ACTIVE").toDomain(),
-            chat = TestDtos.chat(status = "ACTIVE").copy(id = "chat-1").toDomain(),
-        )
-
-    private fun secondChatState(): RealsRootUiState.SecondChat =
-        RealsRootUiState.SecondChat(
-            session = TestDomain.session(),
-            connectionId = "connection-1",
-            matchId = "match-1",
-            partnerName = "Alex",
-            chatId = "chat-1",
-            chat = TestDtos.chat(status = "ACTIVE").copy(id = "chat-1", chatType = "SECOND_CHAT").toDomain(),
-        )
-
-    private fun schedulingState(): RealsRootUiState.Scheduling =
-        RealsRootUiState.Scheduling(
-            session = TestDomain.session(),
-            connectionId = "connection-1",
-            matchId = "match-1",
-            partnerName = "Alex",
-            negotiation = TestDtos.negotiation("PENDING").toDomain(),
-        )
-
-    private fun rootDependencies(api: FakeRealsApi): RealsRootDependencies {
+    private fun rootDependencies(
+        authRepository: FirebaseAuthRepository,
+        api: FakeRealsApi,
+    ): RealsRootDependencies {
         val context = ContextWrapper(null)
         val tokenProvider = FakeAuthTokenProvider()
         val apiExecutor = testApiExecutor()
-        val authRepository = FirebaseAuthRepository(context)
         val meRepository = MeRepository(api, tokenProvider, apiExecutor)
         val profileRepository = ProfileRepository(context, api, tokenProvider, apiExecutor)
         val matchmakingRepository = MatchmakingRepository(api, tokenProvider, apiExecutor)
@@ -315,5 +383,10 @@ class RealsRootViewModelPollingGuardTest {
                 rejectRound = RejectSchedulingRoundUseCase(schedulingRepository),
             ),
         )
+    }
+
+    private class FakeFirebaseAuthRepository : FirebaseAuthRepository(ContextWrapper(null)) {
+        override suspend fun signIn(email: String, password: String): AuthOperationResult =
+            AuthOperationResult.Success
     }
 }

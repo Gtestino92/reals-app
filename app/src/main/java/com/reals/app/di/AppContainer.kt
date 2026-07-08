@@ -7,6 +7,7 @@ import com.reals.app.core.network.ApiExecutor
 import com.reals.app.data.api.RealsApiClient
 import com.reals.app.data.repository.FirebaseAuthRepository
 import com.reals.app.data.repository.ChatRepository
+import com.reals.app.data.repository.LegalRepository
 import com.reals.app.data.repository.MatchRepository
 import com.reals.app.data.repository.MatchmakingRepository
 import com.reals.app.data.repository.MeRepository
@@ -25,10 +26,12 @@ import com.reals.app.domain.usecase.EnqueueMatchmakingUseCase
 import com.reals.app.domain.usecase.GetChatExitRequestsUseCase
 import com.reals.app.domain.usecase.GetChatMessagesUseCase
 import com.reals.app.domain.usecase.GetChatUseCase
+import com.reals.app.domain.usecase.GetCurrentLegalDocumentsUseCase
 import com.reals.app.domain.usecase.GetFirstChatForMatchUseCase
 import com.reals.app.domain.usecase.GetHomePendingUseCase
 import com.reals.app.domain.usecase.GetHomeStatusUseCase
 import com.reals.app.domain.usecase.GetHomeUseCase
+import com.reals.app.domain.usecase.GetLegalStatusUseCase
 import com.reals.app.domain.usecase.GetMatchUseCase
 import com.reals.app.domain.usecase.GetMeUseCase
 import com.reals.app.domain.usecase.GetPartnerPersonalMessageUseCase
@@ -49,6 +52,7 @@ import com.reals.app.domain.usecase.ReorderProfilePhotosUseCase
 import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
 import com.reals.app.domain.usecase.RequestNextFirstChatGuidanceQuestionUseCase
+import com.reals.app.domain.usecase.RecordLegalDocumentActionUseCase
 import com.reals.app.domain.usecase.SafetyCancelChatUseCase
 import com.reals.app.domain.usecase.SendChatMessageUseCase
 import com.reals.app.domain.usecase.SubmitChatDecisionUseCase
@@ -77,6 +81,7 @@ class AppContainer(context: Context) {
     private val matchRepository = MatchRepository(api, tokenProvider, apiExecutor)
     private val chatRepository = ChatRepository(api, json, tokenProvider, apiExecutor)
     private val schedulingRepository = SchedulingRepository(api, tokenProvider, apiExecutor)
+    private val legalRepository = LegalRepository(api, tokenProvider, apiExecutor)
     val provisionAndLoadProfileUseCase = ProvisionAndLoadProfileUseCase(
         meRepository = meRepository,
         profileRepository = profileRepository,
@@ -98,6 +103,9 @@ class AppContainer(context: Context) {
     val activateProfileUseCase = ActivateProfileUseCase(profileRepository)
     val reactivateAccountUseCase = ReactivateAccountUseCase(meRepository)
     val deleteAccountUseCase = DeleteAccountUseCase(meRepository, authRepository)
+    val getCurrentLegalDocumentsUseCase = GetCurrentLegalDocumentsUseCase(legalRepository)
+    val getLegalStatusUseCase = GetLegalStatusUseCase(legalRepository)
+    val recordLegalDocumentActionUseCase = RecordLegalDocumentActionUseCase(legalRepository)
     val enqueueMatchmakingUseCase = EnqueueMatchmakingUseCase(matchmakingRepository)
     val getQueueStatusUseCase = GetQueueStatusUseCase(matchmakingRepository)
     val leaveQueueUseCase = LeaveQueueUseCase(matchmakingRepository)
@@ -137,6 +145,11 @@ class AppContainer(context: Context) {
         account = AccountFeatureDependencies(
             reactivateAccount = reactivateAccountUseCase,
             deleteAccount = deleteAccountUseCase,
+        ),
+        legal = LegalFeatureDependencies(
+            getCurrentDocuments = getCurrentLegalDocumentsUseCase,
+            getStatus = getLegalStatusUseCase,
+            recordAction = recordLegalDocumentActionUseCase,
         ),
         profile = ProfileFeatureDependencies(
             createProfile = createProfileUseCase,

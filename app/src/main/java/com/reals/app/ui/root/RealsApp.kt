@@ -33,6 +33,7 @@ import com.reals.app.ui.chat.VisualApprovalScreen
 import com.reals.app.ui.common.ApiErrorScreen
 import com.reals.app.ui.common.FullScreenMessage
 import com.reals.app.ui.common.formatBackendDate
+import com.reals.app.ui.legal.LegalRequirementsScreen
 import com.reals.app.ui.matchmaking.MatchmakingHomeScreen
 import com.reals.app.ui.profile.CreateProfileScreen
 import com.reals.app.ui.profile.ProfileActivationResultScreen
@@ -109,6 +110,20 @@ fun RealsApp(
                 error = current.error,
                 onReactivate = viewModel::reactivateAccount,
                 onKeepDeletion = viewModel::signOut,
+            )
+
+            is RealsRootUiState.LegalRequirements -> LegalRequirementsScreen(
+                documents = current.documents,
+                loading = current.loading,
+                submittingDocumentType = current.submittingDocumentType,
+                error = current.error,
+                accountDeleteLoading = current.deletingAccount,
+                accountDeleteError = current.accountDeleteError,
+                onRecordRequiredAction = viewModel::recordLegalDocumentAction,
+                onRetryLoad = viewModel::retryLegalRequirements,
+                onDefer = viewModel::deferLegalRequirements,
+                onSignOut = viewModel::signOut,
+                onDeleteAccount = viewModel::deleteAccount,
             )
 
             is RealsRootUiState.Ready -> when (current.session.profileSnapshot) {

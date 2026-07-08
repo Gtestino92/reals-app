@@ -1,11 +1,14 @@
 package com.reals.app.ui.root
 
 import com.reals.app.core.network.ApiError
+import com.reals.app.core.network.isLegalActionRequired
 import com.reals.app.domain.model.BackendUser
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.HomeState
+import com.reals.app.domain.model.LegalDocumentAction
+import com.reals.app.domain.model.LegalDocumentType
 import com.reals.app.domain.model.Match
 import com.reals.app.domain.model.ProfileActivationResult
 import com.reals.app.domain.model.ProfilePhoto
@@ -40,6 +43,18 @@ sealed interface RealsRootUiState {
         val user: BackendUser,
         val reactivating: Boolean = false,
         val error: ApiError? = null,
+    ) : RealsRootUiState
+
+    data class LegalRequirements(
+        val session: ProvisionedSession,
+        val resumeContext: LegalResumeContext,
+        val requirementsSatisfied: Boolean = false,
+        val documents: List<LegalRequirementUiItem> = emptyList(),
+        val loading: Boolean = false,
+        val submittingDocumentType: LegalDocumentType? = null,
+        val error: ApiError? = null,
+        val deletingAccount: Boolean = false,
+        val accountDeleteError: ApiError? = null,
     ) : RealsRootUiState
 
     data class Ready(
@@ -246,6 +261,33 @@ data class AccountUiState(
     val changePasswordMessage: String? = null,
 )
 
+sealed interface LegalResumeContext {
+    data object PostSession : LegalResumeContext
+    data object PostReactivation : LegalResumeContext
+
+    data class ExistingState(
+        val state: RealsRootUiState,
+    ) : LegalResumeContext {
+        init {
+            require(state !is RealsRootUiState.LegalRequirements) {
+                "Legal resume state cannot itself be LegalRequirements."
+            }
+        }
+    }
+}
+
+data class LegalRequirementUiItem(
+    val type: LegalDocumentType,
+    val version: String,
+    val url: String,
+    val requiredAction: LegalDocumentAction,
+    val recordedAction: LegalDocumentAction?,
+    val actedAt: String?,
+    val satisfied: Boolean,
+) {
+    val key: String get() = "${type.rawValue}:$version"
+}
+
 enum class OutgoingMessageDeliveryState {
     Sending,
     Failed,
@@ -310,6 +352,40 @@ fun RealsRootUiState.Ready.clearProfileFeedback(): RealsRootUiState.Ready = copy
     ),
 )
 
+fun RealsRootUiState.clearLegalActionRequiredForResume(): RealsRootUiState = when (this) {
+    is RealsRootUiState.Ready -> copy(
+        profileOp = profileOp.copy(
+            profileCreateError = profileOp.profileCreateError.takeUnless { it.isLegalActionRequired() },
+            profileUpdateError = profileOp.profileUpdateError.takeUnless { it.isLegalActionRequired() },
+            matchFiltersError = profileOp.matchFiltersError.takeUnless { it.isLegalActionRequired() },
+            profileActivationError = profileOp.profileActivationError.takeUnless { it.isLegalActionRequired() },
+        ),
+        photos = photos.copy(
+            photoReorderError = photos.photoReorderError.takeUnless { it.isLegalActionRequired() },
+            photoActionError = photos.photoActionError.takeUnless { it.isLegalActionRequired() },
+        ),
+        home = home.copy(
+            homeLoading = if (home.homeError.isLegalActionRequired()) false else home.homeLoading,
+            homeError = home.homeError.takeUnless { it.isLegalActionRequired() },
+            matchmakingBlockedReason =
+                home.matchmakingBlockedReason.takeUnless { it.isLegalActionRequired() },
+            matchmakingSearchPhase = if (home.homeError.isLegalActionRequired()) {
+                MatchmakingSearchUiPhase.Idle
+            } else {
+                home.matchmakingSearchPhase
+            },
+        ),
+    )
+
+    is RealsRootUiState.FirstChat -> copy(error = error.takeUnless { it.isLegalActionRequired() })
+    is RealsRootUiState.SecondChat -> copy(error = error.takeUnless { it.isLegalActionRequired() })
+    is RealsRootUiState.VisualApproval -> copy(error = error.takeUnless { it.isLegalActionRequired() })
+    is RealsRootUiState.Scheduling -> copy(error = error.takeUnless { it.isLegalActionRequired() })
+    else -> this
+}
+
+private fun ApiError?.isLegalActionRequired(): Boolean = this?.isLegalActionRequired() == true
+
 fun RealsRootUiState.canHandleSystemBack(): Boolean = when (this) {
     is RealsRootUiState.Ready -> {
         val profile = (session.profileSnapshot as? ProfileSnapshot.Found)?.profile
@@ -329,6 +405,7 @@ fun RealsRootUiState.canHandleSystemBack(): Boolean = when (this) {
     is RealsRootUiState.LoadingSession,
     is RealsRootUiState.AccountDeletionScheduled,
     is RealsRootUiState.AccountDeletionPending,
+    is RealsRootUiState.LegalRequirements,
     is RealsRootUiState.FirstChat,
     is RealsRootUiState.Failure -> false
 }

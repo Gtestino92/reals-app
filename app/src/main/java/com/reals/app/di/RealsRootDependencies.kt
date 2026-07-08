@@ -14,10 +14,12 @@ import com.reals.app.domain.usecase.EnqueueMatchmakingUseCase
 import com.reals.app.domain.usecase.GetChatExitRequestsUseCase
 import com.reals.app.domain.usecase.GetChatMessagesUseCase
 import com.reals.app.domain.usecase.GetChatUseCase
+import com.reals.app.domain.usecase.GetCurrentLegalDocumentsUseCase
 import com.reals.app.domain.usecase.GetFirstChatForMatchUseCase
 import com.reals.app.domain.usecase.GetHomePendingUseCase
 import com.reals.app.domain.usecase.GetHomeStatusUseCase
 import com.reals.app.domain.usecase.GetHomeUseCase
+import com.reals.app.domain.usecase.GetLegalStatusUseCase
 import com.reals.app.domain.usecase.GetMatchUseCase
 import com.reals.app.domain.usecase.GetMeUseCase
 import com.reals.app.domain.usecase.GetPartnerPersonalMessageUseCase
@@ -32,6 +34,7 @@ import com.reals.app.domain.usecase.PutMyPersonalMessageUseCase
 import com.reals.app.domain.usecase.ReactivateAccountUseCase
 import com.reals.app.domain.usecase.RejectChatExitRequestUseCase
 import com.reals.app.domain.usecase.RejectSchedulingRoundUseCase
+import com.reals.app.domain.usecase.RecordLegalDocumentActionUseCase
 import com.reals.app.domain.usecase.ReorderProfilePhotosUseCase
 import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
@@ -49,6 +52,7 @@ import com.reals.app.notifications.registration.PushTokenRegistrationService
 data class RealsRootDependencies(
     val session: SessionFeatureDependencies,
     val account: AccountFeatureDependencies,
+    val legal: LegalFeatureDependencies,
     val profile: ProfileFeatureDependencies,
     val home: HomeFeatureDependencies,
     val firstChat: FirstChatFeatureDependencies,
@@ -66,6 +70,12 @@ data class SessionFeatureDependencies(
 data class AccountFeatureDependencies(
     val reactivateAccount: ReactivateAccountUseCase,
     val deleteAccount: DeleteAccountUseCase,
+)
+
+data class LegalFeatureDependencies(
+    val getCurrentDocuments: GetCurrentLegalDocumentsUseCase,
+    val getStatus: GetLegalStatusUseCase,
+    val recordAction: RecordLegalDocumentActionUseCase,
 )
 
 data class ProfileFeatureDependencies(

@@ -6,6 +6,8 @@ import com.reals.app.data.dto.ChatMessageResponseDto
 import com.reals.app.data.dto.ChatPartnerResponseDto
 import com.reals.app.data.dto.ChatResponseDto
 import com.reals.app.data.dto.ConnectionResponseDto
+import com.reals.app.data.dto.CurrentLegalDocumentResponseDto
+import com.reals.app.data.dto.CurrentLegalDocumentsResponseDto
 import com.reals.app.data.dto.FirstChatGuidanceQuestionResponseDto
 import com.reals.app.data.dto.FirstChatGuidanceResponseDto
 import com.reals.app.data.dto.HomeActiveInteractionsSummaryResponseDto
@@ -20,6 +22,9 @@ import com.reals.app.data.dto.HomePendingStateResponseDto
 import com.reals.app.data.dto.HomeResponseDto
 import com.reals.app.data.dto.HomeStatusResponseDto
 import com.reals.app.data.dto.HomeNextStepLiteResponseDto
+import com.reals.app.data.dto.LegalDocumentActionResponseDto
+import com.reals.app.data.dto.LegalDocumentStatusResponseDto
+import com.reals.app.data.dto.LegalStatusResponseDto
 import com.reals.app.data.dto.MatchResponseDto
 import com.reals.app.data.dto.NegotiationResponseDto
 import com.reals.app.data.dto.PhotoResponseDto
@@ -45,6 +50,60 @@ object TestDtos {
         deletedAt = null,
         deletionFinalizesAt = null,
         createdAt = now,
+    )
+
+    fun currentLegalDocuments(
+        documents: List<CurrentLegalDocumentResponseDto> = listOf(currentLegalDocument()),
+    ) = CurrentLegalDocumentsResponseDto(documents)
+
+    fun currentLegalDocument(
+        type: String = "TERMS_OF_USE",
+        version: String = "2026-07-01",
+        url: String = "https://example.test/terms",
+        requiredAction: String = "ACCEPTED",
+    ) = CurrentLegalDocumentResponseDto(
+        type = type,
+        version = version,
+        url = url,
+        requiredAction = requiredAction,
+    )
+
+    fun legalStatus(
+        requirementsSatisfied: Boolean = true,
+        documents: List<LegalDocumentStatusResponseDto> = emptyList(),
+    ) = LegalStatusResponseDto(
+        requirementsSatisfied = requirementsSatisfied,
+        documents = documents,
+    )
+
+    fun legalDocumentStatus(
+        type: String = "TERMS_OF_USE",
+        version: String = "2026-07-01",
+        requiredAction: String = "ACCEPTED",
+        recordedAction: String? = null,
+        actedAt: String? = null,
+        satisfied: Boolean = false,
+    ) = LegalDocumentStatusResponseDto(
+        type = type,
+        version = version,
+        requiredAction = requiredAction,
+        recordedAction = recordedAction,
+        actedAt = actedAt,
+        satisfied = satisfied,
+    )
+
+    fun legalAction(
+        id: String = "action-1",
+        documentType: String = "TERMS_OF_USE",
+        documentVersion: String = "2026-07-01",
+        action: String = "ACCEPTED",
+        actedAt: String = now,
+    ) = LegalDocumentActionResponseDto(
+        id = id,
+        documentType = documentType,
+        documentVersion = documentVersion,
+        action = action,
+        actedAt = actedAt,
     )
 
     fun profile(status: String = "ACTIVE") = ProfileResponseDto(
