@@ -53,6 +53,7 @@ fun LegalRequirementsScreen(
     val uriHandler = LocalUriHandler.current
     var localOpenError by rememberSaveable { mutableStateOf<String?>(null) }
     var showDeleteConfirmation by rememberSaveable { mutableStateOf(false) }
+    val transitionBlocked = loading || submittingDocumentType != null || accountDeleteLoading
 
     Column(
         modifier = modifier
@@ -132,21 +133,21 @@ fun LegalRequirementsScreen(
         ) {
             OutlinedButton(
                 onClick = onDefer,
-                enabled = !accountDeleteLoading,
+                enabled = !transitionBlocked,
                 modifier = Modifier.weight(1f),
             ) {
                 Text("Ahora no")
             }
             OutlinedButton(
                 onClick = onSignOut,
-                enabled = !accountDeleteLoading,
+                enabled = !transitionBlocked,
                 modifier = Modifier.weight(1f),
             ) {
                 Text("Cerrar sesión")
             }
             OutlinedButton(
                 onClick = { showDeleteConfirmation = true },
-                enabled = !accountDeleteLoading,
+                enabled = !transitionBlocked,
                 modifier = Modifier.weight(1f),
             ) {
                 Text(if (accountDeleteLoading) "Eliminando..." else "Eliminar cuenta")

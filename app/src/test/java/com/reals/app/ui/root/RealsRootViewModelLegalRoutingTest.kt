@@ -22,6 +22,8 @@ import com.reals.app.di.SchedulingFeatureDependencies
 import com.reals.app.di.SessionFeatureDependencies
 import com.reals.app.di.VisualApprovalFeatureDependencies
 import com.reals.app.domain.model.SearchLocationInput
+import com.reals.app.domain.model.LegalDocumentAction
+import com.reals.app.domain.model.LegalDocumentType
 import com.reals.app.domain.usecase.AcceptChatExitRequestUseCase
 import com.reals.app.domain.usecase.AcceptSchedulingProposalUseCase
 import com.reals.app.domain.usecase.ActivateProfileUseCase
@@ -77,20 +79,35 @@ import com.reals.app.testutil.TestDtos
 import com.reals.app.testutil.testApiExecutor
 import com.reals.app.testutil.testJson
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import retrofit2.Response
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RealsRootViewModelLegalRoutingTest {
     private val dispatcher = StandardTestDispatcher()
+
+    @Before
+    fun setUp() {
+        Dispatchers.setMain(dispatcher)
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
+    }
 
     @Test
     fun `unsatisfied bootstrap can be deferred without recording legal actions`() = runTest(dispatcher) {
@@ -206,6 +223,26 @@ class RealsRootViewModelLegalRoutingTest {
         assertTrue(viewModel.uiState.value is RealsRootUiState.FirstChat)
     }
 
+    @Test
+    fun `defer is ignored while legal requirements are busy`() = runTest(dispatcher) {
+        val viewModel = viewModel(FakeRealsApi())
+        runCurrent()
+
+        val loadingState = legalRequirements(loading = true)
+        viewModel.setState(loadingState)
+        viewModel.deferLegalRequirements()
+        advanceUntilIdle()
+
+        assertEquals(loadingState, viewModel.uiState.value)
+
+        val submittingState = legalRequirements(submittingDocumentType = LegalDocumentType.TermsOfUse)
+        viewModel.setState(submittingState)
+        viewModel.deferLegalRequirements()
+        advanceUntilIdle()
+
+        assertEquals(submittingState, viewModel.uiState.value)
+    }
+
     private fun FakeRealsApi.configureUnsatisfiedLegal() {
         legalStatusResponse = Response.success(
             TestDtos.legalStatus(
@@ -229,6 +266,27 @@ class RealsRootViewModelLegalRoutingTest {
         code = "LEGAL_ACTION_REQUIRED",
         error = "Conflict",
         message = "legal action required",
+    )
+
+    private fun legalRequirements(
+        loading: Boolean = false,
+        submittingDocumentType: LegalDocumentType? = null,
+    ): RealsRootUiState.LegalRequirements = RealsRootUiState.LegalRequirements(
+        session = TestDomain.session(),
+        resumeContext = LegalResumeContext.PostSession,
+        loading = loading,
+        submittingDocumentType = submittingDocumentType,
+        documents = listOf(
+            LegalRequirementUiItem(
+                type = LegalDocumentType.TermsOfUse,
+                version = "2026-07-01",
+                url = "https://example.test/terms",
+                requiredAction = LegalDocumentAction.Accepted,
+                recordedAction = null,
+                actedAt = null,
+                satisfied = false,
+            )
+        ),
     )
 
     private fun viewModel(api: FakeRealsApi): RealsRootViewModel =

@@ -132,7 +132,7 @@ class RealsRootViewModel(
 
     fun deferLegalRequirements() {
         val current = _uiState.value as? RealsRootUiState.LegalRequirements ?: return
-        if (current.deletingAccount) return
+        if (current.loading || current.submittingDocumentType != null || current.deletingAccount) return
         viewModelScope.launch {
             when (val resume = current.resumeContext) {
                 LegalResumeContext.PostSession,

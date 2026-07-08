@@ -180,7 +180,7 @@ internal class SessionCoordinator(
     }
 
     private fun deleteAccountFromLegal(current: RealsRootUiState.LegalRequirements) {
-        if (current.deletingAccount || current.submittingDocumentType != null) return
+        if (current.loading || current.deletingAccount || current.submittingDocumentType != null) return
 
         scope.launch {
             uiState.value = current.copy(
