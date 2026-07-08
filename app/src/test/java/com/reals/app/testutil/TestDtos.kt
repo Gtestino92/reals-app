@@ -396,9 +396,10 @@ object TestDtos {
         chatId = null,
         createdAt = now,
     )
-}
+
     fun userBlock() = UserBlockResponseDto(
         id = "block-1",
         source = "MANUAL",
         createdAt = now,
     )
+}
