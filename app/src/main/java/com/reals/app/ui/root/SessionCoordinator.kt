@@ -246,6 +246,7 @@ internal class SessionCoordinator(
             when (val result = reactivateAccountUseCase()) {
                 is ApiResult.Success -> {
                     val session = loadProvisionedSessionForActiveUser(result.value) ?: return@launch
+                    registerPushTokenBestEffort()
                     onReactivatedSessionLoaded(session)
                 }
 
