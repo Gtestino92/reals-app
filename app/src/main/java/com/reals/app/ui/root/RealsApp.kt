@@ -121,6 +121,7 @@ fun RealsApp(
                 accountDeleteError = current.accountDeleteError,
                 onRecordRequiredAction = viewModel::recordLegalDocumentAction,
                 onRetryLoad = viewModel::retryLegalRequirements,
+                onDefer = viewModel::deferLegalRequirements,
                 onSignOut = viewModel::signOut,
                 onDeleteAccount = viewModel::deleteAccount,
             )

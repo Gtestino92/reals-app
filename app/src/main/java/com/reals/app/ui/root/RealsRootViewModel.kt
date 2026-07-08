@@ -130,6 +130,20 @@ class RealsRootViewModel(
         }
     }
 
+    fun deferLegalRequirements() {
+        val current = _uiState.value as? RealsRootUiState.LegalRequirements ?: return
+        if (current.deletingAccount) return
+        viewModelScope.launch {
+            when (val resume = current.resumeContext) {
+                LegalResumeContext.PostSession,
+                LegalResumeContext.PostReactivation -> continueReadySession(current.session)
+
+                is LegalResumeContext.ExistingState ->
+                    _uiState.value = resume.state.clearLegalActionRequiredForResume()
+            }
+        }
+    }
+
     fun changePassword(currentPassword: String, newPassword: String) =
         sessionCoordinator.changePassword(currentPassword, newPassword)
 
@@ -1022,7 +1036,7 @@ class RealsRootViewModel(
         )
     }
 
-    private suspend fun continueReadySessionAfterLegal(session: ProvisionedSession) {
+    private suspend fun continueReadySession(session: ProvisionedSession) {
         when (
             val result = profileEntryCoordinator.enter(
                 session = session,
@@ -1066,7 +1080,7 @@ class RealsRootViewModel(
         when (result) {
             is LegalCoordinatorResult.Show -> _uiState.value = result.state
             is LegalCoordinatorResult.Satisfied -> when (val resume = result.resumeContext) {
-                LegalResumeContext.PostSession -> continueReadySessionAfterLegal(result.session)
+                LegalResumeContext.PostSession -> continueReadySession(result.session)
                 LegalResumeContext.PostReactivation ->
                     homeCoordinator.reenterMatchmakingOrLoadHome(result.session)
 

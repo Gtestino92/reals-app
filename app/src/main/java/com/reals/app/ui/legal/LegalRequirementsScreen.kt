@@ -45,6 +45,7 @@ fun LegalRequirementsScreen(
     accountDeleteError: ApiError?,
     onRecordRequiredAction: (String) -> Unit,
     onRetryLoad: () -> Unit,
+    onDefer: () -> Unit,
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit,
     modifier: Modifier = Modifier,
@@ -66,7 +67,7 @@ fun LegalRequirementsScreen(
             fontWeight = FontWeight.SemiBold,
         )
         Text(
-            text = "Revisá los documentos vigentes y completá la acción indicada para seguir usando las funciones de participación de Reals.",
+            text = "Revisá los documentos vigentes. Algunas acciones de participación requieren que completes la acción indicada.",
             style = MaterialTheme.typography.bodyLarge,
         )
 
@@ -129,6 +130,13 @@ fun LegalRequirementsScreen(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            OutlinedButton(
+                onClick = onDefer,
+                enabled = !accountDeleteLoading,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text("Ahora no")
+            }
             OutlinedButton(
                 onClick = onSignOut,
                 enabled = !accountDeleteLoading,
