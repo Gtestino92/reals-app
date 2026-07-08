@@ -7,6 +7,14 @@ import com.reals.app.domain.model.ChatContinueDecision
 import com.reals.app.domain.model.Match
 import com.reals.app.domain.model.VisualDecision
 import com.reals.app.domain.model.VisualProfile
+import com.reals.app.domain.model.UserBlock
+
+class BlockMatchParticipantUseCase(
+    private val matchRepository: MatchRepository,
+) {
+    suspend operator fun invoke(matchId: String): ApiResult<UserBlock> =
+        matchRepository.blockMatchParticipant(matchId)
+}
 
 class GetMatchUseCase(
     private val matchRepository: MatchRepository,

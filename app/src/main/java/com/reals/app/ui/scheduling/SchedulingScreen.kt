@@ -47,6 +47,7 @@ import com.reals.app.domain.model.SchedulingProposal
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
+import com.reals.app.ui.common.ManualBlockConfirmationDialog
 import com.reals.app.ui.common.formatBackendDateTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -61,6 +62,8 @@ fun SchedulingScreen(
     refreshing: Boolean,
     submitting: Boolean,
     submittingLabel: String?,
+    manualBlockLoading: Boolean,
+    manualBlockError: ApiError?,
     negotiation: SchedulingNegotiation?,
     proposals: List<SchedulingProposal>,
     currentUserId: String,
@@ -71,6 +74,8 @@ fun SchedulingScreen(
     onAcceptProposal: (String) -> Unit,
     onRejectRound: () -> Unit,
     onOpenPartnerProfile: () -> Unit,
+    onManualBlock: () -> Unit,
+    onClearManualBlockError: () -> Unit,
     onBackHome: () -> Unit,
 ) {
     val partnerDisplayName = partnerName?.takeIf { it.isNotBlank() }?.let(TextSafety::safeDisplay)
@@ -85,8 +90,10 @@ fun SchedulingScreen(
     val partnerProposals = roundState.partnerProposals
     var nowMillis by rememberSaveable(connectionId) { mutableStateOf(System.currentTimeMillis()) }
     var expiryRefreshRequested by rememberSaveable(connectionId) { mutableStateOf(false) }
+    var showingManualBlockDialog by rememberSaveable(connectionId) { mutableStateOf(false) }
     val lifecycle = schedulingLifecycleUiState(negotiation?.schedulingExpiresAt, nowMillis)
-    val actionsDisabled = lifecycle.expired
+    val actionsDisabled = lifecycle.expired || manualBlockLoading
+    val interactionBusy = loading || refreshing || submitting || manualBlockLoading
 
     LaunchedEffect(connectionId, negotiation?.status?.rawValue) {
         while (negotiation?.status == NegotiationStatus.Pending) {
@@ -226,25 +233,49 @@ fun SchedulingScreen(
         Spacer(modifier = Modifier.height(18.dp))
         OutlinedButton(
             onClick = onRefresh,
-            enabled = !loading && !refreshing && !submitting,
+            enabled = !interactionBusy,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(if (refreshing) "Actualizando..." else "Actualizar")
         }
         OutlinedButton(
             onClick = onOpenPartnerProfile,
-            enabled = !loading && !submitting,
+            enabled = !interactionBusy,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text("Ver perfil")
         }
+        OutlinedButton(
+            onClick = {
+                onClearManualBlockError()
+                showingManualBlockDialog = true
+            },
+            enabled = !interactionBusy,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Bloquear a esta persona")
+        }
         Button(
             onClick = onBackHome,
-            enabled = !loading && !submitting,
+            enabled = !interactionBusy,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(if (submitting) submittingLabel ?: "Procesando..." else "Volver a Home")
         }
+    }
+
+    if (showingManualBlockDialog) {
+        ManualBlockConfirmationDialog(
+            loading = manualBlockLoading,
+            error = manualBlockError,
+            onConfirm = onManualBlock,
+            onDismiss = {
+                if (!manualBlockLoading) {
+                    onClearManualBlockError()
+                    showingManualBlockDialog = false
+                }
+            },
+        )
     }
 }
 

@@ -66,6 +66,7 @@ import com.reals.app.domain.model.MatchState
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
+import com.reals.app.ui.common.ManualBlockConfirmationDialog
 import com.reals.app.ui.common.SearchingDotsIndicator
 import com.reals.app.ui.common.formatBackendDateTime
 import com.reals.app.ui.common.formatBackendTime
@@ -85,11 +86,14 @@ fun ChatScreen(
     optimisticMessages: List<OptimisticOutgoingMessage>,
     exitRequests: List<ChatExitRequest>,
     loading: Boolean,
+    refreshing: Boolean,
     sending: Boolean,
     actionLoading: Boolean,
     actionLoadingLabel: String?,
     guidance: FirstChatGuidance? = null,
     guidanceActionLoading: Boolean = false,
+    manualBlockLoading: Boolean,
+    manualBlockError: ApiError?,
     error: ApiError?,
     message: String?,
     chatTitlePrefix: String = "Chat",
@@ -109,6 +113,8 @@ fun ChatScreen(
     onReject: () -> Unit,
     onRequestMutualExit: () -> Unit,
     onSafetyCancel: (String) -> Unit,
+    onManualBlock: () -> Unit,
+    onClearManualBlockError: () -> Unit,
     onAcceptExitRequest: (String) -> Unit,
     onRejectExitRequest: (String) -> Unit,
     onExitRequestTimeout: (String) -> Unit,
@@ -117,6 +123,7 @@ fun ChatScreen(
     var safetyDetails by rememberSaveable(chat?.id) { mutableStateOf("") }
     var showingSafetyDialog by rememberSaveable(chat?.id) { mutableStateOf(false) }
     var actionsMenuExpanded by rememberSaveable(chat?.id) { mutableStateOf(false) }
+    var showingManualBlockDialog by rememberSaveable(chat?.id) { mutableStateOf(false) }
     var nowMillis by rememberSaveable(chat?.id) { mutableStateOf(System.currentTimeMillis()) }
     var firstChatExpiryHandled by rememberSaveable(chat?.id) { mutableStateOf(false) }
     var secondChatUnavailableHandled by rememberSaveable(chat?.id) { mutableStateOf(false) }
@@ -144,7 +151,7 @@ fun ChatScreen(
                     (allowAvailableChat && chat?.status == ChatStatus.Available)
                     )
     val sendingMessage = sending
-    val loadingChatAction = actionLoading
+    val loadingChatAction = actionLoading || manualBlockLoading
     val canEditDraft = canChat && !loadingChatAction
     val canUseChatActions = canChat && !loadingChatAction
     val canUseNavigationActions = !loadingChatAction
@@ -153,8 +160,15 @@ fun ChatScreen(
         .filter { it.status == ChatExitRequestStatus.Pending }
         .maxByOrNull { it.createdAt }
     val exitFlowLocked = pendingExitRequest != null
-    val canOpenOverflowActions = !loadingChatAction &&
-            ((!exitFlowLocked && canUseChatActions) || !showMutualExitActions)
+    val canUseExistingChatActions =
+        canUseChatActions && (!showMutualExitActions || !exitFlowLocked)
+    val manualBlockBusy =
+        loading || refreshing || sending || actionLoading || guidanceActionLoading ||
+            manualBlockLoading
+    val canManualBlock = !manualBlockBusy
+    val canOpenOverflowActions =
+        (!loadingChatAction && ((!exitFlowLocked && canUseChatActions) || !showMutualExitActions)) ||
+            canManualBlock
     val canDecide = showDecisionActions &&
             match?.state == MatchState.ChatActive &&
             chat?.status == ChatStatus.Active &&
@@ -232,8 +246,9 @@ fun ChatScreen(
                             expanded = actionsMenuExpanded,
                             enabled = canOpenOverflowActions,
                             actionLoading = loadingChatAction,
-                            canChat = canChat,
+                            canUseExistingChatActions = canUseExistingChatActions,
                             canDecide = canDecide,
+                            canManualBlock = canManualBlock,
                             showMutualExitActions = showMutualExitActions,
                             onExpandedChange = { actionsMenuExpanded = it },
                             onRequestMutualExit = {
@@ -247,6 +262,11 @@ fun ChatScreen(
                             onShowSafety = {
                                 actionsMenuExpanded = false
                                 showingSafetyDialog = true
+                            },
+                            onShowManualBlock = {
+                                actionsMenuExpanded = false
+                                onClearManualBlockError()
+                                showingManualBlockDialog = true
                             },
                         )
                     }
@@ -332,6 +352,20 @@ fun ChatScreen(
                 onSafetyCancel(safetyDetails)
                 safetyDetails = ""
                 showingSafetyDialog = false
+            },
+        )
+    }
+
+    if (showingManualBlockDialog) {
+        ManualBlockConfirmationDialog(
+            loading = manualBlockLoading,
+            error = manualBlockError,
+            onConfirm = onManualBlock,
+            onDismiss = {
+                if (!manualBlockLoading) {
+                    onClearManualBlockError()
+                    showingManualBlockDialog = false
+                }
             },
         )
     }
@@ -438,13 +472,15 @@ private fun ChatOverflowMenu(
     expanded: Boolean,
     enabled: Boolean,
     actionLoading: Boolean,
-    canChat: Boolean,
+    canUseExistingChatActions: Boolean,
     canDecide: Boolean,
+    canManualBlock: Boolean,
     showMutualExitActions: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     onRequestMutualExit: () -> Unit,
     onRejectChat: () -> Unit,
     onShowSafety: () -> Unit,
+    onShowManualBlock: () -> Unit,
 ) {
     Box {
         IconButton(
@@ -468,7 +504,7 @@ private fun ChatOverflowMenu(
             if (showMutualExitActions) {
                 DropdownMenuItem(
                     text = { Text("Salida consensuada") },
-                    enabled = !actionLoading && canChat,
+                    enabled = !actionLoading && canUseExistingChatActions,
                     onClick = onRequestMutualExit,
                 )
 
@@ -481,8 +517,14 @@ private fun ChatOverflowMenu(
 
             DropdownMenuItem(
                 text = { Text("Reportar y cerrar chat") },
-                enabled = !actionLoading && canChat,
+                enabled = !actionLoading && canUseExistingChatActions,
                 onClick = onShowSafety,
+            )
+
+            DropdownMenuItem(
+                text = { Text("Bloquear a esta persona") },
+                enabled = canManualBlock,
+                onClick = onShowManualBlock,
             )
         }
     }

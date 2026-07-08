@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.isLegalActionRequired
+import com.reals.app.core.network.isUserPairBlocked
 import com.reals.app.di.AppContainer
 import com.reals.app.di.RealsRootDependencies
 import com.reals.app.domain.model.ChatContinueDecision
@@ -52,12 +53,17 @@ class RealsRootViewModel(
         dependencies.visualApproval.getVisualProfile,
     )
     private val schedulingCoordinator = SchedulingCoordinator(dependencies.scheduling)
+    private val manualBlockCoordinator = ManualBlockCoordinator(
+        dependencies.manualBlock.blockMatchParticipant,
+    )
     private val legalCoordinator = LegalCoordinator(dependencies.legal)
     private lateinit var sessionCoordinator: SessionCoordinator
     private var silentFirstChatRefreshJob: Job? = null
     private var silentSecondChatRefreshJob: Job? = null
     private var silentSchedulingRefreshJob: Job? = null
     private var legalRerouteJob: Job? = null
+    private var pairBlockedRerouteJob: Job? = null
+    private var manualBlockJob: Job? = null
     private val homeCoordinator = HomeCoordinator(
         uiState = _uiState,
         dependencies = dependencies.home,
@@ -79,6 +85,7 @@ class RealsRootViewModel(
             },
         )
         observeLegalActionRequired()
+        observeUserPairBlocked()
         if (autoRefreshSession) {
             refreshSession()
         }
@@ -356,7 +363,7 @@ class RealsRootViewModel(
 
     fun refreshSecondChat(silent: Boolean = false) {
         val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
-        if (current.refreshing || current.sending || current.actionLoading) return
+        if (current.refreshing || current.sending || current.actionLoading || current.manualBlock.loading) return
         if (silent && silentSecondChatRefreshJob?.isActive == true) return
         if (current.chat == null) return openSecondChat(
             connectionId = current.connectionId,
@@ -468,6 +475,7 @@ class RealsRootViewModel(
 
     fun refreshVisualApproval() {
         val current = _uiState.value as? RealsRootUiState.VisualApproval ?: return
+        if (current.manualBlock.loading) return
         viewModelScope.launch {
             applyVisualApprovalFlowResult(
                 visualApprovalCoordinator.refresh(
@@ -505,7 +513,7 @@ class RealsRootViewModel(
 
     fun refreshScheduling(silent: Boolean = false) {
         val current = _uiState.value as? RealsRootUiState.Scheduling ?: return
-        if (current.refreshing || current.submitting) return
+        if (current.refreshing || current.submitting || current.manualBlock.loading) return
         if (silent && silentSchedulingRefreshJob?.isActive == true) return
 
         val job = viewModelScope.launch {
@@ -579,6 +587,7 @@ class RealsRootViewModel(
 
     fun refreshPartnerProfile() {
         val current = _uiState.value as? RealsRootUiState.PartnerProfile ?: return
+        if (current.manualBlock.loading) return
         viewModelScope.launch {
             _uiState.value = partnerProfileCoordinator.refresh(
                 current = current,
@@ -594,9 +603,39 @@ class RealsRootViewModel(
         }
     }
 
+    fun blockCurrentMatchParticipant() {
+        if (manualBlockJob?.isActive == true) return
+        manualBlockJob = viewModelScope.launch {
+            val current = _uiState.value
+            when (
+                val result = manualBlockCoordinator.block(
+                    current = current,
+                    onPending = {
+                        cancelSilentRefreshFor(current)
+                        _uiState.value = it
+                    },
+                )
+            ) {
+                ManualBlockResult.Ignore -> Unit
+                is ManualBlockResult.Show -> _uiState.value = result.state
+                is ManualBlockResult.ReturnHome -> homeCoordinator.returnHome(
+                    session = result.session,
+                    message = "Bloqueaste a esta persona. Cerramos la interacción y no volverán a ser emparejados.",
+                )
+            }
+        }
+    }
+
+    fun clearManualBlockError() {
+        _uiState.value = _uiState.value.clearManualBlockError()
+    }
+
     fun refreshFirstChat(silent: Boolean = false) {
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
-        if (current.refreshing || current.sending || current.actionLoading || current.guidanceActionLoading) return
+        if (
+            current.refreshing || current.sending || current.actionLoading ||
+            current.guidanceActionLoading || current.manualBlock.loading
+        ) return
         if (silent && silentFirstChatRefreshJob?.isActive == true) return
         if (current.chat == null) return openFirstChat(current.matchId, current.chatId)
 
@@ -1107,6 +1146,32 @@ class RealsRootViewModel(
         }
     }
 
+    private fun observeUserPairBlocked() {
+        viewModelScope.launch {
+            uiState.collect { current ->
+                if (pairBlockedRerouteJob?.isActive == true) return@collect
+                if (!current.hasUserPairBlockedInteractionError()) return@collect
+                val session = current.blockedPairSession() ?: return@collect
+                cancelSilentRefreshFor(current)
+                pairBlockedRerouteJob = launch {
+                    homeCoordinator.returnHome(
+                        session = session,
+                        message = "Esta interacción ya no está disponible. Actualizamos tu Home.",
+                    )
+                }
+            }
+        }
+    }
+
+    private fun cancelSilentRefreshFor(current: RealsRootUiState) {
+        when (current) {
+            is RealsRootUiState.FirstChat -> silentFirstChatRefreshJob?.cancel()
+            is RealsRootUiState.SecondChat -> silentSecondChatRefreshJob?.cancel()
+            is RealsRootUiState.Scheduling -> silentSchedulingRefreshJob?.cancel()
+            else -> Unit
+        }
+    }
+
     private fun returnHomeFromExternalNotification(session: ProvisionedSession) {
         viewModelScope.launch {
             homeCoordinator.returnHome(session)
@@ -1143,6 +1208,25 @@ private fun RealsRootUiState.sessionForLegalResume(): ProvisionedSession? = when
 
 private fun ApiError?.isLegalActionRequiredError(): Boolean =
     this?.isLegalActionRequired() == true
+
+private fun RealsRootUiState.hasUserPairBlockedInteractionError(): Boolean = when (this) {
+    is RealsRootUiState.FirstChat -> error.isUserPairBlockedError()
+    is RealsRootUiState.SecondChat -> error.isUserPairBlockedError()
+    is RealsRootUiState.VisualApproval -> error.isUserPairBlockedError()
+    is RealsRootUiState.Scheduling -> error.isUserPairBlockedError()
+    else -> false
+}
+
+private fun RealsRootUiState.blockedPairSession(): ProvisionedSession? = when (this) {
+    is RealsRootUiState.FirstChat -> session
+    is RealsRootUiState.SecondChat -> session
+    is RealsRootUiState.VisualApproval -> session
+    is RealsRootUiState.Scheduling -> session
+    else -> null
+}
+
+private fun ApiError?.isUserPairBlockedError(): Boolean =
+    this?.isUserPairBlocked() == true
 
 private fun RealsRootUiState.FirstChat.withFreshGuidanceFrom(
     displayed: RealsRootUiState.FirstChat,
