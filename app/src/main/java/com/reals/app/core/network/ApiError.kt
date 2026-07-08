@@ -44,6 +44,10 @@ enum class BackendErrorCode(val raw: String) {
     ProfilePhotoNotFound("PROFILE_PHOTO_NOT_FOUND"),
     AccountDeleted("ACCOUNT_DELETED"),
     AccountDeletionFinalized("ACCOUNT_DELETION_FINALIZED"),
+    LegalActionRequired("LEGAL_ACTION_REQUIRED"),
+    LegalDocumentActionInvalid("LEGAL_DOCUMENT_ACTION_INVALID"),
+    LegalDocumentNotFound("LEGAL_DOCUMENT_NOT_FOUND"),
+    LegalDocumentVersionNotCurrent("LEGAL_DOCUMENT_VERSION_NOT_CURRENT"),
     DomainConflict("DOMAIN_CONFLICT"),
     PartnerPersonalMessageNotRead("PARTNER_PERSONAL_MESSAGE_NOT_READ"),
     VisualReviewPartnerMessageNotRead("VISUAL_REVIEW_PARTNER_MESSAGE_NOT_READ"),
@@ -98,6 +102,7 @@ enum class ErrorContext {
     VisualReview,
     Scheduling,
     Account,
+    Legal,
 }
 
 val ApiError.Backend.backendErrorCode: BackendErrorCode
@@ -109,6 +114,10 @@ fun ApiError.isAccountDeleted(): Boolean {
 
 fun ApiError.isAccountDeletionFinalized(): Boolean {
     return this is ApiError.Backend && backendErrorCode == BackendErrorCode.AccountDeletionFinalized
+}
+
+fun ApiError.isLegalActionRequired(): Boolean {
+    return this is ApiError.Backend && backendErrorCode == BackendErrorCode.LegalActionRequired
 }
 
 enum class AuthFailureReason {
@@ -154,6 +163,7 @@ fun ApiError.toUserTitle(context: ErrorContext = ErrorContext.General): String =
     ErrorContext.VisualReview -> "No pudimos completar la revision"
     ErrorContext.Scheduling -> "No pudimos coordinar el horario"
     ErrorContext.Account -> "No pudimos actualizar tu cuenta"
+    ErrorContext.Legal -> "No pudimos actualizar los documentos"
     ErrorContext.General -> "Algo salio mal"
 }
 
@@ -181,6 +191,10 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.ProfilePhotoNotFound -> "No encontramos esa foto. Actualiza la lista e intenta nuevamente."
     BackendErrorCode.AccountDeleted -> "Esta cuenta esta pendiente de eliminacion. Podes recuperarla si todavia esta dentro del plazo."
     BackendErrorCode.AccountDeletionFinalized -> "La cuenta ya no puede recuperarse. Podes crear una cuenta nueva."
+    BackendErrorCode.LegalActionRequired -> "Necesitás completar los documentos vigentes antes de continuar."
+    BackendErrorCode.LegalDocumentVersionNotCurrent,
+    BackendErrorCode.LegalDocumentNotFound -> "Los documentos vigentes cambiaron. Actualizá la información e intentá nuevamente."
+    BackendErrorCode.LegalDocumentActionInvalid -> "La acción requerida cambió. Actualizá los documentos e intentá nuevamente."
     BackendErrorCode.DomainConflict -> when (context) {
         ErrorContext.Chat -> "La conversacion no cumple una regla del flujo todavia. Revisa el estado e intenta nuevamente."
         ErrorContext.VisualReview -> "La revision visual no cumple una regla del flujo todavia. Revisa el mensaje personal o actualiza el estado."

@@ -10,10 +10,13 @@ import com.reals.app.data.dto.ChatResponseDto
 import com.reals.app.data.dto.ConnectionDismissalResponseDto
 import com.reals.app.data.dto.ConnectionResponseDto
 import com.reals.app.data.dto.CreateProfileRequestDto
+import com.reals.app.data.dto.CurrentLegalDocumentsResponseDto
 import com.reals.app.data.dto.EnqueueMatchmakingRequestDto
 import com.reals.app.data.dto.HomeResponseDto
 import com.reals.app.data.dto.HomePendingStateResponseDto
 import com.reals.app.data.dto.HomeStatusResponseDto
+import com.reals.app.data.dto.LegalDocumentActionResponseDto
+import com.reals.app.data.dto.LegalStatusResponseDto
 import com.reals.app.data.dto.MatchResponseDto
 import com.reals.app.data.dto.FirstChatGuidanceResponseDto
 import com.reals.app.data.dto.NegotiationResponseDto
@@ -25,6 +28,7 @@ import com.reals.app.data.dto.ProfileResponseDto
 import com.reals.app.data.dto.QueueStatusResponseDto
 import com.reals.app.data.dto.RegisterPushTokenRequestDto
 import com.reals.app.data.dto.RegisterPushTokenResponseDto
+import com.reals.app.data.dto.RecordLegalDocumentActionRequestDto
 import com.reals.app.data.dto.ReorderProfilePhotosRequestDto
 import com.reals.app.data.dto.ScheduleProposalResponseDto
 import com.reals.app.data.dto.SendMessageRequestDto
@@ -93,6 +97,20 @@ interface RealsApi {
     suspend fun reactivateMe(
         @Header("Authorization") authorization: String,
     ): Response<UserResponseDto>
+
+    @GET("api/legal/documents/current")
+    suspend fun getCurrentLegalDocuments(): Response<CurrentLegalDocumentsResponseDto>
+
+    @GET("api/me/legal-status")
+    suspend fun getMyLegalStatus(
+        @Header("Authorization") authorization: String,
+    ): Response<LegalStatusResponseDto>
+
+    @POST("api/me/legal-document-actions")
+    suspend fun recordMyLegalDocumentAction(
+        @Header("Authorization") authorization: String,
+        @Body body: RecordLegalDocumentActionRequestDto,
+    ): Response<LegalDocumentActionResponseDto>
 
     @GET("api/me/profile")
     suspend fun getMyProfile(

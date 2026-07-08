@@ -12,11 +12,14 @@ import com.reals.app.data.dto.ChatResponseDto
 import com.reals.app.data.dto.ConnectionDismissalResponseDto
 import com.reals.app.data.dto.ConnectionResponseDto
 import com.reals.app.data.dto.CreateProfileRequestDto
+import com.reals.app.data.dto.CurrentLegalDocumentsResponseDto
 import com.reals.app.data.dto.EnqueueMatchmakingRequestDto
 import com.reals.app.data.dto.FirstChatGuidanceResponseDto
 import com.reals.app.data.dto.HomeResponseDto
 import com.reals.app.data.dto.HomePendingStateResponseDto
 import com.reals.app.data.dto.HomeStatusResponseDto
+import com.reals.app.data.dto.LegalDocumentActionResponseDto
+import com.reals.app.data.dto.LegalStatusResponseDto
 import com.reals.app.data.dto.MatchResponseDto
 import com.reals.app.data.dto.NegotiationResponseDto
 import com.reals.app.data.dto.PartnerPersonalMessageResponseDto
@@ -26,6 +29,7 @@ import com.reals.app.data.dto.ProfileResponseDto
 import com.reals.app.data.dto.QueueStatusResponseDto
 import com.reals.app.data.dto.RegisterPushTokenRequestDto
 import com.reals.app.data.dto.RegisterPushTokenResponseDto
+import com.reals.app.data.dto.RecordLegalDocumentActionRequestDto
 import com.reals.app.data.dto.ReorderProfilePhotosRequestDto
 import com.reals.app.data.dto.ScheduleProposalResponseDto
 import com.reals.app.data.dto.SendMessageRequestDto
@@ -101,6 +105,8 @@ class FakeRealsApi : RealsApi {
         private set
     var registerPushTokenBody: RegisterPushTokenRequestDto? = null
         private set
+    var legalActionBody: RecordLegalDocumentActionRequestDto? = null
+        private set
 
     var beforeGetHomeResponse: suspend () -> Unit = {}
     var beforeGetHomeStatusResponse: suspend () -> Unit = {}
@@ -117,6 +123,10 @@ class FakeRealsApi : RealsApi {
     var homePendingResponse: Response<HomePendingStateResponseDto> = Response.success(TestDtos.homePending())
     var registerPushTokenResponse: Response<RegisterPushTokenResponseDto> =
         Response.success(RegisterPushTokenResponseDto(registered = true))
+    var currentLegalDocumentsResponse: Response<CurrentLegalDocumentsResponseDto> =
+        Response.success(TestDtos.currentLegalDocuments())
+    var legalStatusResponse: Response<LegalStatusResponseDto> = Response.success(TestDtos.legalStatus())
+    var legalActionResponse: Response<LegalDocumentActionResponseDto> = Response.success(TestDtos.legalAction())
     var profileResponse: Response<ProfileResponseDto> = Response.success(TestDtos.profile())
     var photosResponse: Response<List<PhotoResponseDto>> = Response.success(listOf(TestDtos.photo()))
     var reorderPhotosResponse: Response<List<PhotoResponseDto>> = Response.success(listOf(TestDtos.photo()))
@@ -173,6 +183,21 @@ class FakeRealsApi : RealsApi {
 
     override suspend fun reactivateMe(authorization: String): Response<UserResponseDto> =
         record("reactivateMe", authorization) { userResponse }
+
+    override suspend fun getCurrentLegalDocuments(): Response<CurrentLegalDocumentsResponseDto> =
+        record("getCurrentLegalDocuments", null) { currentLegalDocumentsResponse }
+
+    override suspend fun getMyLegalStatus(authorization: String): Response<LegalStatusResponseDto> =
+        record("getMyLegalStatus", authorization) { legalStatusResponse }
+
+    override suspend fun recordMyLegalDocumentAction(
+        authorization: String,
+        body: RecordLegalDocumentActionRequestDto,
+    ): Response<LegalDocumentActionResponseDto> =
+        record("recordMyLegalDocumentAction", authorization) {
+            legalActionBody = body
+            legalActionResponse
+        }
 
     override suspend fun getMyProfile(authorization: String): Response<ProfileResponseDto> =
         record("getMyProfile", authorization) { profileResponse }

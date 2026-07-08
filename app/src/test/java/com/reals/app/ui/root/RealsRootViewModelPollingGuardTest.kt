@@ -3,6 +3,7 @@ package com.reals.app.ui.root
 import android.content.ContextWrapper
 import com.reals.app.data.repository.ChatRepository
 import com.reals.app.data.repository.FirebaseAuthRepository
+import com.reals.app.data.repository.LegalRepository
 import com.reals.app.data.repository.MatchRepository
 import com.reals.app.data.repository.MatchmakingRepository
 import com.reals.app.data.repository.MeRepository
@@ -12,6 +13,7 @@ import com.reals.app.data.mapper.toDomain
 import com.reals.app.di.AccountFeatureDependencies
 import com.reals.app.di.FirstChatFeatureDependencies
 import com.reals.app.di.HomeFeatureDependencies
+import com.reals.app.di.LegalFeatureDependencies
 import com.reals.app.di.ProfileFeatureDependencies
 import com.reals.app.di.RealsRootDependencies
 import com.reals.app.di.SchedulingFeatureDependencies
@@ -30,10 +32,12 @@ import com.reals.app.domain.usecase.EnqueueMatchmakingUseCase
 import com.reals.app.domain.usecase.GetChatExitRequestsUseCase
 import com.reals.app.domain.usecase.GetChatMessagesUseCase
 import com.reals.app.domain.usecase.GetChatUseCase
+import com.reals.app.domain.usecase.GetCurrentLegalDocumentsUseCase
 import com.reals.app.domain.usecase.GetFirstChatForMatchUseCase
 import com.reals.app.domain.usecase.GetHomePendingUseCase
 import com.reals.app.domain.usecase.GetHomeStatusUseCase
 import com.reals.app.domain.usecase.GetHomeUseCase
+import com.reals.app.domain.usecase.GetLegalStatusUseCase
 import com.reals.app.domain.usecase.GetMatchUseCase
 import com.reals.app.domain.usecase.GetMeUseCase
 import com.reals.app.domain.usecase.GetPartnerPersonalMessageUseCase
@@ -53,6 +57,7 @@ import com.reals.app.domain.usecase.ReorderProfilePhotosUseCase
 import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
 import com.reals.app.domain.usecase.RequestNextFirstChatGuidanceQuestionUseCase
+import com.reals.app.domain.usecase.RecordLegalDocumentActionUseCase
 import com.reals.app.domain.usecase.SafetyCancelChatUseCase
 import com.reals.app.domain.usecase.SendChatMessageUseCase
 import com.reals.app.domain.usecase.SubmitChatDecisionUseCase
@@ -240,6 +245,7 @@ class RealsRootViewModelPollingGuardTest {
         val matchRepository = MatchRepository(api, tokenProvider, apiExecutor)
         val chatRepository = ChatRepository(api, testJson, tokenProvider, apiExecutor)
         val schedulingRepository = SchedulingRepository(api, tokenProvider, apiExecutor)
+        val legalRepository = LegalRepository(api, tokenProvider, apiExecutor)
         val registerPushTokenUseCase = RegisterPushTokenUseCase(meRepository)
 
         return RealsRootDependencies(
@@ -252,6 +258,11 @@ class RealsRootViewModelPollingGuardTest {
             account = AccountFeatureDependencies(
                 reactivateAccount = ReactivateAccountUseCase(meRepository),
                 deleteAccount = DeleteAccountUseCase(meRepository, authRepository),
+            ),
+            legal = LegalFeatureDependencies(
+                getCurrentDocuments = GetCurrentLegalDocumentsUseCase(legalRepository),
+                getStatus = GetLegalStatusUseCase(legalRepository),
+                recordAction = RecordLegalDocumentActionUseCase(legalRepository),
             ),
             profile = ProfileFeatureDependencies(
                 createProfile = CreateProfileUseCase(profileRepository),

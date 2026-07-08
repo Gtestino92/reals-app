@@ -4,12 +4,15 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.reals.app.core.network.ApiError
+import com.reals.app.core.network.isLegalActionRequired
 import com.reals.app.di.AppContainer
 import com.reals.app.di.RealsRootDependencies
 import com.reals.app.domain.model.ChatContinueDecision
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.CreateProfileInput
 import com.reals.app.domain.model.FirstChatGuidance
+import com.reals.app.domain.model.LegalDocumentAction
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.ProvisionedSession
@@ -24,6 +27,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 class RealsRootViewModel(
@@ -48,10 +52,12 @@ class RealsRootViewModel(
         dependencies.visualApproval.getVisualProfile,
     )
     private val schedulingCoordinator = SchedulingCoordinator(dependencies.scheduling)
+    private val legalCoordinator = LegalCoordinator(dependencies.legal)
     private lateinit var sessionCoordinator: SessionCoordinator
     private var silentFirstChatRefreshJob: Job? = null
     private var silentSecondChatRefreshJob: Job? = null
     private var silentSchedulingRefreshJob: Job? = null
+    private var legalRerouteJob: Job? = null
     private val homeCoordinator = HomeCoordinator(
         uiState = _uiState,
         dependencies = dependencies.home,
@@ -69,9 +75,10 @@ class RealsRootViewModel(
             scope = viewModelScope,
             onActiveSessionLoaded = { session -> showReadySession(session) },
             onReactivatedSessionLoaded = { session ->
-                homeCoordinator.reenterMatchmakingOrLoadHome(session)
+                showReactivatedSession(session)
             },
         )
+        observeLegalActionRequired()
         if (autoRefreshSession) {
             refreshSession()
         }
@@ -90,6 +97,38 @@ class RealsRootViewModel(
     fun signOut() = sessionCoordinator.signOut()
 
     fun deleteAccount() = sessionCoordinator.deleteAccount()
+
+    fun retryLegalRequirements() {
+        val current = _uiState.value as? RealsRootUiState.LegalRequirements ?: return
+        if (current.loading || current.submittingDocumentType != null || current.deletingAccount) return
+        viewModelScope.launch {
+            _uiState.value = current.copy(loading = true, error = null)
+            applyLegalCoordinatorResult(
+                legalCoordinator.load(
+                    session = current.session,
+                    resumeContext = current.resumeContext,
+                )
+            )
+        }
+    }
+
+    fun recordLegalDocumentAction(documentKey: String) {
+        val current = _uiState.value as? RealsRootUiState.LegalRequirements ?: return
+        if (current.loading || current.submittingDocumentType != null || current.deletingAccount) return
+        val requirement = current.documents.firstOrNull { it.key == documentKey } ?: return
+        if (requirement.satisfied || requirement.requiredAction is LegalDocumentAction.Unknown) return
+
+        viewModelScope.launch {
+            val pending = current.copy(
+                submittingDocumentType = requirement.type,
+                error = null,
+            )
+            _uiState.value = pending
+            applyLegalCoordinatorResult(
+                legalCoordinator.recordRequiredAction(pending, requirement)
+            )
+        }
+    }
 
     fun changePassword(currentPassword: String, newPassword: String) =
         sessionCoordinator.changePassword(currentPassword, newPassword)
@@ -120,6 +159,7 @@ class RealsRootViewModel(
             RealsRootUiState.Checking,
             is RealsRootUiState.Failure,
             is RealsRootUiState.FirstChat,
+            is RealsRootUiState.LegalRequirements,
             is RealsRootUiState.LoadingSession,
             is RealsRootUiState.Login,
             is RealsRootUiState.MissingFirebase -> Unit
@@ -150,6 +190,7 @@ class RealsRootViewModel(
             is RealsRootUiState.PartnerProfile -> returnHomeFromExternalNotification(current.session)
             is RealsRootUiState.PendingEngagement -> returnHomeFromExternalNotification(current.session)
             is RealsRootUiState.ActivationComplete -> returnHomeFromExternalNotification(current.session)
+            is RealsRootUiState.LegalRequirements -> Unit
             is RealsRootUiState.LoadingSession,
             RealsRootUiState.Checking -> refreshSession()
             is RealsRootUiState.AccountDeletionPending,
@@ -966,6 +1007,22 @@ class RealsRootViewModel(
     }
 
     private suspend fun showReadySession(session: ProvisionedSession) {
+        enterLegalRequirements(
+            session = session,
+            resumeContext = LegalResumeContext.PostSession,
+            publishLoadingState = false,
+        )
+    }
+
+    private suspend fun showReactivatedSession(session: ProvisionedSession) {
+        enterLegalRequirements(
+            session = session,
+            resumeContext = LegalResumeContext.PostReactivation,
+            publishLoadingState = false,
+        )
+    }
+
+    private suspend fun continueReadySessionAfterLegal(session: ProvisionedSession) {
         when (
             val result = profileEntryCoordinator.enter(
                 session = session,
@@ -985,12 +1042,93 @@ class RealsRootViewModel(
         }
     }
 
+    private suspend fun enterLegalRequirements(
+        session: ProvisionedSession,
+        resumeContext: LegalResumeContext,
+        publishLoadingState: Boolean = true,
+    ) {
+        if (publishLoadingState) {
+            _uiState.value = RealsRootUiState.LegalRequirements(
+                session = session,
+                resumeContext = resumeContext,
+                loading = true,
+            )
+        }
+        applyLegalCoordinatorResult(
+            legalCoordinator.load(
+                session = session,
+                resumeContext = resumeContext,
+            )
+        )
+    }
+
+    private suspend fun applyLegalCoordinatorResult(result: LegalCoordinatorResult) {
+        when (result) {
+            is LegalCoordinatorResult.Show -> _uiState.value = result.state
+            is LegalCoordinatorResult.Satisfied -> when (val resume = result.resumeContext) {
+                LegalResumeContext.PostSession -> continueReadySessionAfterLegal(result.session)
+                LegalResumeContext.PostReactivation ->
+                    homeCoordinator.reenterMatchmakingOrLoadHome(result.session)
+
+                is LegalResumeContext.ExistingState ->
+                    _uiState.value = resume.state.clearLegalActionRequiredForResume()
+            }
+        }
+    }
+
+    private fun observeLegalActionRequired() {
+        viewModelScope.launch {
+            uiState.collect { current ->
+                if (current is RealsRootUiState.LegalRequirements) return@collect
+                if (legalRerouteJob?.isActive == true) return@collect
+                if (!current.hasLegalActionRequiredError()) return@collect
+                val session = current.sessionForLegalResume() ?: return@collect
+                legalRerouteJob = launch {
+                    enterLegalRequirements(
+                        session = session,
+                        resumeContext = LegalResumeContext.ExistingState(current),
+                    )
+                }
+            }
+        }
+    }
+
     private fun returnHomeFromExternalNotification(session: ProvisionedSession) {
         viewModelScope.launch {
             homeCoordinator.returnHome(session)
         }
     }
 }
+
+private fun RealsRootUiState.hasLegalActionRequiredError(): Boolean = when (this) {
+    is RealsRootUiState.Ready ->
+        profileCreateError.isLegalActionRequiredError() ||
+            profileUpdateError.isLegalActionRequiredError() ||
+            matchFiltersError.isLegalActionRequiredError() ||
+            profileActivationError.isLegalActionRequiredError() ||
+            photoReorderError.isLegalActionRequiredError() ||
+            photoActionError.isLegalActionRequiredError() ||
+            homeError.isLegalActionRequiredError() ||
+            matchmakingBlockedReason.isLegalActionRequiredError()
+
+    is RealsRootUiState.FirstChat -> error.isLegalActionRequiredError()
+    is RealsRootUiState.SecondChat -> error.isLegalActionRequiredError()
+    is RealsRootUiState.VisualApproval -> error.isLegalActionRequiredError()
+    is RealsRootUiState.Scheduling -> error.isLegalActionRequiredError()
+    else -> false
+}
+
+private fun RealsRootUiState.sessionForLegalResume(): ProvisionedSession? = when (this) {
+    is RealsRootUiState.Ready -> session
+    is RealsRootUiState.FirstChat -> session
+    is RealsRootUiState.SecondChat -> session
+    is RealsRootUiState.VisualApproval -> session
+    is RealsRootUiState.Scheduling -> session
+    else -> null
+}
+
+private fun ApiError?.isLegalActionRequiredError(): Boolean =
+    this?.isLegalActionRequired() == true
 
 private fun RealsRootUiState.FirstChat.withFreshGuidanceFrom(
     displayed: RealsRootUiState.FirstChat,

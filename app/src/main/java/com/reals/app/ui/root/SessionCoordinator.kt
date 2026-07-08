@@ -140,7 +140,14 @@ internal class SessionCoordinator(
     }
 
     fun deleteAccount() {
-        val current = uiState.value as? RealsRootUiState.Ready ?: return
+        when (val current = uiState.value) {
+            is RealsRootUiState.Ready -> deleteAccountFromReady(current)
+            is RealsRootUiState.LegalRequirements -> deleteAccountFromLegal(current)
+            else -> return
+        }
+    }
+
+    private fun deleteAccountFromReady(current: RealsRootUiState.Ready) {
         if (current.changingPassword) return
 
         scope.launch {
@@ -166,6 +173,32 @@ internal class SessionCoordinator(
                             deletingAccount = false,
                             accountDeleteError = result.error,
                         ),
+                    )
+                }
+            }
+        }
+    }
+
+    private fun deleteAccountFromLegal(current: RealsRootUiState.LegalRequirements) {
+        if (current.deletingAccount || current.submittingDocumentType != null) return
+
+        scope.launch {
+            uiState.value = current.copy(
+                deletingAccount = true,
+                accountDeleteError = null,
+            )
+
+            when (val result = deleteAccountUseCase()) {
+                is ApiResult.Success -> {
+                    uiState.value = RealsRootUiState.AccountDeletionScheduled(
+                        deletionFinalizesAt = result.value.deletionFinalizesAt,
+                    )
+                }
+
+                is ApiResult.Failure -> {
+                    uiState.value = current.copy(
+                        deletingAccount = false,
+                        accountDeleteError = result.error,
                     )
                 }
             }
