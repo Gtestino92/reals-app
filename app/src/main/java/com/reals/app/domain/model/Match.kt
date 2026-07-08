@@ -11,6 +11,12 @@ data class Match(
     val updatedAt: String,
 )
 
+data class UserBlock(
+    val id: String,
+    val source: String,
+    val createdAt: String,
+)
+
 sealed interface MatchState {
     val rawValue: String
 

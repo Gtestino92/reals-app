@@ -18,6 +18,7 @@ import com.reals.app.domain.usecase.AcceptSchedulingProposalUseCase
 import com.reals.app.domain.usecase.ActivateProfileUseCase
 import com.reals.app.domain.usecase.AddProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.CancelChatUseCase
+import com.reals.app.domain.usecase.BlockMatchParticipantUseCase
 import com.reals.app.domain.usecase.CreateProfileUseCase
 import com.reals.app.domain.usecase.DeleteAccountUseCase
 import com.reals.app.domain.usecase.DeleteProfilePhotoUseCase
@@ -110,6 +111,7 @@ class AppContainer(context: Context) {
     val getQueueStatusUseCase = GetQueueStatusUseCase(matchmakingRepository)
     val leaveQueueUseCase = LeaveQueueUseCase(matchmakingRepository)
     val getMatchUseCase = GetMatchUseCase(matchRepository)
+    val blockMatchParticipantUseCase = BlockMatchParticipantUseCase(matchRepository)
     val getFirstChatForMatchUseCase = GetFirstChatForMatchUseCase(matchRepository)
     val submitChatDecisionUseCase = SubmitChatDecisionUseCase(matchRepository)
     val getVisualProfileUseCase = GetVisualProfileUseCase(matchRepository)
@@ -169,6 +171,9 @@ class AppContainer(context: Context) {
             getHomePending = getHomePendingUseCase,
             leaveQueue = leaveQueueUseCase,
             dismissSecondChat = dismissSecondChatForConnectionUseCase,
+        ),
+        manualBlock = ManualBlockFeatureDependencies(
+            blockMatchParticipant = blockMatchParticipantUseCase,
         ),
         firstChat = FirstChatFeatureDependencies(
             getMatch = getMatchUseCase,

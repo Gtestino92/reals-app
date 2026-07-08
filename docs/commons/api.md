@@ -350,3 +350,9 @@ Selected stable frontend-facing domain codes:
 - `LEGAL_DOCUMENT_NOT_FOUND`: requested legal document type has no current configured document.
 - `LEGAL_DOCUMENT_VERSION_NOT_CURRENT`: requested legal document version is not the current configured version.
 - `LEGAL_DOCUMENT_ACTION_INVALID`: requested action does not match the configured required action.
+
+## Manual blocking
+
+`POST /api/matches/{matchId}/block` requires no body and returns block `id`, `source`, and `createdAt`: `201 Created` for a new directional block and `200 OK` for an idempotent replay. Manual blocking creates no report, penalty, or reliability event. A block in either direction excludes the pair and causes positive progression to fail with `409 USER_PAIR_BLOCKED`. Reads, rejection, exit, cancellation, and safety paths remain available. There is no unblock endpoint in the current MVP.
+
+Android requires a definitive confirmation before submitting a manual block. A successful creation or replay returns to Home and refreshes backend state. `USER_PAIR_BLOCKED` reroutes generically to a refreshed Home without revealing block direction.

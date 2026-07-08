@@ -14,12 +14,17 @@ import com.reals.app.domain.model.ChatContinueDecision
 import com.reals.app.domain.model.Match
 import com.reals.app.domain.model.VisualDecision
 import com.reals.app.domain.model.VisualProfile
+import com.reals.app.domain.model.UserBlock
 
 class MatchRepository(
     private val api: RealsApi,
     tokenProvider: AuthTokenProvider,
     apiExecutor: ApiExecutor,
 ) : AuthenticatedRepository(tokenProvider, apiExecutor) {
+    suspend fun blockMatchParticipant(matchId: String): ApiResult<UserBlock> =
+        authorizedCall { authorization -> api.blockMatchParticipant(authorization, matchId) }
+            .map { it.toDomain() }
+
     suspend fun getMatch(matchId: String): ApiResult<Match> =
         authorizedCall { authorization -> api.getMatch(authorization, matchId) }
             .map { it.toDomain() }

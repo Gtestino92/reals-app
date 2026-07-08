@@ -34,6 +34,7 @@ import com.reals.app.domain.model.VisualProfile
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
+import com.reals.app.ui.common.ManualBlockConfirmationDialog
 import com.reals.app.ui.common.userLabel
 
 @Composable
@@ -51,6 +52,8 @@ fun VisualApprovalScreen(
     writingMessage: Boolean,
     deciding: Boolean,
     decidingLabel: String?,
+    manualBlockLoading: Boolean,
+    manualBlockError: ApiError?,
     error: ApiError?,
     message: String?,
     onRefresh: () -> Unit,
@@ -58,12 +61,17 @@ fun VisualApprovalScreen(
     onSavePersonalMessage: (String) -> Unit,
     onApprove: () -> Unit,
     onReject: () -> Unit,
+    onManualBlock: () -> Unit,
+    onClearManualBlockError: () -> Unit,
     onBackHome: () -> Unit,
 ) {
     var personalMessage by rememberSaveable(matchId) { mutableStateOf("") }
     var nowMillis by rememberSaveable(matchId) { mutableStateOf(System.currentTimeMillis()) }
     var expiryRefreshRequested by rememberSaveable(matchId) { mutableStateOf(false) }
-    val busy = loading || refreshing || readingPartnerMessage || writingMessage || deciding
+    var showingManualBlockDialog by rememberSaveable(matchId) { mutableStateOf(false) }
+    val busy =
+        loading || refreshing || readingPartnerMessage || writingMessage || deciding ||
+            manualBlockLoading
     val decisionBlockedByUnreadPartnerMessage =
         profile?.decisionRequiresPartnerPersonalMessageRead == true
     val visualExpiresAt = profile?.visualExpiresAt ?: match?.visualExpiresAt
@@ -232,9 +240,33 @@ fun VisualApprovalScreen(
             }
         }
         Spacer(modifier = Modifier.height(24.dp))
+        OutlinedButton(
+            onClick = {
+                onClearManualBlockError()
+                showingManualBlockDialog = true
+            },
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Bloquear a esta persona")
+        }
         OutlinedButton(onClick = onBackHome, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
             Text("Volver a Home")
         }
+    }
+
+    if (showingManualBlockDialog) {
+        ManualBlockConfirmationDialog(
+            loading = manualBlockLoading,
+            error = manualBlockError,
+            onConfirm = onManualBlock,
+            onDismiss = {
+                if (!manualBlockLoading) {
+                    onClearManualBlockError()
+                    showingManualBlockDialog = false
+                }
+            },
+        )
     }
 }
 

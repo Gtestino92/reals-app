@@ -33,6 +33,7 @@ import com.reals.app.data.dto.ProfileResponseDto
 import com.reals.app.data.dto.QueueStatusResponseDto
 import com.reals.app.data.dto.ScheduleProposalResponseDto
 import com.reals.app.data.dto.UserResponseDto
+import com.reals.app.data.dto.UserBlockResponseDto
 import com.reals.app.data.dto.VisualProfileResponseDto
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.JsonElement
@@ -393,6 +394,12 @@ object TestDtos {
         proposedDateTime = "2026-06-18T21:00:00+00:00",
         status = status,
         chatId = null,
+        createdAt = now,
+    )
+
+    fun userBlock() = UserBlockResponseDto(
+        id = "block-1",
+        source = "MANUAL",
         createdAt = now,
     )
 }

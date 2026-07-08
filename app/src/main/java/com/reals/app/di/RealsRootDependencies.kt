@@ -6,6 +6,7 @@ import com.reals.app.domain.usecase.AcceptSchedulingProposalUseCase
 import com.reals.app.domain.usecase.ActivateProfileUseCase
 import com.reals.app.domain.usecase.AddProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.CancelChatUseCase
+import com.reals.app.domain.usecase.BlockMatchParticipantUseCase
 import com.reals.app.domain.usecase.CreateProfileUseCase
 import com.reals.app.domain.usecase.DeleteAccountUseCase
 import com.reals.app.domain.usecase.DeleteProfilePhotoUseCase
@@ -55,9 +56,14 @@ data class RealsRootDependencies(
     val legal: LegalFeatureDependencies,
     val profile: ProfileFeatureDependencies,
     val home: HomeFeatureDependencies,
+    val manualBlock: ManualBlockFeatureDependencies,
     val firstChat: FirstChatFeatureDependencies,
     val visualApproval: VisualApprovalFeatureDependencies,
     val scheduling: SchedulingFeatureDependencies,
+)
+
+data class ManualBlockFeatureDependencies(
+    val blockMatchParticipant: BlockMatchParticipantUseCase,
 )
 
 data class SessionFeatureDependencies(

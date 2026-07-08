@@ -14,6 +14,7 @@ import com.reals.app.di.AccountFeatureDependencies
 import com.reals.app.di.FirstChatFeatureDependencies
 import com.reals.app.di.HomeFeatureDependencies
 import com.reals.app.di.LegalFeatureDependencies
+import com.reals.app.di.ManualBlockFeatureDependencies
 import com.reals.app.di.ProfileFeatureDependencies
 import com.reals.app.di.RealsRootDependencies
 import com.reals.app.di.SchedulingFeatureDependencies
@@ -24,6 +25,7 @@ import com.reals.app.domain.usecase.AcceptSchedulingProposalUseCase
 import com.reals.app.domain.usecase.ActivateProfileUseCase
 import com.reals.app.domain.usecase.AddProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.CancelChatUseCase
+import com.reals.app.domain.usecase.BlockMatchParticipantUseCase
 import com.reals.app.domain.usecase.CreateProfileUseCase
 import com.reals.app.domain.usecase.DeleteAccountUseCase
 import com.reals.app.domain.usecase.DeleteProfilePhotoUseCase
@@ -196,7 +198,7 @@ class RealsRootViewModelPollingGuardTest {
     }
 
     private fun viewModel(api: FakeRealsApi): RealsRootViewModel =
-        RealsRootViewModel(rootDependencies(api), autoRefreshSession = false)
+        RealsRootViewModel(rootViewModelTestDependencies(api), autoRefreshSession = false)
 
     private fun RealsRootViewModel.setState(state: RealsRootUiState) {
         val field = RealsRootViewModel::class.java.getDeclaredField("_uiState")
@@ -234,7 +236,9 @@ class RealsRootViewModelPollingGuardTest {
             negotiation = TestDtos.negotiation("PENDING").toDomain(),
         )
 
-    private fun rootDependencies(api: FakeRealsApi): RealsRootDependencies {
+}
+
+internal fun rootViewModelTestDependencies(api: FakeRealsApi): RealsRootDependencies {
         val context = ContextWrapper(null)
         val tokenProvider = FakeAuthTokenProvider()
         val apiExecutor = testApiExecutor()
@@ -283,6 +287,9 @@ class RealsRootViewModelPollingGuardTest {
                 leaveQueue = LeaveQueueUseCase(matchmakingRepository),
                 dismissSecondChat = DismissSecondChatForConnectionUseCase(chatRepository),
             ),
+            manualBlock = ManualBlockFeatureDependencies(
+                blockMatchParticipant = BlockMatchParticipantUseCase(matchRepository),
+            ),
             firstChat = FirstChatFeatureDependencies(
                 getMatch = GetMatchUseCase(matchRepository),
                 getChat = GetChatUseCase(chatRepository),
@@ -315,5 +322,4 @@ class RealsRootViewModelPollingGuardTest {
                 rejectRound = RejectSchedulingRoundUseCase(schedulingRepository),
             ),
         )
-    }
 }

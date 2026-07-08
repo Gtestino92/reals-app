@@ -121,6 +121,7 @@ sealed interface RealsRootUiState {
         val actionLoading: Boolean = false,
         val actionLoadingLabel: String? = null,
         val guidanceActionLoading: Boolean = false,
+        val manualBlock: ManualBlockUiState = ManualBlockUiState(),
         val error: ApiError? = null,
         val message: String? = null,
     ) : RealsRootUiState
@@ -140,6 +141,7 @@ sealed interface RealsRootUiState {
         val sending: Boolean = false,
         val actionLoading: Boolean = false,
         val actionLoadingLabel: String? = null,
+        val manualBlock: ManualBlockUiState = ManualBlockUiState(),
         val error: ApiError? = null,
         val message: String? = null,
     ) : RealsRootUiState
@@ -159,6 +161,7 @@ sealed interface RealsRootUiState {
         val writingMessage: Boolean = false,
         val deciding: Boolean = false,
         val decidingLabel: String? = null,
+        val manualBlock: ManualBlockUiState = ManualBlockUiState(),
         val error: ApiError? = null,
         val message: String? = null,
     ) : RealsRootUiState
@@ -172,6 +175,7 @@ sealed interface RealsRootUiState {
         val refreshing: Boolean = false,
         val submitting: Boolean = false,
         val submittingLabel: String? = null,
+        val manualBlock: ManualBlockUiState = ManualBlockUiState(),
         val negotiation: SchedulingNegotiation? = null,
         val proposals: List<SchedulingProposal> = emptyList(),
         val error: ApiError? = null,
@@ -184,6 +188,7 @@ sealed interface RealsRootUiState {
         val profile: VisualProfile? = null,
         val loading: Boolean = false,
         val refreshing: Boolean = false,
+        val manualBlock: ManualBlockUiState = ManualBlockUiState(),
         val error: ApiError? = null,
     ) : RealsRootUiState
 
@@ -200,6 +205,11 @@ sealed interface RealsRootUiState {
 
     data class Failure(val error: ApiError) : RealsRootUiState
 }
+
+data class ManualBlockUiState(
+    val loading: Boolean = false,
+    val error: ApiError? = null,
+)
 
 data class ProfileManagementState(
     val creatingProfile: Boolean = false,
@@ -392,10 +402,11 @@ fun RealsRootUiState.canHandleSystemBack(): Boolean = when (this) {
         editingActiveProfile && profile?.status == ProfileStatus.Active && !photos.reorderingPhotos
     }
 
-    is RealsRootUiState.SecondChat -> !sending && !actionLoading
-    is RealsRootUiState.VisualApproval -> !deciding && !writingMessage && !readingPartnerMessage
-    is RealsRootUiState.Scheduling -> !submitting
-    is RealsRootUiState.PartnerProfile -> true
+    is RealsRootUiState.SecondChat -> !sending && !actionLoading && !manualBlock.loading
+    is RealsRootUiState.VisualApproval ->
+        !deciding && !writingMessage && !readingPartnerMessage && !manualBlock.loading
+    is RealsRootUiState.Scheduling -> !submitting && !manualBlock.loading
+    is RealsRootUiState.PartnerProfile -> !manualBlock.loading
     is RealsRootUiState.PendingEngagement -> true
     is RealsRootUiState.ActivationComplete -> true
 

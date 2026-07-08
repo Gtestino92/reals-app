@@ -36,6 +36,7 @@ import com.reals.app.data.dto.SendMessageRequestDto
 import com.reals.app.data.dto.UpdateMatchFiltersRequestDto
 import com.reals.app.data.dto.UpdateProfileRequestDto
 import com.reals.app.data.dto.UserResponseDto
+import com.reals.app.data.dto.UserBlockResponseDto
 import com.reals.app.data.dto.VisualDecisionRequestDto
 import com.reals.app.data.dto.VisualProfileResponseDto
 import kotlinx.serialization.json.Json
@@ -107,6 +108,8 @@ class FakeRealsApi : RealsApi {
         private set
     var legalActionBody: RecordLegalDocumentActionRequestDto? = null
         private set
+    var blockMatchIds: List<String> = emptyList()
+        private set
 
     var beforeGetHomeResponse: suspend () -> Unit = {}
     var beforeGetHomeStatusResponse: suspend () -> Unit = {}
@@ -133,6 +136,7 @@ class FakeRealsApi : RealsApi {
     var photoResponse: Response<PhotoResponseDto> = Response.success(TestDtos.photo())
     var queueResponse: Response<QueueStatusResponseDto> = Response.success(TestDtos.queueStatus())
     var matchResponse: Response<MatchResponseDto> = Response.success(TestDtos.match())
+    var userBlockResponse: Response<UserBlockResponseDto> = Response.success(TestDtos.userBlock())
     var chatResponse: Response<ChatResponseDto> = Response.success(TestDtos.chat())
     var chatResponseQueue: MutableList<Response<ChatResponseDto>> = mutableListOf()
     var visualProfileResponse: Response<VisualProfileResponseDto> = Response.success(TestDtos.visualProfile())
@@ -284,6 +288,15 @@ class FakeRealsApi : RealsApi {
         matchId: String,
     ): Response<MatchResponseDto> =
         record("getMatch", authorization, matchId) { matchResponse }
+
+    override suspend fun blockMatchParticipant(
+        authorization: String,
+        matchId: String,
+    ): Response<UserBlockResponseDto> =
+        record("blockMatchParticipant", authorization, matchId) {
+            blockMatchIds = blockMatchIds + matchId
+            userBlockResponse
+        }
 
     override suspend fun getFirstChatForMatch(
         authorization: String,

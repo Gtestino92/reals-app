@@ -18,3 +18,10 @@ data class MatchResponseDto(
 data class ChatDecisionRequestDto(
     val decision: String,
 )
+
+@Serializable
+data class UserBlockResponseDto(
+    val id: String,
+    val source: String,
+    val createdAt: String,
+)

@@ -17,23 +17,33 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
 import com.reals.app.domain.model.VisualProfile
 import com.reals.app.ui.common.ApiErrorFeedbackCard
+import com.reals.app.ui.common.ManualBlockConfirmationDialog
 
 @Composable
 fun PartnerProfileScreen(
     profile: VisualProfile?,
     loading: Boolean,
     refreshing: Boolean,
+    manualBlockLoading: Boolean,
+    manualBlockError: ApiError?,
     error: ApiError?,
     onRefresh: () -> Unit,
+    onManualBlock: () -> Unit,
+    onClearManualBlockError: () -> Unit,
     onBackHome: () -> Unit,
 ) {
-    val busy = loading || refreshing
+    var showingManualBlockDialog by rememberSaveable { mutableStateOf(false) }
+    val busy = loading || refreshing || manualBlockLoading
 
     Column(
         modifier = Modifier
@@ -95,8 +105,32 @@ fun PartnerProfileScreen(
             }
         }
         Spacer(modifier = Modifier.height(24.dp))
+        OutlinedButton(
+            onClick = {
+                onClearManualBlockError()
+                showingManualBlockDialog = true
+            },
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Bloquear a esta persona")
+        }
         Button(onClick = onBackHome, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
             Text("Volver a Home")
         }
+    }
+
+    if (showingManualBlockDialog) {
+        ManualBlockConfirmationDialog(
+            loading = manualBlockLoading,
+            error = manualBlockError,
+            onConfirm = onManualBlock,
+            onDismiss = {
+                if (!manualBlockLoading) {
+                    onClearManualBlockError()
+                    showingManualBlockDialog = false
+                }
+            },
+        )
     }
 }

@@ -35,6 +35,7 @@ import com.reals.app.data.dto.SendMessageRequestDto
 import com.reals.app.data.dto.UpdateMatchFiltersRequestDto
 import com.reals.app.data.dto.UpdateProfileRequestDto
 import com.reals.app.data.dto.UserResponseDto
+import com.reals.app.data.dto.UserBlockResponseDto
 import com.reals.app.data.dto.VisualDecisionRequestDto
 import com.reals.app.data.dto.VisualProfileResponseDto
 import kotlinx.serialization.json.JsonElement
@@ -194,6 +195,12 @@ interface RealsApi {
         @Header("Authorization") authorization: String,
         @Path("matchId") matchId: String,
     ): Response<MatchResponseDto>
+
+    @POST("api/matches/{matchId}/block")
+    suspend fun blockMatchParticipant(
+        @Header("Authorization") authorization: String,
+        @Path("matchId") matchId: String,
+    ): Response<UserBlockResponseDto>
 
     @GET("api/matches/{matchId}/chat")
     suspend fun getFirstChatForMatch(
