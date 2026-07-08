@@ -10,6 +10,7 @@ import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -30,10 +31,12 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -73,7 +76,6 @@ import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
 import com.reals.app.ui.common.userDescription
-import com.reals.app.ui.common.userLabel
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.ProfileSnapshot
@@ -158,12 +160,12 @@ fun ProfileStatusScreen(
         verticalArrangement = Arrangement.Center,
     ) {
         Text(
-            text = if (onBackHome == null) "Estado de Reals" else "Perfil y filtros",
+            text = if (onBackHome == null) "Estado de Reals" else "Perfil y preferencias",
             style = MaterialTheme.typography.headlineLarge,
             color = MaterialTheme.colorScheme.primary,
         )
         Text(
-            text = "Gestiona tu perfil, tus fotos y tus preferencias.",
+            text = "Gestioná tu perfil, tus preferencias y tus fotos.",
             modifier = Modifier.padding(top = 8.dp),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -309,6 +311,14 @@ private fun ProfileCard(
     var expandedSection by rememberSaveable(profile.id) {
         mutableStateOf(if (profile.status == ProfileStatus.Draft) ProfileSection.Photos else null)
     }
+    var profileSaveRequested by rememberSaveable(profile.id) { mutableStateOf(false) }
+    var profileSaveInFlight by rememberSaveable(profile.id) { mutableStateOf(false) }
+    var matchFiltersSaveRequested by rememberSaveable(profile.id) { mutableStateOf(false) }
+    var matchFiltersSaveInFlight by rememberSaveable(profile.id) { mutableStateOf(false) }
+    var photoActionRequested by rememberSaveable(profile.id) { mutableStateOf(false) }
+    var photoActionInFlight by rememberSaveable(profile.id) { mutableStateOf(false) }
+    var photoReorderRequested by rememberSaveable(profile.id) { mutableStateOf(false) }
+    var photoReorderInFlight by rememberSaveable(profile.id) { mutableStateOf(false) }
     val busy = profileUpdateLoading ||
             matchFiltersLoading ||
             photosLoading ||
@@ -318,91 +328,150 @@ private fun ProfileCard(
             emailVerificationSending ||
             emailVerificationChecking
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-    ) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text(text = TextSafety.safeDisplay(profile.displayName, maxLength = 100), style = MaterialTheme.typography.titleLarge)
-            Text("Estado: ${profile.status.userLabel()}")
-            Text(
-                "Edad: ${profile.age}. Ubicacion: ${
-                    TextSafety.safeDisplay(profile.city, maxLength = 100)
-                }, ${TextSafety.safeDisplay(profile.country, maxLength = 100)}"
-            )
-            Text("Fotos: ${profile.photoCount}. Identidad verificada: ${yesNo(profile.identityVerified)}")
-            Text("Filtros: ${profile.preferredMinAge}-${profile.preferredMaxAge} anos, ${profile.maxDistanceKm} km")
-            profile.bio?.takeIf { it.isNotBlank() }?.let {
-                Text(TextSafety.safeDisplay(it, maxLength = 1_000))
-            }
-            Text(
-                text = profileNextStep(profile.status),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            ProfileEditActions(
-                profile = profile,
-                loading = profileUpdateLoading,
-                busy = busy,
-                error = profileUpdateError,
-                message = profileUpdateMessage,
-                expanded = expandedSection == ProfileSection.Profile,
-                onToggleExpanded = {
-                    expandedSection = if (expandedSection == ProfileSection.Profile) null else ProfileSection.Profile
-                },
-                onUpdateProfile = onUpdateProfile,
-            )
-            MatchFiltersActions(
-                profile = profile,
-                loading = matchFiltersLoading,
-                busy = busy,
-                error = matchFiltersError,
-                message = matchFiltersMessage,
-                expanded = expandedSection == ProfileSection.Filters,
-                onToggleExpanded = {
-                    expandedSection = if (expandedSection == ProfileSection.Filters) null else ProfileSection.Filters
-                },
-                onUpdateMatchFilters = onUpdateMatchFilters,
-            )
-            PhotoManagerActions(
-                profile = profile,
-                photosLoading = photosLoading,
-                photos = photos,
-                photosError = photosError,
-                photoActionLoading = photoActionLoading,
-                photoActionError = photoActionError,
-                photoActionMessage = photoActionMessage,
-                photoReorderLoading = photoReorderLoading,
-                photoReorderError = photoReorderError,
-                photoReorderMessage = photoReorderMessage,
-                activationLoading = activationLoading,
-                activationError = activationError,
-                emailVerificationSending = emailVerificationSending,
-                emailVerificationChecking = emailVerificationChecking,
-                emailVerificationMessage = emailVerificationMessage,
-                emailVerificationError = emailVerificationError,
-                emailVerificationRequired = emailVerificationRequired,
-                emailVerificationLocallyVerified = emailVerificationLocallyVerified,
-                resendEmailVerificationAvailableAtMillis = resendEmailVerificationAvailableAtMillis,
-                checkEmailVerificationAvailableAtMillis = checkEmailVerificationAvailableAtMillis,
-                busy = busy,
-                expanded = expandedSection == ProfileSection.Photos,
-                onToggleExpanded = {
-                    expandedSection = if (expandedSection == ProfileSection.Photos) null else ProfileSection.Photos
-                },
-                onLoadPhotos = onLoadPhotos,
-                onAddPhotoFile = onAddPhotoFile,
-                onReplacePhotoFile = onReplacePhotoFile,
-                onDeletePhoto = onDeletePhoto,
-                onMovePhoto = onMovePhoto,
-                onActivateProfile = onActivateProfile,
-                onResendEmailVerification = onResendEmailVerification,
-                onCheckEmailVerification = onCheckEmailVerification,
-            )
+    LaunchedEffect(profileUpdateLoading) {
+        if (profileSaveRequested && profileUpdateLoading) {
+            profileSaveInFlight = true
         }
+    }
+    LaunchedEffect(matchFiltersLoading) {
+        if (matchFiltersSaveRequested && matchFiltersLoading) {
+            matchFiltersSaveInFlight = true
+        }
+    }
+    LaunchedEffect(photoActionLoading) {
+        if (photoActionRequested && photoActionLoading) {
+            photoActionInFlight = true
+        }
+    }
+    LaunchedEffect(photoReorderLoading) {
+        if (photoReorderRequested && photoReorderLoading) {
+            photoReorderInFlight = true
+        }
+    }
+
+    val profileSaveSucceeded = profileSaveInFlight && !profileUpdateLoading && profileUpdateMessage != null
+    val matchFiltersSaveSucceeded = matchFiltersSaveInFlight && !matchFiltersLoading && matchFiltersMessage != null
+    val photoActionSucceeded = photoActionInFlight && !photoActionLoading && photoActionMessage != null
+    val photoReorderSucceeded = photoReorderInFlight && !photoReorderLoading && photoReorderMessage != null
+    val photosChangedSuccessfully = photoActionSucceeded || photoReorderSucceeded
+
+    LaunchedEffect(profileUpdateLoading, profileUpdateMessage, profileUpdateError) {
+        if (profileSaveSucceeded && expandedSection == ProfileSection.Profile) {
+            expandedSection = null
+        }
+        if (profileSaveInFlight && !profileUpdateLoading && (profileUpdateMessage != null || profileUpdateError != null)) {
+            profileSaveRequested = false
+            profileSaveInFlight = false
+        }
+    }
+    LaunchedEffect(matchFiltersLoading, matchFiltersMessage, matchFiltersError) {
+        if (matchFiltersSaveSucceeded && expandedSection == ProfileSection.Filters) {
+            expandedSection = null
+        }
+        if (matchFiltersSaveInFlight && !matchFiltersLoading && (matchFiltersMessage != null || matchFiltersError != null)) {
+            matchFiltersSaveRequested = false
+            matchFiltersSaveInFlight = false
+        }
+    }
+    LaunchedEffect(
+        photoActionLoading,
+        photoActionMessage,
+        photoActionError,
+        photoReorderLoading,
+        photoReorderMessage,
+        photoReorderError,
+    ) {
+        if (photosChangedSuccessfully && expandedSection == ProfileSection.Photos) {
+            expandedSection = null
+        }
+        if (photoActionInFlight && !photoActionLoading && (photoActionMessage != null || photoActionError != null)) {
+            photoActionRequested = false
+            photoActionInFlight = false
+        }
+        if (photoReorderInFlight && !photoReorderLoading && (photoReorderMessage != null || photoReorderError != null)) {
+            photoReorderRequested = false
+            photoReorderInFlight = false
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        ProfileDetailsCard(
+            profile = profile,
+            loading = profileUpdateLoading,
+            busy = busy,
+            error = profileUpdateError,
+            message = profileUpdateMessage,
+            expanded = expandedSection == ProfileSection.Profile && !profileSaveSucceeded,
+            onToggleExpanded = {
+                expandedSection = if (expandedSection == ProfileSection.Profile) null else ProfileSection.Profile
+            },
+            onUpdateProfile = {
+                profileSaveRequested = true
+                onUpdateProfile(it)
+            },
+        )
+        MatchPreferencesCard(
+            profile = profile,
+            loading = matchFiltersLoading,
+            busy = busy,
+            error = matchFiltersError,
+            message = matchFiltersMessage,
+            expanded = expandedSection == ProfileSection.Filters && !matchFiltersSaveSucceeded,
+            onToggleExpanded = {
+                expandedSection = if (expandedSection == ProfileSection.Filters) null else ProfileSection.Filters
+            },
+            onUpdateMatchFilters = {
+                matchFiltersSaveRequested = true
+                onUpdateMatchFilters(it)
+            },
+        )
+        PhotosCard(
+            profile = profile,
+            photosLoading = photosLoading,
+            photos = photos,
+            photosError = photosError,
+            photoActionLoading = photoActionLoading,
+            photoActionError = photoActionError,
+            photoActionMessage = photoActionMessage,
+            photoReorderLoading = photoReorderLoading,
+            photoReorderError = photoReorderError,
+            photoReorderMessage = photoReorderMessage,
+            activationLoading = activationLoading,
+            activationError = activationError,
+            emailVerificationSending = emailVerificationSending,
+            emailVerificationChecking = emailVerificationChecking,
+            emailVerificationMessage = emailVerificationMessage,
+            emailVerificationError = emailVerificationError,
+            emailVerificationRequired = emailVerificationRequired,
+            emailVerificationLocallyVerified = emailVerificationLocallyVerified,
+            resendEmailVerificationAvailableAtMillis = resendEmailVerificationAvailableAtMillis,
+            checkEmailVerificationAvailableAtMillis = checkEmailVerificationAvailableAtMillis,
+            busy = busy,
+            expanded = expandedSection == ProfileSection.Photos && !photosChangedSuccessfully,
+            onToggleExpanded = {
+                expandedSection = if (expandedSection == ProfileSection.Photos) null else ProfileSection.Photos
+            },
+            onLoadPhotos = onLoadPhotos,
+            onAddPhotoFile = { position, fileUri ->
+                photoActionRequested = true
+                onAddPhotoFile(position, fileUri)
+            },
+            onReplacePhotoFile = { photoId, position, fileUri ->
+                photoActionRequested = true
+                onReplacePhotoFile(photoId, position, fileUri)
+            },
+            onDeletePhoto = { photoId, position ->
+                photoActionRequested = true
+                onDeletePhoto(photoId, position)
+            },
+            onMovePhoto = { photoId, targetPosition ->
+                photoReorderRequested = true
+                onMovePhoto(photoId, targetPosition)
+            },
+            onActivateProfile = onActivateProfile,
+            onResendEmailVerification = onResendEmailVerification,
+            onCheckEmailVerification = onCheckEmailVerification,
+        )
     }
 }
 
@@ -412,8 +481,41 @@ private enum class ProfileSection {
     Photos,
 }
 
+private val IntentionOptions = listOf(
+    "DATE",
+    "FRIENDSHIP",
+    "CASUAL",
+)
+
 @Composable
-private fun ProfileEditActions(
+private fun SectionHeader(
+    title: String,
+    expanded: Boolean,
+    closeEnabled: Boolean,
+    onClose: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.titleLarge,
+        )
+        if (expanded) {
+            TextButton(
+                onClick = onClose,
+                enabled = closeEnabled,
+            ) {
+                Text("Cerrar")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileDetailsCard(
     profile: Profile,
     loading: Boolean,
     busy: Boolean,
@@ -423,20 +525,233 @@ private fun ProfileEditActions(
     onToggleExpanded: () -> Unit,
     onUpdateProfile: (UpdateProfileInput) -> Unit,
 ) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            SectionHeader(
+                title = "Tu perfil",
+                expanded = expanded,
+                closeEnabled = !loading && !busy,
+                onClose = onToggleExpanded,
+            )
+            if (expanded) {
+                ProfileEditActions(
+                    profile = profile,
+                    loading = loading,
+                    error = error,
+                    message = message,
+                    onUpdateProfile = onUpdateProfile,
+                )
+            } else {
+                Text(
+                    text = TextSafety.safeDisplay(profile.displayName, maxLength = 100),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = "${profile.age} años · ${
+                        TextSafety.safeDisplay(profile.city, maxLength = 100)
+                    }, ${TextSafety.safeDisplay(profile.country, maxLength = 100)}",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                profile.bio?.takeIf { it.isNotBlank() }?.let {
+                    Text(TextSafety.safeDisplay(it, maxLength = 1_000))
+                }
+                Text(
+                    text = profileNextStep(profile.status),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedButton(
+                    onClick = onToggleExpanded,
+                    enabled = !loading && !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Editar perfil")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MatchPreferencesCard(
+    profile: Profile,
+    loading: Boolean,
+    busy: Boolean,
+    error: ApiError?,
+    message: String?,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    onUpdateMatchFilters: (UpdateMatchFiltersInput) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            SectionHeader(
+                title = "Preferencias de match",
+                expanded = expanded,
+                closeEnabled = !loading && !busy,
+                onClose = onToggleExpanded,
+            )
+            if (expanded) {
+                MatchPreferencesEditor(
+                    profile = profile,
+                    loading = loading,
+                    error = error,
+                    message = message,
+                    onUpdateMatchFilters = onUpdateMatchFilters,
+                )
+            } else {
+                Text(profile.intention.intentionLabel(), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = genderPreferenceSummary(profile.lookingForGenders),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    text = "${profile.preferredMinAge}–${profile.preferredMaxAge} años · hasta ${profile.maxDistanceKm} km",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedButton(
+                    onClick = onToggleExpanded,
+                    enabled = !loading && !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Editar preferencias")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PhotosCard(
+    profile: Profile,
+    photosLoading: Boolean,
+    photos: List<ProfilePhoto>,
+    photosError: ApiError?,
+    photoActionLoading: Boolean,
+    photoActionError: ApiError?,
+    photoActionMessage: String?,
+    photoReorderLoading: Boolean,
+    photoReorderError: ApiError?,
+    photoReorderMessage: String?,
+    activationLoading: Boolean,
+    activationError: ApiError?,
+    emailVerificationSending: Boolean,
+    emailVerificationChecking: Boolean,
+    emailVerificationMessage: String?,
+    emailVerificationError: String?,
+    emailVerificationRequired: Boolean,
+    emailVerificationLocallyVerified: Boolean,
+    resendEmailVerificationAvailableAtMillis: Long?,
+    checkEmailVerificationAvailableAtMillis: Long?,
+    busy: Boolean,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    onLoadPhotos: () -> Unit,
+    onAddPhotoFile: (position: Int, fileUri: Uri) -> Unit,
+    onReplacePhotoFile: (photoId: String, position: Int, fileUri: Uri) -> Unit,
+    onDeletePhoto: (photoId: String, position: Int) -> Unit,
+    onMovePhoto: (photoId: String, targetPosition: Int) -> Unit,
+    onActivateProfile: (Profile) -> Unit,
+    onResendEmailVerification: () -> Unit,
+    onCheckEmailVerification: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            SectionHeader(
+                title = "Fotos",
+                expanded = expanded,
+                closeEnabled = !busy,
+                onClose = onToggleExpanded,
+            )
+            if (expanded) {
+                PhotoManagerActions(
+                    profile = profile,
+                    photosLoading = photosLoading,
+                    photos = photos,
+                    photosError = photosError,
+                    photoActionLoading = photoActionLoading,
+                    photoActionError = photoActionError,
+                    photoActionMessage = photoActionMessage,
+                    photoReorderLoading = photoReorderLoading,
+                    photoReorderError = photoReorderError,
+                    photoReorderMessage = photoReorderMessage,
+                    activationLoading = activationLoading,
+                    activationError = activationError,
+                    emailVerificationSending = emailVerificationSending,
+                    emailVerificationChecking = emailVerificationChecking,
+                    emailVerificationMessage = emailVerificationMessage,
+                    emailVerificationError = emailVerificationError,
+                    emailVerificationRequired = emailVerificationRequired,
+                    emailVerificationLocallyVerified = emailVerificationLocallyVerified,
+                    resendEmailVerificationAvailableAtMillis = resendEmailVerificationAvailableAtMillis,
+                    checkEmailVerificationAvailableAtMillis = checkEmailVerificationAvailableAtMillis,
+                    busy = busy,
+                    onLoadPhotos = onLoadPhotos,
+                    onAddPhotoFile = onAddPhotoFile,
+                    onReplacePhotoFile = onReplacePhotoFile,
+                    onDeletePhoto = onDeletePhoto,
+                    onMovePhoto = onMovePhoto,
+                    onActivateProfile = onActivateProfile,
+                    onResendEmailVerification = onResendEmailVerification,
+                    onCheckEmailVerification = onCheckEmailVerification,
+                )
+            } else {
+                Text("${profile.photoCount} de 9 fotos", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = "Identidad verificada: ${yesNo(profile.identityVerified)}",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedButton(
+                    onClick = onToggleExpanded,
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Administrar fotos")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileEditActions(
+    profile: Profile,
+    loading: Boolean,
+    error: ApiError?,
+    message: String?,
+    onUpdateProfile: (UpdateProfileInput) -> Unit,
+) {
     var displayName by rememberSaveable(profile.id, profile.displayName) { mutableStateOf(profile.displayName) }
     var bio by rememberSaveable(profile.id, profile.bio) { mutableStateOf(profile.bio.orEmpty()) }
     var city by rememberSaveable(profile.id, profile.city) { mutableStateOf(profile.city) }
     var country by rememberSaveable(profile.id, profile.country) { mutableStateOf(profile.country) }
-    var intention by rememberSaveable(profile.id, profile.intention) { mutableStateOf(profile.intention) }
     var localError by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
 
-    Column(modifier = Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        OutlinedButton(onClick = onToggleExpanded, enabled = !loading && !busy, modifier = Modifier.fillMaxWidth()) {
-            Text(if (expanded) "Ocultar edicion de perfil" else "Editar perfil")
-        }
-        if (expanded) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
-                text = "Campos editables: nombre, bio, ciudad, pais e intencion.",
+                text = "Campos editables: nombre, bio, ciudad y pais.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -444,20 +759,11 @@ private fun ProfileEditActions(
             OutlinedTextField(bio, { bio = it.take(1_000) }, label = { Text("Bio") }, enabled = !loading, minLines = 3, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(city, { city = it.take(100) }, label = { Text("Ciudad") }, enabled = !loading, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(country, { country = it.take(100) }, label = { Text("Pais") }, enabled = !loading, singleLine = true, modifier = Modifier.fillMaxWidth())
-            EnumDropdown(
-                label = "Intención",
-                value = intention,
-                options = listOf("DATE", "FRIENDSHIP", "CASUAL"),
-                enabled = !loading,
-                optionLabel = { it.intentionLabel() },
-                onValueChange = { intention = it },
-            )
             localError?.let { ErrorFeedback("Revisa los datos", it) }
             error?.let { ApiErrorFeedbackCard(it, ErrorContext.ProfileUpdate) }
-            message?.let { SuccessFeedback(it) }
             Button(
                 onClick = {
-                    val input = validateUpdateProfileInput(displayName, bio, city, country, intention)
+                    val input = validateUpdateProfileInput(displayName, bio, city, country)
                     if (input == null) {
                         localError = "Revisa nombre, ciudad, pais y bio. No uses etiquetas o formato HTML."
                     } else {
@@ -470,22 +776,21 @@ private fun ProfileEditActions(
             ) {
                 Text(if (loading) "Guardando..." else "Guardar cambios")
             }
-        }
     }
 }
 
 @Composable
-private fun MatchFiltersActions(
+private fun MatchPreferencesEditor(
     profile: Profile,
     loading: Boolean,
-    busy: Boolean,
     error: ApiError?,
     message: String?,
-    expanded: Boolean,
-    onToggleExpanded: () -> Unit,
     onUpdateMatchFilters: (UpdateMatchFiltersInput) -> Unit,
 ) {
     val profileGenderPreferenceKey = profile.lookingForGenders.sorted().joinToString("|")
+    var intention by rememberSaveable(profile.id, profile.intention) {
+        mutableStateOf(profile.intention)
+    }
     var lookingForGenders by rememberSaveable(
         profile.id,
         profileGenderPreferenceKey,
@@ -504,33 +809,41 @@ private fun MatchFiltersActions(
     }
     var localError by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
 
-    Column(modifier = Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        OutlinedButton(onClick = onToggleExpanded, enabled = !loading && !busy, modifier = Modifier.fillMaxWidth()) {
-            Text(if (expanded) "Ocultar filtros" else "Editar filtros de match")
-        }
-        if (expanded) {
-            Text(
-                text = "Estas preferencias nos ayudan a encontrar personas compatibles para vos.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodyMedium,
+    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        Text(
+            text = "Definí con quién querés que te conectemos.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        PreferenceGroup(title = "Qué buscás") {
+            IntentionChips(
+                selected = intention,
+                enabled = !loading,
+                onSelectionChange = { intention = it },
             )
-            GenderPreferenceSelector(
+        }
+        PreferenceGroup(title = "A quién querés conocer") {
+            GenderPreferenceChips(
                 selected = lookingForGenders,
                 enabled = !loading,
                 onSelectionChange = { lookingForGenders = it },
-                label = "Me interesa conocer",
             )
+        }
+        PreferenceGroup(title = "Edad") {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                NumberField(minAge, { minAge = it }, "Edad min", !loading, Modifier.weight(1f))
-                NumberField(maxAge, { maxAge = it }, "Edad max", !loading, Modifier.weight(1f))
+                NumberField(minAge, { minAge = it }, "Mínima", !loading, Modifier.weight(1f))
+                NumberField(maxAge, { maxAge = it }, "Máxima", !loading, Modifier.weight(1f))
             }
-            NumberField(distance, { distance = it }, "Distancia maxima km", !loading, Modifier.fillMaxWidth())
-            localError?.let { ErrorFeedback("Revisa los filtros", it) }
+        }
+        PreferenceGroup(title = "Distancia máxima") {
+            NumberField(distance, { distance = it }, "Kilómetros", !loading, Modifier.fillMaxWidth())
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            localError?.let { ErrorFeedback("Revisá las preferencias", it) }
             error?.let { ApiErrorFeedbackCard(it, ErrorContext.MatchFilters) }
-            message?.let { SuccessFeedback(it) }
             Button(
                 onClick = {
-                    val input = validateMatchFiltersInput(lookingForGenders, minAge, maxAge, distance)
+                    val input = validateMatchFiltersInput(intention, lookingForGenders, minAge, maxAge, distance)
                     if (input == null) {
                         localError = "Elegí al menos una preferencia. Edades entre 18 y 99, min <= max, distancia entre 1 y 1000."
                     } else {
@@ -541,8 +854,69 @@ private fun MatchFiltersActions(
                 enabled = !loading,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (loading) "Guardando filtros..." else "Guardar filtros")
+                Text(if (loading) "Guardando preferencias..." else "Guardar preferencias")
             }
+        }
+    }
+}
+
+@Composable
+private fun PreferenceGroup(
+    title: String,
+    content: @Composable () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(title, style = MaterialTheme.typography.titleSmall)
+        content()
+    }
+}
+
+@Composable
+private fun IntentionChips(
+    selected: String,
+    enabled: Boolean,
+    onSelectionChange: (String) -> Unit,
+) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        IntentionOptions.forEach { option ->
+            FilterChip(
+                selected = selected == option,
+                onClick = { onSelectionChange(option) },
+                enabled = enabled,
+                label = { Text(option.intentionLabel()) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun GenderPreferenceChips(
+    selected: Set<String>,
+    enabled: Boolean,
+    onSelectionChange: (Set<String>) -> Unit,
+) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        GenderPreferenceOptions.forEach { option ->
+            val checked = option in selected
+            FilterChip(
+                selected = checked,
+                onClick = {
+                    val next = if (checked) {
+                        if (selected.size == 1) selected else selected - option
+                    } else {
+                        selected + option
+                    }
+                    onSelectionChange(next)
+                },
+                enabled = enabled,
+                label = { Text(option.genderPreferenceLabel()) },
+            )
         }
     }
 }
@@ -570,8 +944,6 @@ private fun PhotoManagerActions(
     resendEmailVerificationAvailableAtMillis: Long?,
     checkEmailVerificationAvailableAtMillis: Long?,
     busy: Boolean,
-    expanded: Boolean,
-    onToggleExpanded: () -> Unit,
     onLoadPhotos: () -> Unit,
     onAddPhotoFile: (position: Int, fileUri: Uri) -> Unit,
     onReplacePhotoFile: (photoId: String, position: Int, fileUri: Uri) -> Unit,
@@ -613,11 +985,7 @@ private fun PhotoManagerActions(
         }
     }
 
-    Column(modifier = Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        OutlinedButton(onClick = onToggleExpanded, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-            Text(if (expanded) "Ocultar fotos" else "Administrar fotos")
-        }
-        if (expanded) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
                 text = "Subi, reemplaza o borra fotos. Para reordenarlas, mantené presionada una foto y arrastrala a otro lugar.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -636,7 +1004,6 @@ private fun PhotoManagerActions(
                     tone = FeedbackTone.Info,
                 )
             }
-            photoReorderMessage?.let { SuccessFeedback(it) }
             photoReorderError?.let { ApiErrorFeedbackCard(it, ErrorContext.PhotoUpload) }
             PhotoGrid(
                 photos = photos,
@@ -656,7 +1023,6 @@ private fun PhotoManagerActions(
                 onMovePhoto = onMovePhoto,
             )
             localError?.let { ErrorFeedback("Revisa las fotos", it) }
-            photoActionMessage?.let { SuccessFeedback(it) }
             photoActionError?.let { ApiErrorFeedbackCard(it, ErrorContext.PhotoUpload) }
             activationError?.let { ApiErrorFeedbackCard(it, ErrorContext.ProfileActivation) }
             val showEmailVerificationActions =
@@ -695,7 +1061,6 @@ private fun PhotoManagerActions(
                     Text(if (activationLoading) "Activando..." else "Intentar activar perfil")
                 }
             }
-        }
     }
 }
 
@@ -1296,7 +1661,6 @@ private fun validateUpdateProfileInput(
     bio: String,
     city: String,
     country: String,
-    intention: String,
 ): UpdateProfileInput? {
     val cleanDisplayName = TextSafety.normalizeSingleLine(displayName, maxLength = 100)
     val cleanBio = TextSafety.normalizeMultiline(bio, maxLength = 1_000)
@@ -1311,18 +1675,17 @@ private fun validateUpdateProfileInput(
     if (TextSafety.containsHtmlLikeMarkup(cleanBio)) return null
     if (TextSafety.containsHtmlLikeMarkup(cleanCity)) return null
     if (TextSafety.containsHtmlLikeMarkup(cleanCountry)) return null
-    if (intention !in listOf("DATE", "FRIENDSHIP", "CASUAL")) return null
 
     return UpdateProfileInput(
         displayName = cleanDisplayName,
         bio = cleanBio.ifBlank { null },
         city = cleanCity,
         country = cleanCountry,
-        intention = intention,
     )
 }
 
 private fun validateMatchFiltersInput(
+    intention: String,
     lookingForGenders: Set<String>,
     minAge: String,
     maxAge: String,
@@ -1331,11 +1694,13 @@ private fun validateMatchFiltersInput(
     val parsedMin = minAge.toIntOrNull()
     val parsedMax = maxAge.toIntOrNull()
     val parsedDistance = distance.toIntOrNull()
+    if (intention !in listOf("DATE", "FRIENDSHIP", "CASUAL")) return null
     if (!isValidGenderPreferenceSet(lookingForGenders)) return null
     if (parsedMin == null || parsedMax == null || parsedDistance == null) return null
     if (parsedMin !in 18..99 || parsedMax !in 18..99 || parsedMin > parsedMax) return null
     if (parsedDistance !in 1..1000) return null
     return UpdateMatchFiltersInput(
+        intention = intention,
         lookingForGenders = lookingForGenders,
         preferredMinAge = parsedMin,
         preferredMaxAge = parsedMax,
@@ -1343,7 +1708,7 @@ private fun validateMatchFiltersInput(
     )
 }
 
-private fun yesNo(value: Boolean): String = if (value) "si" else "no"
+private fun yesNo(value: Boolean): String = if (value) "Sí" else "No"
 
 private fun ApiError?.isEmailNotVerified(): Boolean =
     this is ApiError.Backend &&

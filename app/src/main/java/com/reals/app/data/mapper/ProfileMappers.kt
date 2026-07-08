@@ -54,10 +54,10 @@ fun UpdateProfileInput.toDto(): UpdateProfileRequestDto = UpdateProfileRequestDt
     bio = bio,
     city = city,
     country = country,
-    intention = intention,
 )
 
 fun UpdateMatchFiltersInput.toDto(): UpdateMatchFiltersRequestDto = UpdateMatchFiltersRequestDto(
+    intention = intention,
     lookingForGenders = lookingForGenders,
     preferredMinAge = preferredMinAge,
     preferredMaxAge = preferredMaxAge,
