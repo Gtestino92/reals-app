@@ -10,6 +10,7 @@ import com.reals.app.data.repository.ChatRepository
 import com.reals.app.data.repository.MatchRepository
 import com.reals.app.di.FirstChatFeatureDependencies
 import com.reals.app.domain.model.ChatContinueDecision
+import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.usecase.AcceptChatExitRequestUseCase
@@ -483,6 +484,7 @@ class FirstChatCoordinatorTest {
 
         val result = coordinator.safetyCancel(
             current = current,
+            reason = ChatExitReason.InappropriateBehavior,
             details = "<b>unsafe</b>",
             onPending = {},
         )
@@ -499,6 +501,7 @@ class FirstChatCoordinatorTest {
 
         val result = coordinator.safetyCancel(
             current = current,
+            reason = ChatExitReason.ChildSafetyConcern,
             details = "detalle valido",
             onPending = {},
         )
@@ -511,6 +514,7 @@ class FirstChatCoordinatorTest {
             result.message,
         )
         assertEquals(listOf("safetyCancelChat"), api.calls)
+        assertEquals("CHILD_SAFETY_CONCERN", api.exitBody?.reason)
     }
 
     @Test
@@ -520,6 +524,7 @@ class FirstChatCoordinatorTest {
 
         val result = secondCoordinator.safetyCancel(
             current = current,
+            reason = ChatExitReason.InappropriateBehavior,
             details = "<script>alert(1)</script>",
             onPending = {},
         )
@@ -537,6 +542,7 @@ class FirstChatCoordinatorTest {
 
         val result = secondCoordinator.safetyCancel(
             current = current,
+            reason = ChatExitReason.ChildSafetyConcern,
             details = "detalle valido",
             onPending = {},
         )
@@ -548,6 +554,7 @@ class FirstChatCoordinatorTest {
             result.message,
         )
         assertEquals(listOf("safetyCancelChat"), api.calls)
+        assertEquals("CHILD_SAFETY_CONCERN", api.exitBody?.reason)
     }
 
     @Test

@@ -44,6 +44,7 @@ class UiLabelsTest {
         assertEquals("Ya no hay interes", ChatExitReason.NoLongerInterested.userLabel())
         assertEquals("Comportamiento inapropiado", ChatExitReason.InappropriateBehavior.userLabel())
         assertEquals("Acoso", ChatExitReason.Harassment.userLabel())
+        assertEquals("Seguridad de menores", ChatExitReason.ChildSafetyConcern.userLabel())
         assertEquals("Motivo no disponible", ChatExitReason.Unknown("NEW").userLabel())
     }
 

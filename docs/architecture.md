@@ -87,6 +87,18 @@ Android must not:
 - mutate backend lifecycle state locally;
 - infer locks, penalties or moderation outcomes as source of truth.
 
+## Chat Safety Reporting
+
+First and second chat reuse the existing `Reportar y cerrar chat` safety-cancellation flow. The dialog requires
+non-blank details (up to 1000 characters) and offers `Comportamiento inapropiado`, `Acoso`, `Seguridad de menores`
+and `Otro`. `Seguridad de menores` maps to `ChatExitReason.CHILD_SAFETY_CONCERN`; the selected domain reason and
+normalized details flow through the root ViewModel and the corresponding chat coordinator to
+`POST /api/chats/{chatId}/safety-cancellations`.
+
+A report expresses a concern, not a confirmed violation. Android does not consume the general safety-report or
+admin safety-report APIs and does not expose `priorityReview`; review priority and moderation outcomes remain
+backend/backoffice responsibilities.
+
 ## Notifications
 
 Notification handling lives in `notifications/` and `MainActivity`.

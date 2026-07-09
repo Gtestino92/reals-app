@@ -315,10 +315,6 @@ private fun ProfileCard(
     var profileSaveInFlight by rememberSaveable(profile.id) { mutableStateOf(false) }
     var matchFiltersSaveRequested by rememberSaveable(profile.id) { mutableStateOf(false) }
     var matchFiltersSaveInFlight by rememberSaveable(profile.id) { mutableStateOf(false) }
-    var photoActionRequested by rememberSaveable(profile.id) { mutableStateOf(false) }
-    var photoActionInFlight by rememberSaveable(profile.id) { mutableStateOf(false) }
-    var photoReorderRequested by rememberSaveable(profile.id) { mutableStateOf(false) }
-    var photoReorderInFlight by rememberSaveable(profile.id) { mutableStateOf(false) }
     val busy = profileUpdateLoading ||
             matchFiltersLoading ||
             photosLoading ||
@@ -338,22 +334,8 @@ private fun ProfileCard(
             matchFiltersSaveInFlight = true
         }
     }
-    LaunchedEffect(photoActionLoading) {
-        if (photoActionRequested && photoActionLoading) {
-            photoActionInFlight = true
-        }
-    }
-    LaunchedEffect(photoReorderLoading) {
-        if (photoReorderRequested && photoReorderLoading) {
-            photoReorderInFlight = true
-        }
-    }
-
     val profileSaveSucceeded = profileSaveInFlight && !profileUpdateLoading && profileUpdateMessage != null
     val matchFiltersSaveSucceeded = matchFiltersSaveInFlight && !matchFiltersLoading && matchFiltersMessage != null
-    val photoActionSucceeded = photoActionInFlight && !photoActionLoading && photoActionMessage != null
-    val photoReorderSucceeded = photoReorderInFlight && !photoReorderLoading && photoReorderMessage != null
-    val photosChangedSuccessfully = photoActionSucceeded || photoReorderSucceeded
 
     LaunchedEffect(profileUpdateLoading, profileUpdateMessage, profileUpdateError) {
         if (profileSaveSucceeded && expandedSection == ProfileSection.Profile) {
@@ -373,27 +355,6 @@ private fun ProfileCard(
             matchFiltersSaveInFlight = false
         }
     }
-    LaunchedEffect(
-        photoActionLoading,
-        photoActionMessage,
-        photoActionError,
-        photoReorderLoading,
-        photoReorderMessage,
-        photoReorderError,
-    ) {
-        if (photosChangedSuccessfully && expandedSection == ProfileSection.Photos) {
-            expandedSection = null
-        }
-        if (photoActionInFlight && !photoActionLoading && (photoActionMessage != null || photoActionError != null)) {
-            photoActionRequested = false
-            photoActionInFlight = false
-        }
-        if (photoReorderInFlight && !photoReorderLoading && (photoReorderMessage != null || photoReorderError != null)) {
-            photoReorderRequested = false
-            photoReorderInFlight = false
-        }
-    }
-
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         ProfileDetailsCard(
             profile = profile,
@@ -447,27 +408,15 @@ private fun ProfileCard(
             resendEmailVerificationAvailableAtMillis = resendEmailVerificationAvailableAtMillis,
             checkEmailVerificationAvailableAtMillis = checkEmailVerificationAvailableAtMillis,
             busy = busy,
-            expanded = expandedSection == ProfileSection.Photos && !photosChangedSuccessfully,
+            expanded = expandedSection == ProfileSection.Photos,
             onToggleExpanded = {
                 expandedSection = if (expandedSection == ProfileSection.Photos) null else ProfileSection.Photos
             },
             onLoadPhotos = onLoadPhotos,
-            onAddPhotoFile = { position, fileUri ->
-                photoActionRequested = true
-                onAddPhotoFile(position, fileUri)
-            },
-            onReplacePhotoFile = { photoId, position, fileUri ->
-                photoActionRequested = true
-                onReplacePhotoFile(photoId, position, fileUri)
-            },
-            onDeletePhoto = { photoId, position ->
-                photoActionRequested = true
-                onDeletePhoto(photoId, position)
-            },
-            onMovePhoto = { photoId, targetPosition ->
-                photoReorderRequested = true
-                onMovePhoto(photoId, targetPosition)
-            },
+            onAddPhotoFile = onAddPhotoFile,
+            onReplacePhotoFile = onReplacePhotoFile,
+            onDeletePhoto = onDeletePhoto,
+            onMovePhoto = onMovePhoto,
             onActivateProfile = onActivateProfile,
             onResendEmailVerification = onResendEmailVerification,
             onCheckEmailVerification = onCheckEmailVerification,

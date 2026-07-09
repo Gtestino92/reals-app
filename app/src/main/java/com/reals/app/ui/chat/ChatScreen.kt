@@ -55,6 +55,7 @@ import com.reals.app.core.time.backendInstantOrNull
 import com.reals.app.core.time.remainingExitSeconds
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatDecisionState
+import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatMessage
@@ -112,7 +113,7 @@ fun ChatScreen(
     onApprove: () -> Unit,
     onReject: () -> Unit,
     onRequestMutualExit: () -> Unit,
-    onSafetyCancel: (String) -> Unit,
+    onSafetyCancel: (ChatExitReason, String) -> Unit,
     onManualBlock: () -> Unit,
     onClearManualBlockError: () -> Unit,
     onAcceptExitRequest: (String) -> Unit,
@@ -121,6 +122,9 @@ fun ChatScreen(
 ) {
     var draft by rememberSaveable(chat?.id) { mutableStateOf("") }
     var safetyDetails by rememberSaveable(chat?.id) { mutableStateOf("") }
+    var safetyReasonRawValue by rememberSaveable(chat?.id) {
+        mutableStateOf(ChatExitReason.InappropriateBehavior.rawValue)
+    }
     var showingSafetyDialog by rememberSaveable(chat?.id) { mutableStateOf(false) }
     var actionsMenuExpanded by rememberSaveable(chat?.id) { mutableStateOf(false) }
     var showingManualBlockDialog by rememberSaveable(chat?.id) { mutableStateOf(false) }
@@ -343,14 +347,20 @@ fun ChatScreen(
     if (showingSafetyDialog && showExitActions) {
         SafetyReportDialog(
             details = safetyDetails,
+            selectedReason = safetyReportReasonFromRawValue(safetyReasonRawValue),
             actionLoading = actionLoading,
             onDetailsChange = { safetyDetails = it.take(1_000) },
+            onReasonChange = { safetyReasonRawValue = it.rawValue },
             onDismiss = {
                 if (!actionLoading) showingSafetyDialog = false
             },
             onConfirm = {
-                onSafetyCancel(safetyDetails)
+                onSafetyCancel(
+                    safetyReportReasonFromRawValue(safetyReasonRawValue),
+                    safetyDetails,
+                )
                 safetyDetails = ""
+                safetyReasonRawValue = ChatExitReason.InappropriateBehavior.rawValue
                 showingSafetyDialog = false
             },
         )
@@ -994,17 +1004,51 @@ private fun OptimisticMessageBubble(
 @Composable
 private fun SafetyReportDialog(
     details: String,
+    selectedReason: ChatExitReason,
     actionLoading: Boolean,
     onDetailsChange: (String) -> Unit,
+    onReasonChange: (ChatExitReason) -> Unit,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
+    var reasonMenuExpanded by rememberSaveable { mutableStateOf(false) }
+    val selectedOption = safetyReportReasonOptions.first { it.reason == selectedReason }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Reportar y cerrar chat") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Describi que paso. Este reporte cerrara el chat por seguridad y sera revisado.")
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = { reasonMenuExpanded = true },
+                        enabled = !actionLoading,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(selectedOption.label)
+                    }
+                    DropdownMenu(
+                        expanded = reasonMenuExpanded,
+                        onDismissRequest = { reasonMenuExpanded = false },
+                    ) {
+                        safetyReportReasonOptions.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option.label) },
+                                onClick = {
+                                    onReasonChange(option.reason)
+                                    reasonMenuExpanded = false
+                                },
+                            )
+                        }
+                    }
+                }
+                selectedOption.description?.let { description ->
+                    Text(
+                        text = description,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
                 OutlinedTextField(
                     value = details,
                     onValueChange = onDetailsChange,

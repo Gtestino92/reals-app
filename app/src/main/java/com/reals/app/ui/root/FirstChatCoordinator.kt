@@ -349,6 +349,7 @@ internal class FirstChatCoordinator(
 
     suspend fun safetyCancel(
         current: RealsRootUiState.FirstChat,
+        reason: ChatExitReason,
         details: String,
         onPending: (RealsRootUiState.FirstChat) -> Unit,
     ): FirstChatActionResult {
@@ -372,7 +373,7 @@ internal class FirstChatCoordinator(
         ) { chatId ->
             dependencies.safetyCancelChat(
                 chatId,
-                ChatExitReason.InappropriateBehavior,
+                reason,
                 cleanDetails,
             )
         }

@@ -113,6 +113,7 @@ class BackendStatusParserTest {
         assertEquals(ChatExitReason.NoLongerInterested, ChatExitReason.fromBackend("NO_LONGER_INTERESTED"))
         assertEquals(ChatExitReason.InappropriateBehavior, ChatExitReason.fromBackend("INAPPROPRIATE_BEHAVIOR"))
         assertEquals(ChatExitReason.Harassment, ChatExitReason.fromBackend("HARASSMENT"))
+        assertEquals(ChatExitReason.ChildSafetyConcern, ChatExitReason.fromBackend("CHILD_SAFETY_CONCERN"))
         assertEquals(ChatExitReason.Other, ChatExitReason.fromBackend("OTHER"))
 
         val unknown = ChatExitReason.fromBackend("SOMETHING_ELSE")
