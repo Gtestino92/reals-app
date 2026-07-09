@@ -56,6 +56,7 @@ Matching and chat:
 - `AuditAggregateType`: `USER`, `PROFILE`, `PROFILE_PHOTO`, `CHAT`, `MATCH`, `CONNECTION`, `SAFETY_REPORT`, `USER_BLOCK`, `PENALTY`
 - `LegalDocumentType`: `TERMS_OF_USE`, `PRIVACY_NOTICE`, `COMMUNITY_GUIDELINES`
 - `LegalDocumentAction`: `ACCEPTED`, `ACKNOWLEDGED`
+- `UserReliabilityEventType`: `FIRST_CHAT_MUTUAL_POSITIVE_RESOLUTION`, `FIRST_CHAT_MUTUAL_NO_SPARK_CLOSURE`, `FIRST_CHAT_UNILATERAL_CLOSE_AFTER_MINIMUM_PARTICIPATION`, `FIRST_CHAT_EARLY_UNILATERAL_CLOSE`, `FIRST_CHAT_CLOSED_AFTER_COUNTERPARTY_INACTIVE`, `FIRST_CHAT_MUTUAL_CLOSE_REQUEST_IGNORED`, `FIRST_CHAT_EXPIRED_NO_DECISION`, `VISUAL_REVIEW_EXPIRED_NO_DECISION`, `VISUAL_PERSONAL_MESSAGE_SUBMITTED`, `SCHEDULING_SLOTS_PROPOSED_ON_TIME`, `SCHEDULING_EXPIRED_NO_PROPOSAL`, `SECOND_CHAT_CONFIRMED_ATTENDED`, `SECOND_CHAT_NO_SHOW`, `SAFETY_REPORT_DETERMINED_ABUSIVE`
 - `PhotoValidationStatus`: `PENDING`, `VALIDATED`, `FAILED`
 - `PhotoModerationStatus`: `PENDING`, `APPROVED`, `REJECTED`, `NEEDS_REVIEW`
 - `PenaltyType`: `TEMPORARY_BAN`, `PERMANENT_BAN`
@@ -112,22 +113,34 @@ Push notifications:
 - `ActiveEngagementLock` logically belongs to a user and either a match or connection.
 - `PushDeviceToken` belongs to a user and stores an enabled FCM device token.
 - `PushNotificationDelivery` deduplicates external push attempts per user, notification type and aggregate id. For `VISUAL_REVIEW_AVAILABLE`, the aggregate id is the match id. For `SCHEDULING_AVAILABLE`, the aggregate id is the connection id. For `SECOND_CHAT_REMINDER`, the aggregate id is a deterministic reminder key derived from connection id and `minutesBefore`, so multiple configured reminder lead times can be sent once each.
-- `UserLegalDocumentAction` is an append-oriented factual record that a user performed a configured action for a legal document type/version at a backend-generated timestamp. It stores `userId`, `documentType`, `documentVersion`, `action` and `actedAt`; it does not store document text or document URLs.
+- `UserLegalDocumentAction` is an append-oriented factual record that a user performed a configured action for a legal document type/version/content SHA-256 at a backend-generated timestamp. It stores `userId`, `documentType`, `documentVersion`, nullable `documentContentSha256`, `action` and `actedAt`; it does not store document text or document URLs.
 
 ## Legal Documents
 
 Legal document configuration defines the current document catalog under
 `legal.documents`. Each configured current document has a `type`, `version`,
-`url` and `required-action`. Runtime configuration may use an empty catalog.
+`url`, `content-sha256` and `required-action`. Runtime configuration may use an
+empty catalog.
+
+Canonical legal HTML source files live in this repository under
+`legal-documents/` using `terms/<version>/document.html`,
+`privacy/<version>/document.html` and
+`community-guidelines/<version>/document.html`. The configured
+`content-sha256` is SHA-256 of the exact raw `document.html` bytes. Startup
+verifies that each configured current document has a bundled canonical file and
+that its byte-exact hash matches configuration. The public URL is publication
+metadata and is not fetched by the backend.
 
 `user_legal_document_actions` is the source of truth for factual user actions.
 Rows are idempotent per `user_id + document_type + document_version`. Historical
 actions remain persisted but satisfy status only for the same current configured
-version and required action.
+version, required action and document content SHA-256. Pre-BACK-7 rows may have
+`documentContentSha256 = null`; such rows are legacy unanchored actions and do
+not establish exact historical content identity.
 
 Audit events with `LEGAL_DOCUMENT_ACTION_RECORDED` are secondary operational
 evidence for newly-created rows only. They use `USER` aggregate and factual
-metadata: document type, document version and action.
+metadata: document type, document version, document content SHA-256 and action.
 
 Current legal status is authoritative for protected participation/content
 writes. `LegalComplianceService` delegates to `LegalDocumentService.getStatus`
@@ -185,6 +198,7 @@ Chats can end through approval/normal completion, timeout, inactivity abandonmen
 - Creating a safety report also captures a `SafetyReportEvidenceSnapshot` and records a `SAFETY_REPORT_CREATED` audit event. Evidence capture uses message content only as hash input and does not persist a second copy of message text.
 - Dismissing or confirming a safety report records `SAFETY_REPORT_DISMISSED` or `SAFETY_REPORT_CONFIRMED`; audit metadata excludes report details, verdict notes and penalty reasons.
 - Dismissing a report as `DISMISSED_ABUSIVE_OR_UNJUSTIFIED` creates no safety penalty. If user reliability is enabled and the report has a user reporter, it records the internal `SAFETY_REPORT_DETERMINED_ABUSIVE` reliability event against the reporter.
+- A successful optional visual-review personal-message submission records the internal `VISUAL_PERSONAL_MESSAGE_SUBMITTED` reliability participation event once per user per match when user reliability is enabled. Visual approval/rejection and partner-message reading remain reliability-neutral.
 - `ChatStatus` remains the operational state; `ChatEndReason` records why a chat ended.
 - Temporary penalties have `PenaltyType.TEMPORARY_BAN` and a non-null `expiresAt`; the penalty expiration job deactivates them after expiry.
 - Permanent penalties have `PenaltyType.PERMANENT_BAN`, `expiresAt = null` and are never expired by the job.
