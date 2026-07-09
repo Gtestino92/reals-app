@@ -148,6 +148,6 @@ Recommended remote environments:
 - Backend deploys independently as a containerized API service.
 - Android builds independently as APK/AAB artifacts.
 - The frontend points each build variant/flavor to the correct backend base URL.
-- Contract changes are coordinated through `docs/openapi.yaml` and `docs/api.md`; the frontend should update after backend contract changes land.
+- Contract changes are coordinated through `docs/commons/openapi.yaml` and `docs/commons/api.md`; the frontend should update after backend contract changes land.
 
 Do not put both repos into one production Docker Compose as the primary deployment model. Compose is useful for local backend dependencies and build reproducibility, but the Android app is not a server process.

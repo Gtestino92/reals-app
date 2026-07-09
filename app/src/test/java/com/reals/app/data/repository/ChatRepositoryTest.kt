@@ -1,6 +1,9 @@
 package com.reals.app.data.repository
 
 import com.reals.app.core.network.ApiError
+import com.reals.app.core.network.AuthFailureReason
+import com.reals.app.core.network.isTerminalAuthFailure
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.reals.app.core.network.BackendErrorCode
 import com.reals.app.core.network.ErrorContext
 import com.reals.app.core.network.backendErrorCode
@@ -180,4 +183,43 @@ class ChatRepositoryTest {
         assertEquals(listOf(false, true), tokenProvider.calls)
         assertEquals(listOf("getChat", "getChat"), api.calls)
     }
+
+    @Test
+    fun `invalid Firebase user before request maps to terminal signed out auth failure`() = runBlocking {
+        tokenProvider.failure = invalidFirebaseUser()
+
+        val error = repository.getChat("chat-1").failureError()
+
+        assertEquals(AuthFailureReason.NOT_SIGNED_IN, (error as ApiError.Auth).reason)
+        assertTrue(error.isTerminalAuthFailure())
+        assertTrue(api.calls.isEmpty())
+    }
+
+    @Test
+    fun `invalid Firebase user during forced refresh does not retry api request`() = runBlocking {
+        api.chatResponseQueue = mutableListOf(backendErrorResponse(401, "UNAUTHORIZED"))
+        tokenProvider.failWhen(forceRefresh = true, throwable = invalidFirebaseUser())
+
+        val error = repository.getChat("chat-1").failureError()
+
+        assertEquals(listOf(false, true), tokenProvider.calls)
+        assertEquals(listOf("getChat"), api.calls)
+        assertEquals(AuthFailureReason.NOT_SIGNED_IN, (error as ApiError.Auth).reason)
+    }
+
+    @Test
+    fun `generic token failure remains recoverable and non terminal`() = runBlocking {
+        tokenProvider.failure = IllegalStateException("temporary token failure")
+
+        val error = repository.getChat("chat-1").failureError()
+
+        assertEquals(AuthFailureReason.TOKEN_UNAVAILABLE, (error as ApiError.Auth).reason)
+        assertEquals(false, error.isTerminalAuthFailure())
+        assertTrue(api.calls.isEmpty())
+    }
+
+    private fun invalidFirebaseUser() = FirebaseAuthInvalidUserException(
+        "ERROR_USER_DISABLED",
+        "Firebase user is disabled",
+    )
 }

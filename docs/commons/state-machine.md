@@ -130,5 +130,3 @@ State transitions and lock changes should stay coupled in service methods.
 - An `AVAILABLE` or `ACTIVE` second chat becomes `CANCELLED / USER_BLOCK`; terminal chat history is unchanged.
 
 Existing rejection and closure operations release locks. Positive transitions are guarded by pair-wide `USER_PAIR_BLOCKED`; cleanup, rejection, exit, safety, and read paths remain available.
-
-Android does not synthesize these backend transitions locally. Manual-block success and exact-code `USER_PAIR_BLOCKED` lifecycle conflicts return to Home and load fresh backend state.

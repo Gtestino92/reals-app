@@ -2,6 +2,7 @@ package com.reals.app.data.repository
 
 import android.content.ContextWrapper
 import com.google.firebase.auth.EmailAuthProvider
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -18,6 +19,25 @@ class FirebaseAuthRepositoryPasswordResetTest {
         val result = unconfiguredRepository().reloadAndRefreshEmailVerification()
 
         assertEquals(EmailVerificationCheckResult.NotSignedIn, result)
+    }
+
+    @Test
+    fun `invalid Firebase user maps email verification operations to not signed in`() {
+        val failure = FirebaseAuthInvalidUserException(
+            "ERROR_USER_DISABLED",
+            "Firebase user is disabled",
+        )
+
+        assertEquals(EmailVerificationSendResult.NotSignedIn, failure.toEmailVerificationSendResult())
+        assertEquals(EmailVerificationCheckResult.NotSignedIn, failure.toEmailVerificationCheckResult())
+    }
+
+    @Test
+    fun `generic email verification failure remains non terminal`() {
+        val failure = IllegalStateException("temporary Firebase failure")
+
+        assertEquals(EmailVerificationSendResult.Failure, failure.toEmailVerificationSendResult())
+        assertEquals(EmailVerificationCheckResult.Failure, failure.toEmailVerificationCheckResult())
     }
 
     @Test

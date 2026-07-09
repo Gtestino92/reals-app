@@ -20,6 +20,8 @@ Acceptance criteria:
 - Email/password sign-up works.
 - Email/password sign-in works.
 - Sign-out works.
+- A terminally invalid Firebase user/session signs out locally and returns the root UI to Login.
+- Transient token availability failures remain recoverable and do not force logout.
 - Account deletion/reactivation flows still work with Firebase Auth and backend account state.
 
 ### 1.2 Profile photo upload path

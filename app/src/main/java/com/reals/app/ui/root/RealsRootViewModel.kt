@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.isLegalActionRequired
+import com.reals.app.core.network.isTerminalAuthFailure
 import com.reals.app.core.network.isUserPairBlocked
 import com.reals.app.di.AppContainer
 import com.reals.app.di.RealsRootDependencies
@@ -44,6 +45,7 @@ class RealsRootViewModel(
         authRepository = authRepository,
         getProfilePhotosUseCase = getProfilePhotosUseCase,
         scope = viewModelScope,
+        onTerminalAuthFailure = { sessionCoordinator.invalidateTerminalSession() },
     )
     private val profileEntryCoordinator = ProfileEntryCoordinator(getProfilePhotosUseCase)
     private val firstChatCoordinator = FirstChatCoordinator(dependencies.firstChat)
@@ -63,6 +65,7 @@ class RealsRootViewModel(
     private var silentSchedulingRefreshJob: Job? = null
     private var legalRerouteJob: Job? = null
     private var pairBlockedRerouteJob: Job? = null
+    private var sessionInvalidationJob: Job? = null
     private var manualBlockJob: Job? = null
     private val homeCoordinator = HomeCoordinator(
         uiState = _uiState,
@@ -84,6 +87,7 @@ class RealsRootViewModel(
                 showReactivatedSession(session)
             },
         )
+        observeTerminalAuthFailure()
         observeLegalActionRequired()
         observeUserPairBlocked()
         if (autoRefreshSession) {
@@ -1146,6 +1150,19 @@ class RealsRootViewModel(
         }
     }
 
+    private fun observeTerminalAuthFailure() {
+        viewModelScope.launch {
+            uiState.collect { current ->
+                if (sessionInvalidationJob?.isActive == true) return@collect
+                if (!current.hasTerminalAuthFailure()) return@collect
+                cancelSilentRefreshFor(current)
+                sessionInvalidationJob = launch {
+                    sessionCoordinator.invalidateTerminalSession()
+                }
+            }
+        }
+    }
+
     private fun observeUserPairBlocked() {
         viewModelScope.launch {
             uiState.collect { current ->
@@ -1197,6 +1214,44 @@ private fun RealsRootUiState.hasLegalActionRequiredError(): Boolean = when (this
     else -> false
 }
 
+internal fun RealsRootUiState.hasTerminalAuthFailure(): Boolean = when (this) {
+    is RealsRootUiState.Failure -> error.isTerminalAuthFailure()
+    is RealsRootUiState.AccountDeletionPending -> error.isTerminalAuthFailure()
+    is RealsRootUiState.LegalRequirements ->
+        error.isTerminalAuthFailure() || accountDeleteError.isTerminalAuthFailure()
+
+    is RealsRootUiState.Ready ->
+        profileCreateError.isTerminalAuthFailure() ||
+            profileUpdateError.isTerminalAuthFailure() ||
+            matchFiltersError.isTerminalAuthFailure() ||
+            profileActivationError.isTerminalAuthFailure() ||
+            profilePhotosError.isTerminalAuthFailure() ||
+            photoReorderError.isTerminalAuthFailure() ||
+            photoActionError.isTerminalAuthFailure() ||
+            homeError.isTerminalAuthFailure() ||
+            matchmakingBlockedReason.isTerminalAuthFailure() ||
+            accountDeleteError.isTerminalAuthFailure()
+
+    is RealsRootUiState.FirstChat ->
+        error.isTerminalAuthFailure() || manualBlock.error.isTerminalAuthFailure()
+
+    is RealsRootUiState.SecondChat ->
+        error.isTerminalAuthFailure() || manualBlock.error.isTerminalAuthFailure()
+
+    is RealsRootUiState.VisualApproval ->
+        error.isTerminalAuthFailure() ||
+            partnerMessageError.isTerminalAuthFailure() ||
+            manualBlock.error.isTerminalAuthFailure()
+
+    is RealsRootUiState.Scheduling ->
+        error.isTerminalAuthFailure() || manualBlock.error.isTerminalAuthFailure()
+
+    is RealsRootUiState.PartnerProfile ->
+        error.isTerminalAuthFailure() || manualBlock.error.isTerminalAuthFailure()
+
+    else -> false
+}
+
 private fun RealsRootUiState.sessionForLegalResume(): ProvisionedSession? = when (this) {
     is RealsRootUiState.Ready -> session
     is RealsRootUiState.FirstChat -> session
@@ -1208,6 +1263,9 @@ private fun RealsRootUiState.sessionForLegalResume(): ProvisionedSession? = when
 
 private fun ApiError?.isLegalActionRequiredError(): Boolean =
     this?.isLegalActionRequired() == true
+
+private fun ApiError?.isTerminalAuthFailure(): Boolean =
+    this?.isTerminalAuthFailure() == true
 
 private fun RealsRootUiState.hasUserPairBlockedInteractionError(): Boolean = when (this) {
     is RealsRootUiState.FirstChat -> error.isUserPairBlockedError()

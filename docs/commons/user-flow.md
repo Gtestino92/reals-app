@@ -1,4 +1,4 @@
-﻿# User Flow
+# User Flow
 
 This document describes the current backend flow. It separates implemented behavior from future product ideas.
 
@@ -7,6 +7,25 @@ This document describes the current backend flow. It separates implemented behav
 Local no-auth development can inject a fixed authenticated user through `DevAutoAuthFilter`. The default local Firebase profile and shared environments use Firebase-backed current-user resolution.
 
 A user creates one profile. The profile starts as `DRAFT`; only `ACTIVE` profiles can enter matchmaking. Activation validates configured photo requirements.
+
+Legal compliance is backend-authoritative for protected participation/content
+writes. After provisioning, clients can call `GET /api/me/legal-status`; when
+`requirementsSatisfied=false`, they should show the current legal requirements,
+use `GET /api/legal/documents/current` for URL metadata as needed, submit the
+required factual actions with `POST /api/me/legal-document-actions`, and refresh
+legal status. The Android client may route based on this status, but backend
+protected operations are the enforcement boundary.
+
+Any protected backend request may return `409 LEGAL_ACTION_REQUIRED`. For
+future Android clients, that stable code means refresh legal status and route to
+the legal requirements UI. Legal state is not part of Home and is not modeled as
+a Home pending action.
+
+Reads, legal endpoints, account deletion/reactivation, chat exit/cancellation
+and safety/reporting flows remain available without current legal compliance.
+`APPROVED` first-chat and visual decisions require compliance; `REJECTED`
+decisions remain available. Scheduling proposal submission, proposal acceptance
+and scheduling-round rejection require compliance.
 
 ## 2. Matchmaking Queue
 
@@ -214,6 +233,4 @@ A connection eventually reaches `CLOSED`. Closure releases active connection loc
 
 ## 11. Manual block
 
-A participant may submit `POST /api/matches/{matchId}/block`; the backend resolves the counterpart without exposing their user id. The block immediately excludes the pair and contains every active match or connection. Positive progression then returns `USER_PAIR_BLOCKED`, while reads, rejection, exit, cancellation, and safety remain available.
-
-Android presents manual block as a definitive action with explicit confirmation. Blocking and reporting remain separate: blocking does not submit a safety report. New and idempotently replayed blocks both return to Home and refresh backend state. Exact `USER_PAIR_BLOCKED` progression failures reroute to refreshed Home with generic copy that does not reveal who blocked whom. There is no unblock UI.
+A participant may submit `POST /api/matches/{matchId}/block`; the backend resolves the counterpart without exposing their user id. The block immediately excludes the pair and contains every active match or connection. Positive progression then returns `USER_PAIR_BLOCKED`, while reads, rejection, exit, cancellation, and safety remain available. Android must present definitive-action confirmation before submission; Android UI and unblock are not part of this backend MVP.

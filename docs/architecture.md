@@ -43,6 +43,20 @@ The app does not use Navigation Compose. Navigation is represented by `RealsRoot
 - `ProfileOperationHandler`
 - `ChatMessageActionHandler`
 
+## Authentication And Session Validity
+
+The presence of a cached Firebase `currentUser` is not proof that the session is still usable. Authenticated
+repositories obtain the current ID token, perform the request, and retry once after an HTTP 401 using one forced
+Firebase token refresh.
+
+`FirebaseAuthInvalidUserException` and a missing Firebase user map to the terminal
+`AuthFailureReason.NOT_SIGNED_IN` condition. `SessionCoordinator` centralizes terminal invalidation by signing out
+Firebase locally and moving the root state to `Login`. Bootstrap failures, authenticated mid-session operations,
+email-verification operations and password changes converge on that operation.
+
+Generic token acquisition failures remain `TOKEN_UNAVAILABLE`; they are recoverable and do not force logout.
+Recoverable backend `ACCOUNT_DELETED` is a separate state and continues to route to `AccountDeletionPending`.
+
 ## Contract Changes
 
 When backend contracts change:

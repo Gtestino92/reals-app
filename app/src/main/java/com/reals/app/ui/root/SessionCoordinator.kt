@@ -3,6 +3,7 @@ package com.reals.app.ui.root
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ApiResult
 import com.reals.app.core.network.isAccountDeleted
+import com.reals.app.core.network.isTerminalAuthFailure
 import com.reals.app.data.repository.AuthOperationResult
 import com.reals.app.data.repository.ChangePasswordResult
 import com.reals.app.data.repository.FirebaseAuthRepository
@@ -139,6 +140,13 @@ internal class SessionCoordinator(
         uiState.value = RealsRootUiState.Login()
     }
 
+    fun invalidateTerminalSession() {
+        authRepository.signOut()
+        uiState.value = RealsRootUiState.Login(
+            error = "Tu sesión terminó. Volvé a iniciar sesión.",
+        )
+    }
+
     fun deleteAccount() {
         when (val current = uiState.value) {
             is RealsRootUiState.Ready -> deleteAccountFromReady(current)
@@ -224,6 +232,10 @@ internal class SessionCoordinator(
                 currentPassword = currentPassword,
                 newPassword = newPassword,
             )
+            if (result == ChangePasswordResult.NotSignedIn) {
+                invalidateTerminalSession()
+                return@launch
+            }
             uiState.value = pending.copy(
                 account = pending.account.copy(
                     changingPassword = false,
@@ -306,10 +318,11 @@ internal class SessionCoordinator(
             }
 
             is ApiResult.Failure -> {
-                authRepository.signOut()
-                uiState.value = RealsRootUiState.Login(
-                    error = "La cuenta esta pendiente de eliminacion. Volve a iniciar sesion para recuperarla."
-                )
+                if (userResult.error.isTerminalAuthFailure()) {
+                    invalidateTerminalSession()
+                } else {
+                    uiState.value = RealsRootUiState.Failure(userResult.error)
+                }
             }
         }
     }
@@ -366,6 +379,11 @@ internal class SessionCoordinator(
     }
 
     private suspend fun handleSessionLoadFailure(error: ApiError) {
+        if (error.isTerminalAuthFailure()) {
+            invalidateTerminalSession()
+            return
+        }
+
         if (error.isAccountDeleted()) {
             showAccountDeletionPendingFromBackend()
             return

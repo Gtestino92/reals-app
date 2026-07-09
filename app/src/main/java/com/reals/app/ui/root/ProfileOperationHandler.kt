@@ -43,6 +43,7 @@ class ProfileOperationHandler(
     private val authRepository: FirebaseAuthRepository,
     private val getProfilePhotosUseCase: GetProfilePhotosUseCase,
     private val scope: CoroutineScope,
+    private val onTerminalAuthFailure: () -> Unit,
 ) {
     /**
      * Called when [RealsRootUiState.Ready] is updated from elsewhere (e.g. after home load).
@@ -374,13 +375,7 @@ class ProfileOperationHandler(
                 }
 
                 EmailVerificationCheckResult.NotSignedIn -> {
-                    uiState.value = pending.copy(
-                        profileOp = pending.profileOp.copy(
-                            activatingProfile = false,
-                            emailVerificationMessage = null,
-                            emailVerificationError = "Tu sesión necesita renovarse. Volvé a iniciar sesión.",
-                        ),
-                    )
+                    onTerminalAuthFailure()
                     return@launch
                 }
 
@@ -454,7 +449,12 @@ class ProfileOperationHandler(
                 ),
             )
             uiState.value = pending
-            val feedback = when (authRepository.sendEmailVerificationEmail()) {
+            val result = authRepository.sendEmailVerificationEmail()
+            if (result == EmailVerificationSendResult.NotSignedIn) {
+                onTerminalAuthFailure()
+                return@launch
+            }
+            val feedback = when (result) {
                 EmailVerificationSendResult.Sent -> EmailVerificationFeedback(
                     resendAvailableAtMillis = System.currentTimeMillis() + RESEND_EMAIL_VERIFICATION_COOLDOWN_MILLIS,
                     message = "Te enviamos un nuevo correo de verificación.",
@@ -466,9 +466,7 @@ class ProfileOperationHandler(
                     message = "Email verificado. Ya podés activar tu perfil.",
                 )
 
-                EmailVerificationSendResult.NotSignedIn -> EmailVerificationFeedback(
-                    error = "Tu sesión necesita renovarse. Volvé a iniciar sesión.",
-                )
+                EmailVerificationSendResult.NotSignedIn -> error("Handled above")
 
                 EmailVerificationSendResult.Failure -> EmailVerificationFeedback(
                     error = "No pudimos enviar el correo de verificación. Intentá nuevamente.",
@@ -505,7 +503,12 @@ class ProfileOperationHandler(
                 ),
             )
             uiState.value = pending
-            val feedback = when (authRepository.reloadAndRefreshEmailVerification()) {
+            val result = authRepository.reloadAndRefreshEmailVerification()
+            if (result == EmailVerificationCheckResult.NotSignedIn) {
+                onTerminalAuthFailure()
+                return@launch
+            }
+            val feedback = when (result) {
                 EmailVerificationCheckResult.Verified -> EmailVerificationFeedback(
                     emailVerificationRequired = false,
                     emailVerificationLocallyVerified = true,
@@ -520,9 +523,7 @@ class ProfileOperationHandler(
                     error = "Todavía no vemos el email verificado. Abrí el link del correo y volvé a intentar.",
                 )
 
-                EmailVerificationCheckResult.NotSignedIn -> EmailVerificationFeedback(
-                    error = "Tu sesión necesita renovarse. Volvé a iniciar sesión.",
-                )
+                EmailVerificationCheckResult.NotSignedIn -> error("Handled above")
 
                 EmailVerificationCheckResult.Failure -> EmailVerificationFeedback(
                     error = "No pudimos comprobar la verificación. Intentá nuevamente.",

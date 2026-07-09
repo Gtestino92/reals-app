@@ -118,6 +118,10 @@ fun ApiError.isAccountDeletionFinalized(): Boolean {
     return this is ApiError.Backend && backendErrorCode == BackendErrorCode.AccountDeletionFinalized
 }
 
+fun ApiError.isTerminalAuthFailure(): Boolean {
+    return this is ApiError.Auth && reason == AuthFailureReason.NOT_SIGNED_IN
+}
+
 fun ApiError.isLegalActionRequired(): Boolean {
     return this is ApiError.Backend && backendErrorCode == BackendErrorCode.LegalActionRequired
 }

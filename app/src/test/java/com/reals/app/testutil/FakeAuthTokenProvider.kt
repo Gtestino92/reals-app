@@ -10,11 +10,17 @@ class FakeAuthTokenProvider(
     var calls: List<Boolean> = emptyList()
         private set
     var failure: Throwable? = null
+    private val failuresByRefresh = mutableMapOf<Boolean, Throwable>()
 
     override suspend fun getIdToken(forceRefresh: Boolean): String {
         calls = calls + forceRefresh
+        failuresByRefresh[forceRefresh]?.let { throw it }
         failure?.let { throw it }
         return token
+    }
+
+    fun failWhen(forceRefresh: Boolean, throwable: Throwable) {
+        failuresByRefresh[forceRefresh] = throwable
     }
 
     fun failMissingUser() {
