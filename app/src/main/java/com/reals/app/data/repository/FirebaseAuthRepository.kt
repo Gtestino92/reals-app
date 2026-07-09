@@ -111,9 +111,7 @@ open class FirebaseAuthRepository(private val context: Context) {
                 user.sendEmailVerification().await()
                 EmailVerificationSendResult.Sent
             }
-        }.getOrElse {
-            EmailVerificationSendResult.Failure
-        }
+        }.getOrElse(Throwable::toEmailVerificationSendResult)
     }
 
     open suspend fun reloadAndRefreshEmailVerification(): EmailVerificationCheckResult {
@@ -128,9 +126,7 @@ open class FirebaseAuthRepository(private val context: Context) {
             } else {
                 EmailVerificationCheckResult.NotVerified
             }
-        }.getOrElse {
-            EmailVerificationCheckResult.Failure
-        }
+        }.getOrElse(Throwable::toEmailVerificationCheckResult)
     }
 
     open suspend fun changePassword(
@@ -161,7 +157,7 @@ open class FirebaseAuthRepository(private val context: Context) {
         }
     }
 
-    fun signOut() {
+    open fun signOut() {
         authOrNull()?.signOut()
     }
 
@@ -244,6 +240,22 @@ private val enumerationPronePasswordResetErrorCodes = setOf(
 
 internal fun providerIdsHavePasswordProvider(providerIds: Iterable<String>): Boolean {
     return providerIds.any { it == EmailAuthProvider.PROVIDER_ID }
+}
+
+internal fun Throwable.toEmailVerificationSendResult(): EmailVerificationSendResult {
+    return if (this is FirebaseAuthInvalidUserException) {
+        EmailVerificationSendResult.NotSignedIn
+    } else {
+        EmailVerificationSendResult.Failure
+    }
+}
+
+internal fun Throwable.toEmailVerificationCheckResult(): EmailVerificationCheckResult {
+    return if (this is FirebaseAuthInvalidUserException) {
+        EmailVerificationCheckResult.NotSignedIn
+    } else {
+        EmailVerificationCheckResult.Failure
+    }
 }
 
 internal fun Throwable.toChangePasswordReauthenticationResult(): ChangePasswordResult {

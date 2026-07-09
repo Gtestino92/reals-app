@@ -2,8 +2,10 @@ package com.reals.app.ui.root
 
 import android.content.ContextWrapper
 import com.reals.app.core.network.ApiError
+import com.reals.app.core.network.AuthFailureReason
 import com.reals.app.core.network.BackendErrorCode
 import com.reals.app.core.network.backendErrorCode
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.reals.app.data.repository.AuthOperationResult
 import com.reals.app.data.repository.ChangePasswordResult
 import com.reals.app.data.repository.ChatRepository
@@ -316,6 +318,22 @@ class RealsRootViewModelPasswordResetTest {
     }
 
     @Test
+    fun `invalid Firebase user during email verification invalidates root session`() = runTest(dispatcher) {
+        val authRepository = FakeFirebaseAuthRepository(
+            passwordResetResult = PasswordResetResult.SentOrHandledGenerically,
+            emailVerificationSendResult = EmailVerificationSendResult.NotSignedIn,
+        )
+        val viewModel = viewModel(authRepository)
+        viewModel.setState(RealsRootUiState.Ready(session = TestDomain.session()))
+
+        viewModel.resendEmailVerification()
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value is RealsRootUiState.Login)
+        assertEquals(1, authRepository.signOutCalls)
+    }
+
+    @Test
     fun `check email verification shows verified message`() = runTest(dispatcher) {
         val authRepository = FakeFirebaseAuthRepository(
             passwordResetResult = PasswordResetResult.SentOrHandledGenerically,
@@ -587,7 +605,7 @@ class RealsRootViewModelPasswordResetTest {
     }
 
     @Test
-    fun `change password missing session is handled safely`() = runTest(dispatcher) {
+    fun `change password missing session invalidates root session`() = runTest(dispatcher) {
         val authRepository = FakeFirebaseAuthRepository(
             passwordResetResult = PasswordResetResult.SentOrHandledGenerically,
             changePasswordResult = ChangePasswordResult.NotSignedIn,
@@ -598,8 +616,63 @@ class RealsRootViewModelPasswordResetTest {
         viewModel.changePassword("current-password", "new-password")
         advanceUntilIdle()
 
-        val state = viewModel.uiState.value as RealsRootUiState.Ready
-        assertEquals("Tu sesión necesita renovarse. Volvé a iniciar sesión.", state.changePasswordError)
+        assertTrue(viewModel.uiState.value is RealsRootUiState.Login)
+        assertEquals(1, authRepository.signOutCalls)
+    }
+
+    @Test
+    fun `terminal auth failure during session bootstrap signs out and routes to login`() = runTest(dispatcher) {
+        val authRepository = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
+        val tokenProvider = FakeAuthTokenProvider().apply {
+            failure = FirebaseAuthInvalidUserException(
+                "ERROR_USER_DISABLED",
+                "Firebase user is disabled",
+            )
+        }
+        val api = FakeRealsApi()
+        val viewModel = viewModel(authRepository, api, tokenProvider)
+
+        viewModel.signIn("alex@example.com", "password")
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value is RealsRootUiState.Login)
+        assertEquals(1, authRepository.signOutCalls)
+        assertTrue(api.calls.isEmpty())
+    }
+
+    @Test
+    fun `terminal auth failure published mid session routes to login`() = runTest(dispatcher) {
+        val authRepository = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
+        val viewModel = viewModel(authRepository)
+        viewModel.setState(
+            RealsRootUiState.FirstChat(
+                session = TestDomain.session(),
+                matchId = "match-1",
+                error = authError(AuthFailureReason.NOT_SIGNED_IN),
+            )
+        )
+
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value is RealsRootUiState.Login)
+        assertEquals(1, authRepository.signOutCalls)
+    }
+
+    @Test
+    fun `token unavailable published mid session does not invalidate session`() = runTest(dispatcher) {
+        val authRepository = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
+        val viewModel = viewModel(authRepository)
+        val firstChat = RealsRootUiState.FirstChat(
+            session = TestDomain.session(),
+            matchId = "match-1",
+            error = authError(AuthFailureReason.TOKEN_UNAVAILABLE),
+        )
+        viewModel.setState(firstChat)
+
+        advanceUntilIdle()
+
+        assertEquals(firstChat, viewModel.uiState.value)
+        assertEquals(0, authRepository.signOutCalls)
     }
 
     @Test
@@ -659,8 +732,9 @@ class RealsRootViewModelPasswordResetTest {
     private fun viewModel(
         authRepository: FirebaseAuthRepository,
         api: FakeRealsApi = FakeRealsApi(),
+        tokenProvider: FakeAuthTokenProvider = FakeAuthTokenProvider(),
     ): RealsRootViewModel =
-        RealsRootViewModel(rootDependencies(authRepository, api), autoRefreshSession = false)
+        RealsRootViewModel(rootDependencies(authRepository, api, tokenProvider), autoRefreshSession = false)
 
     private fun RealsRootViewModel.setState(state: RealsRootUiState) {
         val field = RealsRootViewModel::class.java.getDeclaredField("_uiState")
@@ -673,9 +747,9 @@ class RealsRootViewModelPasswordResetTest {
     private fun rootDependencies(
         authRepository: FirebaseAuthRepository,
         api: FakeRealsApi,
+        tokenProvider: FakeAuthTokenProvider,
     ): RealsRootDependencies {
         val context = ContextWrapper(null)
-        val tokenProvider = FakeAuthTokenProvider()
         val apiExecutor = testApiExecutor()
         val meRepository = MeRepository(api, tokenProvider, apiExecutor)
         val profileRepository = ProfileRepository(context, api, tokenProvider, apiExecutor)
@@ -777,6 +851,8 @@ class RealsRootViewModelPasswordResetTest {
             private set
         var emailVerificationCheckCalls = 0
             private set
+        var signOutCalls = 0
+            private set
 
         override suspend fun signIn(email: String, password: String): AuthOperationResult {
             signInRequests += email
@@ -812,5 +888,14 @@ class RealsRootViewModelPasswordResetTest {
             changePasswordRequests += currentPassword to newPassword
             return changePasswordResult
         }
+
+        override fun signOut() {
+            signOutCalls++
+        }
     }
+
+    private fun authError(reason: AuthFailureReason): ApiError.Auth = ApiError.Auth(
+        reason = reason,
+        message = "auth failure",
+    )
 }

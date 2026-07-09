@@ -1,7 +1,7 @@
-﻿# API
+# API
 
 This file summarizes the current controller surface for human readers.
-The formal OpenAPI contract lives in `docs/openapi.yaml`.
+The formal OpenAPI contract lives in `docs/commons/openapi.yaml`.
 
 ## Health
 
@@ -18,15 +18,34 @@ The formal OpenAPI contract lives in `docs/openapi.yaml`.
 - `DELETE /api/me`: schedule soft deletion for the authenticated user account. The account remains recoverable during `account.deletion.recovery-window-days`.
 - `POST /api/me/reactivation`: reactivate an account that is still inside the deletion recovery window.
 - `GET /api/legal/documents/current`: public endpoint that returns the current configured legal document catalog. It may return an empty `documents` array.
-- `GET /api/me/legal-status`: authenticated informational status for current configured legal document versions only.
+- `GET /api/me/legal-status`: authenticated authoritative status for current configured legal document versions only.
 - `POST /api/me/legal-document-actions`: authenticated factual record that the current user performed `ACCEPTED` or `ACKNOWLEDGED` for a configured legal document type/version. Returns `201 Created` for a new row and `200 OK` for an identical replay.
 
-Legal document support in BACK-1 records factual user actions only:
+Legal document support records factual user actions:
 `User X performed action Y for legal document type Z, version V, at time T`.
 The source of truth is `user_legal_document_actions`. `AuditEvent` is secondary
 operational evidence and stores only document type, version and action metadata.
-BACK-1 does not enforce product access for profile, matchmaking, chat, photos or
-other product endpoints.
+The compliance source of truth is the current `legal.documents` catalog plus
+`user_legal_document_actions`.
+
+Protected participation/content writes are backend-gated by current legal
+status and may return `409 LEGAL_ACTION_REQUIRED`. The generic error does not
+list missing documents; clients should call `GET /api/me/legal-status` for the
+authoritative detailed status and `GET /api/legal/documents/current` for URL
+metadata. An empty legal catalog means requirements are satisfied. Historical
+actions stay persisted but do not satisfy a newer configured version.
+
+The gate applies to profile creation/editing/activation/match filters/identity
+verification/photo upload/photo reorder/photo replacement, entering
+matchmaking, sending chat messages, first-chat guidance next requests, visual
+personal-message writes, positive first-chat and visual decisions, and
+scheduling proposal submission/acceptance/round rejection.
+
+Reads remain available. Account deletion/reactivation, legal endpoints, chat
+exit/cancellation/safety operations, safety reports, queue inspection/leaving,
+push-token registration, admin endpoints, actuator endpoints and local-dev
+tooling are not gated. `REJECTED` first-chat and visual decisions remain
+available; only `APPROVED` requires current legal compliance.
 
 For first-chat navigation, `GET /api/me/home` exposes a
 `pendingActions[]` item with `type = FIRST_CHAT` only while the match remains in
@@ -350,9 +369,8 @@ Selected stable frontend-facing domain codes:
 - `LEGAL_DOCUMENT_NOT_FOUND`: requested legal document type has no current configured document.
 - `LEGAL_DOCUMENT_VERSION_NOT_CURRENT`: requested legal document version is not the current configured version.
 - `LEGAL_DOCUMENT_ACTION_INVALID`: requested action does not match the configured required action.
+- `LEGAL_ACTION_REQUIRED`: protected participation/content write requires current legal document actions before continuing.
 
 ## Manual blocking
 
 `POST /api/matches/{matchId}/block` requires no body and returns block `id`, `source`, and `createdAt`: `201 Created` for a new directional block and `200 OK` for an idempotent replay. Manual blocking creates no report, penalty, or reliability event. A block in either direction excludes the pair and causes positive progression to fail with `409 USER_PAIR_BLOCKED`. Reads, rejection, exit, cancellation, and safety paths remain available. There is no unblock endpoint in the current MVP.
-
-Android requires a definitive confirmation before submitting a manual block. A successful creation or replay returns to Home and refreshes backend state. `USER_PAIR_BLOCKED` reroutes generically to a refreshed Home without revealing block direction.

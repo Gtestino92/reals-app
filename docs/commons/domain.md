@@ -1,4 +1,4 @@
-﻿# Domain Model
+# Domain Model
 
 The domain is state-driven and anonymous-first. Business transitions are validated in services, not encoded in controllers or repositories.
 
@@ -129,9 +129,21 @@ Audit events with `LEGAL_DOCUMENT_ACTION_RECORDED` are secondary operational
 evidence for newly-created rows only. They use `USER` aggregate and factual
 metadata: document type, document version and action.
 
-BACK-1 is informational. It does not add legal fields to `User`, does not add a
-user status, and does not enforce access to profile, matchmaking, chat, photos
-or other product endpoints.
+Current legal status is authoritative for protected participation/content
+writes. `LegalComplianceService` delegates to `LegalDocumentService.getStatus`
+on each guarded operation; it does not cache state or duplicate status
+calculation. Empty configured catalogs are naturally satisfied. Historical
+actions remain persisted but do not satisfy a newer configured version.
+
+Unsatisfied protected participation/content writes fail with
+`409 LEGAL_ACTION_REQUIRED`. The detailed status contract remains
+`GET /api/me/legal-status`; generic conflict responses do not enumerate missing
+documents. Reads, account deletion/reactivation, legal action recording, chat
+exit/cancellation/safety operations and safety/reporting flows remain outside
+the legal gate.
+
+The legal model does not add legal fields to `User`, does not add a user status,
+and does not treat every action as legal consent.
 
 ## Active Engagement Locks
 
@@ -208,10 +220,15 @@ Chats can end through approval/normal completion, timeout, inactivity abandonmen
 - `DELETE /api/me` moves the user to `DELETED` and sets `deletedAt` plus `deletionFinalizesAt`.
 - The account remains recoverable until `deletionFinalizesAt`.
 - During the recovery window, the email and Firebase UID remain reserved and cannot provision a new account.
-- Deletion closes active matches/connections and releases engagement locks. Reactivation does not reopen previous engagements.
-- Deletion moves the profile back to `DRAFT` while preserving profile data and photos.
+- Deletion immediately removes ephemeral operational state: matchmaking queue rows, engagement locks, push device tokens, push-delivery records, connection Home dismissals and the deleted user's Home-status projection.
+- Deletion contains active Matches, Chats, Connections and scheduling negotiations but retains their historical lifecycle and content rows. Counterpart Home invalidations remain. Reactivation does not reopen previous engagements.
+- Deletion moves the profile back to `DRAFT` while preserving profile data, photo metadata and profile-photo storage objects during recovery.
 - `POST /api/me/reactivation` restores the user to `ACTIVE` only while the recovery window is still open. The profile remains `DRAFT` and must be activated again before matchmaking.
-- The account-deletion finalization job anonymizes the email and releases the Firebase UID after the recovery window expires.
+- Reactivation does not restore deleted queue, lock, push, Home-dismissal or Home-status state. Home status is recreated through its normal missing-row behavior when needed, and a current FCM token can be registered again.
+- The Firebase Auth identity and local Firebase UID remain linked throughout recovery so ownership authentication and reactivation continue to work.
+- After recovery expires, finalization locks and revalidates the user, then deletes or confirms absence of the Firebase Auth identity before replacing the local email and releasing the local Firebase UID.
+- Finalization coordinates external identity deletion and local identifier release; it remains distinct from a broader product-data purge.
+- Post-recovery retention, purge and anonymization policy is tracked in `docs/data-retention.md`.
 
 ## Match Filtering And Compatibility
 
@@ -231,5 +248,3 @@ The current matching selector expects scores normalized from `0.0` to `1.0`. Env
 ## User blocks
 
 `UserBlock` persists a durable directional action while product exclusion is pair-wide. Block creation preserves the first source, is idempotent and pair-serialized, and has no automatic expiration or unblock operation. Every command contains stale active state across all matches and connections for the pair. Manual blocks create no report, penalty, reliability event, visual decision, or chat exit request.
-
-Android keeps blocking separate from safety reporting and does not expose blocker or blocked-user direction. The current Android product has no unblock UI.

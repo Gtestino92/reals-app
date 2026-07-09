@@ -8,6 +8,7 @@ import com.reals.app.core.network.ApiExecutor
 import com.reals.app.core.network.ApiResult
 import com.reals.app.core.network.AuthFailureReason
 import com.reals.app.data.api.AuthTokenProvider
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import retrofit2.Response
 
 abstract class AuthenticatedRepository(
@@ -66,6 +67,13 @@ abstract class AuthenticatedRepository(
                 ApiError.Auth(
                     reason = AuthFailureReason.TOKEN_MISSING,
                     message = exception.message ?: "No se pudo obtener el token de Firebase.",
+                ),
+            )
+        } catch (exception: FirebaseAuthInvalidUserException) {
+            ApiResult.Failure(
+                ApiError.Auth(
+                    reason = AuthFailureReason.NOT_SIGNED_IN,
+                    message = exception.message ?: "La sesión de Firebase ya no es válida.",
                 ),
             )
         } catch (exception: Exception) {

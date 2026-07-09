@@ -356,6 +356,11 @@ Acceptance criteria:
 - Stale local state does not allow navigation into deleted/invalid sessions.
 - Notification content does not reveal more than intended.
 
+Implemented hardening:
+- A cached Firebase user that becomes terminally invalid is signed out locally and routed to Login.
+- Generic token availability failures remain recoverable; recoverable backend account deletion remains a distinct
+  root state.
+
 ---
 
 ## 17. Future product experiments

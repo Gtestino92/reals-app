@@ -212,6 +212,7 @@ class ProfileOperationHandlerPhotoReorderTest {
             authRepository = authRepository,
             getProfilePhotosUseCase = getProfilePhotos,
             scope = this,
+            onTerminalAuthFailure = {},
         )
         return Harness(state, handler)
     }
