@@ -247,6 +247,10 @@ sealed interface ChatExitReason {
         override val rawValue = "HARASSMENT"
     }
 
+    data object ChildSafetyConcern : ChatExitReason {
+        override val rawValue = "CHILD_SAFETY_CONCERN"
+    }
+
     data object Other : ChatExitReason {
         override val rawValue = "OTHER"
     }
@@ -258,6 +262,7 @@ sealed interface ChatExitReason {
             NoLongerInterested.rawValue -> NoLongerInterested
             InappropriateBehavior.rawValue -> InappropriateBehavior
             Harassment.rawValue -> Harassment
+            ChildSafetyConcern.rawValue -> ChildSafetyConcern
             Other.rawValue -> Other
             else -> Unknown(value)
         }

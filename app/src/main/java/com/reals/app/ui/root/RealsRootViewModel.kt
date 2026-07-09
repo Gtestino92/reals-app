@@ -12,6 +12,7 @@ import com.reals.app.di.AppContainer
 import com.reals.app.di.RealsRootDependencies
 import com.reals.app.domain.model.ChatContinueDecision
 import com.reals.app.domain.model.Chat
+import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.CreateProfileInput
 import com.reals.app.domain.model.FirstChatGuidance
 import com.reals.app.domain.model.LegalDocumentAction
@@ -430,12 +431,13 @@ class RealsRootViewModel(
         sendSecondChatMessage(content)
     }
 
-    fun safetyCancelSecondChat(details: String) {
+    fun safetyCancelSecondChat(reason: ChatExitReason, details: String) {
         val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
         viewModelScope.launch {
             applySecondChatActionResult(
                 secondChatCoordinator.safetyCancel(
                     current = current,
+                    reason = reason,
                     details = details,
                     onPending = { _uiState.value = it },
                 )
@@ -804,12 +806,13 @@ class RealsRootViewModel(
         }
     }
 
-    fun safetyCancelChat(details: String) {
+    fun safetyCancelChat(reason: ChatExitReason, details: String) {
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
         viewModelScope.launch {
             applyFirstChatActionResult(
                 firstChatCoordinator.safetyCancel(
                     current = current,
+                    reason = reason,
                     details = details,
                     onPending = { _uiState.value = it },
                 )

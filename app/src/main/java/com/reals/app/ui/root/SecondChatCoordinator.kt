@@ -119,6 +119,7 @@ internal class SecondChatCoordinator(
 
     suspend fun safetyCancel(
         current: RealsRootUiState.SecondChat,
+        reason: ChatExitReason,
         details: String,
         onPending: (RealsRootUiState.SecondChat) -> Unit,
     ): SecondChatActionResult {
@@ -144,7 +145,7 @@ internal class SecondChatCoordinator(
 
         return when (val result = dependencies.safetyCancelChat(
             chat.id,
-            ChatExitReason.InappropriateBehavior,
+            reason,
             cleanDetails,
         )) {
             is ApiResult.Success -> SecondChatActionResult.ReturnHome(

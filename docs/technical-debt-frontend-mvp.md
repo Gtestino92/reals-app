@@ -64,12 +64,25 @@ Acceptance criteria:
 MVP decision:
 - Do not build a native Android admin/backoffice UI.
 - Safety-report review can continue through backend/admin endpoints and Bruno or another external admin tool.
+- Keep the backend-derived `priorityReview` field and priority ordering out of user-facing Android UI.
 
 Acceptance criteria:
 - Android does not expose admin-only surfaces.
 - Admin/backoffice work remains backend/tooling-owned for MVP.
 
-### 1.5 Dev-only helpers
+### 1.5 Chat safety reporting
+
+MVP decision:
+- First and second chat expose the existing `Reportar y cerrar chat` flow with an explicit safety-reason selector.
+- `Seguridad de menores` sends `CHILD_SAFETY_CONCERN` through the existing chat safety-cancellation endpoint.
+- Report details remain required and a submitted concern is not presented as a confirmed violation.
+
+Acceptance criteria:
+- The selector contains only inappropriate behavior, harassment, child safety and other.
+- `NO_LONGER_INTERESTED` remains limited to non-safety exit behavior.
+- Android does not add general safety-report or admin-review surfaces as part of this flow.
+
+### 1.6 Dev-only helpers
 
 MVP decision:
 - Keep manual/dev-only helpers available in local/dev builds only.

@@ -77,6 +77,7 @@ fun ChatExitReason.userLabel(): String = when (this) {
     ChatExitReason.NoLongerInterested -> "Ya no hay interes"
     ChatExitReason.InappropriateBehavior -> "Comportamiento inapropiado"
     ChatExitReason.Harassment -> "Acoso"
+    ChatExitReason.ChildSafetyConcern -> "Seguridad de menores"
     ChatExitReason.Other -> "Otro motivo"
     is ChatExitReason.Unknown -> "Motivo no disponible"
 }

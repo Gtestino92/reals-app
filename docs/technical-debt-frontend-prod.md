@@ -154,11 +154,14 @@ Acceptance criteria:
 ## 7. Visual content reporting and moderation UX
 
 MVP may defer full visual-profile reporting, but production should support it.
+The existing first- and second-chat `Reportar y cerrar chat` flow already requires details and lets users select
+inappropriate behavior, harassment, child safety or other. That chat-only support does not cover the visual
+surfaces below and does not consume the general `/api/safety/reports` endpoint.
 
 Future frontend scope:
 - Report profile.
 - Report individual photo.
-- Select report reason.
+- Select a report reason on visual/profile/photo reporting surfaces.
 - Add optional details.
 - Submit to backend moderation endpoint.
 - Optionally cancel/reject current flow after report.
