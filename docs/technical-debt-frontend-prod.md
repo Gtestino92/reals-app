@@ -201,21 +201,23 @@ Acceptance criteria:
 
 ---
 
-## 9. Identity verification UX
+## 9. Profile authenticity verification UX
 
-Identity verification is separate from profile photos and is deferred until after MVP.
+Profile authenticity verification is separate from profile photos and photo moderation, and is deferred until after
+MVP. It is not legal identity, document or age verification.
 
 Current Android state:
-- Android reads `identityVerified` and `identityVerificationStatus` from profile responses.
-- Android maps backend `IDENTITY_VERIFICATION_NOT_CONFIGURED` to user-facing copy.
-- Android does not declare or expose `POST /api/me/profile/identity-verification` yet.
+- Android reads `authenticityVerified` and `authenticityVerificationStatus` from profile responses.
+- Android maps backend authenticity-verification error codes to user-facing copy.
+- Android does not declare or expose `POST /api/me/profile/authenticity-verification` yet.
 
 Future frontend scope:
 - Add entry point for verification if product decides it is required or optional.
 - Support provider flow:
   - selfie;
   - liveness;
-  - document capture;
+  - live reference capture;
+  - provider-neutral facial comparison status;
   - external provider redirect/SDK;
   - status polling.
 - Show verification state:

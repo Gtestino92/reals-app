@@ -668,7 +668,7 @@ private fun PhotosCard(
             } else {
                 Text("${profile.photoCount} de 9 fotos", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    text = "Identidad verificada: ${yesNo(profile.identityVerified)}",
+                    text = "Autenticidad del perfil verificada: ${yesNo(profile.authenticityVerified)}",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
