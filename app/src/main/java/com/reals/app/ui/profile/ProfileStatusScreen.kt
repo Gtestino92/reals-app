@@ -974,9 +974,11 @@ private fun PhotoManagerActions(
             localError?.let { ErrorFeedback("Revisa las fotos", it) }
             photoActionError?.let { ApiErrorFeedbackCard(it, ErrorContext.PhotoUpload) }
             activationError?.let { ApiErrorFeedbackCard(it, ErrorContext.ProfileActivation) }
-            val showEmailVerificationActions =
-                !emailVerificationLocallyVerified &&
-                        (activationError.isEmailNotVerified() || emailVerificationRequired)
+            val showEmailVerificationActions = shouldShowEmailVerificationActions(
+                emailVerificationLocallyVerified = emailVerificationLocallyVerified,
+                emailVerificationRequired = emailVerificationRequired,
+                activationError = activationError,
+            )
 
             if (showEmailVerificationActions) {
                 EmailVerificationActions(
@@ -993,14 +995,6 @@ private fun PhotoManagerActions(
                 )
             }
             if (profile.status == ProfileStatus.Draft) {
-                if (!showEmailVerificationActions && !emailVerificationLocallyVerified) {
-                    FeedbackCard(
-                        title = "Verificación de email",
-                        message = "Antes de activar tu perfil, vas a necesitar verificar tu email. " +
-                            "Revisá tu bandeja de entrada o spam.",
-                        tone = FeedbackTone.Warning,
-                    )
-                }
                 val activationEnabled = !busy && (!emailVerificationRequired || emailVerificationLocallyVerified)
                 OutlinedButton(
                     onClick = { onActivateProfile(profile) },
@@ -1658,6 +1652,14 @@ private fun validateMatchFiltersInput(
 }
 
 private fun yesNo(value: Boolean): String = if (value) "Sí" else "No"
+
+internal fun shouldShowEmailVerificationActions(
+    emailVerificationLocallyVerified: Boolean,
+    emailVerificationRequired: Boolean,
+    activationError: ApiError?,
+): Boolean =
+    !emailVerificationLocallyVerified &&
+        (activationError.isEmailNotVerified() || emailVerificationRequired)
 
 private fun ApiError?.isEmailNotVerified(): Boolean =
     this is ApiError.Backend &&
