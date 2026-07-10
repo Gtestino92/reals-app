@@ -31,7 +31,9 @@ enum class BackendErrorCode(val raw: String) {
     ProfileNotFound("PROFILE_NOT_FOUND"),
     ProfileNotActivatable("PROFILE_NOT_ACTIVATABLE"),
     EmailNotVerified("EMAIL_NOT_VERIFIED"),
-    IdentityVerificationNotConfigured("IDENTITY_VERIFICATION_NOT_CONFIGURED"),
+    AuthenticityVerificationNotConfigured("AUTHENTICITY_VERIFICATION_NOT_CONFIGURED"),
+    AuthenticityVerificationProviderError("AUTHENTICITY_VERIFICATION_PROVIDER_ERROR"),
+    ProfileAuthenticityVerificationRequired("PROFILE_AUTHENTICITY_VERIFICATION_REQUIRED"),
     ProfilePhotosRequired("PROFILE_PHOTOS_REQUIRED"),
     ProfilePersonPhotoRequired("PROFILE_PERSON_PHOTO_REQUIRED"),
     ProfileFullBodyPhotoRequired("PROFILE_FULL_BODY_PHOTO_REQUIRED"),
@@ -190,8 +192,12 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.ProfileNotFound -> "No encontramos tu perfil. Actualiza la sesion e intenta nuevamente."
     BackendErrorCode.ProfileNotActivatable -> "Tu perfil necesita completarse antes de activarlo."
     BackendErrorCode.EmailNotVerified -> "Verificá tu email antes de activar el perfil."
-    BackendErrorCode.IdentityVerificationNotConfigured ->
-        "La verificacion de identidad no esta disponible en este entorno."
+    BackendErrorCode.AuthenticityVerificationNotConfigured ->
+        "La verificacion de autenticidad del perfil no esta disponible en este entorno."
+    BackendErrorCode.AuthenticityVerificationProviderError ->
+        "No pudimos completar la verificacion de autenticidad del perfil. Intenta nuevamente mas tarde."
+    BackendErrorCode.ProfileAuthenticityVerificationRequired ->
+        "Necesitas verificar la autenticidad del perfil antes de activarlo."
     BackendErrorCode.ProfilePhotosRequired -> "Subi mas fotos para poder activar tu perfil."
     BackendErrorCode.ProfilePersonPhotoRequired -> "Necesitamos al menos una foto clara tuya para activar tu perfil."
     BackendErrorCode.ProfileFullBodyPhotoRequired -> "Necesitamos una foto de cuerpo completo para activar tu perfil."

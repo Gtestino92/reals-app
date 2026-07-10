@@ -89,14 +89,15 @@ Android must not:
 
 ## Profile Trust Signals
 
-Profile photo validation, photo moderation and identity verification are backend-owned trust signals. Android reads
-the profile/photo fields returned by the API and presents activation errors, but it does not infer semantic person,
-full-body, moderation or identity-verification outcomes locally.
+Profile photo validation, photo moderation and profile authenticity verification are backend-owned trust signals.
+Android reads the profile/photo fields returned by the API and presents activation errors, but it does not infer
+semantic person, full-body, moderation or authenticity-verification outcomes locally.
 
 The shared backend contract is execution-profile aware: outside `prod`, provider `none` may keep MVP-compatible
 positive shortcut states; in `prod`, provider `none` does not create positive trust facts. In particular,
-`POST /api/me/profile/identity-verification` can return `409 IDENTITY_VERIFICATION_NOT_CONFIGURED` when real
-verification is not configured. Android currently does not expose a native identity-verification flow.
+`POST /api/me/profile/authenticity-verification` can return `409 AUTHENTICITY_VERIFICATION_NOT_CONFIGURED` when real
+profile authenticity verification is not configured. Android currently does not expose a native authenticity
+verification flow.
 
 ## Chat Safety Reporting
 

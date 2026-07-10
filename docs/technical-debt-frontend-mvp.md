@@ -183,8 +183,9 @@ The following are not MVP blockers:
 - Real-time chat via WebSocket or SSE.
 - Native Android admin/backoffice UI.
 - Strict automatic profile-photo moderation.
-- Identity verification UX. In `prod`, backend provider `none` returns `IDENTITY_VERIFICATION_NOT_CONFIGURED`
-  instead of marking the profile verified; Android currently only maps that stable error code.
+- Profile authenticity verification UX. In `prod`, backend provider `none` returns
+  `AUTHENTICITY_VERIFICATION_NOT_CONFIGURED` instead of marking the profile authenticity verified; Android currently
+  only maps the stable authenticity-verification error codes.
 - Advanced onboarding experiments.
 - Full production telemetry dashboards.
 - Drag-and-drop profile-photo reordering.

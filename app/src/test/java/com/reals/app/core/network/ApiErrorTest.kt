@@ -60,13 +60,35 @@ class ApiErrorTest {
     }
 
     @Test
-    fun `identity verification not configured maps to deterministic message`() {
-        val error = backendError("IDENTITY_VERIFICATION_NOT_CONFIGURED")
+    fun `authenticity verification backend codes map to deterministic messages`() {
+        mapOf(
+            "AUTHENTICITY_VERIFICATION_NOT_CONFIGURED" to
+                "La verificacion de autenticidad del perfil no esta disponible en este entorno.",
+            "AUTHENTICITY_VERIFICATION_PROVIDER_ERROR" to
+                "No pudimos completar la verificacion de autenticidad del perfil. Intenta nuevamente mas tarde.",
+            "PROFILE_AUTHENTICITY_VERIFICATION_REQUIRED" to
+                "Necesitas verificar la autenticidad del perfil antes de activarlo.",
+        ).forEach { (code, expected) ->
+            assertEquals(
+                expected,
+                backendError(code).toUserMessage(ErrorContext.ProfileActivation),
+            )
+        }
+    }
 
-        assertEquals(BackendErrorCode.IdentityVerificationNotConfigured, error.backendErrorCode)
+    @Test
+    fun `fromRaw parses authenticity verification backend codes`() {
         assertEquals(
-            "La verificacion de identidad no esta disponible en este entorno.",
-            error.toUserMessage(ErrorContext.ProfileActivation),
+            BackendErrorCode.AuthenticityVerificationNotConfigured,
+            BackendErrorCode.fromRaw("AUTHENTICITY_VERIFICATION_NOT_CONFIGURED"),
+        )
+        assertEquals(
+            BackendErrorCode.AuthenticityVerificationProviderError,
+            BackendErrorCode.fromRaw("AUTHENTICITY_VERIFICATION_PROVIDER_ERROR"),
+        )
+        assertEquals(
+            BackendErrorCode.ProfileAuthenticityVerificationRequired,
+            BackendErrorCode.fromRaw("PROFILE_AUTHENTICITY_VERIFICATION_REQUIRED"),
         )
     }
 

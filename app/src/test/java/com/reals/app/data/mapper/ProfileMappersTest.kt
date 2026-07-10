@@ -17,7 +17,8 @@ class ProfileMappersTest {
         assertEquals("user-1", profile.userId)
         assertEquals("Alex", profile.displayName)
         assertEquals(28, profile.age)
-        assertEquals("VERIFIED", profile.identityVerificationStatus)
+        assertEquals(true, profile.authenticityVerified)
+        assertEquals("VERIFIED", profile.authenticityVerificationStatus)
         assertEquals(ProfileStatus.Active, profile.status)
         assertEquals(2, profile.photoCount)
     }

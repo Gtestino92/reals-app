@@ -27,6 +27,7 @@ class VisualReviewMapperTest {
                     isPersonPhoto = false,
                     isFullBody = true,
                     validationStatus = "VALIDATED",
+                    moderationStatus = "APPROVED",
                 ),
                 PhotoResponseDto(
                     id = "photo-1",
@@ -35,6 +36,7 @@ class VisualReviewMapperTest {
                     isPersonPhoto = true,
                     isFullBody = false,
                     validationStatus = "VALIDATED",
+                    moderationStatus = "APPROVED",
                 ),
             ),
         )
