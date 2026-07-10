@@ -7,7 +7,7 @@ data class Profile(
     val birthDate: String,
     val age: Int,
     val identityVerified: Boolean,
-    val identityVerificationStatus: String?,
+    val identityVerificationStatus: String,
     val gender: String,
     val lookingForGenders: Set<String>,
     val intention: String,

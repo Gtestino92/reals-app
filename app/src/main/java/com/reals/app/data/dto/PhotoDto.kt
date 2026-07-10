@@ -10,7 +10,7 @@ data class PhotoResponseDto(
     val isPersonPhoto: Boolean,
     val isFullBody: Boolean,
     val validationStatus: String,
-    val moderationStatus: String? = null,
+    val moderationStatus: String,
 )
 
 @Serializable

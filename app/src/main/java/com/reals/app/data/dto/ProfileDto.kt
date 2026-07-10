@@ -10,7 +10,7 @@ data class ProfileResponseDto(
     val birthDate: String,
     val age: Int,
     val identityVerified: Boolean,
-    val identityVerificationStatus: String? = null,
+    val identityVerificationStatus: String,
     val gender: String,
     val lookingForGenders: Set<String>,
     val intention: String,
