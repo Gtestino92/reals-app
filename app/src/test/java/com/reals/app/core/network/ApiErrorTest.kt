@@ -60,6 +60,17 @@ class ApiErrorTest {
     }
 
     @Test
+    fun `identity verification not configured maps to deterministic message`() {
+        val error = backendError("IDENTITY_VERIFICATION_NOT_CONFIGURED")
+
+        assertEquals(BackendErrorCode.IdentityVerificationNotConfigured, error.backendErrorCode)
+        assertEquals(
+            "La verificacion de identidad no esta disponible en este entorno.",
+            error.toUserMessage(ErrorContext.ProfileActivation),
+        )
+    }
+
+    @Test
     fun `fromRaw parses chat backend codes`() {
         mapOf(
             "CHAT_NOT_FOUND" to BackendErrorCode.ChatNotFound,

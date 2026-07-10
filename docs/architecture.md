@@ -87,6 +87,17 @@ Android must not:
 - mutate backend lifecycle state locally;
 - infer locks, penalties or moderation outcomes as source of truth.
 
+## Profile Trust Signals
+
+Profile photo validation, photo moderation and identity verification are backend-owned trust signals. Android reads
+the profile/photo fields returned by the API and presents activation errors, but it does not infer semantic person,
+full-body, moderation or identity-verification outcomes locally.
+
+The shared backend contract is execution-profile aware: outside `prod`, provider `none` may keep MVP-compatible
+positive shortcut states; in `prod`, provider `none` does not create positive trust facts. In particular,
+`POST /api/me/profile/identity-verification` can return `409 IDENTITY_VERIFICATION_NOT_CONFIGURED` when real
+verification is not configured. Android currently does not expose a native identity-verification flow.
+
 ## Chat Safety Reporting
 
 First and second chat reuse the existing `Reportar y cerrar chat` safety-cancellation flow. The dialog requires

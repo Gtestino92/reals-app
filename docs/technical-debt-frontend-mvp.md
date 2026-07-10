@@ -30,7 +30,8 @@ MVP decision:
 - Keep multipart profile-photo upload as the official frontend flow.
 - Android uploads photos using real files and slot positions.
 - Do not add temporary `isPersonPhoto` or `isFullBody` fields to the Android multipart upload request.
-- Let the backend use permissive pre-MVP validation defaults for uploaded photos.
+- Let the backend own photo validation and moderation results. Outside `prod`, backend provider `none` may use
+  permissive MVP shortcut values; in `prod`, provider `none` no longer produces positive semantic/moderation facts.
 - Remove mock/non-file URL photo flows from Android production code.
 
 Acceptance criteria:
@@ -182,7 +183,8 @@ The following are not MVP blockers:
 - Real-time chat via WebSocket or SSE.
 - Native Android admin/backoffice UI.
 - Strict automatic profile-photo moderation.
-- Identity verification UX.
+- Identity verification UX. In `prod`, backend provider `none` returns `IDENTITY_VERIFICATION_NOT_CONFIGURED`
+  instead of marking the profile verified; Android currently only maps that stable error code.
 - Advanced onboarding experiments.
 - Full production telemetry dashboards.
 - Drag-and-drop profile-photo reordering.

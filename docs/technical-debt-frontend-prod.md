@@ -187,7 +187,10 @@ Future work:
 - Better broken-image fallback.
 - Thumbnail support if backend provides thumbnails.
 - Caching policy review.
-- Avoid showing unvalidated/hidden/rejected photos if backend later introduces moderation states.
+- Avoid treating technically decoded photos as semantically valid person/full-body photos. In `prod`, backend
+  provider `none` can return `isPersonPhoto=false`, `isFullBody=false`, `validationStatus=PENDING` and
+  `moderationStatus=NEEDS_REVIEW`; Android should continue to present backend state without inventing local trust.
+- Avoid showing unvalidated/hidden/rejected photos if backend later introduces stricter visibility rules.
 - Add graceful handling for expired presigned URLs.
 - Retry image loading where appropriate.
 
@@ -201,6 +204,11 @@ Acceptance criteria:
 ## 9. Identity verification UX
 
 Identity verification is separate from profile photos and is deferred until after MVP.
+
+Current Android state:
+- Android reads `identityVerified` and `identityVerificationStatus` from profile responses.
+- Android maps backend `IDENTITY_VERIFICATION_NOT_CONFIGURED` to user-facing copy.
+- Android does not declare or expose `POST /api/me/profile/identity-verification` yet.
 
 Future frontend scope:
 - Add entry point for verification if product decides it is required or optional.
