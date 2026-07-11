@@ -24,9 +24,12 @@ import com.reals.app.testutil.TestDomain
 import com.reals.app.testutil.TestDtos
 import com.reals.app.testutil.backendErrorResponse
 import com.reals.app.testutil.testApiExecutor
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -34,6 +37,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import retrofit2.Response
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ProfileOperationHandlerCountriesTest {
     @Test
     fun `successful country loading stores returned domain list`() = runTest {
@@ -112,6 +116,79 @@ class ProfileOperationHandlerCountriesTest {
         assertEquals(listOf("UY"), harness.ready().countries.map { it.code })
         assertEquals(null, harness.ready().countriesError)
         assertTrue(harness.ready().countriesLoaded)
+    }
+
+    @Test
+    fun `photo load success preserves countries loaded concurrently`() = runTest {
+        val photoRequestStarted = CompletableDeferred<Unit>()
+        val releasePhotoResponse = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeGetProfilePhotosResponse = {
+                photoRequestStarted.complete(Unit)
+                releasePhotoResponse.await()
+            }
+            photosResponse = Response.success(
+                listOf(
+                    TestDtos.photo(id = "photo-2", position = 2),
+                    TestDtos.photo(id = "photo-1", position = 1),
+                ),
+            )
+        }
+        val harness = harness(api)
+
+        harness.handler.loadProfilePhotos()
+        runCurrent()
+        photoRequestStarted.await()
+        harness.handler.loadCountriesIfNeeded()
+        advanceUntilIdle()
+
+        assertEquals(listOf("AR", "BR"), harness.ready().countries.map { it.code })
+        assertTrue(harness.ready().countriesLoaded)
+        assertFalse(harness.ready().countriesLoading)
+        assertEquals(null, harness.ready().countriesError)
+
+        releasePhotoResponse.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(listOf("AR", "BR"), harness.ready().countries.map { it.code })
+        assertTrue(harness.ready().countriesLoaded)
+        assertFalse(harness.ready().countriesLoading)
+        assertEquals(null, harness.ready().countriesError)
+        assertEquals(listOf("photo-1", "photo-2"), harness.ready().profilePhotos.map { it.id })
+        assertFalse(harness.ready().loadingPhotos)
+    }
+
+    @Test
+    fun `photo load failure preserves countries loaded concurrently`() = runTest {
+        val photoRequestStarted = CompletableDeferred<Unit>()
+        val releasePhotoResponse = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeGetProfilePhotosResponse = {
+                photoRequestStarted.complete(Unit)
+                releasePhotoResponse.await()
+            }
+            photosResponse = backendErrorResponse(500, "SERVER_ERROR", "photos failed")
+        }
+        val harness = harness(api)
+
+        harness.handler.loadProfilePhotos()
+        runCurrent()
+        photoRequestStarted.await()
+        harness.handler.loadCountriesIfNeeded()
+        advanceUntilIdle()
+
+        assertEquals(listOf("AR", "BR"), harness.ready().countries.map { it.code })
+        assertTrue(harness.ready().countriesLoaded)
+
+        releasePhotoResponse.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(listOf("AR", "BR"), harness.ready().countries.map { it.code })
+        assertTrue(harness.ready().countriesLoaded)
+        assertFalse(harness.ready().countriesLoading)
+        assertEquals(null, harness.ready().countriesError)
+        assertTrue(harness.ready().profilePhotosError is ApiError.Backend)
+        assertFalse(harness.ready().loadingPhotos)
     }
 
     private fun TestScope.harness(
