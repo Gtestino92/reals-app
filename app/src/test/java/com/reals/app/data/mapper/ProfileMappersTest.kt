@@ -1,10 +1,16 @@
 package com.reals.app.data.mapper
 
 import com.reals.app.domain.model.ProfileStatus
+import com.reals.app.domain.model.CreateProfileInput
 import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.UpdateProfileInput
 import com.reals.app.testutil.TestDtos
+import com.reals.app.testutil.testJson
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -19,8 +25,38 @@ class ProfileMappersTest {
         assertEquals(28, profile.age)
         assertEquals(true, profile.authenticityVerified)
         assertEquals("VERIFIED", profile.authenticityVerificationStatus)
+        assertEquals("AR", profile.countryCode)
         assertEquals(ProfileStatus.Active, profile.status)
         assertEquals(2, profile.photoCount)
+    }
+
+    @Test
+    fun `CountryReferenceResponseDto maps code and display name`() {
+        val country = TestDtos.country(code = "AR", displayName = "Argentina").toDomain()
+
+        assertEquals("AR", country.code)
+        assertEquals("Argentina", country.displayName)
+    }
+
+    @Test
+    fun `CreateProfileInput maps country code and does not serialize legacy country`() {
+        val dto = CreateProfileInput(
+            displayName = "Alex",
+            birthDate = "1998-01-01",
+            gender = "FEMALE",
+            lookingForGenders = setOf("MALE"),
+            intention = "DATE",
+            city = "Buenos Aires",
+            countryCode = "AR",
+            bio = "Bio",
+            preferredMinAge = 25,
+            preferredMaxAge = 35,
+            maxDistanceKm = 10,
+        ).toDto()
+        val json = testJson.encodeToJsonElement(dto).jsonObject
+
+        assertEquals("AR", dto.countryCode)
+        assertHasCountryCodeOnly(json)
     }
 
     @Test
@@ -54,13 +90,14 @@ class ProfileMappersTest {
             displayName = "Alex",
             bio = "Bio",
             city = "CABA",
-            country = "AR",
+            countryCode = "AR",
         ).toDto()
 
         assertEquals("Alex", dto.displayName)
         assertEquals("Bio", dto.bio)
         assertEquals("CABA", dto.city)
-        assertEquals("AR", dto.country)
+        assertEquals("AR", dto.countryCode)
+        assertHasCountryCodeOnly(testJson.encodeToJsonElement(dto).jsonObject)
     }
 
     @Test
@@ -78,5 +115,10 @@ class ProfileMappersTest {
         assertEquals(25, dto.preferredMinAge)
         assertEquals(35, dto.preferredMaxAge)
         assertEquals(12, dto.maxDistanceKm)
+    }
+
+    private fun assertHasCountryCodeOnly(json: JsonObject) {
+        assertTrue(json.containsKey("countryCode"))
+        assertFalse(json.containsKey("country"))
     }
 }

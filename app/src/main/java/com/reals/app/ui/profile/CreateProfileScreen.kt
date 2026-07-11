@@ -3,7 +3,6 @@ package com.reals.app.ui.profile
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,7 +11,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -23,31 +21,37 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
 import com.reals.app.core.security.TextSafety
+import com.reals.app.domain.model.CountryReference
+import com.reals.app.domain.model.CreateProfileInput
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
-import com.reals.app.domain.model.CreateProfileInput
 
 @Composable
 fun CreateProfileScreen(
     loading: Boolean,
     error: ApiError?,
+    countriesLoading: Boolean,
+    countries: List<CountryReference>,
+    countriesError: ApiError?,
     accountDeleteLoading: Boolean,
     accountDeleteError: ApiError?,
     onSubmit: (CreateProfileInput) -> Unit,
+    onLoadCountries: () -> Unit,
     onRefresh: () -> Unit,
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit,
@@ -58,15 +62,20 @@ fun CreateProfileScreen(
     var lookingForGenders by rememberSaveable(saver = GenderPreferenceStateSaver) { mutableStateOf(setOf("FEMALE")) }
     var intention by rememberSaveable { mutableStateOf("DATE") }
     var city by rememberSaveable { mutableStateOf("") }
-    var country by rememberSaveable { mutableStateOf("") }
+    var selectedCountryCode by rememberSaveable { mutableStateOf("") }
     var bio by rememberSaveable { mutableStateOf("") }
-    var preferredMinAge by rememberSaveable { mutableStateOf("18") }
-    var preferredMaxAge by rememberSaveable { mutableStateOf("45") }
-    var maxDistanceKm by rememberSaveable { mutableStateOf("50") }
+    var preferredMinAge by rememberSaveable { mutableStateOf(ProfileMinAge) }
+    var preferredMaxAge by rememberSaveable { mutableStateOf(45) }
+    var maxDistanceKm by rememberSaveable { mutableStateOf(50) }
     var localError by rememberSaveable { mutableStateOf<String?>(null) }
+    var fieldErrors by remember { mutableStateOf(emptySet<CreateProfileField>()) }
     var accountExpanded by rememberSaveable { mutableStateOf(false) }
     val scrollState = rememberScrollState()
     val busy = loading || accountDeleteLoading
+
+    LaunchedEffect(Unit) {
+        onLoadCountries()
+    }
 
     LaunchedEffect(accountExpanded) {
         if (!accountExpanded) return@LaunchedEffect
@@ -107,6 +116,7 @@ fun CreateProfileScreen(
                     label = { Text("Nombre visible") },
                     enabled = !busy,
                     singleLine = true,
+                    isError = CreateProfileField.DisplayName in fieldErrors,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
@@ -116,6 +126,7 @@ fun CreateProfileScreen(
                     supportingText = { Text("Formato YYYY-MM-DD") },
                     enabled = !busy,
                     singleLine = true,
+                    isError = CreateProfileField.BirthDate in fieldErrors,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 EnumDropdown(
@@ -139,54 +150,71 @@ fun CreateProfileScreen(
                     optionLabel = { it.intentionLabel() },
                     onValueChange = { intention = it },
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = city,
-                        onValueChange = { city = it.take(100) },
-                        label = { Text("Ciudad") },
-                        enabled = !busy,
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                    OutlinedTextField(
-                        value = country,
-                        onValueChange = { country = it.take(100) },
-                        label = { Text("Pais") },
-                        enabled = !busy,
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
+                OutlinedTextField(
+                    value = city,
+                    onValueChange = { city = it.take(100) },
+                    label = { Text("Ciudad") },
+                    enabled = !busy,
+                    singleLine = true,
+                    isError = CreateProfileField.City in fieldErrors,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                CountrySelector(
+                    countries = countries,
+                    selectedCountryCode = selectedCountryCode,
+                    loading = countriesLoading,
+                    enabled = !busy,
+                    onCountrySelected = { selectedCountryCode = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    error = if (CreateProfileField.Country in fieldErrors) {
+                        "Seleccioná un país."
+                    } else {
+                        null
+                    },
+                )
+                countriesError?.let {
+                    ApiErrorFeedbackCard(it, ErrorContext.ProfileCreation)
+                    TextButton(
+                        onClick = onLoadCountries,
+                        enabled = !busy && !countriesLoading,
+                    ) {
+                        Text("Reintentar carga de países")
+                    }
                 }
                 OutlinedTextField(
                     value = bio,
                     onValueChange = { bio = it.take(1_000) },
                     label = { Text("Bio opcional") },
                     enabled = !busy,
+                    isError = CreateProfileField.Bio in fieldErrors,
                     minLines = 3,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    NumberField(
-                        value = preferredMinAge,
-                        onValueChange = { preferredMinAge = it },
-                        label = "Edad min",
-                        enabled = !busy,
-                        modifier = Modifier.weight(1f),
-                    )
-                    NumberField(
-                        value = preferredMaxAge,
-                        onValueChange = { preferredMaxAge = it },
-                        label = "Edad max",
-                        enabled = !busy,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                NumberField(
-                    value = maxDistanceKm,
-                    onValueChange = { maxDistanceKm = it },
-                    label = "Distancia maxima km",
+                AgeRangePreferenceControl(
+                    minAge = preferredMinAge,
+                    maxAge = preferredMaxAge,
                     enabled = !busy,
+                    onAgeRangeChange = { minAge, maxAge ->
+                        preferredMinAge = minAge
+                        preferredMaxAge = maxAge
+                    },
                     modifier = Modifier.fillMaxWidth(),
+                    error = if (CreateProfileField.AgeRange in fieldErrors) {
+                        "Elegí edades entre 18 y 99, con mínima menor o igual a máxima."
+                    } else {
+                        null
+                    },
+                )
+                DistancePreferenceControl(
+                    distanceKm = maxDistanceKm,
+                    enabled = !busy,
+                    onDistanceChange = { maxDistanceKm = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    error = if (CreateProfileField.Distance in fieldErrors) {
+                        "Elegí una distancia entre 1 y 100 km."
+                    } else {
+                        null
+                    },
                 )
 
                 localError?.let {
@@ -204,24 +232,26 @@ fun CreateProfileScreen(
                     enabled = !busy,
                     modifier = Modifier.fillMaxWidth(),
                     onClick = {
-                        val input = validateProfileInput(
+                        val validation = validateProfileInputDetailed(
                             displayName = displayName,
                             birthDate = birthDate,
                             gender = gender,
                             lookingForGenders = lookingForGenders,
                             intention = intention,
                             city = city,
-                            country = country,
+                            countryCode = selectedCountryCode,
                             bio = bio,
                             preferredMinAge = preferredMinAge,
                             preferredMaxAge = preferredMaxAge,
                             maxDistanceKm = maxDistanceKm,
                         )
-                        if (input == null) {
-                            localError = "Revisa los campos. No uses etiquetas o formato HTML; nombre, fecha, ciudad, pais, busqueda, edades y distancia son requeridos."
+                        if (validation.input == null) {
+                            fieldErrors = validation.errorFields
+                            localError = validation.errorMessage
                         } else {
+                            fieldErrors = emptySet()
                             localError = null
-                            onSubmit(input)
+                            onSubmit(validation.input)
                         }
                     },
                 ) {
@@ -278,33 +308,14 @@ private fun EnumDropdown(
     }
 }
 
-@Composable
-private fun NumberField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    label: String,
-    enabled: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = { next -> onValueChange(next.filter { it.isDigit() }) },
-        label = { Text(label) },
-        enabled = enabled,
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        modifier = modifier,
-    )
-}
-
-private fun validateProfileInput(
+internal fun validateProfileInput(
     displayName: String,
     birthDate: String,
     gender: String,
     lookingForGenders: Set<String>,
     intention: String,
     city: String,
-    country: String,
+    countryCode: String,
     bio: String,
     preferredMinAge: String,
     preferredMaxAge: String,
@@ -313,37 +324,151 @@ private fun validateProfileInput(
     val minAge = preferredMinAge.toIntOrNull()
     val maxAge = preferredMaxAge.toIntOrNull()
     val distance = maxDistanceKm.toIntOrNull()
+    if (minAge == null || maxAge == null || distance == null) return null
+    return validateProfileInputDetailed(
+        displayName = displayName,
+        birthDate = birthDate,
+        gender = gender,
+        lookingForGenders = lookingForGenders,
+        intention = intention,
+        city = city,
+        countryCode = countryCode,
+        bio = bio,
+        preferredMinAge = minAge,
+        preferredMaxAge = maxAge,
+        maxDistanceKm = distance,
+    ).input
+}
+
+internal data class CreateProfileValidationResult(
+    val input: CreateProfileInput?,
+    val errorFields: Set<CreateProfileField> = emptySet(),
+    val errorMessage: String? = null,
+)
+
+internal enum class CreateProfileField {
+    DisplayName,
+    BirthDate,
+    City,
+    Country,
+    Bio,
+    GenderPreference,
+    AgeRange,
+    Distance,
+}
+
+internal fun validateProfileInputDetailed(
+    displayName: String,
+    birthDate: String,
+    gender: String,
+    lookingForGenders: Set<String>,
+    intention: String,
+    city: String,
+    countryCode: String,
+    bio: String,
+    preferredMinAge: Int,
+    preferredMaxAge: Int,
+    maxDistanceKm: Int,
+): CreateProfileValidationResult {
     val birthDatePattern = Regex("^\\d{4}-\\d{2}-\\d{2}$")
 
     val cleanDisplayName = TextSafety.normalizeSingleLine(displayName, maxLength = 100)
     val cleanBirthDate = birthDate.trim()
     val cleanCity = TextSafety.normalizeSingleLine(city, maxLength = 100)
-    val cleanCountry = TextSafety.normalizeSingleLine(country, maxLength = 100)
+    val cleanCountryCode = countryCode.trim()
     val cleanBio = TextSafety.normalizeMultiline(bio, maxLength = 1_000)
 
-    if (cleanDisplayName.length < 2) return null
-    if (!birthDatePattern.matches(cleanBirthDate)) return null
-    if (cleanCity.isBlank() || cleanCountry.isBlank()) return null
-    if (TextSafety.containsHtmlLikeMarkup(cleanDisplayName)) return null
-    if (TextSafety.containsHtmlLikeMarkup(cleanCity)) return null
-    if (TextSafety.containsHtmlLikeMarkup(cleanCountry)) return null
-    if (TextSafety.containsHtmlLikeMarkup(cleanBio)) return null
-    if (minAge == null || maxAge == null || distance == null) return null
-    if (minAge !in 18..99 || maxAge !in 18..99 || minAge > maxAge) return null
-    if (distance !in 1..1000) return null
-    if (!isValidGenderPreferenceSet(lookingForGenders)) return null
+    if (cleanDisplayName.length < 2) {
+        return CreateProfileValidationResult(
+            input = null,
+            errorFields = setOf(CreateProfileField.DisplayName),
+            errorMessage = "El nombre visible debe tener al menos 2 caracteres.",
+        )
+    }
+    if (!birthDatePattern.matches(cleanBirthDate)) {
+        return CreateProfileValidationResult(
+            input = null,
+            errorFields = setOf(CreateProfileField.BirthDate),
+            errorMessage = "La fecha de nacimiento debe usar formato YYYY-MM-DD.",
+        )
+    }
+    if (cleanCity.isBlank()) {
+        return CreateProfileValidationResult(
+            input = null,
+            errorFields = setOf(CreateProfileField.City),
+            errorMessage = "La ciudad es requerida.",
+        )
+    }
+    if (cleanCountryCode.isBlank()) {
+        return CreateProfileValidationResult(
+            input = null,
+            errorFields = setOf(CreateProfileField.Country),
+            errorMessage = "Seleccioná un país.",
+        )
+    }
+    if (TextSafety.containsHtmlLikeMarkup(cleanDisplayName)) {
+        return CreateProfileValidationResult(
+            input = null,
+            errorFields = setOf(CreateProfileField.DisplayName),
+            errorMessage = "No uses etiquetas o formato HTML en el nombre visible.",
+        )
+    }
+    if (TextSafety.containsHtmlLikeMarkup(cleanCity)) {
+        return CreateProfileValidationResult(
+            input = null,
+            errorFields = setOf(CreateProfileField.City),
+            errorMessage = "No uses etiquetas o formato HTML en la ciudad.",
+        )
+    }
+    if (TextSafety.containsHtmlLikeMarkup(cleanBio)) {
+        return CreateProfileValidationResult(
+            input = null,
+            errorFields = setOf(CreateProfileField.Bio),
+            errorMessage = "No uses etiquetas o formato HTML en la bio.",
+        )
+    }
+    if (preferredMinAge !in ProfileMinAge..ProfileMaxAge || preferredMaxAge !in ProfileMinAge..ProfileMaxAge) {
+        return CreateProfileValidationResult(
+            input = null,
+            errorFields = setOf(CreateProfileField.AgeRange),
+            errorMessage = "Las edades deben estar entre 18 y 99 años.",
+        )
+    }
+    if (preferredMinAge > preferredMaxAge) {
+        return CreateProfileValidationResult(
+            input = null,
+            errorFields = setOf(CreateProfileField.AgeRange),
+            errorMessage = "La edad mínima no puede ser mayor que la máxima.",
+        )
+    }
+    if (maxDistanceKm !in ProfileMinDistanceKm..ProfileMaxDistanceKm) {
+        return CreateProfileValidationResult(
+            input = null,
+            errorFields = setOf(CreateProfileField.Distance),
+            errorMessage = "La distancia debe estar entre 1 y 100 km.",
+        )
+    }
+    if (!isValidGenderPreferenceSet(lookingForGenders)) {
+        return CreateProfileValidationResult(
+            input = null,
+            errorFields = setOf(CreateProfileField.GenderPreference),
+            errorMessage = "Elegí al menos una preferencia de género.",
+        )
+    }
 
-    return CreateProfileInput(
-        displayName = cleanDisplayName,
-        birthDate = cleanBirthDate,
-        gender = gender,
-        lookingForGenders = lookingForGenders,
-        intention = intention,
-        city = cleanCity,
-        country = cleanCountry,
-        bio = cleanBio.ifBlank { null },
-        preferredMinAge = minAge,
-        preferredMaxAge = maxAge,
-        maxDistanceKm = distance,
+    return CreateProfileValidationResult(
+        input = CreateProfileInput(
+            displayName = cleanDisplayName,
+            birthDate = cleanBirthDate,
+            gender = gender,
+            lookingForGenders = lookingForGenders,
+            intention = intention,
+            city = cleanCity,
+            countryCode = cleanCountryCode,
+            bio = cleanBio.ifBlank { null },
+            preferredMinAge = preferredMinAge,
+            preferredMaxAge = preferredMaxAge,
+            maxDistanceKm = maxDistanceKm,
+        ),
     )
 }

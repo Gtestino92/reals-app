@@ -6,6 +6,7 @@ import com.reals.app.domain.model.BackendUser
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.CountryReference
 import com.reals.app.domain.model.HomeState
 import com.reals.app.domain.model.LegalDocumentAction
 import com.reals.app.domain.model.LegalDocumentType
@@ -67,6 +68,10 @@ sealed interface RealsRootUiState {
     ) : RealsRootUiState {
         val creatingProfile: Boolean get() = profileOp.creatingProfile
         val profileCreateError: ApiError? get() = profileOp.profileCreateError
+        val countriesLoading: Boolean get() = profileOp.countriesLoading
+        val countries: List<CountryReference> get() = profileOp.countries
+        val countriesError: ApiError? get() = profileOp.countriesError
+        val countriesLoaded: Boolean get() = profileOp.countriesLoaded
         val updatingProfile: Boolean get() = profileOp.updatingProfile
         val profileUpdateError: ApiError? get() = profileOp.profileUpdateError
         val profileUpdateMessage: String? get() = profileOp.profileUpdateMessage
@@ -214,6 +219,10 @@ data class ManualBlockUiState(
 data class ProfileManagementState(
     val creatingProfile: Boolean = false,
     val profileCreateError: ApiError? = null,
+    val countriesLoading: Boolean = false,
+    val countries: List<CountryReference> = emptyList(),
+    val countriesError: ApiError? = null,
+    val countriesLoaded: Boolean = false,
     val updatingProfile: Boolean = false,
     val profileUpdateError: ApiError? = null,
     val profileUpdateMessage: String? = null,
@@ -366,6 +375,7 @@ fun RealsRootUiState.clearLegalActionRequiredForResume(): RealsRootUiState = whe
     is RealsRootUiState.Ready -> copy(
         profileOp = profileOp.copy(
             profileCreateError = profileOp.profileCreateError.takeUnless { it.isLegalActionRequired() },
+            countriesError = profileOp.countriesError.takeUnless { it.isLegalActionRequired() },
             profileUpdateError = profileOp.profileUpdateError.takeUnless { it.isLegalActionRequired() },
             matchFiltersError = profileOp.matchFiltersError.takeUnless { it.isLegalActionRequired() },
             profileActivationError = profileOp.profileActivationError.takeUnless { it.isLegalActionRequired() },

@@ -13,6 +13,7 @@ import com.reals.app.data.dto.PhotoPlacementRequestDto
 import com.reals.app.data.dto.ReorderProfilePhotosRequestDto
 import com.reals.app.data.mapper.toDto
 import com.reals.app.data.mapper.toDomain
+import com.reals.app.domain.model.CountryReference
 import com.reals.app.domain.model.CreateProfileInput
 import com.reals.app.domain.model.PhotoPlacementInput
 import com.reals.app.domain.model.Profile
@@ -53,6 +54,10 @@ class ProfileRepository(
     suspend fun updateMyProfile(input: UpdateProfileInput): ApiResult<Profile> =
         authorizedCall { authorization -> api.updateMyProfile(authorization, input.toDto()) }
             .map { it.toDomain() }
+
+    suspend fun getCountries(): ApiResult<List<CountryReference>> =
+        authorizedCall { authorization -> api.getCountries(authorization) }
+            .map { countries -> countries.map { it.toDomain() } }
 
     suspend fun updateMyMatchFilters(input: UpdateMatchFiltersInput): ApiResult<Profile> =
         authorizedCall { authorization -> api.updateMyMatchFilters(authorization, input.toDto()) }

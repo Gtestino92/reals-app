@@ -905,6 +905,10 @@ class RealsRootViewModel(
         profileHandler.updateProfile(input)
     }
 
+    fun loadCountriesIfNeeded() {
+        profileHandler.loadCountriesIfNeeded()
+    }
+
     fun updateMatchFilters(input: UpdateMatchFiltersInput) {
         profileHandler.updateMatchFilters(input)
     }
@@ -1202,6 +1206,7 @@ class RealsRootViewModel(
 private fun RealsRootUiState.hasLegalActionRequiredError(): Boolean = when (this) {
     is RealsRootUiState.Ready ->
         profileCreateError.isLegalActionRequiredError() ||
+            countriesError.isLegalActionRequiredError() ||
             profileUpdateError.isLegalActionRequiredError() ||
             matchFiltersError.isLegalActionRequiredError() ||
             profileActivationError.isLegalActionRequiredError() ||
@@ -1225,6 +1230,7 @@ internal fun RealsRootUiState.hasTerminalAuthFailure(): Boolean = when (this) {
 
     is RealsRootUiState.Ready ->
         profileCreateError.isTerminalAuthFailure() ||
+            countriesError.isTerminalAuthFailure() ||
             profileUpdateError.isTerminalAuthFailure() ||
             matchFiltersError.isTerminalAuthFailure() ||
             profileActivationError.isTerminalAuthFailure() ||

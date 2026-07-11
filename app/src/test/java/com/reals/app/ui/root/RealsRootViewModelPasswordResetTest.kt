@@ -44,6 +44,7 @@ import com.reals.app.domain.usecase.GetChatExitRequestsUseCase
 import com.reals.app.domain.usecase.GetChatMessagesUseCase
 import com.reals.app.domain.usecase.GetChatUseCase
 import com.reals.app.domain.usecase.GetCurrentLegalDocumentsUseCase
+import com.reals.app.domain.usecase.GetCountriesUseCase
 import com.reals.app.domain.usecase.GetFirstChatForMatchUseCase
 import com.reals.app.domain.usecase.GetHomePendingUseCase
 import com.reals.app.domain.usecase.GetHomeStatusUseCase
@@ -779,6 +780,7 @@ class RealsRootViewModelPasswordResetTest {
             profile = ProfileFeatureDependencies(
                 createProfile = CreateProfileUseCase(profileRepository),
                 updateProfile = UpdateProfileUseCase(profileRepository),
+                getCountries = GetCountriesUseCase(profileRepository),
                 updateMatchFilters = UpdateMatchFiltersUseCase(profileRepository),
                 getProfilePhotos = GetProfilePhotosUseCase(profileRepository),
                 addProfilePhotoFile = AddProfilePhotoFileUseCase(profileRepository),

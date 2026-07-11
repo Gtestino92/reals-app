@@ -7,5 +7,5 @@ data class UpdateProfileRequestDto(
     val displayName: String? = null,
     val bio: String? = null,
     val city: String? = null,
-    val country: String? = null,
+    val countryCode: String? = null,
 )

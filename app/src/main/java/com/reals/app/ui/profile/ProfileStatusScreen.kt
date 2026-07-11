@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -62,7 +61,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -76,6 +74,7 @@ import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
 import com.reals.app.ui.common.userDescription
+import com.reals.app.domain.model.CountryReference
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.ProfileSnapshot
@@ -93,6 +92,9 @@ fun ProfileStatusScreen(
     profileUpdateLoading: Boolean,
     profileUpdateError: ApiError?,
     profileUpdateMessage: String?,
+    countriesLoading: Boolean,
+    countries: List<CountryReference>,
+    countriesError: ApiError?,
     matchFiltersLoading: Boolean,
     matchFiltersError: ApiError?,
     matchFiltersMessage: String?,
@@ -119,6 +121,7 @@ fun ProfileStatusScreen(
     accountDeleteError: ApiError?,
     showDraftAfterEditNotice: Boolean = false,
     onUpdateProfile: (UpdateProfileInput) -> Unit,
+    onLoadCountries: () -> Unit,
     onUpdateMatchFilters: (UpdateMatchFiltersInput) -> Unit,
     onLoadPhotos: () -> Unit,
     onAddPhotoFile: (position: Int, fileUri: Uri) -> Unit,
@@ -148,6 +151,10 @@ fun ProfileStatusScreen(
         if (!accountExpanded) return@LaunchedEffect
         withFrameNanos { }
         scrollState.animateScrollTo(scrollState.maxValue)
+    }
+
+    LaunchedEffect(Unit) {
+        onLoadCountries()
     }
 
     Column(
@@ -186,6 +193,9 @@ fun ProfileStatusScreen(
                 profileUpdateLoading = profileUpdateLoading,
                 profileUpdateError = profileUpdateError,
                 profileUpdateMessage = profileUpdateMessage,
+                countriesLoading = countriesLoading,
+                countries = countries,
+                countriesError = countriesError,
                 matchFiltersLoading = matchFiltersLoading,
                 matchFiltersError = matchFiltersError,
                 matchFiltersMessage = matchFiltersMessage,
@@ -209,6 +219,7 @@ fun ProfileStatusScreen(
                 resendEmailVerificationAvailableAtMillis = resendEmailVerificationAvailableAtMillis,
                 checkEmailVerificationAvailableAtMillis = checkEmailVerificationAvailableAtMillis,
                 onUpdateProfile = onUpdateProfile,
+                onLoadCountries = onLoadCountries,
                 onUpdateMatchFilters = onUpdateMatchFilters,
                 onLoadPhotos = onLoadPhotos,
                 onAddPhotoFile = onAddPhotoFile,
@@ -275,6 +286,9 @@ private fun ProfileCard(
     profileUpdateLoading: Boolean,
     profileUpdateError: ApiError?,
     profileUpdateMessage: String?,
+    countriesLoading: Boolean,
+    countries: List<CountryReference>,
+    countriesError: ApiError?,
     matchFiltersLoading: Boolean,
     matchFiltersError: ApiError?,
     matchFiltersMessage: String?,
@@ -298,6 +312,7 @@ private fun ProfileCard(
     resendEmailVerificationAvailableAtMillis: Long?,
     checkEmailVerificationAvailableAtMillis: Long?,
     onUpdateProfile: (UpdateProfileInput) -> Unit,
+    onLoadCountries: () -> Unit,
     onUpdateMatchFilters: (UpdateMatchFiltersInput) -> Unit,
     onLoadPhotos: () -> Unit,
     onAddPhotoFile: (position: Int, fileUri: Uri) -> Unit,
@@ -358,6 +373,9 @@ private fun ProfileCard(
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         ProfileDetailsCard(
             profile = profile,
+            countries = countries,
+            countriesLoading = countriesLoading,
+            countriesError = countriesError,
             loading = profileUpdateLoading,
             busy = busy,
             error = profileUpdateError,
@@ -370,6 +388,7 @@ private fun ProfileCard(
                 profileSaveRequested = true
                 onUpdateProfile(it)
             },
+            onLoadCountries = onLoadCountries,
         )
         MatchPreferencesCard(
             profile = profile,
@@ -466,6 +485,9 @@ private fun SectionHeader(
 @Composable
 private fun ProfileDetailsCard(
     profile: Profile,
+    countries: List<CountryReference>,
+    countriesLoading: Boolean,
+    countriesError: ApiError?,
     loading: Boolean,
     busy: Boolean,
     error: ApiError?,
@@ -473,6 +495,7 @@ private fun ProfileDetailsCard(
     expanded: Boolean,
     onToggleExpanded: () -> Unit,
     onUpdateProfile: (UpdateProfileInput) -> Unit,
+    onLoadCountries: () -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -491,10 +514,14 @@ private fun ProfileDetailsCard(
             if (expanded) {
                 ProfileEditActions(
                     profile = profile,
+                    countries = countries,
+                    countriesLoading = countriesLoading,
+                    countriesError = countriesError,
                     loading = loading,
                     error = error,
                     message = message,
                     onUpdateProfile = onUpdateProfile,
+                    onLoadCountries = onLoadCountries,
                 )
             } else {
                 Text(
@@ -504,7 +531,7 @@ private fun ProfileDetailsCard(
                 Text(
                     text = "${profile.age} años · ${
                         TextSafety.safeDisplay(profile.city, maxLength = 100)
-                    }, ${TextSafety.safeDisplay(profile.country, maxLength = 100)}",
+                    }, ${TextSafety.safeDisplay(profileCountryDisplayName(profile, countries), maxLength = 100)}",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -687,34 +714,54 @@ private fun PhotosCard(
 @Composable
 private fun ProfileEditActions(
     profile: Profile,
+    countries: List<CountryReference>,
+    countriesLoading: Boolean,
+    countriesError: ApiError?,
     loading: Boolean,
     error: ApiError?,
     message: String?,
     onUpdateProfile: (UpdateProfileInput) -> Unit,
+    onLoadCountries: () -> Unit,
 ) {
     var displayName by rememberSaveable(profile.id, profile.displayName) { mutableStateOf(profile.displayName) }
     var bio by rememberSaveable(profile.id, profile.bio) { mutableStateOf(profile.bio.orEmpty()) }
     var city by rememberSaveable(profile.id, profile.city) { mutableStateOf(profile.city) }
-    var country by rememberSaveable(profile.id, profile.country) { mutableStateOf(profile.country) }
+    var selectedCountryCode by rememberSaveable(profile.id, profile.countryCode) { mutableStateOf(profile.countryCode) }
     var localError by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
-                text = "Campos editables: nombre, bio, ciudad y pais.",
+                text = "Campos editables: nombre, bio, ciudad y país.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
             OutlinedTextField(displayName, { displayName = it.take(100) }, label = { Text("Nombre visible") }, enabled = !loading, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(bio, { bio = it.take(1_000) }, label = { Text("Bio") }, enabled = !loading, minLines = 3, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(city, { city = it.take(100) }, label = { Text("Ciudad") }, enabled = !loading, singleLine = true, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(country, { country = it.take(100) }, label = { Text("Pais") }, enabled = !loading, singleLine = true, modifier = Modifier.fillMaxWidth())
+            CountrySelector(
+                countries = countries,
+                selectedCountryCode = selectedCountryCode,
+                loading = countriesLoading,
+                enabled = !loading,
+                onCountrySelected = { selectedCountryCode = it },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            countriesError?.let {
+                ApiErrorFeedbackCard(it, ErrorContext.ProfileUpdate)
+                TextButton(
+                    onClick = onLoadCountries,
+                    enabled = !loading && !countriesLoading,
+                ) {
+                    Text("Reintentar carga de países")
+                }
+            }
             localError?.let { ErrorFeedback("Revisa los datos", it) }
             error?.let { ApiErrorFeedbackCard(it, ErrorContext.ProfileUpdate) }
             Button(
                 onClick = {
-                    val input = validateUpdateProfileInput(displayName, bio, city, country)
+                    val input = validateUpdateProfileInput(displayName, bio, city, selectedCountryCode)
                     if (input == null) {
-                        localError = "Revisa nombre, ciudad, pais y bio. No uses etiquetas o formato HTML."
+                        localError = "Revisa nombre, ciudad, país y bio. No uses etiquetas o formato HTML."
                     } else {
                         localError = null
                         onUpdateProfile(input)
@@ -748,15 +795,16 @@ private fun MatchPreferencesEditor(
         mutableStateOf(profile.lookingForGenders)
     }
     var minAge by rememberSaveable(profile.id, profile.preferredMinAge) {
-        mutableStateOf(profile.preferredMinAge.toString())
+        mutableStateOf(profile.preferredMinAge)
     }
     var maxAge by rememberSaveable(profile.id, profile.preferredMaxAge) {
-        mutableStateOf(profile.preferredMaxAge.toString())
+        mutableStateOf(profile.preferredMaxAge)
     }
     var distance by rememberSaveable(profile.id, profile.maxDistanceKm) {
-        mutableStateOf(profile.maxDistanceKm.toString())
+        mutableStateOf(profile.maxDistanceKm.coerceIn(ProfileMinDistanceKm, ProfileMaxDistanceKm))
     }
     var localError by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
+    var fieldErrors by remember { mutableStateOf(emptySet<MatchFiltersField>()) }
 
     Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Text(
@@ -779,25 +827,53 @@ private fun MatchPreferencesEditor(
             )
         }
         PreferenceGroup(title = "Edad") {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                NumberField(minAge, { minAge = it }, "Mínima", !loading, Modifier.weight(1f))
-                NumberField(maxAge, { maxAge = it }, "Máxima", !loading, Modifier.weight(1f))
-            }
+            AgeRangePreferenceControl(
+                minAge = minAge,
+                maxAge = maxAge,
+                enabled = !loading,
+                onAgeRangeChange = { nextMin, nextMax ->
+                    minAge = nextMin
+                    maxAge = nextMax
+                },
+                error = if (MatchFiltersField.AgeRange in fieldErrors) {
+                    "Elegí edades entre 18 y 99, con mínima menor o igual a máxima."
+                } else {
+                    null
+                },
+            )
         }
         PreferenceGroup(title = "Distancia máxima") {
-            NumberField(distance, { distance = it }, "Kilómetros", !loading, Modifier.fillMaxWidth())
+            DistancePreferenceControl(
+                distanceKm = distance,
+                enabled = !loading,
+                onDistanceChange = { distance = it },
+                modifier = Modifier.fillMaxWidth(),
+                error = if (MatchFiltersField.Distance in fieldErrors) {
+                    "Elegí una distancia entre 1 y 100 km."
+                } else {
+                    null
+                },
+            )
         }
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             localError?.let { ErrorFeedback("Revisá las preferencias", it) }
             error?.let { ApiErrorFeedbackCard(it, ErrorContext.MatchFilters) }
             Button(
                 onClick = {
-                    val input = validateMatchFiltersInput(intention, lookingForGenders, minAge, maxAge, distance)
-                    if (input == null) {
-                        localError = "Elegí al menos una preferencia. Edades entre 18 y 99, min <= max, distancia entre 1 y 1000."
+                    val validation = validateMatchFiltersInputDetailed(
+                        intention = intention,
+                        lookingForGenders = lookingForGenders,
+                        minAge = minAge,
+                        maxAge = maxAge,
+                        distance = distance,
+                    )
+                    if (validation.input == null) {
+                        fieldErrors = validation.errorFields
+                        localError = validation.errorMessage
                     } else {
+                        fieldErrors = emptySet()
                         localError = null
-                        onUpdateMatchFilters(input)
+                        onUpdateMatchFilters(validation.input)
                     }
                 },
                 enabled = !loading,
@@ -1539,25 +1615,6 @@ private fun String.isLocalhostPresignedUrl(): Boolean {
 }
 
 @Composable
-private fun NumberField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    label: String,
-    enabled: Boolean,
-    modifier: Modifier,
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = { next -> onValueChange(next.filter { it.isDigit() }) },
-        label = { Text(label) },
-        enabled = enabled,
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        modifier = modifier,
-    )
-}
-
-@Composable
 private fun ErrorFeedback(title: String, message: String) {
     FeedbackCard(title = title, message = message, tone = FeedbackTone.Error)
 }
@@ -1570,6 +1627,11 @@ private fun SuccessFeedback(message: String) {
 private fun profileNextStep(status: ProfileStatus): String = when (status) {
     else -> status.userDescription()
 }
+
+internal fun profileCountryDisplayName(
+    profile: Profile,
+    countries: List<CountryReference>,
+): String = countries.firstOrNull { it.code == profile.countryCode }?.displayName ?: profile.countryCode
 
 @Composable
 private fun EnumDropdown(
@@ -1599,55 +1661,96 @@ private fun EnumDropdown(
     }
 }
 
-private fun validateUpdateProfileInput(
+internal fun validateUpdateProfileInput(
     displayName: String,
     bio: String,
     city: String,
-    country: String,
+    countryCode: String,
 ): UpdateProfileInput? {
     val cleanDisplayName = TextSafety.normalizeSingleLine(displayName, maxLength = 100)
     val cleanBio = TextSafety.normalizeMultiline(bio, maxLength = 1_000)
     val cleanCity = TextSafety.normalizeSingleLine(city, maxLength = 100)
-    val cleanCountry = TextSafety.normalizeSingleLine(country, maxLength = 100)
+    val cleanCountryCode = countryCode.trim()
 
     if (cleanDisplayName.length !in 2..100) return null
     if (cleanBio.length > 1000) return null
     if (cleanCity.isBlank() || cleanCity.length > 100) return null
-    if (cleanCountry.isBlank() || cleanCountry.length > 100) return null
+    if (cleanCountryCode.isBlank()) return null
     if (TextSafety.containsHtmlLikeMarkup(cleanDisplayName)) return null
     if (TextSafety.containsHtmlLikeMarkup(cleanBio)) return null
     if (TextSafety.containsHtmlLikeMarkup(cleanCity)) return null
-    if (TextSafety.containsHtmlLikeMarkup(cleanCountry)) return null
 
     return UpdateProfileInput(
         displayName = cleanDisplayName,
         bio = cleanBio.ifBlank { null },
         city = cleanCity,
-        country = cleanCountry,
+        countryCode = cleanCountryCode,
     )
 }
 
-private fun validateMatchFiltersInput(
+internal data class MatchFiltersValidationResult(
+    val input: UpdateMatchFiltersInput?,
+    val errorFields: Set<MatchFiltersField> = emptySet(),
+    val errorMessage: String? = null,
+)
+
+internal enum class MatchFiltersField {
+    Intention,
+    GenderPreference,
+    AgeRange,
+    Distance,
+}
+
+internal fun validateMatchFiltersInputDetailed(
     intention: String,
     lookingForGenders: Set<String>,
-    minAge: String,
-    maxAge: String,
-    distance: String,
-): UpdateMatchFiltersInput? {
-    val parsedMin = minAge.toIntOrNull()
-    val parsedMax = maxAge.toIntOrNull()
-    val parsedDistance = distance.toIntOrNull()
-    if (intention !in listOf("DATE", "FRIENDSHIP", "CASUAL")) return null
-    if (!isValidGenderPreferenceSet(lookingForGenders)) return null
-    if (parsedMin == null || parsedMax == null || parsedDistance == null) return null
-    if (parsedMin !in 18..99 || parsedMax !in 18..99 || parsedMin > parsedMax) return null
-    if (parsedDistance !in 1..1000) return null
-    return UpdateMatchFiltersInput(
-        intention = intention,
-        lookingForGenders = lookingForGenders,
-        preferredMinAge = parsedMin,
-        preferredMaxAge = parsedMax,
-        maxDistanceKm = parsedDistance,
+    minAge: Int,
+    maxAge: Int,
+    distance: Int,
+): MatchFiltersValidationResult {
+    if (intention !in listOf("DATE", "FRIENDSHIP", "CASUAL")) {
+        return MatchFiltersValidationResult(
+            input = null,
+            errorFields = setOf(MatchFiltersField.Intention),
+            errorMessage = "Elegí qué estás buscando.",
+        )
+    }
+    if (!isValidGenderPreferenceSet(lookingForGenders)) {
+        return MatchFiltersValidationResult(
+            input = null,
+            errorFields = setOf(MatchFiltersField.GenderPreference),
+            errorMessage = "Elegí al menos una preferencia de género.",
+        )
+    }
+    if (minAge !in ProfileMinAge..ProfileMaxAge || maxAge !in ProfileMinAge..ProfileMaxAge) {
+        return MatchFiltersValidationResult(
+            input = null,
+            errorFields = setOf(MatchFiltersField.AgeRange),
+            errorMessage = "Las edades deben estar entre 18 y 99 años.",
+        )
+    }
+    if (minAge > maxAge) {
+        return MatchFiltersValidationResult(
+            input = null,
+            errorFields = setOf(MatchFiltersField.AgeRange),
+            errorMessage = "La edad mínima no puede ser mayor que la máxima.",
+        )
+    }
+    if (distance !in ProfileMinDistanceKm..ProfileMaxDistanceKm) {
+        return MatchFiltersValidationResult(
+            input = null,
+            errorFields = setOf(MatchFiltersField.Distance),
+            errorMessage = "La distancia debe estar entre 1 y 100 km.",
+        )
+    }
+    return MatchFiltersValidationResult(
+        input = UpdateMatchFiltersInput(
+            intention = intention,
+            lookingForGenders = lookingForGenders,
+            preferredMinAge = minAge,
+            preferredMaxAge = maxAge,
+            maxDistanceKm = distance,
+        ),
     )
 }
 

@@ -15,7 +15,7 @@ data class ProfileResponseDto(
     val lookingForGenders: Set<String>,
     val intention: String,
     val city: String,
-    val country: String,
+    val countryCode: String,
     val bio: String? = null,
     val preferredMinAge: Int,
     val preferredMaxAge: Int,

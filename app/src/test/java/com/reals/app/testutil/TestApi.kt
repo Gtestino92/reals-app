@@ -11,6 +11,7 @@ import com.reals.app.data.dto.ChatMessageResponseDto
 import com.reals.app.data.dto.ChatResponseDto
 import com.reals.app.data.dto.ConnectionDismissalResponseDto
 import com.reals.app.data.dto.ConnectionResponseDto
+import com.reals.app.data.dto.CountryReferenceResponseDto
 import com.reals.app.data.dto.CreateProfileRequestDto
 import com.reals.app.data.dto.CurrentLegalDocumentsResponseDto
 import com.reals.app.data.dto.EnqueueMatchmakingRequestDto
@@ -131,6 +132,8 @@ class FakeRealsApi : RealsApi {
     var legalStatusResponse: Response<LegalStatusResponseDto> = Response.success(TestDtos.legalStatus())
     var legalActionResponse: Response<LegalDocumentActionResponseDto> = Response.success(TestDtos.legalAction())
     var profileResponse: Response<ProfileResponseDto> = Response.success(TestDtos.profile())
+    var countriesResponse: Response<List<CountryReferenceResponseDto>> =
+        Response.success(listOf(TestDtos.country("AR", "Argentina"), TestDtos.country("BR", "Brasil")))
     var photosResponse: Response<List<PhotoResponseDto>> = Response.success(listOf(TestDtos.photo()))
     var reorderPhotosResponse: Response<List<PhotoResponseDto>> = Response.success(listOf(TestDtos.photo()))
     var photoResponse: Response<PhotoResponseDto> = Response.success(TestDtos.photo())
@@ -205,6 +208,9 @@ class FakeRealsApi : RealsApi {
 
     override suspend fun getMyProfile(authorization: String): Response<ProfileResponseDto> =
         record("getMyProfile", authorization) { profileResponse }
+
+    override suspend fun getCountries(authorization: String): Response<List<CountryReferenceResponseDto>> =
+        record("getCountries", authorization) { countriesResponse }
 
     override suspend fun createMyProfile(
         authorization: String,

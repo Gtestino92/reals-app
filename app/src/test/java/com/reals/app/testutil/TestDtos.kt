@@ -6,6 +6,7 @@ import com.reals.app.data.dto.ChatMessageResponseDto
 import com.reals.app.data.dto.ChatPartnerResponseDto
 import com.reals.app.data.dto.ChatResponseDto
 import com.reals.app.data.dto.ConnectionResponseDto
+import com.reals.app.data.dto.CountryReferenceResponseDto
 import com.reals.app.data.dto.CurrentLegalDocumentResponseDto
 import com.reals.app.data.dto.CurrentLegalDocumentsResponseDto
 import com.reals.app.data.dto.FirstChatGuidanceQuestionResponseDto
@@ -119,7 +120,7 @@ object TestDtos {
         lookingForGenders = setOf("MALE"),
         intention = "SERIOUS",
         city = "Buenos Aires",
-        country = "AR",
+        countryCode = "AR",
         bio = "Hola",
         preferredMinAge = 25,
         preferredMaxAge = 35,
@@ -128,6 +129,14 @@ object TestDtos {
         photoCount = 2,
         createdAt = now,
         updatedAt = now,
+    )
+
+    fun country(
+        code: String = "AR",
+        displayName: String = "Argentina",
+    ) = CountryReferenceResponseDto(
+        code = code,
+        displayName = displayName,
     )
 
     fun photo(

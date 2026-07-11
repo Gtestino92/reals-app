@@ -1,10 +1,12 @@
 package com.reals.app.data.mapper
 
 import com.reals.app.data.dto.CreateProfileRequestDto
+import com.reals.app.data.dto.CountryReferenceResponseDto
 import com.reals.app.data.dto.PhotoResponseDto
 import com.reals.app.data.dto.ProfileResponseDto
 import com.reals.app.data.dto.UpdateMatchFiltersRequestDto
 import com.reals.app.data.dto.UpdateProfileRequestDto
+import com.reals.app.domain.model.CountryReference
 import com.reals.app.domain.model.CreateProfileInput
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfilePhoto
@@ -24,7 +26,7 @@ fun ProfileResponseDto.toDomain(): Profile = Profile(
     lookingForGenders = lookingForGenders,
     intention = intention,
     city = city,
-    country = country,
+    countryCode = countryCode,
     bio = bio,
     preferredMinAge = preferredMinAge,
     preferredMaxAge = preferredMaxAge,
@@ -42,7 +44,7 @@ fun CreateProfileInput.toDto(): CreateProfileRequestDto = CreateProfileRequestDt
     lookingForGenders = lookingForGenders,
     intention = intention,
     city = city,
-    country = country,
+    countryCode = countryCode,
     bio = bio,
     preferredMinAge = preferredMinAge,
     preferredMaxAge = preferredMaxAge,
@@ -53,7 +55,12 @@ fun UpdateProfileInput.toDto(): UpdateProfileRequestDto = UpdateProfileRequestDt
     displayName = displayName,
     bio = bio,
     city = city,
-    country = country,
+    countryCode = countryCode,
+)
+
+fun CountryReferenceResponseDto.toDomain(): CountryReference = CountryReference(
+    code = code,
+    displayName = displayName,
 )
 
 fun UpdateMatchFiltersInput.toDto(): UpdateMatchFiltersRequestDto = UpdateMatchFiltersRequestDto(
