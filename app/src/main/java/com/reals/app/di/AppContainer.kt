@@ -28,6 +28,7 @@ import com.reals.app.domain.usecase.GetChatExitRequestsUseCase
 import com.reals.app.domain.usecase.GetChatMessagesUseCase
 import com.reals.app.domain.usecase.GetChatUseCase
 import com.reals.app.domain.usecase.GetCurrentLegalDocumentsUseCase
+import com.reals.app.domain.usecase.GetCountriesUseCase
 import com.reals.app.domain.usecase.GetFirstChatForMatchUseCase
 import com.reals.app.domain.usecase.GetHomePendingUseCase
 import com.reals.app.domain.usecase.GetHomeStatusUseCase
@@ -89,6 +90,7 @@ class AppContainer(context: Context) {
     )
     val createProfileUseCase = CreateProfileUseCase(profileRepository)
     val updateProfileUseCase = UpdateProfileUseCase(profileRepository)
+    val getCountriesUseCase = GetCountriesUseCase(profileRepository)
     val updateMatchFiltersUseCase = UpdateMatchFiltersUseCase(profileRepository)
     val getMeUseCase = GetMeUseCase(meRepository)
     val getHomeUseCase = GetHomeUseCase(meRepository)
@@ -156,6 +158,7 @@ class AppContainer(context: Context) {
         profile = ProfileFeatureDependencies(
             createProfile = createProfileUseCase,
             updateProfile = updateProfileUseCase,
+            getCountries = getCountriesUseCase,
             updateMatchFilters = updateMatchFiltersUseCase,
             getProfilePhotos = getProfilePhotosUseCase,
             addProfilePhotoFile = addProfilePhotoFileUseCase,

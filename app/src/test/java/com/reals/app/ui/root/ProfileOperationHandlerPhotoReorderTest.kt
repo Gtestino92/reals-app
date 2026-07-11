@@ -16,6 +16,7 @@ import com.reals.app.domain.usecase.ActivateProfileUseCase
 import com.reals.app.domain.usecase.AddProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.CreateProfileUseCase
 import com.reals.app.domain.usecase.DeleteProfilePhotoUseCase
+import com.reals.app.domain.usecase.GetCountriesUseCase
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
 import com.reals.app.domain.usecase.ReorderProfilePhotosUseCase
 import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
@@ -201,6 +202,7 @@ class ProfileOperationHandlerPhotoReorderTest {
             dependencies = ProfileFeatureDependencies(
                 createProfile = CreateProfileUseCase(profileRepository),
                 updateProfile = UpdateProfileUseCase(profileRepository),
+                getCountries = GetCountriesUseCase(profileRepository),
                 updateMatchFilters = UpdateMatchFiltersUseCase(profileRepository),
                 getProfilePhotos = getProfilePhotos,
                 addProfilePhotoFile = AddProfilePhotoFileUseCase(profileRepository),

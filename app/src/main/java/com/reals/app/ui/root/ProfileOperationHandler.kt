@@ -120,6 +120,49 @@ class ProfileOperationHandler(
         }
     }
 
+    fun loadCountriesIfNeeded() {
+        val current = requireReady() ?: return
+        if (current.countriesLoaded || current.countriesLoading) return
+
+        scope.launch {
+            val latest = requireReady() ?: return@launch
+            if (latest.countriesLoaded || latest.countriesLoading) return@launch
+
+            val pending = latest.copy(
+                profileOp = latest.profileOp.copy(
+                    countriesLoading = true,
+                    countriesError = null,
+                ),
+            )
+            uiState.value = pending
+
+            when (val result = dependencies.getCountries()) {
+                is ApiResult.Success -> {
+                    val displayed = requireReady() ?: return@launch
+                    uiState.value = displayed.copy(
+                        profileOp = displayed.profileOp.copy(
+                            countriesLoading = false,
+                            countries = result.value,
+                            countriesError = null,
+                            countriesLoaded = true,
+                        ),
+                    )
+                }
+
+                is ApiResult.Failure -> {
+                    val displayed = requireReady() ?: return@launch
+                    uiState.value = displayed.copy(
+                        profileOp = displayed.profileOp.copy(
+                            countriesLoading = false,
+                            countriesError = result.error,
+                            countriesLoaded = false,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
     fun updateMatchFilters(input: UpdateMatchFiltersInput) {
         val current = requireReady() ?: return
         scope.launch {

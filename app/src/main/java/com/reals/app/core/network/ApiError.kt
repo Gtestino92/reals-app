@@ -39,6 +39,7 @@ enum class BackendErrorCode(val raw: String) {
     ProfileFullBodyPhotoRequired("PROFILE_FULL_BODY_PHOTO_REQUIRED"),
     ProfilePhotoLimitReached("PROFILE_PHOTO_LIMIT_REACHED"),
     InvalidProfileBirthDate("INVALID_PROFILE_BIRTH_DATE"),
+    InvalidProfileCountry("INVALID_PROFILE_COUNTRY"),
     InvalidMatchFilters("INVALID_MATCH_FILTERS"),
     PhotoPositionInvalid("PHOTO_POSITION_INVALID"),
     PhotoPositionOccupied("PHOTO_POSITION_OCCUPIED"),
@@ -203,6 +204,7 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.ProfileFullBodyPhotoRequired -> "Necesitamos una foto de cuerpo completo para activar tu perfil."
     BackendErrorCode.ProfilePhotoLimitReached -> "Ya llegaste al maximo de fotos permitidas."
     BackendErrorCode.InvalidProfileBirthDate -> "Revisa tu fecha de nacimiento."
+    BackendErrorCode.InvalidProfileCountry -> "Seleccioná un país válido."
     BackendErrorCode.InvalidMatchFilters -> "Revisa las edades y la distancia. Hay algun valor fuera de rango."
     BackendErrorCode.PhotoPositionInvalid -> "Esa posicion de foto no esta disponible."
     BackendErrorCode.PhotoPositionOccupied -> "Ya hay una foto en esa posicion. Podes reemplazarla o elegir otra."

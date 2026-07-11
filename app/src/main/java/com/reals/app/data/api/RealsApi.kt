@@ -9,6 +9,7 @@ import com.reals.app.data.dto.ChatMessageResponseDto
 import com.reals.app.data.dto.ChatResponseDto
 import com.reals.app.data.dto.ConnectionDismissalResponseDto
 import com.reals.app.data.dto.ConnectionResponseDto
+import com.reals.app.data.dto.CountryReferenceResponseDto
 import com.reals.app.data.dto.CreateProfileRequestDto
 import com.reals.app.data.dto.CurrentLegalDocumentsResponseDto
 import com.reals.app.data.dto.EnqueueMatchmakingRequestDto
@@ -117,6 +118,11 @@ interface RealsApi {
     suspend fun getMyProfile(
         @Header("Authorization") authorization: String,
     ): Response<ProfileResponseDto>
+
+    @GET("api/reference/countries")
+    suspend fun getCountries(
+        @Header("Authorization") authorization: String,
+    ): Response<List<CountryReferenceResponseDto>>
 
     @POST("api/me/profile")
     suspend fun createMyProfile(

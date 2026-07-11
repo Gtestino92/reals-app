@@ -60,6 +60,21 @@ class ApiErrorTest {
     }
 
     @Test
+    fun `invalid profile country maps to deterministic profile message`() {
+        val error = backendError("INVALID_PROFILE_COUNTRY", message = "technical detail")
+
+        assertEquals(BackendErrorCode.InvalidProfileCountry, error.backendErrorCode)
+        assertEquals(
+            "Seleccioná un país válido.",
+            error.toUserMessage(ErrorContext.ProfileCreation),
+        )
+        assertEquals(
+            "Seleccioná un país válido.",
+            error.toUserMessage(ErrorContext.ProfileUpdate),
+        )
+    }
+
+    @Test
     fun `authenticity verification backend codes map to deterministic messages`() {
         mapOf(
             "AUTHENTICITY_VERIFICATION_NOT_CONFIGURED" to

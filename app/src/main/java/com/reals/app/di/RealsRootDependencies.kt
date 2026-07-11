@@ -16,6 +16,7 @@ import com.reals.app.domain.usecase.GetChatExitRequestsUseCase
 import com.reals.app.domain.usecase.GetChatMessagesUseCase
 import com.reals.app.domain.usecase.GetChatUseCase
 import com.reals.app.domain.usecase.GetCurrentLegalDocumentsUseCase
+import com.reals.app.domain.usecase.GetCountriesUseCase
 import com.reals.app.domain.usecase.GetFirstChatForMatchUseCase
 import com.reals.app.domain.usecase.GetHomePendingUseCase
 import com.reals.app.domain.usecase.GetHomeStatusUseCase
@@ -87,6 +88,7 @@ data class LegalFeatureDependencies(
 data class ProfileFeatureDependencies(
     val createProfile: CreateProfileUseCase,
     val updateProfile: UpdateProfileUseCase,
+    val getCountries: GetCountriesUseCase,
     val updateMatchFilters: UpdateMatchFiltersUseCase,
     val getProfilePhotos: GetProfilePhotosUseCase,
     val addProfilePhotoFile: AddProfilePhotoFileUseCase,

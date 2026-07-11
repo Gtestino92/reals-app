@@ -58,7 +58,7 @@ class ProfileRepositoryTest {
                 lookingForGenders = setOf("MALE"),
                 intention = "SERIOUS",
                 city = "Buenos Aires",
-                country = "AR",
+                countryCode = "AR",
                 bio = "Bio",
                 preferredMinAge = 25,
                 preferredMaxAge = 35,
@@ -67,6 +67,7 @@ class ProfileRepositoryTest {
         ).successValue()
 
         assertEquals("Alex", api.createProfileBody?.displayName)
+        assertEquals("AR", api.createProfileBody?.countryCode)
         assertEquals(10, api.createProfileBody?.maxDistanceKm)
 
         repository.updateMyProfile(
@@ -74,12 +75,23 @@ class ProfileRepositoryTest {
                 displayName = "Alex 2",
                 bio = null,
                 city = "CABA",
-                country = "AR",
+                countryCode = "AR",
             )
         ).successValue()
 
         assertEquals("Alex 2", api.updateProfileBody?.displayName)
         assertEquals("CABA", api.updateProfileBody?.city)
+        assertEquals("AR", api.updateProfileBody?.countryCode)
+    }
+
+    @Test
+    fun `get countries uses authenticated reference endpoint and maps domain list`() = runBlocking {
+        val countries = repository.getCountries().successValue()
+
+        assertEquals(listOf("getCountries"), api.calls)
+        assertEquals("Bearer test-token", api.lastAuthorization)
+        assertEquals(listOf("AR", "BR"), countries.map { it.code })
+        assertEquals(listOf("Argentina", "Brasil"), countries.map { it.displayName })
     }
 
     @Test
