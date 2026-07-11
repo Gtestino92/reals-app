@@ -208,17 +208,20 @@ class ProfileOperationHandler(
             uiState.value = pending
             when (val result = getProfilePhotosUseCase()) {
                 is ApiResult.Success -> {
-                    uiState.value = pending.copy(
-                        photos = pending.photos.copy(
+                    val latest = requireReady() ?: return@launch
+                    uiState.value = latest.copy(
+                        photos = latest.photos.copy(
                             loadingPhotos = false,
                             profilePhotos = result.value.sortedBy { it.position },
+                            profilePhotosError = null,
                         ),
                     )
                 }
 
                 is ApiResult.Failure -> {
-                    uiState.value = pending.copy(
-                        photos = pending.photos.copy(
+                    val latest = requireReady() ?: return@launch
+                    uiState.value = latest.copy(
+                        photos = latest.photos.copy(
                             loadingPhotos = false,
                             profilePhotosError = result.error,
                         ),

@@ -117,6 +117,7 @@ class FakeRealsApi : RealsApi {
     var beforeGetFirstChatForMatchResponse: suspend () -> Unit = {}
     var beforeGetChatResponse: suspend () -> Unit = {}
     var beforeGetConnectionNegotiationResponse: suspend () -> Unit = {}
+    var beforeGetProfilePhotosResponse: suspend () -> Unit = {}
     var beforeReorderPhotosResponse: suspend () -> Unit = {}
 
     var pingResponse: Response<PingResponseDto> = Response.success(PingResponseDto("ok"))
@@ -240,7 +241,7 @@ class FakeRealsApi : RealsApi {
         }
 
     override suspend fun getMyProfilePhotos(authorization: String): Response<List<PhotoResponseDto>> =
-        record("getMyProfilePhotos", authorization) { photosResponse }
+        record("getMyProfilePhotos", authorization, beforeResponse = beforeGetProfilePhotosResponse) { photosResponse }
 
     override suspend fun reorderMyProfilePhotos(
         authorization: String,
