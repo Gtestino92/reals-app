@@ -1551,15 +1551,6 @@ private fun ProfilePhotoImage(
             .build()
     }
     when {
-        photo.url.isLocalhostPresignedUrl() -> {
-            Text(
-                text = "URL local firmada no renderizable en emulador.",
-                modifier = modifier.padding(8.dp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-
         displayUrl.isRenderableImageUrl() -> {
             AsyncImage(
                 model = imageRequest,
@@ -1593,7 +1584,7 @@ private data class PhotoGridDragState(
     val targetPosition: Int?,
 )
 
-private fun String.toEmulatorReachableUrl(): String {
+internal fun String.toEmulatorReachableUrl(): String {
     if (isPresignedUrl()) return this
     return replace("http://localhost:", "http://10.0.2.2:")
         .replace("http://127.0.0.1:", "http://10.0.2.2:")
@@ -1601,17 +1592,12 @@ private fun String.toEmulatorReachableUrl(): String {
 
 private fun String.stablePhotoCacheKey(): String = substringBefore("?")
 
-private fun String.isRenderableImageUrl(): Boolean {
+internal fun String.isRenderableImageUrl(): Boolean {
     return startsWith("http://") || startsWith("https://")
 }
 
 private fun String.isPresignedUrl(): Boolean {
     return contains("X-Amz-Signature=")
-}
-
-private fun String.isLocalhostPresignedUrl(): Boolean {
-    return isPresignedUrl() &&
-        (startsWith("http://localhost:") || startsWith("http://127.0.0.1:"))
 }
 
 @Composable

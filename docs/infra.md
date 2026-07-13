@@ -16,7 +16,7 @@ The app has one flavor dimension, `environment`:
 
 | Flavor | Default API URL | Cleartext HTTP |
 | --- | --- | --- |
-| `local` | `http://10.0.2.2:8080/` | yes |
+| `local` | `http://127.0.0.1:8080/` | yes |
 | `dev` | `https://api-dev.reals.example.com/` | no |
 | `prod` | `https://api.reals.example.com/` | no |
 
@@ -140,8 +140,8 @@ Recommended local setup:
 
 1. Run `reals-backend` with its Docker Compose stack. That starts backend dependencies such as Postgres and MinIO, and exposes the API on `localhost:8080`.
 2. Run the Android app from Android Studio or with Gradle install tasks.
-3. The Android emulator reaches the host backend through `http://10.0.2.2:8080/`, which is the default `local` flavor `REALS_BASE_URL`.
-4. A physical device needs either a LAN-accessible backend URL or a tunneled URL, not `10.0.2.2`.
+3. Configure ADB reverse with `.\tools\setup-android-local.ps1` from this repository.
+4. The Android emulator or physical device reaches the host backend through `http://127.0.0.1:8080/`, which is the default `local` flavor `REALS_BASE_URL` when ADB reverse is active.
 
 Recommended remote environments:
 

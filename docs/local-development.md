@@ -11,7 +11,7 @@
 
 The app has one environment flavor dimension:
 
-- `local`: local backend from emulator. Default base URL is `http://10.0.2.2:8080/`; cleartext traffic is allowed.
+- `local`: local backend through ADB reverse. Default base URL is `http://127.0.0.1:8080/`; cleartext traffic is allowed.
 - `dev`: dev/staging backend. Set `realsDevBaseUrl` or `REALS_DEV_BASE_URL`.
 - `prod`: production backend. Set `realsProdBaseUrl` or `REALS_PROD_BASE_URL`.
 
@@ -36,7 +36,7 @@ Firebase Auth is required for real sign-in/provisioning flows. Push notification
 ./gradlew :app:assembleLocalDebug
 ```
 
-Use the `localDebug` variant for emulator testing against a backend running on the host machine.
+Use the `localDebug` variant for emulator or physical-device testing against a backend running on the host machine. See `local-android-networking.md` for the ADB reverse workflow.
 
 ## Backend Contract Docs
 
