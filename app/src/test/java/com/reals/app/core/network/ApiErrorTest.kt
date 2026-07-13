@@ -175,9 +175,11 @@ class ApiErrorTest {
             "SCHEDULING_NEGOTIATION_NOT_FOUND" to BackendErrorCode.SchedulingNegotiationNotFound,
             "SCHEDULING_INVALID_PROPOSALS" to BackendErrorCode.SchedulingInvalidProposals,
             "SCHEDULING_PROPOSALS_ALREADY_SUBMITTED" to BackendErrorCode.SchedulingProposalsAlreadySubmitted,
+            "SCHEDULING_ROUND_CHANGED" to BackendErrorCode.SchedulingRoundChanged,
             "SCHEDULING_PROPOSAL_NOT_AVAILABLE" to BackendErrorCode.SchedulingProposalNotAvailable,
             "SCHEDULING_CANNOT_ACCEPT_OWN_PROPOSAL" to BackendErrorCode.SchedulingCannotAcceptOwnProposal,
-            "SCHEDULING_ROUND_NOT_REJECTABLE" to BackendErrorCode.SchedulingRoundNotRejectable,
+            "SCHEDULING_PARTNER_PROPOSALS_NOT_AVAILABLE" to
+                BackendErrorCode.SchedulingPartnerProposalsNotAvailable,
         ).forEach { (raw, expected) ->
             assertEquals(expected, BackendErrorCode.fromRaw(raw))
         }
@@ -195,12 +197,14 @@ class ApiErrorTest {
                 "Revisa los horarios elegidos. Deben ser futuros, unicos y estar alineados cada media hora.",
             "SCHEDULING_PROPOSALS_ALREADY_SUBMITTED" to
                 "Ya enviaste tus horarios para esta ronda.",
+            "SCHEDULING_ROUND_CHANGED" to
+                "La ronda cambio. Actualizamos las opciones; revisalas antes de continuar.",
             "SCHEDULING_PROPOSAL_NOT_AVAILABLE" to
                 "Ese horario ya no esta disponible. Actualiza la propuesta.",
             "SCHEDULING_CANNOT_ACCEPT_OWN_PROPOSAL" to
                 "No podes aceptar un horario propuesto por vos.",
-            "SCHEDULING_ROUND_NOT_REJECTABLE" to
-                "Todavia no se puede rechazar esta ronda. Espera a que ambas personas envien horarios.",
+            "SCHEDULING_PARTNER_PROPOSALS_NOT_AVAILABLE" to
+                "Esas opciones ya no estan disponibles. Actualizamos el estado de la coordinacion.",
         ).forEach { (code, expected) ->
             assertEquals(
                 expected,

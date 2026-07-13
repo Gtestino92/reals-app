@@ -73,7 +73,7 @@ fun SchedulingScreen(
     onRefresh: () -> Unit,
     onSubmitProposals: (List<String>) -> Unit,
     onAcceptProposal: (String) -> Unit,
-    onRejectRound: () -> Unit,
+    onRejectPartnerProposals: () -> Unit,
     onOpenPartnerProfile: () -> Unit,
     onManualBlock: () -> Unit,
     onClearManualBlockError: () -> Unit,
@@ -89,13 +89,19 @@ fun SchedulingScreen(
     val stage = roundState.stage
     val myProposals = roundState.myProposals
     val partnerProposals = roundState.partnerProposals
+    val myPendingProposals = roundState.myPendingProposals
+    val partnerPendingProposals = roundState.partnerPendingProposals
     var nowMillis by rememberSaveable(connectionId) { mutableStateOf(System.currentTimeMillis()) }
+    val draftScope = schedulingProposalDraftScope(connectionId, negotiation?.roundNumber)
+    var selectedProposalDraft by rememberSaveable(draftScope.connectionId, draftScope.roundNumber) {
+        mutableStateOf(emptyList<String>())
+    }
     var expiryRefreshRequested by rememberSaveable(connectionId) { mutableStateOf(false) }
     var showingManualBlockDialog by rememberSaveable(connectionId) { mutableStateOf(false) }
     val lifecycle = schedulingLifecycleUiState(negotiation?.schedulingExpiresAt, nowMillis)
     val actionsDisabled = lifecycle.expired || manualBlockLoading
     val interactionBusy = loading || refreshing || submitting || manualBlockLoading
-    val errorPlacement = schedulingErrorPlacement(stage, myProposals, error)
+    val errorPlacement = schedulingErrorPlacement(stage, error)
 
     LaunchedEffect(connectionId, negotiation?.status?.rawValue) {
         while (negotiation?.status == NegotiationStatus.Pending) {
@@ -187,30 +193,25 @@ fun SchedulingScreen(
                 submittingLabel = submittingLabel,
                 proposalError = errorPlacement.proposalError,
                 nowMillis = nowMillis,
+                selected = selectedProposalDraft,
+                onSelectedChange = { selectedProposalDraft = it },
                 onSubmitProposals = onSubmitProposals,
             )
 
-            SchedulingStage.WaitingForPartnerProposals -> WaitingPartnerCard(myProposals)
+            SchedulingStage.WaitingForPartnerProposals -> WaitingPartnerCard(
+                myProposals = myProposals,
+                myPendingProposals = myPendingProposals,
+            )
             SchedulingStage.ReviewPartnerProposals -> {
-                if (myProposals.isEmpty()) {
-                    ProposalSelectorCard(
-                        submitting = submitting,
-                        actionsDisabled = actionsDisabled,
-                        submittingLabel = submittingLabel,
-                        proposalError = errorPlacement.proposalError,
-                        nowMillis = nowMillis,
-                        onSubmitProposals = onSubmitProposals,
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
                 ReviewProposalsCard(
                     myProposals = myProposals,
-                    partnerProposals = partnerProposals,
+                    partnerPendingProposals = partnerPendingProposals,
                     submitting = submitting,
                     actionsDisabled = actionsDisabled,
                     submittingLabel = submittingLabel,
+                    reviewError = errorPlacement.reviewError,
                     onAcceptProposal = onAcceptProposal,
-                    onRejectRound = onRejectRound,
+                    onRejectPartnerProposals = onRejectPartnerProposals,
                 )
             }
 
@@ -335,9 +336,10 @@ private fun ProposalSelectorCard(
     submittingLabel: String?,
     proposalError: ApiError?,
     nowMillis: Long,
+    selected: List<String>,
+    onSelectedChange: (List<String>) -> Unit,
     onSubmitProposals: (List<String>) -> Unit,
 ) {
-    var selected by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var validationError by rememberSaveable { mutableStateOf<String?>(null) }
     val zoneId = ZoneId.systemDefault()
     val now = Instant.ofEpochMilli(nowMillis)
@@ -404,7 +406,8 @@ private fun ProposalSelectorCard(
     }
     val candidateValue = candidateSelection?.let { buildSchedulingSlot(it, zoneId).toString() }
     val selectedLabels = selected
-    val currentSelectedValidation = validateCurrentSelectedSlots(selected, now)
+    val currentSelectedValidation = selected.takeIf { it.isNotEmpty() }
+        ?.let { validateCurrentSelectedSlots(it, now) }
     val visibleValidationError = validationError ?: currentSelectedValidation
 
     Card(
@@ -496,7 +499,7 @@ private fun ProposalSelectorCard(
                         selected.size >= 3 -> validationError = "Podes elegir hasta 3 horarios."
                         validation != null -> validationError = validation
                         else -> {
-                            selected = selected + value
+                            onSelectedChange(selected + value)
                             validationError = null
                         }
                     }
@@ -527,7 +530,7 @@ private fun ProposalSelectorCard(
                         )
                         OutlinedButton(
                             onClick = {
-                                selected = selected.filterNot { it == value }
+                                onSelectedChange(selected.filterNot { it == value })
                                 validationError = null
                             },
                             enabled = !submitting && !actionsDisabled,
@@ -576,25 +579,28 @@ private fun ProposalSelectorCard(
 internal data class SchedulingErrorPlacement(
     val topLevelError: ApiError?,
     val proposalError: ApiError?,
+    val reviewError: ApiError?,
 )
 
 internal fun schedulingErrorPlacement(
     stage: SchedulingStage,
-    myProposals: List<SchedulingProposal>,
     error: ApiError?,
 ): SchedulingErrorPlacement {
     val proposalError = error?.takeIf {
-        stage.showsProposalSelector(myProposals) && it.isProposalSubmissionError()
+        stage.showsProposalSelector() && it.isProposalSubmissionError()
+    }
+    val reviewError = error?.takeIf {
+        stage == SchedulingStage.ReviewPartnerProposals && it.isReceivedProposalReviewError()
     }
     return SchedulingErrorPlacement(
-        topLevelError = error.takeUnless { it == proposalError },
+        topLevelError = error.takeUnless { it == proposalError || it == reviewError },
         proposalError = proposalError,
+        reviewError = reviewError,
     )
 }
 
-private fun SchedulingStage.showsProposalSelector(myProposals: List<SchedulingProposal>): Boolean =
-    this == SchedulingStage.WaitingForMyProposals ||
-        (this == SchedulingStage.ReviewPartnerProposals && myProposals.isEmpty())
+private fun SchedulingStage.showsProposalSelector(): Boolean =
+    this == SchedulingStage.WaitingForMyProposals
 
 private fun ApiError.isProposalSubmissionError(): Boolean =
     this is ApiError.Backend &&
@@ -602,6 +608,28 @@ private fun ApiError.isProposalSubmissionError(): Boolean =
             BackendErrorCode.SchedulingInvalidProposals,
             BackendErrorCode.SchedulingProposalsAlreadySubmitted,
         )
+
+private fun ApiError.isReceivedProposalReviewError(): Boolean =
+    this is ApiError.Backend &&
+        backendErrorCode in setOf(
+            BackendErrorCode.SchedulingRoundChanged,
+            BackendErrorCode.SchedulingPartnerProposalsNotAvailable,
+            BackendErrorCode.SchedulingProposalNotAvailable,
+        )
+
+internal data class SchedulingProposalDraftScope(
+    val connectionId: String,
+    val roundNumber: Int,
+)
+
+internal fun schedulingProposalDraftScope(
+    connectionId: String,
+    roundNumber: Int?,
+): SchedulingProposalDraftScope =
+    SchedulingProposalDraftScope(
+        connectionId = connectionId,
+        roundNumber = roundNumber ?: 0,
+    )
 
 @Composable
 private fun <T> WheelPickerColumn(
@@ -733,12 +761,19 @@ private fun MinutePickerColumn(
 }
 
 @Composable
-private fun WaitingPartnerCard(myProposals: List<SchedulingProposal>) {
+private fun WaitingPartnerCard(
+    myProposals: List<SchedulingProposal>,
+    myPendingProposals: List<SchedulingProposal>,
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Esperando propuestas de la otra persona", style = MaterialTheme.typography.titleMedium)
             Text(
-                text = "Ya enviamos tus horarios de esta ronda en orden de prioridad. Te avisamos cuando haya opciones para revisar.",
+                text = if (myPendingProposals.isNotEmpty()) {
+                    "Esperando que la otra persona revise tus opciones."
+                } else {
+                    "La otra persona rechazo tus opciones. Ahora esperamos que envie las suyas."
+                },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             ProposalList("Tus horarios por prioridad", myProposals)
@@ -749,45 +784,49 @@ private fun WaitingPartnerCard(myProposals: List<SchedulingProposal>) {
 @Composable
 private fun ReviewProposalsCard(
     myProposals: List<SchedulingProposal>,
-    partnerProposals: List<SchedulingProposal>,
+    partnerPendingProposals: List<SchedulingProposal>,
     submitting: Boolean,
     actionsDisabled: Boolean,
     submittingLabel: String?,
+    reviewError: ApiError?,
     onAcceptProposal: (String) -> Unit,
-    onRejectRound: () -> Unit,
+    onRejectPartnerProposals: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Revisa las opciones recibidas", style = MaterialTheme.typography.titleMedium)
             Text(
-                text = "Las opciones aparecen en orden de prioridad. Prioridad 1 es la preferida.",
+                text = "Elegi una opcion recibida o rechaza estas opciones antes de proponer las tuyas.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            ProposalList("Tus horarios por prioridad", myProposals)
-            ProposalList("Horarios de la otra persona por prioridad", partnerProposals)
-            partnerProposals
-                .filter { it.status == ProposalStatus.Pending }
-                .forEach { proposal ->
-                    Button(
-                        onClick = { onAcceptProposal(proposal.id) },
-                        enabled = !submitting && !actionsDisabled,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            if (submitting) {
-                                submittingLabel ?: "Procesando..."
-                            } else {
-                                "Aceptar ${formatBackendDateTime(proposal.proposedDateTime)}"
-                            }
-                        )
-                    }
+            ProposalList("Opciones recibidas por prioridad", partnerPendingProposals)
+            partnerPendingProposals.forEach { proposal ->
+                Button(
+                    onClick = { onAcceptProposal(proposal.id) },
+                    enabled = !submitting && !actionsDisabled,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        if (submitting) {
+                            submittingLabel ?: "Procesando..."
+                        } else {
+                            "Aceptar ${formatBackendDateTime(proposal.proposedDateTime)}"
+                        }
+                    )
                 }
+            }
+            if (myProposals.isNotEmpty()) {
+                ProposalList("Tus horarios por prioridad", myProposals)
+            }
+            reviewError?.let {
+                ApiErrorFeedbackCard(it, ErrorContext.Scheduling)
+            }
             OutlinedButton(
-                onClick = onRejectRound,
+                onClick = onRejectPartnerProposals,
                 enabled = !submitting && !actionsDisabled,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (submitting) submittingLabel ?: "Procesando..." else "Rechazar ronda")
+                Text(if (submitting) submittingLabel ?: "Procesando..." else "Rechazar opciones")
             }
         }
     }

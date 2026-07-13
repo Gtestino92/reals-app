@@ -4,7 +4,13 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class AddProposalRequestDto(
+    val expectedRoundNumber: Int,
     val proposedDateTimes: List<String>,
+)
+
+@Serializable
+data class RejectPartnerProposalsRequestDto(
+    val expectedRoundNumber: Int,
 )
 
 @Serializable

@@ -59,7 +59,7 @@ import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
 import com.reals.app.domain.usecase.PutMyPersonalMessageUseCase
 import com.reals.app.domain.usecase.ReactivateAccountUseCase
 import com.reals.app.domain.usecase.RejectChatExitRequestUseCase
-import com.reals.app.domain.usecase.RejectSchedulingRoundUseCase
+import com.reals.app.domain.usecase.RejectPartnerSchedulingProposalsUseCase
 import com.reals.app.domain.usecase.RecordLegalDocumentActionUseCase
 import com.reals.app.domain.usecase.RegisterPushTokenUseCase
 import com.reals.app.domain.usecase.ReorderProfilePhotosUseCase
@@ -387,7 +387,7 @@ class RealsRootViewModelLegalRoutingTest {
                 getProposals = GetSchedulingProposalsUseCase(schedulingRepository),
                 submitProposals = SubmitSchedulingProposalsUseCase(schedulingRepository),
                 acceptProposal = AcceptSchedulingProposalUseCase(schedulingRepository),
-                rejectRound = RejectSchedulingRoundUseCase(schedulingRepository),
+                rejectPartnerProposals = RejectPartnerSchedulingProposalsUseCase(schedulingRepository),
             ),
         )
     }

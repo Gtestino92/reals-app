@@ -45,7 +45,23 @@ class SchedulingRoundStateTest {
     }
 
     @Test
-    fun `pending current round with partner proposals reviews received options`() {
+    fun `partner pending proposals with no own proposals reviews received options`() {
+        val state = deriveSchedulingRoundState(
+            loading = false,
+            negotiation = negotiation(roundNumber = 2),
+            proposals = listOf(
+                proposal(id = "partner-current", userId = "partner", roundNumber = 2),
+            ),
+            currentUserId = "me",
+        )
+
+        assertEquals(SchedulingStage.ReviewPartnerProposals, state.stage)
+        assertTrue(state.myProposals.isEmpty())
+        assertEquals(listOf("partner-current"), state.partnerPendingProposals.map { it.id })
+    }
+
+    @Test
+    fun `partner pending proposals remain review priority when own proposals also exist`() {
         val state = deriveSchedulingRoundState(
             loading = false,
             negotiation = negotiation(roundNumber = 2),
@@ -60,7 +76,73 @@ class SchedulingRoundStateTest {
         assertEquals(SchedulingStage.ReviewPartnerProposals, state.stage)
         assertEquals(listOf("my-current"), state.myProposals.map { it.id })
         assertEquals(listOf("partner-current"), state.partnerProposals.map { it.id })
+        assertEquals(listOf("partner-current"), state.partnerPendingProposals.map { it.id })
         assertEquals(listOf("my-current", "partner-current"), state.currentRoundProposals.map { it.id })
+    }
+
+    @Test
+    fun `partner rejected proposals allow selector when user has not submitted`() {
+        val state = deriveSchedulingRoundState(
+            loading = false,
+            negotiation = negotiation(roundNumber = 2),
+            proposals = listOf(
+                proposal(
+                    id = "partner-rejected",
+                    userId = "partner",
+                    roundNumber = 2,
+                    status = ProposalStatus.Rejected,
+                ),
+            ),
+            currentUserId = "me",
+        )
+
+        assertEquals(SchedulingStage.WaitingForMyProposals, state.stage)
+        assertTrue(state.partnerPendingProposals.isEmpty())
+        assertEquals(listOf("partner-rejected"), state.partnerProposals.map { it.id })
+    }
+
+    @Test
+    fun `own pending proposals wait when no partner pending proposals exist`() {
+        val state = deriveSchedulingRoundState(
+            loading = false,
+            negotiation = negotiation(roundNumber = 2),
+            proposals = listOf(
+                proposal(id = "my-current", userId = "me", roundNumber = 2),
+                proposal(
+                    id = "partner-rejected",
+                    userId = "partner",
+                    roundNumber = 2,
+                    status = ProposalStatus.Rejected,
+                ),
+            ),
+            currentUserId = "me",
+        )
+
+        assertEquals(SchedulingStage.WaitingForPartnerProposals, state.stage)
+        assertEquals(listOf("my-current"), state.myPendingProposals.map { it.id })
+        assertTrue(state.partnerPendingProposals.isEmpty())
+    }
+
+    @Test
+    fun `own rejected proposals still review partner pending proposals`() {
+        val state = deriveSchedulingRoundState(
+            loading = false,
+            negotiation = negotiation(roundNumber = 2),
+            proposals = listOf(
+                proposal(
+                    id = "my-rejected",
+                    userId = "me",
+                    roundNumber = 2,
+                    status = ProposalStatus.Rejected,
+                ),
+                proposal(id = "partner-current", userId = "partner", roundNumber = 2),
+            ),
+            currentUserId = "me",
+        )
+
+        assertEquals(SchedulingStage.ReviewPartnerProposals, state.stage)
+        assertTrue(state.myPendingProposals.isEmpty())
+        assertEquals(listOf("partner-current"), state.partnerPendingProposals.map { it.id })
     }
 
     @Test
@@ -111,7 +193,6 @@ class SchedulingRoundStateTest {
 
         val placement = schedulingErrorPlacement(
             stage = SchedulingStage.WaitingForMyProposals,
-            myProposals = emptyList(),
             error = error,
         )
 
@@ -120,6 +201,7 @@ class SchedulingRoundStateTest {
             BackendErrorCode.SchedulingInvalidProposals,
             (placement.proposalError as ApiError.Backend).backendErrorCode,
         )
+        assertEquals(null, placement.reviewError)
     }
 
     @Test
@@ -128,7 +210,6 @@ class SchedulingRoundStateTest {
 
         val placement = schedulingErrorPlacement(
             stage = SchedulingStage.WaitingForPartnerProposals,
-            myProposals = listOf(proposal(id = "my-current", userId = "me", roundNumber = 2)),
             error = error,
         )
 
@@ -137,6 +218,24 @@ class SchedulingRoundStateTest {
             (placement.topLevelError as ApiError.Backend).backendErrorCode,
         )
         assertEquals(null, placement.proposalError)
+        assertEquals(null, placement.reviewError)
+    }
+
+    @Test
+    fun `received proposal review errors are shown near review card`() {
+        val error = backendError("SCHEDULING_PARTNER_PROPOSALS_NOT_AVAILABLE")
+
+        val placement = schedulingErrorPlacement(
+            stage = SchedulingStage.ReviewPartnerProposals,
+            error = error,
+        )
+
+        assertEquals(null, placement.topLevelError)
+        assertEquals(null, placement.proposalError)
+        assertEquals(
+            BackendErrorCode.SchedulingPartnerProposalsNotAvailable,
+            (placement.reviewError as ApiError.Backend).backendErrorCode,
+        )
     }
 
     @Test
@@ -145,7 +244,6 @@ class SchedulingRoundStateTest {
 
         val placement = schedulingErrorPlacement(
             stage = SchedulingStage.WaitingForMyProposals,
-            myProposals = emptyList(),
             error = error,
         )
 
@@ -154,6 +252,44 @@ class SchedulingRoundStateTest {
             (placement.topLevelError as ApiError.Backend).backendErrorCode,
         )
         assertEquals(null, placement.proposalError)
+        assertEquals(null, placement.reviewError)
+    }
+
+    @Test
+    fun `proposal draft scope is preserved for same connection and round`() {
+        val first = schedulingProposalDraftScope("connection-1", 2)
+        val second = schedulingProposalDraftScope("connection-1", 2)
+
+        assertEquals(first, second)
+    }
+
+    @Test
+    fun `proposal draft scope changes when round changes`() {
+        val first = schedulingProposalDraftScope("connection-1", 2)
+        val second = schedulingProposalDraftScope("connection-1", 3)
+
+        assertTrue(first != second)
+    }
+
+    @Test
+    fun `rejected received proposals make selector eligible when user has not submitted`() {
+        val state = deriveSchedulingRoundState(
+            loading = false,
+            negotiation = negotiation(roundNumber = 2),
+            proposals = listOf(
+                proposal(
+                    id = "partner-rejected",
+                    userId = "partner",
+                    roundNumber = 2,
+                    status = ProposalStatus.Rejected,
+                ),
+            ),
+            currentUserId = "me",
+        )
+
+        assertEquals(SchedulingStage.WaitingForMyProposals, state.stage)
+        assertTrue(state.myProposals.isEmpty())
+        assertTrue(state.partnerPendingProposals.isEmpty())
     }
 
     private fun negotiation(
@@ -176,6 +312,7 @@ class SchedulingRoundStateTest {
         userId: String,
         roundNumber: Int,
         preferenceOrder: Int = 1,
+        status: ProposalStatus = ProposalStatus.Pending,
     ) = SchedulingProposal(
         id = id,
         connectionId = "connection-1",
@@ -183,7 +320,7 @@ class SchedulingRoundStateTest {
         roundNumber = roundNumber,
         preferenceOrder = preferenceOrder,
         proposedDateTime = "2026-06-18T21:00:00-03:00",
-        status = ProposalStatus.Pending,
+        status = status,
         chatId = null,
         createdAt = "2026-06-18T10:00:00-03:00",
     )

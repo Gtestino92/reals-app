@@ -24,9 +24,10 @@ class SubmitSchedulingProposalsUseCase(
 ) {
     suspend operator fun invoke(
         connectionId: String,
+        expectedRoundNumber: Int,
         proposedDateTimes: List<String>,
     ): ApiResult<List<SchedulingProposal>> =
-        schedulingRepository.submitProposals(connectionId, proposedDateTimes)
+        schedulingRepository.submitProposals(connectionId, expectedRoundNumber, proposedDateTimes)
 }
 
 class AcceptSchedulingProposalUseCase(
@@ -39,9 +40,12 @@ class AcceptSchedulingProposalUseCase(
         schedulingRepository.acceptProposal(connectionId, proposalId)
 }
 
-class RejectSchedulingRoundUseCase(
+class RejectPartnerSchedulingProposalsUseCase(
     private val schedulingRepository: SchedulingRepository,
 ) {
-    suspend operator fun invoke(connectionId: String): ApiResult<SchedulingNegotiation> =
-        schedulingRepository.rejectRound(connectionId)
+    suspend operator fun invoke(
+        connectionId: String,
+        expectedRoundNumber: Int,
+    ): ApiResult<SchedulingNegotiation> =
+        schedulingRepository.rejectPartnerProposals(connectionId, expectedRoundNumber)
 }

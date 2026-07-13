@@ -32,6 +32,7 @@ import com.reals.app.data.dto.RegisterPushTokenRequestDto
 import com.reals.app.data.dto.RegisterPushTokenResponseDto
 import com.reals.app.data.dto.RecordLegalDocumentActionRequestDto
 import com.reals.app.data.dto.ReorderProfilePhotosRequestDto
+import com.reals.app.data.dto.RejectPartnerProposalsRequestDto
 import com.reals.app.data.dto.ScheduleProposalResponseDto
 import com.reals.app.data.dto.SendMessageRequestDto
 import com.reals.app.data.dto.UpdateMatchFiltersRequestDto
@@ -97,6 +98,8 @@ class FakeRealsApi : RealsApi {
         private set
     var proposalsBody: AddProposalRequestDto? = null
         private set
+    var rejectPartnerProposalsBody: RejectPartnerProposalsRequestDto? = null
+        private set
     var createProfileBody: CreateProfileRequestDto? = null
         private set
     var updateProfileBody: UpdateProfileRequestDto? = null
@@ -121,6 +124,8 @@ class FakeRealsApi : RealsApi {
     var beforeGetChatExitRequestsResponse: suspend () -> Unit = {}
     var beforeGetConnectionNegotiationResponse: suspend () -> Unit = {}
     var beforeSubmitConnectionProposalsResponse: suspend () -> Unit = {}
+    var beforeAcceptConnectionProposalResponse: suspend () -> Unit = {}
+    var beforeRejectConnectionPartnerProposalsResponse: suspend () -> Unit = {}
     var beforeGetProfilePhotosResponse: suspend () -> Unit = {}
     var beforeReorderPhotosResponse: suspend () -> Unit = {}
 
@@ -164,6 +169,7 @@ class FakeRealsApi : RealsApi {
     var negotiationResponse: Response<NegotiationResponseDto> = Response.success(TestDtos.negotiation())
     var proposalsResponse: Response<List<ScheduleProposalResponseDto>> = Response.success(listOf(TestDtos.proposal()))
     var submitProposalsResponse: Response<List<ScheduleProposalResponseDto>>? = null
+    var rejectPartnerProposalsResponse: Response<NegotiationResponseDto>? = null
 
     override suspend fun ping(): Response<PingResponseDto> = record("ping", null) { pingResponse }
 
@@ -504,13 +510,27 @@ class FakeRealsApi : RealsApi {
         connectionId: String,
         proposalId: String,
     ): Response<NegotiationResponseDto> =
-        record("acceptConnectionProposal", authorization, "$connectionId/$proposalId") { negotiationResponse }
+        record(
+            "acceptConnectionProposal",
+            authorization,
+            "$connectionId/$proposalId",
+            beforeResponse = beforeAcceptConnectionProposalResponse,
+        ) { negotiationResponse }
 
-    override suspend fun rejectConnectionNegotiationRound(
+    override suspend fun rejectConnectionPartnerProposals(
         authorization: String,
         connectionId: String,
+        body: RejectPartnerProposalsRequestDto,
     ): Response<NegotiationResponseDto> =
-        record("rejectConnectionNegotiationRound", authorization, connectionId) { negotiationResponse }
+        record(
+            "rejectConnectionPartnerProposals",
+            authorization,
+            connectionId,
+            beforeResponse = beforeRejectConnectionPartnerProposalsResponse,
+        ) {
+            rejectPartnerProposalsBody = body
+            rejectPartnerProposalsResponse ?: negotiationResponse
+        }
 
     private suspend fun <T> record(
         name: String,

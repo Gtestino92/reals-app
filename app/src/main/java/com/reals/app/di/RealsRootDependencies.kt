@@ -35,7 +35,7 @@ import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
 import com.reals.app.domain.usecase.PutMyPersonalMessageUseCase
 import com.reals.app.domain.usecase.ReactivateAccountUseCase
 import com.reals.app.domain.usecase.RejectChatExitRequestUseCase
-import com.reals.app.domain.usecase.RejectSchedulingRoundUseCase
+import com.reals.app.domain.usecase.RejectPartnerSchedulingProposalsUseCase
 import com.reals.app.domain.usecase.RecordLegalDocumentActionUseCase
 import com.reals.app.domain.usecase.ReorderProfilePhotosUseCase
 import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
@@ -138,5 +138,5 @@ data class SchedulingFeatureDependencies(
     val getProposals: GetSchedulingProposalsUseCase,
     val submitProposals: SubmitSchedulingProposalsUseCase,
     val acceptProposal: AcceptSchedulingProposalUseCase,
-    val rejectRound: RejectSchedulingRoundUseCase,
+    val rejectPartnerProposals: RejectPartnerSchedulingProposalsUseCase,
 )

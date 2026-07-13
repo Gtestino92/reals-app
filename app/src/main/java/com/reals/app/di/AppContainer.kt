@@ -48,7 +48,7 @@ import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
 import com.reals.app.domain.usecase.PutMyPersonalMessageUseCase
 import com.reals.app.domain.usecase.ReactivateAccountUseCase
 import com.reals.app.domain.usecase.RejectChatExitRequestUseCase
-import com.reals.app.domain.usecase.RejectSchedulingRoundUseCase
+import com.reals.app.domain.usecase.RejectPartnerSchedulingProposalsUseCase
 import com.reals.app.domain.usecase.RegisterPushTokenUseCase
 import com.reals.app.domain.usecase.ReorderProfilePhotosUseCase
 import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
@@ -137,7 +137,7 @@ class AppContainer(context: Context) {
     val getSchedulingProposalsUseCase = GetSchedulingProposalsUseCase(schedulingRepository)
     val submitSchedulingProposalsUseCase = SubmitSchedulingProposalsUseCase(schedulingRepository)
     val acceptSchedulingProposalUseCase = AcceptSchedulingProposalUseCase(schedulingRepository)
-    val rejectSchedulingRoundUseCase = RejectSchedulingRoundUseCase(schedulingRepository)
+    val rejectPartnerSchedulingProposalsUseCase = RejectPartnerSchedulingProposalsUseCase(schedulingRepository)
 
     val rootDependencies = RealsRootDependencies(
         session = SessionFeatureDependencies(
@@ -207,7 +207,7 @@ class AppContainer(context: Context) {
             getProposals = getSchedulingProposalsUseCase,
             submitProposals = submitSchedulingProposalsUseCase,
             acceptProposal = acceptSchedulingProposalUseCase,
-            rejectRound = rejectSchedulingRoundUseCase,
+            rejectPartnerProposals = rejectPartnerSchedulingProposalsUseCase,
         ),
     )
 }

@@ -36,17 +36,23 @@ class VisualAndSchedulingUseCasesTest {
     fun `SubmitSchedulingProposalsUseCase delegates`() = runBlocking {
         val slots = listOf("2026-06-18T21:00:00Z")
 
-        SubmitSchedulingProposalsUseCase(schedulingRepository)("connection-1", slots).successValue()
+        SubmitSchedulingProposalsUseCase(schedulingRepository)(
+            connectionId = "connection-1",
+            expectedRoundNumber = 2,
+            proposedDateTimes = slots,
+        ).successValue()
 
         assertEquals("submitConnectionProposals", api.calls.single())
+        assertEquals(2, api.proposalsBody?.expectedRoundNumber)
         assertEquals(slots, api.proposalsBody?.proposedDateTimes)
     }
 
     @Test
     fun `Accept and Reject scheduling use cases delegate`() = runBlocking {
         AcceptSchedulingProposalUseCase(schedulingRepository)("connection-1", "proposal-1").successValue()
-        RejectSchedulingRoundUseCase(schedulingRepository)("connection-1").successValue()
+        RejectPartnerSchedulingProposalsUseCase(schedulingRepository)("connection-1", 2).successValue()
 
-        assertEquals(listOf("acceptConnectionProposal", "rejectConnectionNegotiationRound"), api.calls)
+        assertEquals(listOf("acceptConnectionProposal", "rejectConnectionPartnerProposals"), api.calls)
+        assertEquals(2, api.rejectPartnerProposalsBody?.expectedRoundNumber)
     }
 }

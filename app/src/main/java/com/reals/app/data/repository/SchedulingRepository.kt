@@ -6,6 +6,7 @@ import com.reals.app.core.network.map
 import com.reals.app.data.api.AuthTokenProvider
 import com.reals.app.data.api.RealsApi
 import com.reals.app.data.dto.AddProposalRequestDto
+import com.reals.app.data.dto.RejectPartnerProposalsRequestDto
 import com.reals.app.data.mapper.toDomain
 import com.reals.app.domain.model.SchedulingConnection
 import com.reals.app.domain.model.SchedulingNegotiation
@@ -30,13 +31,17 @@ class SchedulingRepository(
 
     suspend fun submitProposals(
         connectionId: String,
+        expectedRoundNumber: Int,
         proposedDateTimes: List<String>,
     ): ApiResult<List<SchedulingProposal>> =
         authorizedCall { authorization ->
             api.submitConnectionProposals(
                 authorization = authorization,
                 connectionId = connectionId,
-                body = AddProposalRequestDto(proposedDateTimes),
+                body = AddProposalRequestDto(
+                    expectedRoundNumber = expectedRoundNumber,
+                    proposedDateTimes = proposedDateTimes,
+                ),
             )
         }.map { proposals -> proposals.map { it.toDomain() } }
 
@@ -52,8 +57,15 @@ class SchedulingRepository(
             )
         }.map { it.toDomain() }
 
-    suspend fun rejectRound(connectionId: String): ApiResult<SchedulingNegotiation> =
+    suspend fun rejectPartnerProposals(
+        connectionId: String,
+        expectedRoundNumber: Int,
+    ): ApiResult<SchedulingNegotiation> =
         authorizedCall { authorization ->
-            api.rejectConnectionNegotiationRound(authorization, connectionId)
+            api.rejectConnectionPartnerProposals(
+                authorization = authorization,
+                connectionId = connectionId,
+                body = RejectPartnerProposalsRequestDto(expectedRoundNumber),
+            )
         }.map { it.toDomain() }
 }

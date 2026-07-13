@@ -357,7 +357,7 @@ fun RealsApp(
                 onRefresh = { viewModel.refreshScheduling(silent = true) },
                 onSubmitProposals = viewModel::submitSchedulingProposals,
                 onAcceptProposal = viewModel::acceptSchedulingProposal,
-                onRejectRound = viewModel::rejectSchedulingRound,
+                onRejectPartnerProposals = viewModel::rejectSchedulingPartnerProposals,
                 onOpenPartnerProfile = { viewModel.openConnectionPartnerProfile(current.matchId) },
                 onManualBlock = viewModel::blockCurrentMatchParticipant,
                 onClearManualBlockError = viewModel::clearManualBlockError,

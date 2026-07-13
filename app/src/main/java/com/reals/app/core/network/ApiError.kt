@@ -79,9 +79,10 @@ enum class BackendErrorCode(val raw: String) {
     SchedulingNegotiationNotFound("SCHEDULING_NEGOTIATION_NOT_FOUND"),
     SchedulingInvalidProposals("SCHEDULING_INVALID_PROPOSALS"),
     SchedulingProposalsAlreadySubmitted("SCHEDULING_PROPOSALS_ALREADY_SUBMITTED"),
+    SchedulingRoundChanged("SCHEDULING_ROUND_CHANGED"),
     SchedulingProposalNotAvailable("SCHEDULING_PROPOSAL_NOT_AVAILABLE"),
     SchedulingCannotAcceptOwnProposal("SCHEDULING_CANNOT_ACCEPT_OWN_PROPOSAL"),
-    SchedulingRoundNotRejectable("SCHEDULING_ROUND_NOT_REJECTABLE"),
+    SchedulingPartnerProposalsNotAvailable("SCHEDULING_PARTNER_PROPOSALS_NOT_AVAILABLE"),
     Unknown("UNKNOWN");
 
     companion object {
@@ -249,9 +250,10 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.SchedulingNegotiationNotFound -> "No encontramos la coordinacion de horarios. Actualiza el estado."
     BackendErrorCode.SchedulingInvalidProposals -> "Revisa los horarios elegidos. Deben ser futuros, unicos y estar alineados cada media hora."
     BackendErrorCode.SchedulingProposalsAlreadySubmitted -> "Ya enviaste tus horarios para esta ronda."
+    BackendErrorCode.SchedulingRoundChanged -> "La ronda cambio. Actualizamos las opciones; revisalas antes de continuar."
     BackendErrorCode.SchedulingProposalNotAvailable -> "Ese horario ya no esta disponible. Actualiza la propuesta."
     BackendErrorCode.SchedulingCannotAcceptOwnProposal -> "No podes aceptar un horario propuesto por vos."
-    BackendErrorCode.SchedulingRoundNotRejectable -> "Todavia no se puede rechazar esta ronda. Espera a que ambas personas envien horarios."
+    BackendErrorCode.SchedulingPartnerProposalsNotAvailable -> "Esas opciones ya no estan disponibles. Actualizamos el estado de la coordinacion."
     BackendErrorCode.Unknown -> when (context) {
         ErrorContext.ProfileActivation -> "Revisa que tu perfil tenga la informacion y fotos necesarias."
         ErrorContext.PhotoUpload,

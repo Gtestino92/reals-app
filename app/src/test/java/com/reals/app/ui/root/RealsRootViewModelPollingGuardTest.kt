@@ -58,7 +58,7 @@ import com.reals.app.domain.usecase.PutMyPersonalMessageUseCase
 import com.reals.app.domain.usecase.ReactivateAccountUseCase
 import com.reals.app.domain.usecase.RegisterPushTokenUseCase
 import com.reals.app.domain.usecase.RejectChatExitRequestUseCase
-import com.reals.app.domain.usecase.RejectSchedulingRoundUseCase
+import com.reals.app.domain.usecase.RejectPartnerSchedulingProposalsUseCase
 import com.reals.app.domain.usecase.ReorderProfilePhotosUseCase
 import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
@@ -95,6 +95,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
+import retrofit2.Response
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RealsRootViewModelPollingGuardTest {
@@ -300,6 +301,180 @@ class RealsRootViewModelPollingGuardTest {
     }
 
     @Test
+    fun `duplicate scheduling submission is blocked while pending`() = runTest(dispatcher) {
+        val submitStarted = CompletableDeferred<Unit>()
+        val releaseSubmit = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeSubmitConnectionProposalsResponse = {
+                submitStarted.complete(Unit)
+                releaseSubmit.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(schedulingState())
+
+        viewModel.submitSchedulingProposals(listOf("2026-06-18T21:00:00Z"))
+        runCurrent()
+        submitStarted.await()
+
+        viewModel.submitSchedulingProposals(listOf("2026-06-18T21:30:00Z"))
+        runCurrent()
+
+        assertEquals(1, api.calls.count { it == "submitConnectionProposals" })
+
+        releaseSubmit.complete(Unit)
+        advanceUntilIdle()
+    }
+
+    @Test
+    fun `silent scheduling refresh cannot overwrite accepted proposal`() = runTest(dispatcher) {
+        val refreshGate = CompletableDeferred<Unit>()
+        val refreshStarted = CompletableDeferred<Unit>()
+        var negotiationCalls = 0
+        val api = FakeRealsApi().apply {
+            negotiationResponse = Response.success(TestDtos.negotiation("CONFIRMED"))
+            beforeGetConnectionNegotiationResponse = {
+                negotiationCalls += 1
+                if (negotiationCalls == 1) {
+                    refreshStarted.complete(Unit)
+                    refreshGate.await()
+                }
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(schedulingState())
+
+        viewModel.refreshScheduling(silent = true)
+        runCurrent()
+        refreshStarted.await()
+
+        viewModel.acceptSchedulingProposal("proposal-1")
+        advanceUntilIdle()
+
+        refreshGate.complete(Unit)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Scheduling
+        assertEquals(false, state.submitting)
+        assertEquals("Horario confirmado.", state.message)
+    }
+
+    @Test
+    fun `accept scheduling proposal publishes pending and blocks duplicate actions`() = runTest(dispatcher) {
+        val acceptStarted = CompletableDeferred<Unit>()
+        val releaseAccept = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeAcceptConnectionProposalResponse = {
+                acceptStarted.complete(Unit)
+                releaseAccept.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(schedulingState())
+
+        viewModel.acceptSchedulingProposal("proposal-1")
+        runCurrent()
+        acceptStarted.await()
+
+        val pending = viewModel.uiState.value as RealsRootUiState.Scheduling
+        assertEquals(true, pending.submitting)
+        assertEquals("Aceptando horario...", pending.submittingLabel)
+
+        viewModel.acceptSchedulingProposal("proposal-2")
+        runCurrent()
+        assertEquals(1, api.calls.count { it == "acceptConnectionProposal" })
+
+        releaseAccept.complete(Unit)
+        advanceUntilIdle()
+    }
+
+    @Test
+    fun `silent scheduling refresh cannot overwrite partner proposal rejection`() = runTest(dispatcher) {
+        val refreshGate = CompletableDeferred<Unit>()
+        val refreshStarted = CompletableDeferred<Unit>()
+        var negotiationCalls = 0
+        val api = FakeRealsApi().apply {
+            beforeGetConnectionNegotiationResponse = {
+                negotiationCalls += 1
+                if (negotiationCalls == 1) {
+                    refreshStarted.complete(Unit)
+                    refreshGate.await()
+                }
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(schedulingState())
+
+        viewModel.refreshScheduling(silent = true)
+        runCurrent()
+        refreshStarted.await()
+
+        viewModel.rejectSchedulingPartnerProposals()
+        advanceUntilIdle()
+
+        refreshGate.complete(Unit)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Scheduling
+        assertEquals(false, state.submitting)
+        assertEquals("Rechazaste las opciones recibidas.", state.message)
+    }
+
+    @Test
+    fun `reject partner proposals publishes pending and blocks duplicate actions`() = runTest(dispatcher) {
+        val rejectStarted = CompletableDeferred<Unit>()
+        val releaseReject = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeRejectConnectionPartnerProposalsResponse = {
+                rejectStarted.complete(Unit)
+                releaseReject.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(schedulingState())
+
+        viewModel.rejectSchedulingPartnerProposals()
+        runCurrent()
+        rejectStarted.await()
+
+        val pending = viewModel.uiState.value as RealsRootUiState.Scheduling
+        assertEquals(true, pending.submitting)
+        assertEquals("Rechazando opciones...", pending.submittingLabel)
+
+        viewModel.rejectSchedulingPartnerProposals()
+        runCurrent()
+        assertEquals(1, api.calls.count { it == "rejectConnectionPartnerProposals" })
+
+        releaseReject.complete(Unit)
+        advanceUntilIdle()
+    }
+
+    @Test
+    fun `rejection result cannot overwrite another scheduling connection`() = runTest(dispatcher) {
+        val rejectStarted = CompletableDeferred<Unit>()
+        val releaseReject = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeRejectConnectionPartnerProposalsResponse = {
+                rejectStarted.complete(Unit)
+                releaseReject.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(schedulingState(connectionId = "connection-1"))
+
+        viewModel.rejectSchedulingPartnerProposals()
+        runCurrent()
+        rejectStarted.await()
+
+        val otherConnection = schedulingState(connectionId = "connection-2", matchId = "match-2")
+        viewModel.setState(otherConnection)
+        releaseReject.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(otherConnection, viewModel.uiState.value)
+    }
+
+    @Test
     fun `scheduling submission result cannot overwrite another scheduling connection`() = runTest(dispatcher) {
         val submitStarted = CompletableDeferred<Unit>()
         val releaseSubmit = CompletableDeferred<Unit>()
@@ -475,7 +650,7 @@ internal fun rootViewModelTestDependencies(api: FakeRealsApi): RealsRootDependen
                 getProposals = GetSchedulingProposalsUseCase(schedulingRepository),
                 submitProposals = SubmitSchedulingProposalsUseCase(schedulingRepository),
                 acceptProposal = AcceptSchedulingProposalUseCase(schedulingRepository),
-                rejectRound = RejectSchedulingRoundUseCase(schedulingRepository),
+                rejectPartnerProposals = RejectPartnerSchedulingProposalsUseCase(schedulingRepository),
             ),
         )
 }

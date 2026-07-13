@@ -11,7 +11,7 @@ import com.reals.app.domain.model.NegotiationStatus
 import com.reals.app.domain.usecase.AcceptSchedulingProposalUseCase
 import com.reals.app.domain.usecase.GetSchedulingNegotiationUseCase
 import com.reals.app.domain.usecase.GetSchedulingProposalsUseCase
-import com.reals.app.domain.usecase.RejectSchedulingRoundUseCase
+import com.reals.app.domain.usecase.RejectPartnerSchedulingProposalsUseCase
 import com.reals.app.domain.usecase.SubmitSchedulingProposalsUseCase
 import com.reals.app.data.repository.SchedulingRepository
 import com.reals.app.testutil.FakeAuthTokenProvider
@@ -60,7 +60,22 @@ class SchedulingCoordinatorTest {
         assertEquals(false, state.submitting)
         assertEquals(null, state.submittingLabel)
         assertEquals("Enviamos tus horarios.", state.message)
+        assertEquals(2, api.proposalsBody?.expectedRoundNumber)
         assertEquals(slots, api.proposalsBody?.proposedDateTimes)
+    }
+
+    @Test
+    fun `submit proposals without negotiation does not call api`() = runBlocking {
+        val state = coordinator.submitProposals(
+            current = baseState().copy(negotiation = null),
+            proposedDateTimes = listOf("2026-06-18T21:00:00Z"),
+            onPending = {},
+        )
+
+        assertEquals(emptyList<String>(), api.calls)
+        assertEquals(false, state.submitting)
+        assertEquals(null, state.message)
+        assertEquals(ApiError.Unexpected::class, state.error!!::class)
     }
 
     @Test
@@ -148,6 +163,28 @@ class SchedulingCoordinatorTest {
     }
 
     @Test
+    fun `round changed error remains primary after successful refresh`() = runBlocking {
+        api.submitProposalsResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "SCHEDULING_ROUND_CHANGED",
+            message = "raw backend message",
+        )
+        api.negotiationResponse = Response.success(TestDtos.negotiation("PENDING"))
+        api.proposalsResponse = Response.success(listOf(TestDtos.proposal()))
+
+        val state = coordinator.submitProposals(
+            current = baseState(),
+            proposedDateTimes = listOf("2026-06-18T21:00:00Z"),
+            onPending = {},
+        )
+        val error = state.error as ApiError.Backend
+
+        assertEquals(BackendErrorCode.SchedulingRoundChanged, error.backendErrorCode)
+        assertNull(state.message)
+        assertEquals(NegotiationStatus.Pending, state.negotiation?.status)
+    }
+
+    @Test
     fun `submit refresh failure does not replace submit failure`() = runBlocking {
         api.submitProposalsResponse = backendErrorResponse(
             statusCode = 400,
@@ -174,7 +211,7 @@ class SchedulingCoordinatorTest {
     fun `accept proposal confirmed updates state`() = runBlocking {
         api.negotiationResponse = Response.success(TestDtos.negotiation("CONFIRMED"))
 
-        val state = coordinator.acceptProposal(baseState(), "proposal-1")
+        val state = coordinator.acceptProposal(baseState(), "proposal-1", onPending = {})
 
         assertEquals(false, state.submitting)
         assertEquals("Horario confirmado.", state.message)
@@ -182,30 +219,124 @@ class SchedulingCoordinatorTest {
     }
 
     @Test
-    fun `reject round failed updates state`() = runBlocking {
+    fun `accept proposal publishes pending before request completes`() = runTest {
+        val acceptStarted = CompletableDeferred<Unit>()
+        val releaseAccept = CompletableDeferred<Unit>()
+        api.beforeAcceptConnectionProposalResponse = {
+            acceptStarted.complete(Unit)
+            releaseAccept.await()
+        }
+        val current = baseState().copy(error = ApiError.Unexpected("old"), message = "old")
+        var pending: RealsRootUiState.Scheduling? = null
+
+        val result = async {
+            coordinator.acceptProposal(current, "proposal-1", onPending = { pending = it })
+        }
+
+        acceptStarted.await()
+        runCurrent()
+
+        assertEquals(true, pending?.submitting)
+        assertNull(pending?.error)
+        assertNull(pending?.message)
+
+        releaseAccept.complete(Unit)
+        assertEquals(false, result.await().submitting)
+    }
+
+    @Test
+    fun `reject partner proposals failed updates state`() = runBlocking {
         api.negotiationResponse = Response.success(TestDtos.negotiation("FAILED"))
 
-        val state = coordinator.rejectRound(baseState())
+        val state = coordinator.rejectPartnerProposals(baseState(), onPending = {})
 
         assertEquals(false, state.submitting)
         assertEquals("No hubo acuerdo.", state.message)
         assertEquals(NegotiationStatus.Failed, state.negotiation?.status)
+        assertEquals(2, api.rejectPartnerProposalsBody?.expectedRoundNumber)
     }
 
     @Test
-    fun `reject round pending next round updates state`() = runBlocking {
+    fun `reject partner proposals same round updates state`() = runBlocking {
+        api.negotiationResponse = Response.success(TestDtos.negotiation("PENDING").copy(roundNumber = 2))
+
+        val state = coordinator.rejectPartnerProposals(baseState(), onPending = {})
+
+        assertEquals(false, state.submitting)
+        assertEquals("Rechazaste las opciones recibidas.", state.message)
+        assertEquals(2, state.negotiation?.roundNumber)
+    }
+
+    @Test
+    fun `reject partner proposals pending next round updates state`() = runBlocking {
         api.negotiationResponse = Response.success(TestDtos.negotiation("PENDING").copy(roundNumber = 3))
         val current = baseState().copy(
             negotiation = TestDtos.negotiation("PENDING").copy(roundNumber = 2).toDomain(),
         )
 
-        val state = coordinator.rejectRound(current)
+        val state = coordinator.rejectPartnerProposals(current, onPending = {})
 
         assertEquals(false, state.submitting)
-        assertEquals("Ronda rechazada, se abrio una nueva ronda.", state.message)
+        assertEquals("Ambas listas fueron rechazadas. Se abrio una nueva ronda.", state.message)
         assertEquals(3, state.negotiation?.roundNumber)
         assertEquals(NegotiationStatus.Pending, state.negotiation?.status)
-        assertEquals(listOf("rejectConnectionNegotiationRound", "getConnectionNegotiation", "getConnectionProposals"), api.calls)
+        assertEquals(listOf("rejectConnectionPartnerProposals", "getConnectionNegotiation", "getConnectionProposals"), api.calls)
+    }
+
+    @Test
+    fun `partner proposals unavailable remains primary after refresh`() = runBlocking {
+        api.negotiationResponse = Response.success(TestDtos.negotiation("PENDING"))
+        api.proposalsResponse = Response.success(listOf(TestDtos.proposal()))
+        api.rejectPartnerProposalsResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "SCHEDULING_PARTNER_PROPOSALS_NOT_AVAILABLE",
+        )
+
+        val state = coordinator.rejectPartnerProposals(baseState(), onPending = {})
+        val error = state.error as ApiError.Backend
+
+        assertEquals(BackendErrorCode.SchedulingPartnerProposalsNotAvailable, error.backendErrorCode)
+        assertNull(state.message)
+        assertEquals(NegotiationStatus.Pending, state.negotiation?.status)
+    }
+
+    @Test
+    fun `reject partner proposals publishes pending before request completes`() = runTest {
+        val rejectStarted = CompletableDeferred<Unit>()
+        val releaseReject = CompletableDeferred<Unit>()
+        api.beforeRejectConnectionPartnerProposalsResponse = {
+            rejectStarted.complete(Unit)
+            releaseReject.await()
+        }
+        val current = baseState().copy(error = ApiError.Unexpected("old"), message = "old")
+        var pending: RealsRootUiState.Scheduling? = null
+
+        val result = async {
+            coordinator.rejectPartnerProposals(current, onPending = { pending = it })
+        }
+
+        rejectStarted.await()
+        runCurrent()
+
+        assertEquals(true, pending?.submitting)
+        assertNull(pending?.error)
+        assertNull(pending?.message)
+
+        releaseReject.complete(Unit)
+        assertEquals(false, result.await().submitting)
+    }
+
+    @Test
+    fun `reject partner proposals without negotiation does not call api`() = runBlocking {
+        val state = coordinator.rejectPartnerProposals(
+            current = baseState().copy(negotiation = null),
+            onPending = {},
+        )
+
+        assertEquals(emptyList<String>(), api.calls)
+        assertEquals(false, state.submitting)
+        assertEquals(null, state.message)
+        assertEquals(ApiError.Unexpected::class, state.error!!::class)
     }
 
     private fun baseState() = RealsRootUiState.Scheduling(
@@ -213,6 +344,7 @@ class SchedulingCoordinatorTest {
         connectionId = "connection-1",
         matchId = "match-1",
         partnerName = "Alex",
+        negotiation = TestDtos.negotiation("PENDING").copy(roundNumber = 2).toDomain(),
     )
 
     private fun schedulingDependencies(api: FakeRealsApi): SchedulingFeatureDependencies {
@@ -222,7 +354,7 @@ class SchedulingCoordinatorTest {
             getProposals = GetSchedulingProposalsUseCase(repository),
             submitProposals = SubmitSchedulingProposalsUseCase(repository),
             acceptProposal = AcceptSchedulingProposalUseCase(repository),
-            rejectRound = RejectSchedulingRoundUseCase(repository),
+            rejectPartnerProposals = RejectPartnerSchedulingProposalsUseCase(repository),
         )
     }
 }

@@ -564,22 +564,46 @@ class RealsRootViewModel(
         val cleanProposalId = proposalId.trim()
         if (current.submitting || cleanProposalId.isBlank()) return
 
+        silentSchedulingRefreshJob?.cancel()
+        silentSchedulingRefreshJob = null
+        val connectionId = current.connectionId
         viewModelScope.launch {
-            _uiState.value = schedulingCoordinator.acceptProposal(
+            val result = schedulingCoordinator.acceptProposal(
                 current.copy(submittingLabel = "Aceptando horario..."),
                 cleanProposalId,
+                onPending = { pending ->
+                    val latest = _uiState.value as? RealsRootUiState.Scheduling
+                    if (latest?.connectionId == connectionId) {
+                        _uiState.value = pending
+                    }
+                },
             )
+            val latest = _uiState.value as? RealsRootUiState.Scheduling ?: return@launch
+            if (latest.connectionId != connectionId) return@launch
+            _uiState.value = result
         }
     }
 
-    fun rejectSchedulingRound() {
+    fun rejectSchedulingPartnerProposals() {
         val current = _uiState.value as? RealsRootUiState.Scheduling ?: return
         if (current.submitting) return
 
+        silentSchedulingRefreshJob?.cancel()
+        silentSchedulingRefreshJob = null
+        val connectionId = current.connectionId
         viewModelScope.launch {
-            _uiState.value = schedulingCoordinator.rejectRound(
-                current.copy(submittingLabel = "Rechazando ronda..."),
+            val result = schedulingCoordinator.rejectPartnerProposals(
+                current.copy(submittingLabel = "Rechazando opciones..."),
+                onPending = { pending ->
+                    val latest = _uiState.value as? RealsRootUiState.Scheduling
+                    if (latest?.connectionId == connectionId) {
+                        _uiState.value = pending
+                    }
+                },
             )
+            val latest = _uiState.value as? RealsRootUiState.Scheduling ?: return@launch
+            if (latest.connectionId != connectionId) return@launch
+            _uiState.value = result
         }
     }
 

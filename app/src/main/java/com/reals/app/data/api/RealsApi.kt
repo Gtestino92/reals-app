@@ -31,6 +31,7 @@ import com.reals.app.data.dto.RegisterPushTokenRequestDto
 import com.reals.app.data.dto.RegisterPushTokenResponseDto
 import com.reals.app.data.dto.RecordLegalDocumentActionRequestDto
 import com.reals.app.data.dto.ReorderProfilePhotosRequestDto
+import com.reals.app.data.dto.RejectPartnerProposalsRequestDto
 import com.reals.app.data.dto.ScheduleProposalResponseDto
 import com.reals.app.data.dto.SendMessageRequestDto
 import com.reals.app.data.dto.UpdateMatchFiltersRequestDto
@@ -367,8 +368,9 @@ interface RealsApi {
     ): Response<NegotiationResponseDto>
 
     @POST("api/connections/{connectionId}/negotiation/rejections")
-    suspend fun rejectConnectionNegotiationRound(
+    suspend fun rejectConnectionPartnerProposals(
         @Header("Authorization") authorization: String,
         @Path("connectionId") connectionId: String,
+        @Body body: RejectPartnerProposalsRequestDto,
     ): Response<NegotiationResponseDto>
 }
