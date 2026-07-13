@@ -55,7 +55,7 @@ class ApiExecutor(private val json: Json) {
         runCatching {
             Log.w(
                 "RealsApi",
-                "HTTP ${response.code()} code=${parsed?.code} error=${parsed?.error} message=${parsed?.message ?: response.message()}",
+                "HTTP ${response.code()} code=${parsed?.code} error=${parsed?.error}",
             )
         }
         return ApiError.Backend(

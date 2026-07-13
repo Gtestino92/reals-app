@@ -13,6 +13,8 @@ import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.MatchState
 import com.reals.app.domain.model.ProvisionedSession
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 
 internal class FirstChatCoordinator(
     private val dependencies: FirstChatFeatureDependencies,
@@ -22,7 +24,12 @@ internal class FirstChatCoordinator(
         matchId: String,
         chatId: String?,
     ): FirstChatLoadResult {
-        val matchResult = dependencies.getMatch(matchId)
+        val (matchResult, chatResult) = coroutineScope {
+            val matchDeferred = async { dependencies.getMatch(matchId) }
+            val chatDeferred = async { dependencies.getFirstChatForMatch(matchId) }
+            matchDeferred.await() to chatDeferred.await()
+        }
+
         if (matchResult is ApiResult.Failure) {
             return FirstChatLoadResult.Show(
                 RealsRootUiState.FirstChat(
@@ -42,7 +49,6 @@ internal class FirstChatCoordinator(
             return FirstChatLoadResult.RouteHome(firstChatExitMessage(match.state))
         }
 
-        val chatResult = dependencies.getFirstChatForMatch(matchId)
         if (chatResult is ApiResult.Failure) {
             return FirstChatLoadResult.Show(
                 RealsRootUiState.FirstChat(
@@ -68,8 +74,11 @@ internal class FirstChatCoordinator(
             return FirstChatLoadResult.RouteHome("Ya registramos tu decision. Actualizamos tu Home.")
         }
 
-        val messagesResult = dependencies.getChatMessages(chat.id)
-        val exitsResult = dependencies.getChatExitRequests(chat.id)
+        val (messagesResult, exitsResult) = coroutineScope {
+            val messagesDeferred = async { dependencies.getChatMessages(chat.id) }
+            val exitsDeferred = async { dependencies.getChatExitRequests(chat.id) }
+            messagesDeferred.await() to exitsDeferred.await()
+        }
 
         return FirstChatLoadResult.Show(
             RealsRootUiState.FirstChat(

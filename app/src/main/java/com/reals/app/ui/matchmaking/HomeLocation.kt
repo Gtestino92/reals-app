@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
-import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.core.location.LocationManagerCompat
 import androidx.core.os.CancellationSignal
@@ -15,7 +14,6 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration.Companion.milliseconds
 
-private const val TAG = "RealsLocation"
 private const val SEARCH_LOCATION_CACHE_MAX_AGE_MILLIS = 15 * 60 * 1000L
 private const val SEARCH_LOCATION_MAX_ACCURACY_METERS = 1000
 private const val CURRENT_LOCATION_TIMEOUT_MILLIS = 7_000L
@@ -157,7 +155,6 @@ private class AndroidSearchLocationSource(
 
     override suspend fun currentLocation(): ResolvedSearchLocation? {
         val provider = preferredProvider(locationManager)
-        Log.d(TAG, "selected provider=$provider")
         if (provider == null) return null
 
         return requestCurrentLocation(context, locationManager, provider)?.toResolvedSearchLocation()
