@@ -30,7 +30,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -38,7 +37,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ApiError
+import com.reals.app.core.network.BackendErrorCode
 import com.reals.app.core.network.ErrorContext
+import com.reals.app.core.network.backendErrorCode
 import com.reals.app.core.security.TextSafety
 import com.reals.app.domain.model.NegotiationStatus
 import com.reals.app.domain.model.ProposalStatus
@@ -49,7 +50,7 @@ import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
 import com.reals.app.ui.common.ManualBlockConfirmationDialog
 import com.reals.app.ui.common.formatBackendDateTime
-import java.time.OffsetDateTime
+import java.time.Instant
 import java.time.ZoneId
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
@@ -94,6 +95,7 @@ fun SchedulingScreen(
     val lifecycle = schedulingLifecycleUiState(negotiation?.schedulingExpiresAt, nowMillis)
     val actionsDisabled = lifecycle.expired || manualBlockLoading
     val interactionBusy = loading || refreshing || submitting || manualBlockLoading
+    val errorPlacement = schedulingErrorPlacement(stage, myProposals, error)
 
     LaunchedEffect(connectionId, negotiation?.status?.rawValue) {
         while (negotiation?.status == NegotiationStatus.Pending) {
@@ -149,7 +151,7 @@ fun SchedulingScreen(
             Spacer(modifier = Modifier.height(12.dp))
         }
 
-        error?.let {
+        errorPlacement.topLevelError?.let {
             ApiErrorFeedbackCard(it, ErrorContext.Scheduling)
             Spacer(modifier = Modifier.height(12.dp))
         }
@@ -183,6 +185,8 @@ fun SchedulingScreen(
                 submitting = submitting,
                 actionsDisabled = actionsDisabled,
                 submittingLabel = submittingLabel,
+                proposalError = errorPlacement.proposalError,
+                nowMillis = nowMillis,
                 onSubmitProposals = onSubmitProposals,
             )
 
@@ -193,6 +197,8 @@ fun SchedulingScreen(
                         submitting = submitting,
                         actionsDisabled = actionsDisabled,
                         submittingLabel = submittingLabel,
+                        proposalError = errorPlacement.proposalError,
+                        nowMillis = nowMillis,
                         onSubmitProposals = onSubmitProposals,
                     )
                     Spacer(modifier = Modifier.height(12.dp))
@@ -327,20 +333,52 @@ private fun ProposalSelectorCard(
     submitting: Boolean,
     actionsDisabled: Boolean,
     submittingLabel: String?,
+    proposalError: ApiError?,
+    nowMillis: Long,
     onSubmitProposals: (List<String>) -> Unit,
 ) {
     var selected by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var validationError by rememberSaveable { mutableStateOf<String?>(null) }
-    val zoneId = remember { ZoneId.systemDefault() }
-    val now = remember(zoneId) { OffsetDateTime.now(zoneId) }
-    val dayOptions = remember(now) { schedulingDayOptions(now) }
-    val initialSelection = remember(now, zoneId) { firstAvailableSchedulingSelection(now, zoneId) }
+    val zoneId = ZoneId.systemDefault()
+    val now = Instant.ofEpochMilli(nowMillis)
+        .atZone(zoneId)
+        .toOffsetDateTime()
+    val dayOptions = schedulingDayOptions(now)
+    val initialSelection = firstAvailableSchedulingSelection(now, zoneId)
     var selectedDate by rememberSaveable {
         mutableStateOf(initialSelection?.date?.toString() ?: now.toLocalDate().toString())
     }
     var selectedHour by rememberSaveable { mutableStateOf(initialSelection?.hour ?: 8) }
     var selectedMinute by rememberSaveable { mutableStateOf(initialSelection?.minute ?: 0) }
     var hourScrollKey by rememberSaveable { mutableStateOf(0) }
+    LaunchedEffect(
+        nowMillis,
+        zoneId.id,
+        selectedDate,
+        selectedHour,
+        selectedMinute,
+    ) {
+        val corrected = correctedSchedulingPickerSelection(
+            selectedDate = selectedDate,
+            selectedHour = selectedHour,
+            selectedMinute = selectedMinute,
+            now = now,
+            zoneId = zoneId,
+        )
+        if (selectedDate != corrected.date.toString() ||
+            selectedHour != corrected.hour ||
+            selectedMinute != corrected.minute
+        ) {
+            val hourChanged = selectedDate != corrected.date.toString() || selectedHour != corrected.hour
+            selectedDate = corrected.date.toString()
+            selectedHour = corrected.hour
+            selectedMinute = corrected.minute
+            if (hourChanged) {
+                hourScrollKey += 1
+            }
+            validationError = null
+        }
+    }
     val selectedLocalDate = runCatching { java.time.LocalDate.parse(selectedDate) }
         .getOrDefault(now.toLocalDate())
     val availableHours = availableSchedulingHours(selectedLocalDate, now, zoneId)
@@ -366,6 +404,8 @@ private fun ProposalSelectorCard(
     }
     val candidateValue = candidateSelection?.let { buildSchedulingSlot(it, zoneId).toString() }
     val selectedLabels = selected
+    val currentSelectedValidation = validateCurrentSelectedSlots(selected, now)
+    val visibleValidationError = validationError ?: currentSelectedValidation
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -449,8 +489,7 @@ private fun ProposalSelectorCard(
             Button(
                 onClick = {
                     val value = candidateValue
-                    val currentNow = OffsetDateTime.now(zoneId)
-                    val validation = value?.let { validateSelectedSlots(selected + it, currentNow) }
+                    val validation = value?.let { validateSelectedSlots(selected + it, now) }
                     when {
                         value == null -> validationError = "Selecciona un horario valido."
                         value in selected -> validationError = "Ese horario ya esta en la lista."
@@ -499,19 +538,22 @@ private fun ProposalSelectorCard(
                 }
             }
 
-            validationError?.let {
+            visibleValidationError?.let {
                 Text(it, color = MaterialTheme.colorScheme.error)
+            }
+            proposalError?.let {
+                ApiErrorFeedbackCard(it, ErrorContext.Scheduling)
             }
             Button(
                 onClick = {
-                    val validation = validateSelectedSlots(selected, OffsetDateTime.now(zoneId))
+                    val validation = validateCurrentSelectedSlots(selected, now)
                     if (validation == null) {
                         onSubmitProposals(selected)
                     } else {
                         validationError = validation
                     }
                 },
-                enabled = !submitting && !actionsDisabled && selected.isNotEmpty(),
+                enabled = !submitting && !actionsDisabled && canSubmitSelectedSlots(selected, now),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 if (submitting) {
@@ -530,6 +572,36 @@ private fun ProposalSelectorCard(
         }
     }
 }
+
+internal data class SchedulingErrorPlacement(
+    val topLevelError: ApiError?,
+    val proposalError: ApiError?,
+)
+
+internal fun schedulingErrorPlacement(
+    stage: SchedulingStage,
+    myProposals: List<SchedulingProposal>,
+    error: ApiError?,
+): SchedulingErrorPlacement {
+    val proposalError = error?.takeIf {
+        stage.showsProposalSelector(myProposals) && it.isProposalSubmissionError()
+    }
+    return SchedulingErrorPlacement(
+        topLevelError = error.takeUnless { it == proposalError },
+        proposalError = proposalError,
+    )
+}
+
+private fun SchedulingStage.showsProposalSelector(myProposals: List<SchedulingProposal>): Boolean =
+    this == SchedulingStage.WaitingForMyProposals ||
+        (this == SchedulingStage.ReviewPartnerProposals && myProposals.isEmpty())
+
+private fun ApiError.isProposalSubmissionError(): Boolean =
+    this is ApiError.Backend &&
+        backendErrorCode in setOf(
+            BackendErrorCode.SchedulingInvalidProposals,
+            BackendErrorCode.SchedulingProposalsAlreadySubmitted,
+        )
 
 @Composable
 private fun <T> WheelPickerColumn(

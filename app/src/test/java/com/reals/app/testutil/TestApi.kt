@@ -117,6 +117,7 @@ class FakeRealsApi : RealsApi {
     var beforeGetFirstChatForMatchResponse: suspend () -> Unit = {}
     var beforeGetChatResponse: suspend () -> Unit = {}
     var beforeGetConnectionNegotiationResponse: suspend () -> Unit = {}
+    var beforeSubmitConnectionProposalsResponse: suspend () -> Unit = {}
     var beforeGetProfilePhotosResponse: suspend () -> Unit = {}
     var beforeReorderPhotosResponse: suspend () -> Unit = {}
 
@@ -159,6 +160,7 @@ class FakeRealsApi : RealsApi {
         Response.success(ConnectionDismissalResponseDto(dismissed = true))
     var negotiationResponse: Response<NegotiationResponseDto> = Response.success(TestDtos.negotiation())
     var proposalsResponse: Response<List<ScheduleProposalResponseDto>> = Response.success(listOf(TestDtos.proposal()))
+    var submitProposalsResponse: Response<List<ScheduleProposalResponseDto>>? = null
 
     override suspend fun ping(): Response<PingResponseDto> = record("ping", null) { pingResponse }
 
@@ -485,9 +487,9 @@ class FakeRealsApi : RealsApi {
         connectionId: String,
         body: AddProposalRequestDto,
     ): Response<List<ScheduleProposalResponseDto>> =
-        record("submitConnectionProposals", authorization, connectionId) {
+        record("submitConnectionProposals", authorization, connectionId, beforeResponse = beforeSubmitConnectionProposalsResponse) {
             proposalsBody = body
-            proposalsResponse
+            submitProposalsResponse ?: proposalsResponse
         }
 
     override suspend fun acceptConnectionProposal(

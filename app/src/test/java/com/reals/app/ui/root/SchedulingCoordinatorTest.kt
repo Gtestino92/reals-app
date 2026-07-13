@@ -20,11 +20,18 @@ import com.reals.app.testutil.TestDomain
 import com.reals.app.testutil.TestDtos
 import com.reals.app.testutil.backendErrorResponse
 import com.reals.app.testutil.testApiExecutor
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 import retrofit2.Response
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class SchedulingCoordinatorTest {
     private val api = FakeRealsApi()
     private val coordinator = SchedulingCoordinator(schedulingDependencies(api))
@@ -48,16 +55,17 @@ class SchedulingCoordinatorTest {
         val current = baseState()
         val slots = listOf("2026-06-18T21:00:00Z")
 
-        val state = coordinator.submitProposals(current, slots)
+        val state = coordinator.submitProposals(current, slots, onPending = {})
 
         assertEquals(false, state.submitting)
+        assertEquals(null, state.submittingLabel)
         assertEquals("Enviamos tus horarios.", state.message)
         assertEquals(slots, api.proposalsBody?.proposedDateTimes)
     }
 
     @Test
     fun `submit proposals failure keeps scheduling backend error`() = runBlocking {
-        api.proposalsResponse = backendErrorResponse(
+        api.submitProposalsResponse = backendErrorResponse(
             statusCode = 409,
             code = "SCHEDULING_PROPOSALS_ALREADY_SUBMITTED",
             message = "raw backend message",
@@ -66,15 +74,100 @@ class SchedulingCoordinatorTest {
         val state = coordinator.submitProposals(
             current = baseState(),
             proposedDateTimes = listOf("2026-06-18T21:00:00Z"),
+            onPending = {},
         )
         val error = state.error as ApiError.Backend
 
         assertEquals(false, state.submitting)
+        assertEquals(null, state.submittingLabel)
         assertEquals(BackendErrorCode.SchedulingProposalsAlreadySubmitted, error.backendErrorCode)
         assertEquals(
             "Ya enviaste tus horarios para esta ronda.",
             error.toUserMessage(ErrorContext.Scheduling),
         )
+        assertNull(state.message)
+    }
+
+    @Test
+    fun `submit proposals publishes pending before request completes and clears feedback`() = runTest {
+        val submitStarted = CompletableDeferred<Unit>()
+        val releaseSubmit = CompletableDeferred<Unit>()
+        api.beforeSubmitConnectionProposalsResponse = {
+            submitStarted.complete(Unit)
+            releaseSubmit.await()
+        }
+        val previousError = ApiError.Unexpected("old")
+        val current = baseState().copy(
+            submittingLabel = "Enviando horarios...",
+            error = previousError,
+            message = "mensaje anterior",
+        )
+        var pending: RealsRootUiState.Scheduling? = null
+
+        val result = async {
+            coordinator.submitProposals(
+                current = current,
+                proposedDateTimes = listOf("2026-06-18T21:00:00Z"),
+                onPending = { pending = it },
+            )
+        }
+
+        submitStarted.await()
+        runCurrent()
+
+        assertEquals(true, pending?.submitting)
+        assertEquals("Enviando horarios...", pending?.submittingLabel)
+        assertNull(pending?.error)
+        assertNull(pending?.message)
+
+        releaseSubmit.complete(Unit)
+        assertEquals(false, result.await().submitting)
+    }
+
+    @Test
+    fun `invalid proposals error remains primary after successful refresh`() = runBlocking {
+        api.submitProposalsResponse = backendErrorResponse(
+            statusCode = 400,
+            code = "SCHEDULING_INVALID_PROPOSALS",
+            message = "raw backend message",
+        )
+        api.negotiationResponse = Response.success(TestDtos.negotiation("PENDING"))
+        api.proposalsResponse = Response.success(listOf(TestDtos.proposal()))
+
+        val state = coordinator.submitProposals(
+            current = baseState(),
+            proposedDateTimes = listOf("2026-06-18T21:00:00Z"),
+            onPending = {},
+        )
+        val error = state.error as ApiError.Backend
+
+        assertEquals(BackendErrorCode.SchedulingInvalidProposals, error.backendErrorCode)
+        assertNull(state.message)
+        assertEquals(NegotiationStatus.Pending, state.negotiation?.status)
+        assertEquals(1, state.proposals.size)
+    }
+
+    @Test
+    fun `submit refresh failure does not replace submit failure`() = runBlocking {
+        api.submitProposalsResponse = backendErrorResponse(
+            statusCode = 400,
+            code = "SCHEDULING_INVALID_PROPOSALS",
+            message = "raw backend message",
+        )
+        api.negotiationResponse = backendErrorResponse(
+            statusCode = 404,
+            code = "SCHEDULING_NEGOTIATION_NOT_FOUND",
+        )
+
+        val state = coordinator.submitProposals(
+            current = baseState(),
+            proposedDateTimes = listOf("2026-06-18T21:00:00Z"),
+            onPending = {},
+        )
+        val error = state.error as ApiError.Backend
+
+        assertEquals(BackendErrorCode.SchedulingInvalidProposals, error.backendErrorCode)
+        assertNull(state.message)
     }
 
     @Test

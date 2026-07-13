@@ -1,6 +1,9 @@
 package com.reals.app.ui.root
 
 import android.content.ContextWrapper
+import com.reals.app.core.network.ApiError
+import com.reals.app.core.network.BackendErrorCode
+import com.reals.app.core.network.backendErrorCode
 import com.reals.app.data.repository.ChatRepository
 import com.reals.app.data.repository.FirebaseAuthRepository
 import com.reals.app.data.repository.LegalRepository
@@ -74,6 +77,7 @@ import com.reals.app.testutil.FakeAuthTokenProvider
 import com.reals.app.testutil.FakeRealsApi
 import com.reals.app.testutil.TestDomain
 import com.reals.app.testutil.TestDtos
+import com.reals.app.testutil.backendErrorResponse
 import com.reals.app.testutil.testApiExecutor
 import com.reals.app.testutil.testJson
 import kotlinx.coroutines.CompletableDeferred
@@ -88,6 +92,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 
@@ -198,6 +203,152 @@ class RealsRootViewModelPollingGuardTest {
         advanceUntilIdle()
     }
 
+    @Test
+    fun `submit scheduling proposals publishes pending state before request completes`() = runTest(dispatcher) {
+        val submitStarted = CompletableDeferred<Unit>()
+        val releaseSubmit = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeSubmitConnectionProposalsResponse = {
+                submitStarted.complete(Unit)
+                releaseSubmit.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(
+            schedulingState().copy(
+                error = ApiError.Unexpected("old"),
+                message = "mensaje anterior",
+            )
+        )
+
+        viewModel.submitSchedulingProposals(listOf("2026-06-18T21:00:00Z"))
+        runCurrent()
+        submitStarted.await()
+
+        val pending = viewModel.uiState.value as RealsRootUiState.Scheduling
+        assertEquals(true, pending.submitting)
+        assertEquals("Enviando horarios...", pending.submittingLabel)
+        assertNull(pending.error)
+        assertNull(pending.message)
+
+        releaseSubmit.complete(Unit)
+        advanceUntilIdle()
+    }
+
+    @Test
+    fun `silent scheduling refresh cannot overwrite failed proposal submission`() = runTest(dispatcher) {
+        val refreshGate = CompletableDeferred<Unit>()
+        val refreshStarted = CompletableDeferred<Unit>()
+        var negotiationCalls = 0
+        val api = FakeRealsApi().apply {
+            beforeGetConnectionNegotiationResponse = {
+                negotiationCalls += 1
+                if (negotiationCalls == 1) {
+                    refreshStarted.complete(Unit)
+                    refreshGate.await()
+                }
+            }
+            submitProposalsResponse = backendErrorResponse(
+                statusCode = 400,
+                code = "SCHEDULING_INVALID_PROPOSALS",
+            )
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(schedulingState())
+
+        viewModel.refreshScheduling(silent = true)
+        runCurrent()
+        refreshStarted.await()
+
+        viewModel.submitSchedulingProposals(listOf("2026-06-18T21:00:00Z"))
+        advanceUntilIdle()
+
+        refreshGate.complete(Unit)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Scheduling
+        val error = state.error as ApiError.Backend
+        assertEquals(false, state.submitting)
+        assertEquals(BackendErrorCode.SchedulingInvalidProposals, error.backendErrorCode)
+        assertNull(state.message)
+    }
+
+    @Test
+    fun `silent scheduling refresh is ignored while submission is pending`() = runTest(dispatcher) {
+        val submitStarted = CompletableDeferred<Unit>()
+        val releaseSubmit = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeSubmitConnectionProposalsResponse = {
+                submitStarted.complete(Unit)
+                releaseSubmit.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(schedulingState())
+
+        viewModel.submitSchedulingProposals(listOf("2026-06-18T21:00:00Z"))
+        runCurrent()
+        submitStarted.await()
+
+        viewModel.refreshScheduling(silent = true)
+        runCurrent()
+
+        assertEquals(0, api.calls.count { it == "getConnectionNegotiation" })
+
+        releaseSubmit.complete(Unit)
+        advanceUntilIdle()
+    }
+
+    @Test
+    fun `scheduling submission result cannot overwrite another scheduling connection`() = runTest(dispatcher) {
+        val submitStarted = CompletableDeferred<Unit>()
+        val releaseSubmit = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeSubmitConnectionProposalsResponse = {
+                submitStarted.complete(Unit)
+                releaseSubmit.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(schedulingState(connectionId = "connection-1"))
+
+        viewModel.submitSchedulingProposals(listOf("2026-06-18T21:00:00Z"))
+        runCurrent()
+        submitStarted.await()
+
+        val otherConnection = schedulingState(connectionId = "connection-2", matchId = "match-2")
+        viewModel.setState(otherConnection)
+        releaseSubmit.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(otherConnection, viewModel.uiState.value)
+    }
+
+    @Test
+    fun `scheduling submission result cannot overwrite another screen`() = runTest(dispatcher) {
+        val submitStarted = CompletableDeferred<Unit>()
+        val releaseSubmit = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeSubmitConnectionProposalsResponse = {
+                submitStarted.complete(Unit)
+                releaseSubmit.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(schedulingState())
+
+        viewModel.submitSchedulingProposals(listOf("2026-06-18T21:00:00Z"))
+        runCurrent()
+        submitStarted.await()
+
+        val ready = RealsRootUiState.Ready(TestDomain.session())
+        viewModel.setState(ready)
+        releaseSubmit.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(ready, viewModel.uiState.value)
+    }
+
     private fun viewModel(api: FakeRealsApi): RealsRootViewModel =
         RealsRootViewModel(rootViewModelTestDependencies(api), autoRefreshSession = false)
 
@@ -228,11 +379,14 @@ class RealsRootViewModelPollingGuardTest {
             chat = TestDtos.chat(status = "ACTIVE").copy(id = "chat-1", chatType = "SECOND_CHAT").toDomain(),
         )
 
-    private fun schedulingState(): RealsRootUiState.Scheduling =
+    private fun schedulingState(
+        connectionId: String = "connection-1",
+        matchId: String = "match-1",
+    ): RealsRootUiState.Scheduling =
         RealsRootUiState.Scheduling(
             session = TestDomain.session(),
-            connectionId = "connection-1",
-            matchId = "match-1",
+            connectionId = connectionId,
+            matchId = matchId,
             partnerName = "Alex",
             negotiation = TestDtos.negotiation("PENDING").toDomain(),
         )

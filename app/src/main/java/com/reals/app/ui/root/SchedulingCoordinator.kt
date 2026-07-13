@@ -62,8 +62,11 @@ internal class SchedulingCoordinator(
     suspend fun submitProposals(
         current: RealsRootUiState.Scheduling,
         proposedDateTimes: List<String>,
+        onPending: (RealsRootUiState.Scheduling) -> Unit,
     ): RealsRootUiState.Scheduling {
         val pending = current.copy(submitting = true, error = null, message = null)
+        onPending(pending)
+
         val submitResult = dependencies.submitProposals(current.connectionId, proposedDateTimes)
         val refreshed = refresh(pending, silent = false)
         return when (submitResult) {
@@ -81,7 +84,7 @@ internal class SchedulingCoordinator(
                 submitting = false,
                 submittingLabel = null,
                 error = submitResult.error,
-                message = "Actualizamos la coordinacion con el estado actual.",
+                message = null,
             )
         }
     }

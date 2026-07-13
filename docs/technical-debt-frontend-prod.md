@@ -322,7 +322,36 @@ Acceptance criteria:
 
 ---
 
-## 14. Accessibility and UX polish
+## 14. Scheduling authoritative clock
+
+Current Android correction:
+- Scheduling proposal slot selection uses the screen's reactive Android device time instead of freezing `now` when
+  the selector enters composition.
+- The selector re-derives the current system time zone on recomposition instead of caching it permanently.
+- Selected proposal slots are revalidated as device time advances, and expired selected slots block submission until
+  the user removes or replaces them.
+
+Remaining production limitation:
+- Future/past validation still depends on the correctness of the Android device or emulator wall clock.
+
+Recommended production hardening:
+- Scheduling/negotiation responses should expose an authoritative `serverTime`, or the networking layer should
+  consistently retain a trusted HTTP server date.
+- Android should store the received server instant and `SystemClock.elapsedRealtime()` at the moment it was received.
+- Current server time should be estimated as `receivedServerInstant + monotonicElapsedDuration`.
+- Device time zone should be used only to display local dates and times.
+- Future/past proposal validation should use the authoritative estimated server instant.
+- The estimate should be refreshed during negotiation refreshes and before scheduling mutations.
+- Clock skew beyond a defined tolerance should be logged and surfaced with actionable UX.
+
+Priority:
+- Production hardening, not required for the current MVP correction.
+- Requires backend/API or shared networking-time policy work; no OpenAPI change is implemented by the current Android
+  fix.
+
+---
+
+## 15. Accessibility and UX polish
 
 Future work:
 - Accessibility labels for major actions.
@@ -337,7 +366,7 @@ Not MVP blocker, but recommended before wider production use.
 
 ---
 
-## 15. Android performance
+## 16. Android performance
 
 Future work:
 - Review recomposition hotspots after RootViewModel refactor.
@@ -354,7 +383,7 @@ Acceptance criteria:
 
 ---
 
-## 16. Security and privacy hardening
+## 17. Security and privacy hardening
 
 Future frontend work:
 - Avoid logging tokens and sensitive payloads.
@@ -376,7 +405,7 @@ Implemented hardening:
 
 ---
 
-## 17. Future product experiments
+## 18. Future product experiments
 
 Deferred:
 - Reveal quotas.
