@@ -6,6 +6,7 @@ This directory is the canonical documentation set for the Android frontend.
 
 - `architecture.md`: Android structure, layers and feature ownership.
 - `local-development.md`: local setup, flavors, Firebase and emulator notes.
+- `local-android-networking.md`: ADB reverse workflow for local backend and MinIO access.
 - `testing.md`: automated test strategy and Gradle commands.
 - `security.md`: frontend security and user-content rendering notes.
 - `photo-management-decisions.md`: profile photo UX and implementation decisions.
