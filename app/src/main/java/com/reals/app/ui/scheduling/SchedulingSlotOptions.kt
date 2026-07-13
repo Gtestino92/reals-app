@@ -21,6 +21,9 @@ internal data class SchedulingSlotSelection(
     val minute: Int,
 )
 
+internal const val EXPIRED_SELECTED_SLOT_MESSAGE =
+    "Uno o mas horarios elegidos ya pasaron. Quitalos o elegi otro horario."
+
 internal fun schedulingDayOptions(
     now: OffsetDateTime,
     locale: Locale = Locale.getDefault(),
@@ -88,6 +91,42 @@ internal fun firstAvailableSchedulingSelection(
     }
 }
 
+internal fun correctedSchedulingPickerSelection(
+    selectedDate: String,
+    selectedHour: Int,
+    selectedMinute: Int,
+    now: OffsetDateTime,
+    zoneId: ZoneId = ZoneId.systemDefault(),
+): SchedulingSlotSelection {
+    val dayOptions = schedulingDayOptions(now)
+    val selectedLocalDate = runCatching { LocalDate.parse(selectedDate) }.getOrNull()
+    val validSelectedDate = selectedLocalDate?.takeIf { date ->
+        dayOptions.any { it.date == date } &&
+            availableSchedulingHours(date, now, zoneId).isNotEmpty()
+    }
+    val dateWasPreserved = validSelectedDate != null
+    val date = validSelectedDate ?: dayOptions.firstNotNullOfOrNull { day ->
+        day.date.takeIf { availableSchedulingHours(it, now, zoneId).isNotEmpty() }
+    } ?: now.toLocalDate()
+    val hours = availableSchedulingHours(date, now, zoneId)
+    val hour = if (dateWasPreserved) {
+        selectedHour.takeIf { it in hours } ?: hours.firstOrNull() ?: selectedHour
+    } else {
+        hours.firstOrNull() ?: selectedHour
+    }
+    val minutes = availableSchedulingMinutes(date, hour, now, zoneId)
+    val minute = if (dateWasPreserved) {
+        selectedMinute.takeIf { it in minutes } ?: minutes.firstOrNull() ?: selectedMinute
+    } else {
+        minutes.firstOrNull() ?: selectedMinute
+    }
+    return SchedulingSlotSelection(
+        date = date,
+        hour = hour,
+        minute = minute,
+    )
+}
+
 internal fun buildSchedulingSlot(
     selection: SchedulingSlotSelection,
     zoneId: ZoneId = ZoneId.systemDefault(),
@@ -126,4 +165,25 @@ internal fun validateSelectedSlots(
         return "Los horarios tienen que estar alineados a media hora."
     }
     return null
+}
+
+internal fun validateCurrentSelectedSlots(
+    values: List<String>,
+    now: OffsetDateTime,
+): String? {
+    if (values.isEmpty()) return validateSelectedSlots(values, now)
+    val parsed = values.map { value ->
+        runCatching { OffsetDateTime.parse(value) }.getOrNull()
+    }
+    if (parsed.all { it != null } && parsed.any { !it!!.isAfter(now) }) {
+        return EXPIRED_SELECTED_SLOT_MESSAGE
+    }
+    return validateSelectedSlots(values, now)
+}
+
+internal fun canSubmitSelectedSlots(
+    values: List<String>,
+    now: OffsetDateTime,
+): Boolean {
+    return values.isNotEmpty() && validateCurrentSelectedSlots(values, now) == null
 }

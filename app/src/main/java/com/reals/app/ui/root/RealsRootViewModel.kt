@@ -527,6 +527,11 @@ class RealsRootViewModel(
         }
         if (silent) {
             silentSchedulingRefreshJob = job
+            job.invokeOnCompletion {
+                if (silentSchedulingRefreshJob == job) {
+                    silentSchedulingRefreshJob = null
+                }
+            }
         }
     }
 
@@ -534,11 +539,23 @@ class RealsRootViewModel(
         val current = _uiState.value as? RealsRootUiState.Scheduling ?: return
         if (current.submitting) return
 
+        silentSchedulingRefreshJob?.cancel()
+        silentSchedulingRefreshJob = null
+        val connectionId = current.connectionId
         viewModelScope.launch {
-            _uiState.value = schedulingCoordinator.submitProposals(
+            val result = schedulingCoordinator.submitProposals(
                 current.copy(submittingLabel = "Enviando horarios..."),
                 proposedDateTimes,
+                onPending = { pending ->
+                    val latest = _uiState.value as? RealsRootUiState.Scheduling
+                    if (latest?.connectionId == connectionId) {
+                        _uiState.value = pending
+                    }
+                },
             )
+            val latest = _uiState.value as? RealsRootUiState.Scheduling ?: return@launch
+            if (latest.connectionId != connectionId) return@launch
+            _uiState.value = result
         }
     }
 
