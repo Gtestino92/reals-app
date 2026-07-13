@@ -200,7 +200,7 @@ class ApiErrorTest {
             "SCHEDULING_ROUND_CHANGED" to
                 "La ronda cambio. Actualizamos las opciones; revisalas antes de continuar.",
             "SCHEDULING_PROPOSAL_NOT_AVAILABLE" to
-                "Ese horario ya no esta disponible. Actualiza la propuesta.",
+                "Ese horario ya no esta disponible. Actualizamos las opciones.",
             "SCHEDULING_CANNOT_ACCEPT_OWN_PROPOSAL" to
                 "No podes aceptar un horario propuesto por vos.",
             "SCHEDULING_PARTNER_PROPOSALS_NOT_AVAILABLE" to

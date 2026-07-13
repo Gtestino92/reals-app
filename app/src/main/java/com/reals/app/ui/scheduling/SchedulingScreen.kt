@@ -210,6 +210,7 @@ fun SchedulingScreen(
                     actionsDisabled = actionsDisabled,
                     submittingLabel = submittingLabel,
                     reviewError = errorPlacement.reviewError,
+                    nowMillis = nowMillis,
                     onAcceptProposal = onAcceptProposal,
                     onRejectPartnerProposals = onRejectPartnerProposals,
                 )
@@ -789,9 +790,11 @@ private fun ReviewProposalsCard(
     actionsDisabled: Boolean,
     submittingLabel: String?,
     reviewError: ApiError?,
+    nowMillis: Long,
     onAcceptProposal: (String) -> Unit,
     onRejectPartnerProposals: () -> Unit,
 ) {
+    val reviewState = schedulingReceivedProposalReviewState(partnerPendingProposals, nowMillis)
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Revisa las opciones recibidas", style = MaterialTheme.typography.titleMedium)
@@ -799,21 +802,40 @@ private fun ReviewProposalsCard(
                 text = "Elegi una opcion recibida o rechaza estas opciones antes de proponer las tuyas.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            ProposalList("Opciones recibidas por prioridad", partnerPendingProposals)
-            partnerPendingProposals.forEach { proposal ->
-                Button(
-                    onClick = { onAcceptProposal(proposal.id) },
-                    enabled = !submitting && !actionsDisabled,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        if (submitting) {
-                            submittingLabel ?: "Procesando..."
-                        } else {
-                            "Aceptar ${formatBackendDateTime(proposal.proposedDateTime)}"
-                        }
-                    )
+            ReceivedProposalList(reviewState)
+            when {
+                reviewState.allExpired -> Text(
+                    text = "Todos los horarios recibidos ya pasaron. Rechazá estas opciones para continuar con la coordinación.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                reviewState.noneAcceptable -> Text(
+                    text = "Ninguno de los horarios recibidos está disponible para aceptar. Rechazá estas opciones para continuar con la coordinación.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            reviewState.items
+                .filter { it.acceptanceAvailable }
+                .forEach { item ->
+                    Button(
+                        onClick = { onAcceptProposal(item.proposal.id) },
+                        enabled = !submitting && !actionsDisabled,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            if (submitting) {
+                                submittingLabel ?: "Procesando..."
+                            } else {
+                                "Aceptar ${formatBackendDateTime(item.proposal.proposedDateTime)}"
+                            }
+                        )
+                    }
                 }
+            if (reviewState.items.isEmpty()) {
+                Text(
+                    text = "No hay horarios recibidos disponibles para revisar.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             if (myProposals.isNotEmpty()) {
                 ProposalList("Tus horarios por prioridad", myProposals)
@@ -823,10 +845,63 @@ private fun ReviewProposalsCard(
             }
             OutlinedButton(
                 onClick = onRejectPartnerProposals,
-                enabled = !submitting && !actionsDisabled,
+                enabled = !submitting && !actionsDisabled && reviewState.resolutionByRejectionAvailable,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(if (submitting) submittingLabel ?: "Procesando..." else "Rechazar opciones")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReceivedProposalList(
+    reviewState: SchedulingReceivedProposalReviewState,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Opciones recibidas por prioridad", style = MaterialTheme.typography.titleSmall)
+        if (reviewState.items.isEmpty()) {
+            Text(
+                text = "No hay horarios recibidos.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            reviewState.items.forEach { item ->
+                val proposal = item.proposal
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Prioridad ${proposal.preferenceOrder}: ${
+                            if (item.unavailable) {
+                                "Horario no disponible"
+                            } else {
+                                formatBackendDateTime(proposal.proposedDateTime)
+                            }
+                        }",
+                        modifier = Modifier.weight(1f),
+                        color = if (item.acceptanceAvailable) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                    when {
+                        item.expired -> Text(
+                            text = "Ya pasó",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+
+                        item.unavailable -> Text(
+                            text = "No disponible",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    }
+                }
             }
         }
     }

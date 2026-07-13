@@ -1,5 +1,8 @@
 package com.reals.app.ui.scheduling
 
+import com.reals.app.domain.model.ProposalStatus
+import com.reals.app.domain.model.SchedulingProposal
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.OffsetDateTime
@@ -21,8 +24,65 @@ internal data class SchedulingSlotSelection(
     val minute: Int,
 )
 
+internal enum class SchedulingProposalTimeAvailability {
+    Future,
+    Expired,
+    Invalid,
+}
+
+internal data class SchedulingReceivedProposalReviewItem(
+    val proposal: SchedulingProposal,
+    val timeAvailability: SchedulingProposalTimeAvailability,
+) {
+    val acceptanceAvailable: Boolean get() = timeAvailability == SchedulingProposalTimeAvailability.Future
+    val expired: Boolean get() = timeAvailability == SchedulingProposalTimeAvailability.Expired
+    val unavailable: Boolean get() = timeAvailability == SchedulingProposalTimeAvailability.Invalid
+}
+
+internal data class SchedulingReceivedProposalReviewState(
+    val items: List<SchedulingReceivedProposalReviewItem>,
+) {
+    val hasAcceptableProposal: Boolean get() = items.any { it.acceptanceAvailable }
+    val allExpired: Boolean get() = items.isNotEmpty() && items.all { it.expired }
+    val noneAcceptable: Boolean get() = items.isNotEmpty() && !hasAcceptableProposal
+    val resolutionByRejectionAvailable: Boolean get() = items.isNotEmpty()
+}
+
 internal const val EXPIRED_SELECTED_SLOT_MESSAGE =
     "Uno o mas horarios elegidos ya pasaron. Quitalos o elegi otro horario."
+
+internal fun schedulingProposalTimeAvailability(
+    proposedDateTime: String,
+    nowMillis: Long,
+): SchedulingProposalTimeAvailability {
+    val proposedInstant = runCatching { OffsetDateTime.parse(proposedDateTime).toInstant() }
+        .getOrNull()
+        ?: return SchedulingProposalTimeAvailability.Invalid
+    val nowInstant = Instant.ofEpochMilli(nowMillis)
+    return if (proposedInstant.isAfter(nowInstant)) {
+        SchedulingProposalTimeAvailability.Future
+    } else {
+        SchedulingProposalTimeAvailability.Expired
+    }
+}
+
+internal fun schedulingReceivedProposalReviewState(
+    partnerProposals: List<SchedulingProposal>,
+    nowMillis: Long,
+): SchedulingReceivedProposalReviewState {
+    val items = partnerProposals
+        .filter { it.status == ProposalStatus.Pending }
+        .map { proposal ->
+            SchedulingReceivedProposalReviewItem(
+                proposal = proposal,
+                timeAvailability = schedulingProposalTimeAvailability(
+                    proposedDateTime = proposal.proposedDateTime,
+                    nowMillis = nowMillis,
+                ),
+            )
+        }
+    return SchedulingReceivedProposalReviewState(items)
+}
 
 internal fun schedulingDayOptions(
     now: OffsetDateTime,

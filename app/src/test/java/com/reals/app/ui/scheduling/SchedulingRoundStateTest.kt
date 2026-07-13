@@ -102,6 +102,27 @@ class SchedulingRoundStateTest {
     }
 
     @Test
+    fun `partner pending expired proposal still requires review`() {
+        val state = deriveSchedulingRoundState(
+            loading = false,
+            negotiation = negotiation(roundNumber = 2),
+            proposals = listOf(
+                proposal(
+                    id = "partner-expired",
+                    userId = "partner",
+                    roundNumber = 2,
+                    status = ProposalStatus.Pending,
+                    proposedDateTime = "2026-06-18T09:00:00-03:00",
+                ),
+            ),
+            currentUserId = "me",
+        )
+
+        assertEquals(SchedulingStage.ReviewPartnerProposals, state.stage)
+        assertEquals(listOf("partner-expired"), state.partnerPendingProposals.map { it.id })
+    }
+
+    @Test
     fun `own pending proposals wait when no partner pending proposals exist`() {
         val state = deriveSchedulingRoundState(
             loading = false,
@@ -239,6 +260,23 @@ class SchedulingRoundStateTest {
     }
 
     @Test
+    fun `proposal not available review error is not duplicated at top level`() {
+        val error = backendError("SCHEDULING_PROPOSAL_NOT_AVAILABLE")
+
+        val placement = schedulingErrorPlacement(
+            stage = SchedulingStage.ReviewPartnerProposals,
+            error = error,
+        )
+
+        assertEquals(null, placement.topLevelError)
+        assertEquals(null, placement.proposalError)
+        assertEquals(
+            BackendErrorCode.SchedulingProposalNotAvailable,
+            (placement.reviewError as ApiError.Backend).backendErrorCode,
+        )
+    }
+
+    @Test
     fun `non proposal scheduling error remains top level`() {
         val error = backendError("SCHEDULING_EXPIRED")
 
@@ -292,6 +330,156 @@ class SchedulingRoundStateTest {
         assertTrue(state.partnerPendingProposals.isEmpty())
     }
 
+    @Test
+    fun `proposal time availability is future only when proposal instant is after now`() {
+        val nowMillis = java.time.Instant.parse("2026-07-15T22:30:00Z").toEpochMilli()
+
+        assertEquals(
+            SchedulingProposalTimeAvailability.Future,
+            schedulingProposalTimeAvailability("2026-07-15T19:31:00-03:00", nowMillis),
+        )
+    }
+
+    @Test
+    fun `proposal time availability is expired when proposal instant equals now`() {
+        val nowMillis = java.time.Instant.parse("2026-07-15T22:30:00Z").toEpochMilli()
+
+        assertEquals(
+            SchedulingProposalTimeAvailability.Expired,
+            schedulingProposalTimeAvailability("2026-07-15T19:30:00-03:00", nowMillis),
+        )
+    }
+
+    @Test
+    fun `proposal time availability is expired when proposal instant is before now`() {
+        val nowMillis = java.time.Instant.parse("2026-07-15T22:30:00Z").toEpochMilli()
+
+        assertEquals(
+            SchedulingProposalTimeAvailability.Expired,
+            schedulingProposalTimeAvailability("2026-07-15T19:29:00-03:00", nowMillis),
+        )
+    }
+
+    @Test
+    fun `proposal time availability compares equivalent instants across offsets`() {
+        val nowMillis = java.time.Instant.parse("2026-07-15T22:30:00Z").toEpochMilli()
+
+        assertEquals(
+            SchedulingProposalTimeAvailability.Expired,
+            schedulingProposalTimeAvailability("2026-07-16T00:30:00+02:00", nowMillis),
+        )
+    }
+
+    @Test
+    fun `proposal time availability treats malformed timestamp as invalid`() {
+        val nowMillis = java.time.Instant.parse("2026-07-15T22:30:00Z").toEpochMilli()
+
+        assertEquals(
+            SchedulingProposalTimeAvailability.Invalid,
+            schedulingProposalTimeAvailability("not-a-date", nowMillis),
+        )
+    }
+
+    @Test
+    fun `proposal time availability does not depend on display time zone`() {
+        val nowMillis = java.time.Instant.parse("2026-07-15T22:30:00Z").toEpochMilli()
+
+        assertEquals(
+            SchedulingProposalTimeAvailability.Future,
+            schedulingProposalTimeAvailability("2026-07-16T08:00:00+09:00", nowMillis),
+        )
+    }
+
+    @Test
+    fun `review state marks future pending proposal acceptable`() {
+        val nowMillis = java.time.Instant.parse("2026-07-15T22:30:00Z").toEpochMilli()
+
+        val state = schedulingReceivedProposalReviewState(
+            partnerProposals = listOf(proposal("future", "partner", 2, proposedDateTime = "2026-07-15T20:00:00-03:00")),
+            nowMillis = nowMillis,
+        )
+
+        assertEquals(listOf("future"), state.items.map { it.proposal.id })
+        assertEquals(true, state.items.single().acceptanceAvailable)
+        assertEquals(false, state.items.single().expired)
+    }
+
+    @Test
+    fun `review state marks expired pending proposal non acceptable`() {
+        val nowMillis = java.time.Instant.parse("2026-07-15T22:30:00Z").toEpochMilli()
+
+        val state = schedulingReceivedProposalReviewState(
+            partnerProposals = listOf(proposal("expired", "partner", 2, proposedDateTime = "2026-07-15T19:30:00-03:00")),
+            nowMillis = nowMillis,
+        )
+
+        assertEquals(false, state.items.single().acceptanceAvailable)
+        assertEquals(true, state.items.single().expired)
+        assertEquals(true, state.allExpired)
+        assertEquals(true, state.resolutionByRejectionAvailable)
+    }
+
+    @Test
+    fun `review state preserves preference order and accepts only future proposals`() {
+        val nowMillis = java.time.Instant.parse("2026-07-15T22:30:00Z").toEpochMilli()
+
+        val state = schedulingReceivedProposalReviewState(
+            partnerProposals = listOf(
+                proposal("expired", "partner", 2, preferenceOrder = 1, proposedDateTime = "2026-07-15T19:30:00-03:00"),
+                proposal("future", "partner", 2, preferenceOrder = 2, proposedDateTime = "2026-07-15T20:00:00-03:00"),
+            ),
+            nowMillis = nowMillis,
+        )
+
+        assertEquals(listOf("expired", "future"), state.items.map { it.proposal.id })
+        assertEquals(listOf(false, true), state.items.map { it.acceptanceAvailable })
+    }
+
+    @Test
+    fun `review state marks invalid timestamp unavailable and non acceptable`() {
+        val nowMillis = java.time.Instant.parse("2026-07-15T22:30:00Z").toEpochMilli()
+
+        val state = schedulingReceivedProposalReviewState(
+            partnerProposals = listOf(proposal("invalid", "partner", 2, proposedDateTime = "not-a-date")),
+            nowMillis = nowMillis,
+        )
+
+        assertEquals(SchedulingProposalTimeAvailability.Invalid, state.items.single().timeAvailability)
+        assertEquals(false, state.items.single().acceptanceAvailable)
+        assertEquals(true, state.noneAcceptable)
+        assertEquals(false, state.allExpired)
+    }
+
+    @Test
+    fun `review state ignores rejected proposals`() {
+        val nowMillis = java.time.Instant.parse("2026-07-15T22:30:00Z").toEpochMilli()
+
+        val state = schedulingReceivedProposalReviewState(
+            partnerProposals = listOf(
+                proposal(
+                    id = "rejected",
+                    userId = "partner",
+                    roundNumber = 2,
+                    status = ProposalStatus.Rejected,
+                    proposedDateTime = "2026-07-15T20:00:00-03:00",
+                ),
+            ),
+            nowMillis = nowMillis,
+        )
+
+        assertTrue(state.items.isEmpty())
+    }
+
+    @Test
+    fun `pending proposal changes from future to expired without backend status change`() {
+        val timeA = java.time.Instant.parse("2026-07-15T22:29:59Z").toEpochMilli()
+        val timeB = java.time.Instant.parse("2026-07-15T22:30:00Z").toEpochMilli()
+        val value = "2026-07-15T19:30:00-03:00"
+
+        assertEquals(SchedulingProposalTimeAvailability.Future, schedulingProposalTimeAvailability(value, timeA))
+        assertEquals(SchedulingProposalTimeAvailability.Expired, schedulingProposalTimeAvailability(value, timeB))
+    }
+
     private fun negotiation(
         roundNumber: Int = 2,
         status: NegotiationStatus = NegotiationStatus.Pending,
@@ -313,13 +501,14 @@ class SchedulingRoundStateTest {
         roundNumber: Int,
         preferenceOrder: Int = 1,
         status: ProposalStatus = ProposalStatus.Pending,
+        proposedDateTime: String = "2026-06-18T21:00:00-03:00",
     ) = SchedulingProposal(
         id = id,
         connectionId = "connection-1",
         userId = userId,
         roundNumber = roundNumber,
         preferenceOrder = preferenceOrder,
-        proposedDateTime = "2026-06-18T21:00:00-03:00",
+        proposedDateTime = proposedDateTime,
         status = status,
         chatId = null,
         createdAt = "2026-06-18T10:00:00-03:00",

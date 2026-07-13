@@ -251,7 +251,7 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.SchedulingInvalidProposals -> "Revisa los horarios elegidos. Deben ser futuros, unicos y estar alineados cada media hora."
     BackendErrorCode.SchedulingProposalsAlreadySubmitted -> "Ya enviaste tus horarios para esta ronda."
     BackendErrorCode.SchedulingRoundChanged -> "La ronda cambio. Actualizamos las opciones; revisalas antes de continuar."
-    BackendErrorCode.SchedulingProposalNotAvailable -> "Ese horario ya no esta disponible. Actualiza la propuesta."
+    BackendErrorCode.SchedulingProposalNotAvailable -> "Ese horario ya no esta disponible. Actualizamos las opciones."
     BackendErrorCode.SchedulingCannotAcceptOwnProposal -> "No podes aceptar un horario propuesto por vos."
     BackendErrorCode.SchedulingPartnerProposalsNotAvailable -> "Esas opciones ya no estan disponibles. Actualizamos el estado de la coordinacion."
     BackendErrorCode.Unknown -> when (context) {

@@ -219,6 +219,26 @@ class SchedulingCoordinatorTest {
     }
 
     @Test
+    fun `proposal not available after acceptance remains primary after refresh`() = runBlocking {
+        api.acceptProposalResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "SCHEDULING_PROPOSAL_NOT_AVAILABLE",
+        )
+        api.negotiationResponse = Response.success(TestDtos.negotiation("PENDING"))
+        api.proposalsResponse = Response.success(
+            listOf(TestDtos.proposal("PENDING").copy(userId = "partner")),
+        )
+
+        val state = coordinator.acceptProposal(baseState(), "proposal-1", onPending = {})
+        val error = state.error as ApiError.Backend
+
+        assertEquals(BackendErrorCode.SchedulingProposalNotAvailable, error.backendErrorCode)
+        assertNull(state.message)
+        assertEquals(1, state.proposals.size)
+        assertEquals("partner", state.proposals.single().userId)
+    }
+
+    @Test
     fun `accept proposal publishes pending before request completes`() = runTest {
         val acceptStarted = CompletableDeferred<Unit>()
         val releaseAccept = CompletableDeferred<Unit>()

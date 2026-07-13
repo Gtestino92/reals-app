@@ -169,6 +169,7 @@ class FakeRealsApi : RealsApi {
     var negotiationResponse: Response<NegotiationResponseDto> = Response.success(TestDtos.negotiation())
     var proposalsResponse: Response<List<ScheduleProposalResponseDto>> = Response.success(listOf(TestDtos.proposal()))
     var submitProposalsResponse: Response<List<ScheduleProposalResponseDto>>? = null
+    var acceptProposalResponse: Response<NegotiationResponseDto>? = null
     var rejectPartnerProposalsResponse: Response<NegotiationResponseDto>? = null
 
     override suspend fun ping(): Response<PingResponseDto> = record("ping", null) { pingResponse }
@@ -515,7 +516,7 @@ class FakeRealsApi : RealsApi {
             authorization,
             "$connectionId/$proposalId",
             beforeResponse = beforeAcceptConnectionProposalResponse,
-        ) { negotiationResponse }
+        ) { acceptProposalResponse ?: negotiationResponse }
 
     override suspend fun rejectConnectionPartnerProposals(
         authorization: String,
