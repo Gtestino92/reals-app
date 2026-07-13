@@ -37,17 +37,62 @@ class SchedulingCoordinatorTest {
     private val coordinator = SchedulingCoordinator(schedulingDependencies(api))
 
     @Test
-    fun `load scheduling success updates state`() = runBlocking {
-        val state = coordinator.load(
-            session = TestDomain.session(),
-            connectionId = "connection-1",
-            matchId = "match-1",
-            partnerName = "Alex",
+    fun `initial scheduling refresh success updates state`() = runBlocking {
+        val state = coordinator.refresh(
+            current = baseState().copy(
+                loading = true,
+                negotiation = null,
+            ),
+            silent = false,
         )
 
         assertEquals(false, state.loading)
         assertEquals(NegotiationStatus.Pending, state.negotiation?.status)
         assertEquals(1, state.proposals.size)
+    }
+
+    @Test
+    fun `initial scheduling refresh negotiation failure does not request proposals`() = runBlocking {
+        api.negotiationResponse = backendErrorResponse(
+            statusCode = 404,
+            code = "SCHEDULING_NEGOTIATION_NOT_FOUND",
+        )
+
+        val state = coordinator.refresh(
+            current = baseState().copy(
+                loading = true,
+                negotiation = null,
+            ),
+            silent = false,
+        )
+
+        assertEquals(false, state.loading)
+        assertEquals(false, state.refreshing)
+        assertEquals(null, state.negotiation)
+        assertEquals(listOf("getConnectionNegotiation"), api.calls)
+        assertEquals(ApiError.Backend::class, state.error!!::class)
+    }
+
+    @Test
+    fun `initial scheduling refresh proposal failure preserves loaded negotiation`() = runBlocking {
+        api.proposalsResponse = backendErrorResponse(
+            statusCode = 500,
+            code = "SCHEDULING_PROPOSALS_UNAVAILABLE",
+        )
+
+        val state = coordinator.refresh(
+            current = baseState().copy(
+                loading = true,
+                negotiation = null,
+            ),
+            silent = false,
+        )
+
+        assertEquals(false, state.loading)
+        assertEquals(false, state.refreshing)
+        assertEquals(NegotiationStatus.Pending, state.negotiation?.status)
+        assertEquals(emptyList<Any>(), state.proposals)
+        assertEquals(ApiError.Backend::class, state.error!!::class)
     }
 
     @Test

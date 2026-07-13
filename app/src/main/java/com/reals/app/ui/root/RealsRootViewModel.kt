@@ -63,6 +63,7 @@ class RealsRootViewModel(
     private lateinit var sessionCoordinator: SessionCoordinator
     private var silentFirstChatRefreshJob: Job? = null
     private var silentSecondChatRefreshJob: Job? = null
+    private var schedulingOpenJob: Job? = null
     private var silentSchedulingRefreshJob: Job? = null
     private var legalRerouteJob: Job? = null
     private var pairBlockedRerouteJob: Job? = null
@@ -506,14 +507,30 @@ class RealsRootViewModel(
         val cleanConnectionId = connectionId.trim()
         val cleanMatchId = matchId.trim()
         if (cleanConnectionId.isBlank() || cleanMatchId.isBlank()) return
+        if (schedulingOpenJob?.isActive == true) return
 
-        viewModelScope.launch {
-            _uiState.value = schedulingCoordinator.load(
-                session = session,
-                connectionId = cleanConnectionId,
-                matchId = cleanMatchId,
-                partnerName = partnerName,
-            )
+        val pending = RealsRootUiState.Scheduling(
+            session = session,
+            connectionId = cleanConnectionId,
+            matchId = cleanMatchId,
+            partnerName = partnerName,
+            loading = true,
+        )
+        _uiState.value = pending
+
+        val job = viewModelScope.launch {
+            val result = schedulingCoordinator.refresh(pending, silent = false)
+            val latest = _uiState.value as? RealsRootUiState.Scheduling ?: return@launch
+            if (latest.connectionId != cleanConnectionId || latest.matchId != cleanMatchId) {
+                return@launch
+            }
+            _uiState.value = result
+        }
+        schedulingOpenJob = job
+        job.invokeOnCompletion {
+            if (schedulingOpenJob == job) {
+                schedulingOpenJob = null
+            }
         }
     }
 
@@ -609,6 +626,8 @@ class RealsRootViewModel(
 
     fun closeScheduling() {
         val current = _uiState.value as? RealsRootUiState.Scheduling ?: return
+        schedulingOpenJob?.cancel()
+        schedulingOpenJob = null
         viewModelScope.launch {
             homeCoordinator.returnHome(current.session)
         }

@@ -23,6 +23,7 @@ import com.reals.app.di.RealsRootDependencies
 import com.reals.app.di.SchedulingFeatureDependencies
 import com.reals.app.di.SessionFeatureDependencies
 import com.reals.app.di.VisualApprovalFeatureDependencies
+import com.reals.app.domain.model.NegotiationStatus
 import com.reals.app.domain.usecase.AcceptChatExitRequestUseCase
 import com.reals.app.domain.usecase.AcceptSchedulingProposalUseCase
 import com.reals.app.domain.usecase.ActivateProfileUseCase
@@ -522,6 +523,186 @@ class RealsRootViewModelPollingGuardTest {
         advanceUntilIdle()
 
         assertEquals(ready, viewModel.uiState.value)
+    }
+
+    @Test
+    fun `open scheduling publishes pending state before requests complete`() = runTest(dispatcher) {
+        val negotiationStarted = CompletableDeferred<Unit>()
+        val releaseNegotiation = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeGetConnectionNegotiationResponse = {
+                negotiationStarted.complete(Unit)
+                releaseNegotiation.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(RealsRootUiState.Ready(TestDomain.session()))
+
+        viewModel.openScheduling(" connection-1 ", " match-1 ", "Alex")
+
+        val pending = viewModel.uiState.value as RealsRootUiState.Scheduling
+        assertEquals(true, pending.loading)
+        assertEquals("connection-1", pending.connectionId)
+        assertEquals("match-1", pending.matchId)
+        assertEquals("Alex", pending.partnerName)
+        assertNull(pending.negotiation)
+        assertEquals(emptyList<Any>(), pending.proposals)
+        assertEquals(false, viewModel.uiState.value is RealsRootUiState.Ready)
+
+        runCurrent()
+        negotiationStarted.await()
+
+        releaseNegotiation.complete(Unit)
+        advanceUntilIdle()
+
+        val loaded = viewModel.uiState.value as RealsRootUiState.Scheduling
+        assertEquals(false, loaded.loading)
+        assertEquals("connection-1", loaded.connectionId)
+        assertEquals(NegotiationStatus.Pending, loaded.negotiation?.status)
+        assertEquals(1, loaded.proposals.size)
+    }
+
+    @Test
+    fun `duplicate open scheduling taps share the active open request`() = runTest(dispatcher) {
+        val negotiationStarted = CompletableDeferred<Unit>()
+        val releaseNegotiation = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeGetConnectionNegotiationResponse = {
+                negotiationStarted.complete(Unit)
+                releaseNegotiation.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(RealsRootUiState.Ready(TestDomain.session()))
+
+        viewModel.openScheduling("connection-1", "match-1", "Alex")
+        runCurrent()
+        negotiationStarted.await()
+
+        viewModel.openScheduling("connection-1", "match-1", "Alex")
+        runCurrent()
+
+        assertEquals(1, api.calls.count { it == "getConnectionNegotiation" })
+
+        releaseNegotiation.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(1, api.calls.count { it == "getConnectionProposals" })
+    }
+
+    @Test
+    fun `closing scheduling during initial load prevents late result from reopening it`() = runTest(dispatcher) {
+        val negotiationStarted = CompletableDeferred<Unit>()
+        val releaseNegotiation = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeGetConnectionNegotiationResponse = {
+                negotiationStarted.complete(Unit)
+                releaseNegotiation.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(RealsRootUiState.Ready(TestDomain.session()))
+
+        viewModel.openScheduling("connection-1", "match-1", "Alex")
+        runCurrent()
+        negotiationStarted.await()
+
+        viewModel.closeScheduling()
+        advanceUntilIdle()
+
+        assertEquals(false, viewModel.uiState.value is RealsRootUiState.Scheduling)
+
+        releaseNegotiation.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(false, viewModel.uiState.value is RealsRootUiState.Scheduling)
+    }
+
+    @Test
+    fun `initial scheduling result cannot overwrite another scheduling connection`() = runTest(dispatcher) {
+        val negotiationStarted = CompletableDeferred<Unit>()
+        val releaseNegotiation = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeGetConnectionNegotiationResponse = {
+                negotiationStarted.complete(Unit)
+                releaseNegotiation.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(RealsRootUiState.Ready(TestDomain.session()))
+
+        viewModel.openScheduling("connection-1", "match-1", "Alex")
+        runCurrent()
+        negotiationStarted.await()
+
+        val otherConnection = schedulingState(connectionId = "connection-2", matchId = "match-2")
+        viewModel.setState(otherConnection)
+
+        releaseNegotiation.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(otherConnection, viewModel.uiState.value)
+    }
+
+    @Test
+    fun `initial scheduling negotiation failure remains on scheduling screen`() = runTest(dispatcher) {
+        val api = FakeRealsApi().apply {
+            negotiationResponse = backendErrorResponse(
+                statusCode = 404,
+                code = "SCHEDULING_NEGOTIATION_NOT_FOUND",
+            )
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(RealsRootUiState.Ready(TestDomain.session()))
+
+        viewModel.openScheduling("connection-1", "match-1", "Alex")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Scheduling
+        assertEquals(false, state.loading)
+        assertNull(state.negotiation)
+        assertEquals(ApiError.Backend::class, state.error!!::class)
+        assertEquals(0, api.calls.count { it == "getConnectionProposals" })
+    }
+
+    @Test
+    fun `initial scheduling proposal failure preserves loaded negotiation`() = runTest(dispatcher) {
+        val api = FakeRealsApi().apply {
+            proposalsResponse = backendErrorResponse(
+                statusCode = 500,
+                code = "SCHEDULING_PROPOSALS_UNAVAILABLE",
+            )
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(RealsRootUiState.Ready(TestDomain.session()))
+
+        viewModel.openScheduling("connection-1", "match-1", "Alex")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Scheduling
+        assertEquals(false, state.loading)
+        assertEquals(NegotiationStatus.Pending, state.negotiation?.status)
+        assertEquals(emptyList<Any>(), state.proposals)
+        assertEquals(ApiError.Backend::class, state.error!!::class)
+    }
+
+    @Test
+    fun `completed scheduling open job allows a later open`() = runTest(dispatcher) {
+        val api = FakeRealsApi()
+        val viewModel = viewModel(api)
+        viewModel.setState(RealsRootUiState.Ready(TestDomain.session()))
+
+        viewModel.openScheduling("connection-1", "match-1", "Alex")
+        advanceUntilIdle()
+
+        viewModel.openScheduling("connection-2", "match-2", "Blake")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Scheduling
+        assertEquals("connection-2", state.connectionId)
+        assertEquals("match-2", state.matchId)
+        assertEquals("Blake", state.partnerName)
+        assertEquals(2, api.calls.count { it == "getConnectionNegotiation" })
     }
 
     private fun viewModel(api: FakeRealsApi): RealsRootViewModel =

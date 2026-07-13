@@ -4,28 +4,11 @@ import com.reals.app.core.network.ApiResult
 import com.reals.app.core.network.ApiError
 import com.reals.app.di.SchedulingFeatureDependencies
 import com.reals.app.domain.model.NegotiationStatus
-import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.SchedulingNegotiation
 
 internal class SchedulingCoordinator(
     private val dependencies: SchedulingFeatureDependencies,
 ) {
-    suspend fun load(
-        session: ProvisionedSession,
-        connectionId: String,
-        matchId: String,
-        partnerName: String?,
-    ): RealsRootUiState.Scheduling {
-        val loading = RealsRootUiState.Scheduling(
-            session = session,
-            connectionId = connectionId,
-            matchId = matchId,
-            partnerName = partnerName,
-            loading = true,
-        )
-        return refresh(loading, silent = false)
-    }
-
     suspend fun refresh(
         current: RealsRootUiState.Scheduling,
         silent: Boolean,
