@@ -36,7 +36,7 @@ class PushTokenRegistrationService(
                 }
             }
 
-            is ApiResult.Failure -> Log.w(TAG, "FCM token registration failed: ${result.error}")
+            is ApiResult.Failure -> Log.w(TAG, "FCM token registration failed.")
         }
     }
 

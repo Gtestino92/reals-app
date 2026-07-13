@@ -36,7 +36,12 @@ import com.reals.app.testutil.TestDtos
 import com.reals.app.testutil.backendErrorResponse
 import com.reals.app.testutil.testApiExecutor
 import com.reals.app.testutil.testJson
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -46,6 +51,51 @@ import retrofit2.Response
 class FirstChatCoordinatorTest {
     private val api = FakeRealsApi()
     private val coordinator = FirstChatCoordinator(firstChatDependencies(api))
+
+    @Test
+    fun `load success returns match chat messages and exit requests`() = runBlocking {
+        api.chatMessagesResponse = Response.success(
+            TestDtos.chatMessagesArrayPayload(listOf(TestDtos.chatMessage("message-load")))
+        )
+        api.exitRequestsResponse = Response.success(listOf(TestDtos.exitRequest(status = "PENDING")))
+
+        val result = coordinator.load(
+            session = TestDomain.session(),
+            matchId = "match-1",
+            chatId = null,
+        )
+
+        assertTrue(result is FirstChatLoadResult.Show)
+        val state = (result as FirstChatLoadResult.Show).state
+        assertEquals(false, state.loading)
+        assertEquals("match-1", state.match?.id)
+        assertEquals("chat-1", state.chat?.id)
+        assertEquals("message-load", state.messages.single().id)
+        assertEquals("exit-1", state.exitRequests.single().id)
+        assertEquals(null, state.error)
+    }
+
+    @Test
+    fun `load match failure preserves error state`() = runBlocking {
+        api.matchResponse = backendErrorResponse(
+            statusCode = 500,
+            code = "INTERNAL_ERROR",
+        )
+
+        val result = coordinator.load(
+            session = TestDomain.session(),
+            matchId = "match-1",
+            chatId = null,
+        )
+
+        assertTrue(result is FirstChatLoadResult.Show)
+        val state = (result as FirstChatLoadResult.Show).state
+        val error = state.error as ApiError.Backend
+        assertEquals(false, state.loading)
+        assertEquals(null, state.match)
+        assertEquals(null, state.chat)
+        assertEquals(BackendErrorCode.Unknown, error.backendErrorCode)
+    }
 
     @Test
     fun `load routes home when match is closed`() = runBlocking {
@@ -58,6 +108,151 @@ class FirstChatCoordinatorTest {
         )
 
         assertTrue(result is FirstChatLoadResult.RouteHome)
+    }
+
+    @Test
+    fun `load chat failure preserves loaded match and error state`() = runBlocking {
+        api.chatResponse = backendErrorResponse(
+            statusCode = 404,
+            code = "CHAT_NOT_FOUND",
+        )
+
+        val result = coordinator.load(
+            session = TestDomain.session(),
+            matchId = "match-1",
+            chatId = null,
+        )
+
+        assertTrue(result is FirstChatLoadResult.Show)
+        val state = (result as FirstChatLoadResult.Show).state
+        val error = state.error as ApiError.Backend
+        assertEquals(false, state.loading)
+        assertEquals("match-1", state.match?.id)
+        assertEquals(null, state.chat)
+        assertEquals(BackendErrorCode.ChatNotFound, error.backendErrorCode)
+    }
+
+    @Test
+    fun `load uses messages failure before exit requests failure`() = runBlocking {
+        api.chatMessagesResponse = backendErrorResponse(
+            statusCode = 400,
+            code = "CHAT_MESSAGE_INVALID",
+        )
+        api.exitRequestsResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "ACTIVE_PENALTY",
+        )
+
+        val result = coordinator.load(
+            session = TestDomain.session(),
+            matchId = "match-1",
+            chatId = null,
+        )
+
+        assertTrue(result is FirstChatLoadResult.Show)
+        val state = (result as FirstChatLoadResult.Show).state
+        val error = state.error as ApiError.Backend
+        assertEquals(false, state.loading)
+        assertEquals(BackendErrorCode.ChatMessageInvalid, error.backendErrorCode)
+        assertTrue(state.messages.isEmpty())
+        assertTrue(state.exitRequests.isEmpty())
+    }
+
+    @Test
+    fun `load uses exit requests failure when messages succeed`() = runBlocking {
+        api.chatMessagesResponse = Response.success(
+            TestDtos.chatMessagesArrayPayload(listOf(TestDtos.chatMessage("message-load")))
+        )
+        api.exitRequestsResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "ACTIVE_PENALTY",
+        )
+
+        val result = coordinator.load(
+            session = TestDomain.session(),
+            matchId = "match-1",
+            chatId = null,
+        )
+
+        assertTrue(result is FirstChatLoadResult.Show)
+        val state = (result as FirstChatLoadResult.Show).state
+        val error = state.error as ApiError.Backend
+        assertEquals(false, state.loading)
+        assertEquals(BackendErrorCode.ActivePenalty, error.backendErrorCode)
+        assertEquals("message-load", state.messages.single().id)
+        assertTrue(state.exitRequests.isEmpty())
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `load starts match and first chat requests concurrently`() = runTest {
+        val matchStarted = CompletableDeferred<Unit>()
+        val chatStarted = CompletableDeferred<Unit>()
+        val releaseMatch = CompletableDeferred<Unit>()
+        val releaseChat = CompletableDeferred<Unit>()
+        api.beforeGetMatchResponse = {
+            matchStarted.complete(Unit)
+            releaseMatch.await()
+        }
+        api.beforeGetFirstChatForMatchResponse = {
+            chatStarted.complete(Unit)
+            releaseChat.await()
+        }
+
+        val load = async {
+            coordinator.load(
+                session = TestDomain.session(),
+                matchId = "match-1",
+                chatId = null,
+            )
+        }
+
+        try {
+            matchStarted.await()
+            runCurrent()
+            assertTrue(chatStarted.isCompleted)
+        } finally {
+            releaseMatch.complete(Unit)
+            releaseChat.complete(Unit)
+        }
+
+        assertTrue(load.await() is FirstChatLoadResult.Show)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `load starts messages and exit requests concurrently`() = runTest {
+        val messagesStarted = CompletableDeferred<Unit>()
+        val exitRequestsStarted = CompletableDeferred<Unit>()
+        val releaseMessages = CompletableDeferred<Unit>()
+        val releaseExitRequests = CompletableDeferred<Unit>()
+        api.beforeGetChatMessagesResponse = {
+            messagesStarted.complete(Unit)
+            releaseMessages.await()
+        }
+        api.beforeGetChatExitRequestsResponse = {
+            exitRequestsStarted.complete(Unit)
+            releaseExitRequests.await()
+        }
+
+        val load = async {
+            coordinator.load(
+                session = TestDomain.session(),
+                matchId = "match-1",
+                chatId = null,
+            )
+        }
+
+        try {
+            messagesStarted.await()
+            runCurrent()
+            assertTrue(exitRequestsStarted.isCompleted)
+        } finally {
+            releaseMessages.complete(Unit)
+            releaseExitRequests.complete(Unit)
+        }
+
+        assertTrue(load.await() is FirstChatLoadResult.Show)
     }
 
     @Test

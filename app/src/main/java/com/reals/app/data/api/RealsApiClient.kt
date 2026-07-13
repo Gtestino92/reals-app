@@ -13,9 +13,13 @@ import retrofit2.Retrofit
 object RealsApiClient {
     @OptIn(ExperimentalSerializationApi::class)
     fun create(baseUrl: String, json: Json): RealsApi {
+        val shouldLogNetwork = BuildConfig.DEBUG && BuildConfig.REALS_ENVIRONMENT != "prod"
         val logging = HttpLoggingInterceptor().apply {
             redactHeader("Authorization")
-            level = if (BuildConfig.DEBUG) {
+            redactHeader("Cookie")
+            redactHeader("Set-Cookie")
+            redactHeader("X-Firebase-AppCheck")
+            level = if (shouldLogNetwork) {
                 HttpLoggingInterceptor.Level.BASIC
             } else {
                 HttpLoggingInterceptor.Level.NONE
