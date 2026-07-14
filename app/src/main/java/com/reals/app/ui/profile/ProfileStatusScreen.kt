@@ -2,6 +2,7 @@ package com.reals.app.ui.profile
 
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -65,6 +66,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
+import com.reals.app.core.media.deleteStaleProfilePhotoCropFiles
+import com.reals.app.core.media.profilePhotoCropCacheDirectory
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.BackendErrorCode
 import com.reals.app.core.network.ErrorContext
@@ -84,6 +87,7 @@ import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.UpdateProfileInput
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
@@ -978,41 +982,55 @@ private fun PhotoManagerActions(
     onResendEmailVerification: () -> Unit,
     onCheckEmailVerification: () -> Unit,
 ) {
+    val context = LocalContext.current
     var localError by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
-    var replacePhotoId by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
-    var replacePosition by rememberSaveable(profile.id) { mutableStateOf<Int?>(null) }
-    var pendingAddedPosition by rememberSaveable(profile.id) { mutableStateOf<Int?>(null) }
-    val addFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        val position = pendingAddedPosition
-        if (uri != null && position != null) {
+    var pendingTargetKind by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
+    var pendingTargetPosition by rememberSaveable(profile.id) { mutableStateOf<Int?>(null) }
+    var pendingTargetPhotoId by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
+    var cropSourceUriString by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
+    val pendingTarget = remember(pendingTargetKind, pendingTargetPosition, pendingTargetPhotoId) {
+        profilePhotoSelectionTarget(pendingTargetKind, pendingTargetPosition, pendingTargetPhotoId)
+    }
+    val cropRequest = remember(cropSourceUriString, pendingTarget) {
+        val sourceUri = cropSourceUriString?.let(Uri::parse)
+        val target = pendingTarget
+        if (sourceUri != null && target != null) ProfilePhotoCropRequest(sourceUri, target) else null
+    }
+    val imagePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null && pendingTarget != null) {
             localError = null
-            onAddPhotoFile(position, uri)
+            cropSourceUriString = uri.toString()
         } else {
-            pendingAddedPosition = null
+            pendingTargetKind = null
+            pendingTargetPosition = null
+            pendingTargetPhotoId = null
         }
     }
-    val replaceFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        val photoId = replacePhotoId
-        val position = replacePosition
-        replacePhotoId = null
-        replacePosition = null
-        if (uri != null && photoId != null && position != null) {
-            localError = null
-            onReplacePhotoFile(photoId, position, uri)
-        }
+    LaunchedEffect(Unit) {
+        deleteStaleProfilePhotoCropFiles(
+            cacheDir = profilePhotoCropCacheDirectory(context),
+            nowMillis = System.currentTimeMillis(),
+            maxAgeMillis = 24.hours.inWholeMilliseconds,
+        )
     }
     LaunchedEffect(photoActionLoading, photoActionMessage) {
-        if (!photoActionLoading && photoActionMessage != null && pendingAddedPosition != null) {
-            pendingAddedPosition = null
+        if (!photoActionLoading && photoActionMessage != null && pendingTarget != null) {
+            pendingTargetKind = null
+            pendingTargetPosition = null
+            pendingTargetPhotoId = null
+            cropSourceUriString = null
         }
         if (!photoActionLoading && photoActionError != null) {
-            pendingAddedPosition = null
+            pendingTargetKind = null
+            pendingTargetPosition = null
+            pendingTargetPhotoId = null
+            cropSourceUriString = null
         }
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
-                text = "Subi, reemplaza o borra fotos. Para reordenarlas, mantené presionada una foto y arrastrala a otro lugar.",
+                text = "Subi, reemplaza o borra fotos. Las miniaturas se muestran cuadradas; la foto se publica en formato vertical 4:5. Para reordenarlas, mantené presionada una foto y arrastrala.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -1035,18 +1053,47 @@ private fun PhotoManagerActions(
                 busy = busy,
                 onPickNewFile = { position ->
                     localError = null
-                    pendingAddedPosition = position
-                    addFileLauncher.launch("image/*")
+                    pendingTargetKind = ProfilePhotoAddTargetKind
+                    pendingTargetPosition = position
+                    pendingTargetPhotoId = null
+                    cropSourceUriString = null
+                    imagePickerLauncher.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                    )
                 },
                 onPickReplacementFile = { photoId, position ->
                     localError = null
-                    replacePhotoId = photoId
-                    replacePosition = position
-                    replaceFileLauncher.launch("image/*")
+                    pendingTargetKind = ProfilePhotoReplaceTargetKind
+                    pendingTargetPosition = position
+                    pendingTargetPhotoId = photoId
+                    cropSourceUriString = null
+                    imagePickerLauncher.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                    )
                 },
                 onDeletePhoto = onDeletePhoto,
                 onMovePhoto = onMovePhoto,
             )
+            cropRequest?.let { request ->
+                ProfilePhotoCropDialog(
+                    request = request,
+                    onCancel = {
+                        pendingTargetKind = null
+                        pendingTargetPosition = null
+                        pendingTargetPhotoId = null
+                        cropSourceUriString = null
+                    },
+                    onCropped = { croppedUri ->
+                        dispatchCroppedProfilePhoto(
+                            target = request.target,
+                            croppedUri = croppedUri,
+                            onAddPhotoFile = onAddPhotoFile,
+                            onReplacePhotoFile = onReplacePhotoFile,
+                        )
+                        cropSourceUriString = null
+                    },
+                )
+            }
             localError?.let { ErrorFeedback("Revisa las fotos", it) }
             photoActionError?.let { ApiErrorFeedbackCard(it, ErrorContext.PhotoUpload) }
             activationError?.let { ApiErrorFeedbackCard(it, ErrorContext.ProfileActivation) }
@@ -1559,6 +1606,28 @@ internal val ProfilePhotoGridPositions: IntRange = 1..9
 internal fun List<ProfilePhoto>.profilePhotosByGridPosition(): Map<Int, ProfilePhoto> =
     filter { it.position in ProfilePhotoGridPositions }
         .associateBy { it.position }
+
+private const val ProfilePhotoAddTargetKind = "add"
+private const val ProfilePhotoReplaceTargetKind = "replace"
+
+internal fun profilePhotoSelectionTarget(
+    kind: String?,
+    position: Int?,
+    photoId: String?,
+): ProfilePhotoSelectionTarget? =
+    when (kind) {
+        ProfilePhotoAddTargetKind ->
+            position?.let(ProfilePhotoSelectionTarget::Add)
+
+        ProfilePhotoReplaceTargetKind ->
+            if (position != null && !photoId.isNullOrBlank()) {
+                ProfilePhotoSelectionTarget.Replace(photoId = photoId, position = position)
+            } else {
+                null
+            }
+
+        else -> null
+    }
 
 private data class PhotoGridDragState(
     val photoId: String,
