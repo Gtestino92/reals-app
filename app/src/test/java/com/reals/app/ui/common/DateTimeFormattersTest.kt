@@ -42,4 +42,94 @@ class DateTimeFormattersTest {
     fun formatBackendDateUsesConvertedLocalDate() {
         assertEquals("17/06/2026", formatBackendDate("2026-06-18T01:30:00Z", buenosAires, locale))
     }
+
+    @Test
+    fun `contextual date time formats same local date as today`() {
+        val nowMillis = java.time.Instant.parse("2026-07-15T12:00:00Z").toEpochMilli()
+
+        assertEquals(
+            "Hoy, 20:30",
+            formatBackendContextualDateTime(
+                "2026-07-15T20:30:00-03:00",
+                nowMillis,
+                buenosAires,
+                locale,
+            ),
+        )
+    }
+
+    @Test
+    fun `contextual date time formats next local date as tomorrow`() {
+        val nowMillis = java.time.Instant.parse("2026-07-15T12:00:00Z").toEpochMilli()
+
+        assertEquals(
+            "Mañana, 18:00",
+            formatBackendContextualDateTime(
+                "2026-07-16T18:00:00-03:00",
+                nowMillis,
+                buenosAires,
+                locale,
+            ),
+        )
+    }
+
+    @Test
+    fun `contextual date time formats later date in same year`() {
+        val nowMillis = java.time.Instant.parse("2026-07-15T12:00:00Z").toEpochMilli()
+
+        assertEquals(
+            "Viernes 17 de julio, 21:00",
+            formatBackendContextualDateTime(
+                "2026-07-17T21:00:00-03:00",
+                nowMillis,
+                buenosAires,
+                locale,
+            ),
+        )
+    }
+
+    @Test
+    fun `contextual date time formats another year`() {
+        val nowMillis = java.time.Instant.parse("2026-07-15T12:00:00Z").toEpochMilli()
+
+        assertEquals(
+            "Domingo 3 de enero de 2027, 21:00",
+            formatBackendContextualDateTime(
+                "2027-01-03T21:00:00-03:00",
+                nowMillis,
+                buenosAires,
+                locale,
+            ),
+        )
+    }
+
+    @Test
+    fun `contextual date time compares local dates after timezone conversion`() {
+        val nowMillis = java.time.Instant.parse("2026-07-15T23:30:00Z").toEpochMilli()
+
+        assertEquals(
+            "Hoy, 21:30",
+            formatBackendContextualDateTime(
+                "2026-07-16T00:30:00Z",
+                nowMillis,
+                buenosAires,
+                locale,
+            ),
+        )
+    }
+
+    @Test
+    fun `contextual date time returns dash for null or blank`() {
+        val nowMillis = java.time.Instant.parse("2026-07-15T12:00:00Z").toEpochMilli()
+
+        assertEquals("-", formatBackendContextualDateTime(null, nowMillis, buenosAires, locale))
+        assertEquals("-", formatBackendContextualDateTime(" ", nowMillis, buenosAires, locale))
+    }
+
+    @Test
+    fun `contextual date time falls back safely for invalid input`() {
+        val nowMillis = java.time.Instant.parse("2026-07-15T12:00:00Z").toEpochMilli()
+
+        assertEquals("not-a-date", formatBackendContextualDateTime("not-a-date", nowMillis, buenosAires, locale))
+    }
 }

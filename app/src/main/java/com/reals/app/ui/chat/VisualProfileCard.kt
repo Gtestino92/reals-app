@@ -18,17 +18,22 @@ import com.reals.app.core.security.TextSafety
 import com.reals.app.domain.model.VisualProfile
 
 @Composable
-fun VisualProfileCard(profile: VisualProfile) {
+fun VisualProfileCard(
+    profile: VisualProfile,
+    showHeader: Boolean = true,
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
         Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(
-                text = TextSafety.safeDisplay(profile.displayName, maxLength = 100),
-                style = MaterialTheme.typography.titleLarge,
-            )
-            Text("Edad: ${profile.age}")
+            if (showHeader) {
+                Text(
+                    text = TextSafety.safeDisplay(profile.displayName, maxLength = 100),
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                Text("Edad: ${profile.age}")
+            }
             profile.bio?.takeIf { it.isNotBlank() }?.let {
                 Text(TextSafety.safeDisplay(it, maxLength = 1_000))
             }
@@ -41,7 +46,6 @@ fun VisualProfileCard(profile: VisualProfile) {
                             modifier = Modifier.padding(12.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Text("Foto ${photo.position}")
                             AsyncImage(
                                 model = photo.url,
                                 contentDescription = "Foto ${photo.position}",

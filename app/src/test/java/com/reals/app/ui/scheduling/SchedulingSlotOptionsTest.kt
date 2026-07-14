@@ -232,4 +232,27 @@ class SchedulingSlotOptionsTest {
 
         assertTrue(labels[2].contains("20"))
     }
+
+    @Test
+    fun `centered wheel index keeps middle selections centered`() {
+        assertEquals(4, centeredWheelFirstVisibleIndex(selectedIndex = 5, optionCount = 24))
+    }
+
+    @Test
+    fun `centered wheel index keeps first selections at top edge`() {
+        assertEquals(0, centeredWheelFirstVisibleIndex(selectedIndex = 0, optionCount = 24))
+        assertEquals(0, centeredWheelFirstVisibleIndex(selectedIndex = 1, optionCount = 24))
+    }
+
+    @Test
+    fun `centered wheel index keeps last selections at bottom edge`() {
+        assertEquals(21, centeredWheelFirstVisibleIndex(selectedIndex = 23, optionCount = 24))
+    }
+
+    @Test
+    fun `centered wheel index handles invalid or short lists safely`() {
+        assertEquals(0, centeredWheelFirstVisibleIndex(selectedIndex = -1, optionCount = 24))
+        assertEquals(0, centeredWheelFirstVisibleIndex(selectedIndex = 0, optionCount = 0))
+        assertEquals(0, centeredWheelFirstVisibleIndex(selectedIndex = 1, optionCount = 2))
+    }
 }

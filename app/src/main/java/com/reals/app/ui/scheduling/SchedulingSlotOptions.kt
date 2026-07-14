@@ -48,6 +48,11 @@ internal data class SchedulingReceivedProposalReviewState(
     val resolutionByRejectionAvailable: Boolean get() = items.isNotEmpty()
 }
 
+internal data class NumberedSchedulingProposal<T>(
+    val number: Int,
+    val item: T,
+)
+
 internal const val EXPIRED_SELECTED_SLOT_MESSAGE =
     "Uno o mas horarios elegidos ya pasaron. Quitalos o elegi otro horario."
 
@@ -82,6 +87,40 @@ internal fun schedulingReceivedProposalReviewState(
             )
         }
     return SchedulingReceivedProposalReviewState(items)
+}
+
+internal fun schedulingPendingProposalPresentationItems(
+    proposals: List<SchedulingProposal>,
+): List<NumberedSchedulingProposal<SchedulingProposal>> =
+    proposals
+        .filter { it.status == ProposalStatus.Pending }
+        .mapIndexed { index, proposal ->
+            NumberedSchedulingProposal(
+                number = index + 1,
+                item = proposal,
+            )
+        }
+
+internal fun schedulingReceivedProposalPresentationItems(
+    reviewState: SchedulingReceivedProposalReviewState,
+): List<NumberedSchedulingProposal<SchedulingReceivedProposalReviewItem>> =
+    reviewState.items.mapIndexed { index, item ->
+        NumberedSchedulingProposal(
+            number = index + 1,
+            item = item,
+        )
+    }
+
+internal fun centeredWheelFirstVisibleIndex(
+    selectedIndex: Int,
+    optionCount: Int,
+    visibleItemCount: Int = 3,
+): Int {
+    if (selectedIndex < 0 || optionCount <= 0) return 0
+    val safeVisibleItemCount = visibleItemCount.coerceAtLeast(1)
+    val maxFirstVisibleIndex = (optionCount - safeVisibleItemCount).coerceAtLeast(0)
+    return (selectedIndex - safeVisibleItemCount / 2)
+        .coerceIn(0, maxFirstVisibleIndex)
 }
 
 internal fun schedulingDayOptions(

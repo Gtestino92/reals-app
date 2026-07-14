@@ -1,6 +1,7 @@
 package com.reals.app.ui.scheduling
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -42,18 +43,21 @@ import com.reals.app.core.network.ErrorContext
 import com.reals.app.core.network.backendErrorCode
 import com.reals.app.core.security.TextSafety
 import com.reals.app.domain.model.NegotiationStatus
-import com.reals.app.domain.model.ProposalStatus
 import com.reals.app.domain.model.SchedulingNegotiation
 import com.reals.app.domain.model.SchedulingProposal
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
 import com.reals.app.ui.common.ManualBlockConfirmationDialog
-import com.reals.app.ui.common.formatBackendDateTime
+import com.reals.app.ui.common.ManualBlockOverflowMenu
+import com.reals.app.ui.common.formatBackendContextualDateTime
 import java.time.Instant
 import java.time.ZoneId
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
+
+private val PickerControlSlotHeight = 48.dp
+private val PickerOptionSlotHeight = 156.dp
 
 @Composable
 fun SchedulingScreen(
@@ -87,8 +91,6 @@ fun SchedulingScreen(
         currentUserId = currentUserId,
     )
     val stage = roundState.stage
-    val myProposals = roundState.myProposals
-    val partnerProposals = roundState.partnerProposals
     val myPendingProposals = roundState.myPendingProposals
     val partnerPendingProposals = roundState.partnerPendingProposals
     var nowMillis by rememberSaveable(connectionId) { mutableStateOf(System.currentTimeMillis()) }
@@ -136,39 +138,59 @@ fun SchedulingScreen(
             .padding(24.dp),
         verticalArrangement = Arrangement.Center,
     ) {
-        Text(
-            text = "Coordinar horarios",
-            style = MaterialTheme.typography.headlineLarge,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        Text(
-            text = partnerDisplayName?.let { "Con $it" } ?: "Con la otra persona",
-            modifier = Modifier.padding(top = 8.dp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-
-        message?.let {
-            FeedbackCard(
-                title = "Estado actualizado",
-                message = it,
-                tone = FeedbackTone.Success,
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Coordinar horarios",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                ManualBlockOverflowMenu(
+                    enabled = !interactionBusy,
+                    onRequestBlock = {
+                        onClearManualBlockError()
+                        showingManualBlockDialog = true
+                    },
+                )
+            }
+            Text(
+                text = partnerDisplayName?.let { "Con $it" } ?: "Con la otra persona",
+                modifier = Modifier.padding(top = 8.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(modifier = Modifier.height(12.dp))
         }
+        if (negotiation != null && stage != SchedulingStage.Loading) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Ronda ${negotiation.roundNumber}",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (refreshing) {
+                    Text(
+                        text = "Actualizando...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
 
         errorPlacement.topLevelError?.let {
             ApiErrorFeedbackCard(it, ErrorContext.Scheduling)
             Spacer(modifier = Modifier.height(12.dp))
         }
 
-        StatusCard(
-            loading = loading,
-            refreshing = refreshing,
-            negotiation = negotiation,
-            stage = stage,
-        )
-        Spacer(modifier = Modifier.height(12.dp))
         if (lifecycle.expired) {
             FeedbackCard(
                 title = "Estado",
@@ -199,12 +221,12 @@ fun SchedulingScreen(
             )
 
             SchedulingStage.WaitingForPartnerProposals -> WaitingPartnerCard(
-                myProposals = myProposals,
                 myPendingProposals = myPendingProposals,
+                nowMillis = nowMillis,
             )
             SchedulingStage.ReviewPartnerProposals -> {
                 ReviewProposalsCard(
-                    myProposals = myProposals,
+                    myPendingProposals = myPendingProposals,
                     partnerPendingProposals = partnerPendingProposals,
                     submitting = submitting,
                     actionsDisabled = actionsDisabled,
@@ -216,59 +238,34 @@ fun SchedulingScreen(
                 )
             }
 
-            SchedulingStage.Scheduled -> ScheduledCard(negotiation?.confirmedDateTime)
+            SchedulingStage.Scheduled -> ScheduledCard(negotiation?.confirmedDateTime, nowMillis)
             SchedulingStage.Failed -> FailedCard()
             SchedulingStage.Unknown -> UnknownCard()
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
-        if (stage != SchedulingStage.WaitingForPartnerProposals &&
-            stage != SchedulingStage.ReviewPartnerProposals
-        ) {
-            ProposalListCard(
-                title = "Tus horarios",
-                proposals = myProposals,
-                emptyMessage = "Todavia no enviaste horarios en esta ronda.",
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            ProposalListCard(
-                title = "Horarios de la otra persona",
-                proposals = partnerProposals,
-                emptyMessage = "Todavia no hay horarios de la otra persona en esta ronda.",
-            )
-        }
-
-        Spacer(modifier = Modifier.height(18.dp))
-        OutlinedButton(
-            onClick = onRefresh,
-            enabled = !interactionBusy,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(if (refreshing) "Actualizando..." else "Actualizar")
-        }
-        OutlinedButton(
-            onClick = onOpenPartnerProfile,
-            enabled = !interactionBusy,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("Ver perfil")
-        }
-        OutlinedButton(
-            onClick = {
-                onClearManualBlockError()
-                showingManualBlockDialog = true
-            },
-            enabled = !interactionBusy,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("Bloquear a esta persona")
-        }
-        Button(
-            onClick = onBackHome,
-            enabled = !interactionBusy,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(if (submitting) submittingLabel ?: "Procesando..." else "Volver a Home")
+        if (stage != SchedulingStage.Loading) {
+            Spacer(modifier = Modifier.height(18.dp))
+            OutlinedButton(
+                onClick = onRefresh,
+                enabled = !interactionBusy,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (refreshing) "Actualizando..." else "Actualizar")
+            }
+            OutlinedButton(
+                onClick = onOpenPartnerProfile,
+                enabled = !interactionBusy,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Ver perfil")
+            }
+            Button(
+                onClick = onBackHome,
+                enabled = !interactionBusy,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (submitting) submittingLabel ?: "Procesando..." else "Volver a Home")
+            }
         }
     }
 
@@ -284,38 +281,6 @@ fun SchedulingScreen(
                 }
             },
         )
-    }
-}
-
-@Composable
-private fun StatusCard(
-    loading: Boolean,
-    refreshing: Boolean,
-    negotiation: SchedulingNegotiation?,
-    stage: SchedulingStage,
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-    ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Ronda actual", style = MaterialTheme.typography.titleMedium)
-            Text(
-                text = if (loading) {
-                    "Cargando..."
-                } else {
-                    "Estado: ${negotiation?.status?.userLabel() ?: stage.userLabel()}"
-                },
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = "Numero de ronda: ${negotiation?.roundNumber ?: "-"}",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (refreshing) {
-                Text("Actualizando...", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
     }
 }
 
@@ -365,7 +330,6 @@ private fun ProposalSelectorCard(
     }
     var selectedHour by rememberSaveable { mutableStateOf(initialSelection?.hour ?: 8) }
     var selectedMinute by rememberSaveable { mutableStateOf(initialSelection?.minute ?: 0) }
-    var hourScrollKey by rememberSaveable { mutableStateOf(0) }
     LaunchedEffect(
         nowMillis,
         zoneId.id,
@@ -384,13 +348,9 @@ private fun ProposalSelectorCard(
             selectedHour != corrected.hour ||
             selectedMinute != corrected.minute
         ) {
-            val hourChanged = selectedDate != corrected.date.toString() || selectedHour != corrected.hour
             selectedDate = corrected.date.toString()
             selectedHour = corrected.hour
             selectedMinute = corrected.minute
-            if (hourChanged) {
-                hourScrollKey += 1
-            }
             validationError = null
         }
     }
@@ -442,17 +402,16 @@ private fun ProposalSelectorCard(
                 optionLabel = { it.label },
                 isOptionEnabled = { day -> availableSchedulingHours(day.date, now, zoneId).isNotEmpty() },
                 onSelected = { day ->
+                    val currentHour = effectiveHour
+                    val currentMinute = effectiveMinute
                     selectedDate = day.date.toString()
                     val nextHours = availableSchedulingHours(day.date, now, zoneId)
-                    val nextHour = selectedHour.takeIf { it in nextHours }
+                    val nextHour = currentHour.takeIf { it in nextHours }
                         ?: nextHours.firstOrNull()
                     if (nextHour != null) {
-                        if (nextHour != selectedHour) {
-                            selectedHour = nextHour
-                            hourScrollKey += 1
-                        }
+                        selectedHour = nextHour
                         val nextMinutes = availableSchedulingMinutes(day.date, nextHour, now, zoneId)
-                        selectedMinute = selectedMinute.takeIf { it in nextMinutes }
+                        selectedMinute = currentMinute.takeIf { it in nextMinutes }
                             ?: nextMinutes.firstOrNull()
                             ?: selectedMinute
                     }
@@ -473,7 +432,6 @@ private fun ProposalSelectorCard(
                     selected = selectedHour.takeIf { it in availableHours },
                     enabled = !submitting && !actionsDisabled,
                     optionLabel = { it.toString().padStart(2, '0') },
-                    scrollKey = hourScrollKey,
                     onSelected = { hour ->
                         selectedHour = hour
                         val nextMinutes = availableSchedulingMinutes(
@@ -523,22 +481,21 @@ private fun ProposalSelectorCard(
                 Text("Agregar opcion")
             }
 
-            Text("Opciones elegidas por prioridad", style = MaterialTheme.typography.titleSmall)
+            Text("Opciones elegidas", style = MaterialTheme.typography.titleSmall)
             if (selectedLabels.isEmpty()) {
                 Text(
                     text = "Todavia no agregaste horarios.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
-                selectedLabels.forEach { value ->
-                    val priority = selectedLabels.indexOf(value) + 1
+                selectedLabels.forEachIndexed { index, value ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "Prioridad $priority: ${formatBackendDateTime(value)}",
+                            text = "${index + 1}. ${formatBackendContextualDateTime(value, nowMillis)}",
                             modifier = Modifier.weight(1f),
                         )
                         OutlinedButton(
@@ -653,11 +610,14 @@ private fun <T> WheelPickerColumn(
     optionLabel: (T) -> String,
     onSelected: (T) -> Unit,
     modifier: Modifier = Modifier,
-    pickerHeight: Dp = 156.dp,
-    scrollKey: Any? = Unit,
+    pickerHeight: Dp = PickerOptionSlotHeight,
     isOptionEnabled: (T) -> Boolean = { true },
 ) {
     val selectedIndex = options.indexOf(selected)
+    val targetFirstVisibleIndex = centeredWheelFirstVisibleIndex(
+        selectedIndex = selectedIndex,
+        optionCount = options.size,
+    )
     val previousOption = options
         .take(selectedIndex.coerceAtLeast(0))
         .lastOrNull(isOptionEnabled)
@@ -671,19 +631,26 @@ private fun <T> WheelPickerColumn(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(title, style = MaterialTheme.typography.titleSmall)
-        TextButton(
-            onClick = { previousOption?.let(onSelected) },
-            enabled = enabled && previousOption != null,
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(PickerControlSlotHeight),
+            contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = "^",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelMedium,
-            )
+            TextButton(
+                onClick = { previousOption?.let(onSelected) },
+                enabled = enabled && previousOption != null,
+            ) {
+                Text(
+                    text = "^",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
         }
-        key(scrollKey, options.size) {
+        key(options, targetFirstVisibleIndex) {
             val listState = rememberLazyListState(
-                initialFirstVisibleItemIndex = selectedIndex.coerceAtLeast(0),
+                initialFirstVisibleItemIndex = targetFirstVisibleIndex,
             )
             LazyColumn(
                 modifier = Modifier
@@ -716,15 +683,22 @@ private fun <T> WheelPickerColumn(
                 }
             }
         }
-        TextButton(
-            onClick = { nextOption?.let(onSelected) },
-            enabled = enabled && nextOption != null,
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(PickerControlSlotHeight),
+            contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = "v",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelMedium,
-            )
+            TextButton(
+                onClick = { nextOption?.let(onSelected) },
+                enabled = enabled && nextOption != null,
+            ) {
+                Text(
+                    text = "v",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
         }
     }
 }
@@ -740,13 +714,14 @@ private fun MinutePickerColumn(
 ) {
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text("Min", style = MaterialTheme.typography.titleSmall)
+        Spacer(modifier = Modifier.height(PickerControlSlotHeight))
         Column(
-            modifier = Modifier.height(186.dp),
-            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.height(PickerOptionSlotHeight),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             minutes.forEach { minute ->
                 val optionEnabled = enabled && minute in enabledMinutes
@@ -770,13 +745,14 @@ private fun MinutePickerColumn(
                 }
             }
         }
+        Spacer(modifier = Modifier.height(PickerControlSlotHeight))
     }
 }
 
 @Composable
 private fun WaitingPartnerCard(
-    myProposals: List<SchedulingProposal>,
     myPendingProposals: List<SchedulingProposal>,
+    nowMillis: Long,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -789,14 +765,20 @@ private fun WaitingPartnerCard(
                 },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            ProposalList("Tus horarios por prioridad", myProposals)
+            if (myPendingProposals.isNotEmpty()) {
+                ProposalList(
+                    title = "Tus opciones enviadas",
+                    proposals = myPendingProposals,
+                    nowMillis = nowMillis,
+                )
+            }
         }
     }
 }
 
 @Composable
 private fun ReviewProposalsCard(
-    myProposals: List<SchedulingProposal>,
+    myPendingProposals: List<SchedulingProposal>,
     partnerPendingProposals: List<SchedulingProposal>,
     submitting: Boolean,
     actionsDisabled: Boolean,
@@ -814,7 +796,7 @@ private fun ReviewProposalsCard(
                 text = "Elegi una opcion recibida o rechaza estas opciones antes de proponer las tuyas.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            ReceivedProposalList(reviewState)
+            ReceivedProposalList(reviewState, nowMillis)
             when {
                 reviewState.allExpired -> Text(
                     text = "Todos los horarios recibidos ya pasaron. Rechazá estas opciones para continuar con la coordinación.",
@@ -838,7 +820,7 @@ private fun ReviewProposalsCard(
                             if (submitting) {
                                 submittingLabel ?: "Procesando..."
                             } else {
-                                "Aceptar ${formatBackendDateTime(item.proposal.proposedDateTime)}"
+                                "Aceptar ${formatBackendContextualDateTime(item.proposal.proposedDateTime, nowMillis)}"
                             }
                         )
                     }
@@ -849,8 +831,12 @@ private fun ReviewProposalsCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (myProposals.isNotEmpty()) {
-                ProposalList("Tus horarios por prioridad", myProposals)
+            if (myPendingProposals.isNotEmpty()) {
+                ProposalList(
+                    title = "Tus opciones enviadas",
+                    proposals = myPendingProposals,
+                    nowMillis = nowMillis,
+                )
             }
             reviewError?.let {
                 ApiErrorFeedbackCard(it, ErrorContext.Scheduling)
@@ -869,16 +855,17 @@ private fun ReviewProposalsCard(
 @Composable
 private fun ReceivedProposalList(
     reviewState: SchedulingReceivedProposalReviewState,
+    nowMillis: Long,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("Opciones recibidas por prioridad", style = MaterialTheme.typography.titleSmall)
         if (reviewState.items.isEmpty()) {
             Text(
                 text = "No hay horarios recibidos.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
-            reviewState.items.forEach { item ->
+            schedulingReceivedProposalPresentationItems(reviewState).forEach { numberedItem ->
+                val item = numberedItem.item
                 val proposal = item.proposal
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -886,11 +873,11 @@ private fun ReceivedProposalList(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = "Prioridad ${proposal.preferenceOrder}: ${
+                        text = "${numberedItem.number}. ${
                             if (item.unavailable) {
                                 "Horario no disponible"
                             } else {
-                                formatBackendDateTime(proposal.proposedDateTime)
+                                formatBackendContextualDateTime(proposal.proposedDateTime, nowMillis)
                             }
                         }",
                         modifier = Modifier.weight(1f),
@@ -905,12 +892,16 @@ private fun ReceivedProposalList(
                             text = "Ya pasó",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.labelMedium,
+                            maxLines = 1,
+                            softWrap = false,
                         )
 
                         item.unavailable -> Text(
                             text = "No disponible",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.labelMedium,
+                            maxLines = 1,
+                            softWrap = false,
                         )
                     }
                 }
@@ -920,7 +911,10 @@ private fun ReceivedProposalList(
 }
 
 @Composable
-private fun ScheduledCard(confirmedDateTime: String?) {
+private fun ScheduledCard(
+    confirmedDateTime: String?,
+    nowMillis: Long,
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
@@ -928,7 +922,7 @@ private fun ScheduledCard(confirmedDateTime: String?) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("Horario confirmado", style = MaterialTheme.typography.titleMedium)
             Text(
-                text = "Quedo confirmado para ${formatBackendDateTime(confirmedDateTime)}.",
+                text = formatBackendContextualDateTime(confirmedDateTime, nowMillis),
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
         }
@@ -958,75 +952,24 @@ private fun UnknownCard() {
 }
 
 @Composable
-private fun ProposalListCard(
+private fun ProposalList(
     title: String,
     proposals: List<SchedulingProposal>,
-    emptyMessage: String,
+    nowMillis: Long,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            if (proposals.isNotEmpty()) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title, style = MaterialTheme.typography.titleSmall)
+        val items = schedulingPendingProposalPresentationItems(proposals)
+        if (items.isEmpty()) {
+            Text("Sin horarios.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            items.forEach { item ->
                 Text(
-                    text = "Ordenadas por prioridad. Prioridad 1 es la preferida.",
+                    text = "${item.number}. ${formatBackendContextualDateTime(item.item.proposedDateTime, nowMillis)}",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (proposals.isEmpty()) {
-                Text(emptyMessage, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else {
-                proposals.forEach { proposal ->
-                    ProposalRow(proposal)
-                }
-            }
         }
     }
-}
-
-@Composable
-private fun ProposalList(title: String, proposals: List<SchedulingProposal>) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(title, style = MaterialTheme.typography.titleSmall)
-        if (proposals.isEmpty()) {
-            Text("Sin horarios.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            proposals.forEach { ProposalRow(it) }
-        }
-    }
-}
-
-@Composable
-private fun ProposalRow(proposal: SchedulingProposal) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text("Prioridad ${proposal.preferenceOrder}: ${formatBackendDateTime(proposal.proposedDateTime)}")
-        Text(
-            proposal.status.userLabel(),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-private fun SchedulingStage.userLabel(): String = when (this) {
-    SchedulingStage.Loading -> "Cargando"
-    SchedulingStage.WaitingForMyProposals -> "Esperando tus horarios"
-    SchedulingStage.WaitingForPartnerProposals -> "Esperando a la otra persona"
-    SchedulingStage.ReviewPartnerProposals -> "Revisar propuestas"
-    SchedulingStage.Scheduled -> "Programado"
-    SchedulingStage.Failed -> "No disponible"
-    SchedulingStage.Unknown -> "Estado no disponible"
-}
-
-private fun NegotiationStatus.userLabel(): String = when (this) {
-    NegotiationStatus.Pending -> "Pendiente"
-    NegotiationStatus.Confirmed -> "Confirmada"
-    NegotiationStatus.Failed -> "Fallida"
-    is NegotiationStatus.Unknown -> "Estado no disponible"
-}
-
-private fun ProposalStatus.userLabel(): String = when (this) {
-    ProposalStatus.Pending -> "Pendiente"
-    ProposalStatus.Accepted -> "Aceptado"
-    ProposalStatus.Rejected -> "Rechazado"
-    is ProposalStatus.Unknown -> "Estado no disponible"
 }
 

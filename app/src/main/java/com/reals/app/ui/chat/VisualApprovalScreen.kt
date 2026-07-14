@@ -24,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ApiError
@@ -35,6 +36,7 @@ import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
 import com.reals.app.ui.common.ManualBlockConfirmationDialog
+import com.reals.app.ui.common.ManualBlockOverflowMenu
 import com.reals.app.ui.common.userLabel
 
 @Composable
@@ -105,16 +107,30 @@ fun VisualApprovalScreen(
             .padding(24.dp),
         verticalArrangement = Arrangement.Center,
     ) {
-        Text(
-            text = "Aprobacion visual",
-            style = MaterialTheme.typography.headlineLarge,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        Text(
-            text = "Revisa el perfil visual antes de decidir si queres continuar.",
-            modifier = Modifier.padding(top = 8.dp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Aprobacion visual",
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = "Revisa el perfil visual antes de decidir si queres continuar.",
+                    modifier = Modifier.padding(top = 8.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            ManualBlockOverflowMenu(
+                enabled = !busy,
+                onRequestBlock = {
+                    onClearManualBlockError()
+                    showingManualBlockDialog = true
+                },
+            )
+        }
         Spacer(modifier = Modifier.height(16.dp))
         StatusCard(
             match = match,
@@ -240,16 +256,6 @@ fun VisualApprovalScreen(
             }
         }
         Spacer(modifier = Modifier.height(24.dp))
-        OutlinedButton(
-            onClick = {
-                onClearManualBlockError()
-                showingManualBlockDialog = true
-            },
-            enabled = !busy,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("Bloquear a esta persona")
-        }
         OutlinedButton(onClick = onBackHome, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
             Text("Volver a Home")
         }
