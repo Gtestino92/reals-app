@@ -480,6 +480,64 @@ class SchedulingRoundStateTest {
         assertEquals(SchedulingProposalTimeAvailability.Expired, schedulingProposalTimeAvailability(value, timeB))
     }
 
+    @Test
+    fun `pending proposal presentation filters rejected rows and numbers contiguously`() {
+        val items = schedulingPendingProposalPresentationItems(
+            listOf(
+                proposal("rejected", "me", 2, preferenceOrder = 1, status = ProposalStatus.Rejected),
+                proposal("pending-two", "me", 2, preferenceOrder = 2),
+                proposal("pending-three", "me", 2, preferenceOrder = 3),
+            )
+        )
+
+        assertEquals(listOf(1, 2), items.map { it.number })
+        assertEquals(listOf("pending-two", "pending-three"), items.map { it.item.id })
+    }
+
+    @Test
+    fun `received proposal presentation numbers visible pending rows after rejected rows are filtered`() {
+        val nowMillis = java.time.Instant.parse("2026-07-15T22:30:00Z").toEpochMilli()
+        val reviewState = schedulingReceivedProposalReviewState(
+            partnerProposals = listOf(
+                proposal(
+                    id = "rejected",
+                    userId = "partner",
+                    roundNumber = 2,
+                    preferenceOrder = 1,
+                    status = ProposalStatus.Rejected,
+                ),
+                proposal(
+                    id = "pending",
+                    userId = "partner",
+                    roundNumber = 2,
+                    preferenceOrder = 3,
+                    proposedDateTime = "2026-07-15T20:00:00-03:00",
+                ),
+            ),
+            nowMillis = nowMillis,
+        )
+
+        val items = schedulingReceivedProposalPresentationItems(reviewState)
+
+        assertEquals(listOf(1), items.map { it.number })
+        assertEquals(listOf("pending"), items.map { it.item.proposal.id })
+    }
+
+    @Test
+    fun `confirmed stage ignores proposal history presentation needs`() {
+        val state = deriveSchedulingRoundState(
+            loading = false,
+            negotiation = negotiation(status = NegotiationStatus.Confirmed),
+            proposals = listOf(
+                proposal("my-rejected", "me", 2, status = ProposalStatus.Rejected),
+                proposal("partner-rejected", "partner", 2, status = ProposalStatus.Rejected),
+            ),
+            currentUserId = "me",
+        )
+
+        assertEquals(SchedulingStage.Scheduled, state.stage)
+    }
+
     private fun negotiation(
         roundNumber: Int = 2,
         status: NegotiationStatus = NegotiationStatus.Pending,

@@ -1367,15 +1367,6 @@ private fun FilledPhotoSlot(
                 contentDescription = "Foto de perfil ${photo.position}",
                 modifier = Modifier.fillMaxSize(),
             )
-            Text(
-                text = "Foto ${photo.position}",
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .background(Color.Black.copy(alpha = 0.56f))
-                    .padding(horizontal = 6.dp, vertical = 3.dp),
-                color = Color.White,
-                style = MaterialTheme.typography.labelSmall,
-            )
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -1485,14 +1476,6 @@ private fun EmptyPhotoSlot(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Text(
-            text = "Foto $position",
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(horizontal = 6.dp, vertical = 3.dp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.labelSmall,
-        )
         if (busy) {
             Box(
                 modifier = Modifier

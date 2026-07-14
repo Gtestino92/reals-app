@@ -444,14 +444,20 @@ private fun MatchmakingIdleScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(modifier = Modifier.height(20.dp))
+        val initiallyExpandedSection = initiallyExpandedHomeSection(
+            actions = screenModel.pendingActions,
+            nextSteps = screenModel.nextSteps,
+        )
         PendingActionsCard(
             actions = screenModel.pendingActions,
+            initiallyExpandedSection = initiallyExpandedSection,
             busy = busy,
             onOpenFirstChat = onOpenFirstChat,
             onOpenVisualApproval = onOpenVisualApproval,
         )
         NextStepCard(
             nextSteps = screenModel.nextSteps,
+            initiallyExpandedSection = initiallyExpandedSection,
             busy = busy,
             nowMillis = nowMillis,
             onOpenScheduling = onOpenScheduling,
