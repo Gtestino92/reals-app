@@ -2,8 +2,8 @@ package com.reals.app.ui.chat
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.reals.app.core.security.TextSafety
 import com.reals.app.domain.model.VisualProfile
+import com.reals.app.ui.profile.ProfilePhotoPresentationAspectRatio
 
 @Composable
 fun VisualProfileCard(
@@ -52,7 +53,7 @@ fun VisualProfileCard(
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(260.dp),
+                                    .aspectRatio(ProfilePhotoPresentationAspectRatio),
                             )
                         }
                     }

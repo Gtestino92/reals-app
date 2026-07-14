@@ -3,6 +3,8 @@ package com.reals.app.data.repository
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import com.reals.app.core.media.deleteOwnedProfilePhotoCropFile
+import com.reals.app.core.media.profilePhotoCropCacheDirectory
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ApiExecutor
 import com.reals.app.core.network.ApiResult
@@ -22,7 +24,6 @@ import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.UpdateProfileInput
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -117,29 +118,37 @@ class ProfileRepository(
             .map { it.toDomain() }
 
     private fun filePart(uri: Uri): MultipartBody.Part {
-        val resolver = requireNotNull(context) { "Context is required for file uploads." }.contentResolver
-        val contentType = resolver.getType(uri)
-            ?.toMediaTypeOrNull()
-            ?: "application/octet-stream".toMediaType()
+        val uploadContext = requireNotNull(context) { "Context is required for file uploads." }
+        val resolver = uploadContext.contentResolver
+        val filename = displayName(uri)
+        val contentType = ProfileUploadFileMetadata.contentType(
+            resolverMimeType = resolver.getType(uri),
+            filename = filename,
+        ).toMediaType()
         val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
             ?: error("No se pudo leer el archivo seleccionado.")
+        deleteOwnedProfilePhotoCropFile(uri, profilePhotoCropCacheDirectory(uploadContext))
         return MultipartBody.Part.createFormData(
             name = "file",
-            filename = displayName(uri),
+            filename = filename,
             body = bytes.toRequestBody(contentType),
         )
     }
 
     private fun displayName(uri: Uri): String {
         val resolver = requireNotNull(context) { "Context is required for file uploads." }.contentResolver
+        var queryDisplayName: String? = null
         resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
             val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
             if (nameIndex >= 0 && cursor.moveToFirst()) {
                 val value = cursor.getString(nameIndex)
-                if (!value.isNullOrBlank()) return value
+                if (!value.isNullOrBlank()) queryDisplayName = value
             }
         }
-        return "profile-photo"
+        return ProfileUploadFileMetadata.displayName(
+            queryDisplayName = queryDisplayName,
+            lastPathSegment = uri.lastPathSegment,
+        )
     }
 
     private fun positionPart(position: Int): RequestBody =
