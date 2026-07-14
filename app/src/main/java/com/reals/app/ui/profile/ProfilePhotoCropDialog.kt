@@ -21,8 +21,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -220,30 +220,6 @@ internal fun ProfilePhotoCropDialog(
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                OutlinedButton(
-                    onClick = { transform = transform?.zoomBy(ZoomOutStep) },
-                    enabled = !processing && bitmap != null && transform != null,
-                ) {
-                    Text("−")
-                }
-                Text(
-                    text = "Zoom",
-                    color = Color.White,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                OutlinedButton(
-                    onClick = { transform = transform?.zoomBy(ZoomInStep) },
-                    enabled = !processing && bitmap != null && transform != null,
-                ) {
-                    Text("+")
-                }
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -279,7 +255,7 @@ private fun CropPreviewImage(bitmap: Bitmap, transform: ProfilePhotoCropTransfor
         bitmap = bitmap.asImageBitmap(),
         contentDescription = null,
         modifier = Modifier
-            .size(imageWidth, imageHeight)
+            .requiredSize(imageWidth, imageHeight)
             .offset {
                 IntOffset(
                     x = transform.offsetX.roundToInt(),
@@ -288,6 +264,3 @@ private fun CropPreviewImage(bitmap: Bitmap, transform: ProfilePhotoCropTransfor
             },
     )
 }
-
-private const val ZoomInStep = 1.2f
-private const val ZoomOutStep = 1f / ZoomInStep
