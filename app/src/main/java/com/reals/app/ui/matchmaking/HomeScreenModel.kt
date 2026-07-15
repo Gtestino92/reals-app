@@ -74,8 +74,8 @@ sealed interface HomeNextStepItem {
 }
 
 sealed interface HomePassiveNoticeItem {
-    data class SchedulingPreparing(val count: Int) : HomePassiveNoticeItem
-    data class Unknown(val rawType: String, val count: Int?) : HomePassiveNoticeItem
+    data object SchedulingPreparing : HomePassiveNoticeItem
+    data class Unknown(val rawType: String) : HomePassiveNoticeItem
 }
 
 data class HomeMatchmakingUiState(

@@ -72,9 +72,11 @@ Connection and scheduling:
 internal active connection for capacity/locks and has `schedulingAvailableAt`,
 but it is not visible as a revealed Home connection or actionable until a
 scheduling activation job moves it to `SCHEDULING_PHASE` and initializes
-negotiation. Home surfaces this state through
-`activeInteractionsSummary.pendingSchedulingConnectionCount` and the passive
-notice `SCHEDULING_PREPARING`, not through `nextSteps`.
+negotiation. Home surfaces this state through the boolean
+`activeInteractionsSummary.hasPendingSchedulingConnection` and one generic
+count-free passive notice `SCHEDULING_PREPARING`, not through `nextSteps`. The
+boolean is intentionally not an exact count of internal pending scheduling
+connections.
 
 Scheduling proposals represent second-chat slots inside the app. They do not represent in-person meeting times. A proposal row stores one possible slot, its `roundNumber` and its `preferenceOrder` within the user's submitted list. Proposal submission requires future slots, but a persisted `PENDING` proposal may later become temporally unavailable when its proposed time passes. Expired pending proposals remain visible and rejectable; they are not automatically changed to `REJECTED` and do not automatically advance the round. Explicit acceptance and automatic overlap confirmation consider only proposal instants that are still strictly in the future. Each participant can submit at most one ordered list per round. Rejection is represented by proposal `status = REJECTED`: rejecting partner proposals changes only the partner's pending rows, does not delete historical rows and does not reject the caller's own list. Rejected proposals never participate in overlap auto-confirmation. A confirmed negotiation schedules the second chat for `confirmedDateTime`; `GET /api/connections/{connectionId}/chat` materializes and activates the `SECOND_CHAT` idempotently when `now >= confirmedDateTime` and before the configured writable window expires. Home exposes that agreed time as `secondChat.availableAt`. After `timeoutAt`, second chats become `EXPIRED` and read-only until `readOnlyUntil`; cleanup then marks them `CLOSED` and closes the connection.
 
@@ -114,6 +116,14 @@ Push notifications:
 - `PushDeviceToken` belongs to a user and stores an enabled FCM device token.
 - `PushNotificationDelivery` deduplicates external push attempts per user, notification type and aggregate id. For `VISUAL_REVIEW_AVAILABLE`, the aggregate id is the match id. For `SCHEDULING_AVAILABLE`, the aggregate id is the connection id. For `SECOND_CHAT_REMINDER`, the aggregate id is a deterministic reminder key derived from connection id and `minutesBefore`, so multiple configured reminder lead times can be sent once each.
 - `UserLegalDocumentAction` is an append-oriented factual record that a user performed a configured action for a legal document type/version/content SHA-256 at a backend-generated timestamp. It stores `userId`, `documentType`, `documentVersion`, nullable `documentContentSha256`, `action` and `actedAt`; it does not store document text or document URLs.
+
+Matchmaking pair eligibility distinguishes active interactions, temporary history cooldowns and permanent blocks:
+
+- Active-pair uniqueness is invariant. Users are not eligible as a pair while they have an active `CHAT_ACTIVE` or `VISUAL_PHASE` match, a `VISUAL_APPROVED` match whose connection was not created yet, or any non-`CLOSED` connection.
+- `active_engagement_locks` continue to model per-user active match/connection capacity. They are not an unordered pair-exclusion table and are not duplicated for cooldowns.
+- When `matchmaking.exclude-previous-pairing` is enabled, previous terminal outcomes create temporary exclusions calculated from existing history: 30 days for explicit first-chat rejection, visual rejection, visual-review expiration and closed connections; 7 days for first-chat absolute timeout or inactivity abandonment.
+- `MatchState.EXPIRED` is classified from persisted phase evidence. An expired match with no `VisualReview` is treated as first-chat expiration; an expired match with a `VisualReview` is treated as visual-review expiration. First-chat `Chat.endedAt` is preferred for timeout/abandonment timestamps, with `Match.updatedAt` as legacy fallback.
+- A cooldown expires naturally when its cutoff elapses. No cleanup job, derived cooldown table, new match state or automatic `UserBlock` is created for normal product outcomes.
 
 ## Legal Documents
 

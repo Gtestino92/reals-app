@@ -63,14 +63,14 @@ class HomeUiMapperTest {
     fun `scheduling pending passive notice does not generate actionable button`() {
         val model = mapper.toScreenModel(
             home = homeState(
-                passiveNotices = listOf(HomePassiveNotice.SchedulingPreparing(count = 1)),
+                passiveNotices = listOf(HomePassiveNotice.SchedulingPreparing),
             ),
             localHidden = noHiddenInteractions(),
             localMatchmakingBlockedReason = null,
         )
 
         assertTrue(model.pendingActions.isEmpty())
-        assertEquals(HomePassiveNoticeItem.SchedulingPreparing(1), model.passiveNotices.single())
+        assertEquals(HomePassiveNoticeItem.SchedulingPreparing, model.passiveNotices.single())
     }
 
     @Test
@@ -159,7 +159,67 @@ class HomeUiMapperTest {
         assertTrue(model.nextSteps.isEmpty())
     }
 
+    @Test
+    fun `displayed initial count follows locally hidden pending actions`() {
+        val model = mapper.toScreenModel(
+            home = homeState(
+                activeInteractionsSummary = summary(
+                    activeInitialCount = 1,
+                    activeConnectionCount = 0,
+                    hasPendingSchedulingConnection = true,
+                    actionableConnectionCount = 0,
+                ),
+                pendingActions = listOf(
+                    HomePendingAction.FirstChat(
+                        matchId = "match-hidden",
+                        chatId = "chat-hidden",
+                        partner = partner("Alex"),
+                    ),
+                ),
+            ),
+            localHidden = LocalHiddenInteractions(
+                hiddenFirstChatMatchIds = setOf("match-hidden"),
+                hiddenVisualMatchIds = emptySet(),
+            ),
+            localMatchmakingBlockedReason = null,
+        )
+
+        assertTrue(model.pendingActions.isEmpty())
+        assertEquals(0, model.activeInteractionsSummary?.activeInitialCount)
+        assertEquals(true, model.activeInteractionsSummary?.hasPendingSchedulingConnection)
+    }
+
+    @Test
+    fun `displayed connection counts follow filtered next steps`() {
+        val model = mapper.toScreenModel(
+            home = homeState(
+                activeInteractionsSummary = summary(
+                    activeInitialCount = 0,
+                    activeConnectionCount = 1,
+                    hasPendingSchedulingConnection = true,
+                    actionableConnectionCount = 1,
+                ),
+                nextSteps = listOf(
+                    HomeNextStep.SecondChatAvailable(
+                        connectionId = "connection-cancelled",
+                        matchId = "match-cancelled",
+                        partner = null,
+                        secondChat = homeChat("cancelled-chat", ChatStatus.Cancelled, "Morgan"),
+                    ),
+                ),
+            ),
+            localHidden = noHiddenInteractions(),
+            localMatchmakingBlockedReason = null,
+        )
+
+        assertTrue(model.nextSteps.isEmpty())
+        assertEquals(0, model.activeInteractionsSummary?.activeConnectionCount)
+        assertEquals(0, model.activeInteractionsSummary?.actionableConnectionCount)
+        assertEquals(true, model.activeInteractionsSummary?.hasPendingSchedulingConnection)
+    }
+
     private fun homeState(
+        activeInteractionsSummary: HomeActiveInteractionsSummary = summary(),
         pendingActions: List<HomePendingAction> = emptyList(),
         nextSteps: List<HomeNextStep> = emptyList(),
         passiveNotices: List<HomePassiveNotice> = emptyList(),
@@ -170,15 +230,22 @@ class HomeUiMapperTest {
             canSearch = true,
             blockedReason = null,
         ),
-        activeInteractionsSummary = HomeActiveInteractionsSummary(
-            activeInitialCount = 0,
-            activeConnectionCount = 0,
-            pendingSchedulingConnectionCount = 0,
-            actionableConnectionCount = 0,
-        ),
+        activeInteractionsSummary = activeInteractionsSummary,
         pendingActions = pendingActions,
         nextSteps = nextSteps,
         passiveNotices = passiveNotices,
+    )
+
+    private fun summary(
+        activeInitialCount: Int = 0,
+        activeConnectionCount: Int = 0,
+        hasPendingSchedulingConnection: Boolean = false,
+        actionableConnectionCount: Int = 0,
+    ): HomeActiveInteractionsSummary = HomeActiveInteractionsSummary(
+        activeInitialCount = activeInitialCount,
+        activeConnectionCount = activeConnectionCount,
+        hasPendingSchedulingConnection = hasPendingSchedulingConnection,
+        actionableConnectionCount = actionableConnectionCount,
     )
 
     private fun noHiddenInteractions(): LocalHiddenInteractions = LocalHiddenInteractions(

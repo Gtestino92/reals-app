@@ -338,7 +338,7 @@ class HomeCoordinatorCancelTest {
         activeInteractionsSummary = HomeActiveInteractionsSummary(
             activeInitialCount = 0,
             activeConnectionCount = 0,
-            pendingSchedulingConnectionCount = 0,
+            hasPendingSchedulingConnection = false,
             actionableConnectionCount = 0,
         ),
         pendingActions = emptyList(),

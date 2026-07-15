@@ -45,7 +45,7 @@ data class HomeMatchmakingBlockedReasonResponseDto(
 data class HomeActiveInteractionsSummaryResponseDto(
     val activeInitialCount: Int = 0,
     val activeConnectionCount: Int = 0,
-    val pendingSchedulingConnectionCount: Int = 0,
+    val hasPendingSchedulingConnection: Boolean = false,
     val actionableConnectionCount: Int = 0,
 )
 
@@ -93,7 +93,6 @@ data class HomePendingSecondChatLiteResponseDto(
 @Serializable
 data class HomePassiveNoticeResponseDto(
     val type: String,
-    val count: Int,
 )
 
 @Serializable

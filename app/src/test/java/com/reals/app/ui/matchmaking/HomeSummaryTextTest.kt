@@ -12,11 +12,11 @@ class HomeSummaryTextTest {
         val summaryText = activeExperiencesSummaryText(
             summary(activeInitialCount = 0, activeConnectionCount = 0),
         )
-        val noticeText = passiveNoticeText(HomePassiveNoticeItem.SchedulingPreparing(count = 1))
+        val noticeText = passiveNoticeText(HomePassiveNoticeItem.SchedulingPreparing)
 
         assertNull(summaryText)
         assertEquals(
-            "Tenes una coordinacion en preparacion. Se habilitara mas adelante.",
+            "Estamos preparando uno de tus proximos pasos.",
             noticeText,
         )
         assertTrue(noticeText?.contains("0 iniciales") != true)
@@ -50,16 +50,16 @@ class HomeSummaryTextTest {
             activeExperiencesSummaryText(summary(activeInitialCount = 1, activeConnectionCount = 1)),
         )
         assertEquals(
-            "Tenes una coordinacion en preparacion. Se habilitara mas adelante.",
-            passiveNoticeText(HomePassiveNoticeItem.SchedulingPreparing(count = 1)),
+            "Estamos preparando uno de tus proximos pasos.",
+            passiveNoticeText(HomePassiveNoticeItem.SchedulingPreparing),
         )
     }
 
     @Test
-    fun `plural scheduling preparing notice renders count`() {
+    fun `scheduling preparing notice is generic and count-free`() {
         assertEquals(
-            "Tenes 2 coordinaciones en preparacion. Se habilitaran mas adelante.",
-            passiveNoticeText(HomePassiveNoticeItem.SchedulingPreparing(count = 2)),
+            "Estamos preparando uno de tus proximos pasos.",
+            passiveNoticeText(HomePassiveNoticeItem.SchedulingPreparing),
         )
     }
 
@@ -69,7 +69,7 @@ class HomeSummaryTextTest {
     ): HomeActiveInteractionsSummary = HomeActiveInteractionsSummary(
         activeInitialCount = activeInitialCount,
         activeConnectionCount = activeConnectionCount,
-        pendingSchedulingConnectionCount = 0,
+        hasPendingSchedulingConnection = false,
         actionableConnectionCount = 0,
     )
 }

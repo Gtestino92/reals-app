@@ -289,7 +289,7 @@ object TestDtos {
         activeInteractionsSummary = HomeActiveInteractionsSummaryResponseDto(
             activeInitialCount = 1,
             activeConnectionCount = 2,
-            pendingSchedulingConnectionCount = 3,
+            hasPendingSchedulingConnection = true,
             actionableConnectionCount = 4,
         ),
         pendingActions = listOf(
@@ -327,7 +327,7 @@ object TestDtos {
                 ),
             ),
         ),
-        passiveNotices = listOf(HomePassiveNoticeResponseDto("SCHEDULING_PREPARING", 2)),
+        passiveNotices = listOf(HomePassiveNoticeResponseDto("SCHEDULING_PREPARING")),
     )
 
     fun homeStatus(version: Long = 1, dirty: Boolean = false) = HomeStatusResponseDto(
@@ -367,7 +367,7 @@ object TestDtos {
                 ),
             ),
         ),
-        passiveNotices = listOf(HomePassiveNoticeResponseDto("SCHEDULING_PREPARING", 2)),
+        passiveNotices = listOf(HomePassiveNoticeResponseDto("SCHEDULING_PREPARING")),
         serverTime = now,
     )
 

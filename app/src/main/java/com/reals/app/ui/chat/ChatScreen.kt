@@ -77,6 +77,7 @@ import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.milliseconds
 
 private const val MUTUAL_EXIT_TIMEOUT_SECONDS = 20L
+private const val MUTUAL_EXIT_TIMEOUT_RETRY_MILLIS = 2_000L
 
 @Composable
 fun ChatScreen(
@@ -847,7 +848,6 @@ private fun TimedExitRequestCard(
     onExitRequestTimeout: (String) -> Unit,
 ) {
     var nowMillis by rememberSaveable(request.id) { mutableStateOf(System.currentTimeMillis()) }
-    var timeoutHandled by rememberSaveable(request.id) { mutableStateOf(false) }
     val remainingSeconds = remainingExitSeconds(
         createdAt = request.createdAt,
         nowMillis = nowMillis,
@@ -862,9 +862,9 @@ private fun TimedExitRequestCard(
         }
     }
 
-    LaunchedEffect(request.id, remainingSeconds) {
-        if (remainingSeconds == 0L && !timeoutHandled) {
-            timeoutHandled = true
+    LaunchedEffect(request.id, remainingSeconds, actionsDisabled) {
+        if (shouldRequestExitTimeout(remainingSeconds, actionsDisabled)) {
+            delay(MUTUAL_EXIT_TIMEOUT_RETRY_MILLIS.milliseconds)
             onExitRequestTimeout(request.id)
         }
     }
@@ -876,11 +876,10 @@ private fun TimedExitRequestCard(
         ) {
             Text("Salida consensuada pendiente", style = MaterialTheme.typography.titleMedium)
             Text(
-                text = if (requestedByMe) {
-                    "Esperando respuesta. Si no contesta, el chat se cierra en ${remainingSeconds}s."
-                } else {
-                    "Te propusieron cerrar el chat. Responde en ${remainingSeconds}s."
-                },
+                text = timedExitRequestBodyText(
+                    requestedByMe = requestedByMe,
+                    remainingSeconds = remainingSeconds,
+                ),
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
             Text(
@@ -915,6 +914,22 @@ private fun TimedExitRequestCard(
         }
     }
 }
+
+internal fun shouldRequestExitTimeout(
+    remainingSeconds: Long,
+    actionsDisabled: Boolean,
+): Boolean =
+    remainingSeconds == 0L && !actionsDisabled
+
+internal fun timedExitRequestBodyText(
+    requestedByMe: Boolean,
+    remainingSeconds: Long,
+): String =
+    when {
+        remainingSeconds == 0L -> "La solicitud vencio. Estamos cerrando el chat."
+        requestedByMe -> "Esperando respuesta. Si no contesta, el chat se cierra en ${remainingSeconds}s."
+        else -> "Te propusieron cerrar el chat. Responde en ${remainingSeconds}s."
+    }
 
 @Composable
 private fun MessageBubble(

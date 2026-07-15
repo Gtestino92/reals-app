@@ -232,7 +232,7 @@ fun MatchmakingHomeScreen(
             model.passiveNotices.size,
             model.activeInteractionsSummary?.activeInitialCount,
             model.activeInteractionsSummary?.activeConnectionCount,
-            model.activeInteractionsSummary?.pendingSchedulingConnectionCount,
+            model.activeInteractionsSummary?.hasPendingSchedulingConnection,
             model.activeInteractionsSummary?.actionableConnectionCount,
         ) {
             while (true) {
