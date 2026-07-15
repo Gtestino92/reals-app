@@ -24,6 +24,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.dp
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import com.reals.app.core.security.TextSafety
 import com.reals.app.ui.common.formatBackendContextualDateTime
 import com.reals.app.ui.common.formatBackendTime
@@ -251,7 +256,11 @@ private fun HomeCollapsibleSection(
                 HomeSectionChevron(expanded = expanded)
             }
         }
-        if (expanded) {
+        AnimatedVisibility(
+            visible = expanded,
+            enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+            exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut(),
+        ) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 content()
             }

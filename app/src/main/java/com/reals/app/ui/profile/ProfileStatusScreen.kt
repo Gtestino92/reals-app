@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
 package com.reals.app.ui.profile
 
 import android.net.Uri
@@ -7,6 +9,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,6 +27,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -453,6 +458,19 @@ private enum class ProfileSection {
     Photos,
 }
 
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun rememberExpandedSectionRequester(expanded: Boolean): BringIntoViewRequester {
+    val requester = remember { BringIntoViewRequester() }
+    LaunchedEffect(expanded) {
+        if (expanded) {
+            withFrameNanos { }
+            requester.bringIntoView()
+        }
+    }
+    return requester
+}
+
 private val IntentionOptions = listOf(
     "DATE",
     "FRIENDSHIP",
@@ -501,8 +519,11 @@ private fun ProfileDetailsCard(
     onUpdateProfile: (UpdateProfileInput) -> Unit,
     onLoadCountries: () -> Unit,
 ) {
+    val bringIntoViewRequester = rememberExpandedSectionRequester(expanded)
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .bringIntoViewRequester(bringIntoViewRequester),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
         Column(
@@ -570,8 +591,11 @@ private fun MatchPreferencesCard(
     onToggleExpanded: () -> Unit,
     onUpdateMatchFilters: (UpdateMatchFiltersInput) -> Unit,
 ) {
+    val bringIntoViewRequester = rememberExpandedSectionRequester(expanded)
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .bringIntoViewRequester(bringIntoViewRequester),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
         Column(
@@ -650,8 +674,11 @@ private fun PhotosCard(
     onResendEmailVerification: () -> Unit,
     onCheckEmailVerification: () -> Unit,
 ) {
+    val bringIntoViewRequester = rememberExpandedSectionRequester(expanded)
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .bringIntoViewRequester(bringIntoViewRequester),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
         Column(

@@ -431,7 +431,7 @@ private fun MatchmakingIdleScreen(
             .imePadding()
             .verticalScroll(scrollState)
             .padding(24.dp),
-        verticalArrangement = Arrangement.Center,
+        verticalArrangement = Arrangement.Top,
     ) {
         Text(
             text = "Home",
