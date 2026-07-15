@@ -61,6 +61,24 @@ class ChatLifecycleUiStateTest {
         assertEquals("El chat se cierra por inactividad en 30s.", state?.warningCopy())
     }
 
+    @Test
+    fun `header deadline prefers absolute expiresAt over inactivity deadline`() {
+        val lifecycle = FirstChatLifecycleUiState(
+            deadline = "2026-06-18T21:05:00Z",
+            reason = FirstChatExpiryReason.Inactivity,
+            remainingMillis = 30_000L,
+            showCountdown = true,
+            expired = false,
+        )
+
+        val label = firstChatHeaderDeadlineLabel(
+            expiresAt = "2026-06-18T21:10:00Z",
+            firstChatLifecycle = lifecycle,
+        )
+
+        assertEquals("2026-06-18T21:10:00Z", label)
+    }
+
     private fun millis(value: String): Long =
         OffsetDateTime.parse(value).toInstant().toEpochMilli()
 }
