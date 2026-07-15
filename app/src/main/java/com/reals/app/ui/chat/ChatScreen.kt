@@ -447,7 +447,7 @@ private fun ChatHeader(
 
                 trailingContent?.invoke()
             }
-            val deadlineLabel = firstChatLifecycle?.deadline ?: expiresAt
+            val deadlineLabel = firstChatHeaderDeadlineLabel(expiresAt, firstChatLifecycle)
             Text(
                 text = when {
                     secondChatReadOnlyUntil != null ->
@@ -1084,6 +1084,11 @@ private fun SuccessFeedback(message: String, modifier: Modifier = Modifier) {
         modifier = modifier
     )
 }
+
+internal fun firstChatHeaderDeadlineLabel(
+    expiresAt: String?,
+    firstChatLifecycle: FirstChatLifecycleUiState?,
+): String? = expiresAt ?: firstChatLifecycle?.deadline
 
 private fun chatDecisionSummary(
     myDecision: ChatDecisionState?,
