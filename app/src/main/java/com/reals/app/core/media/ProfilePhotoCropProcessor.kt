@@ -1,5 +1,6 @@
 package com.reals.app.core.media
 
+import android.annotation.RequiresApi
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -75,6 +76,7 @@ internal class ProfilePhotoCropProcessor(
             }
         }
 
+    @RequiresApi(Build.VERSION_CODES.P)
     private fun decodeWithImageDecoder(uri: Uri): Bitmap {
         val source = ImageDecoder.createSource(context.contentResolver, uri)
         return ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
