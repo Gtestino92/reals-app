@@ -95,18 +95,24 @@ android {
             manifestPlaceholders["usesCleartextTraffic"] = "true"
             buildConfigField("String", "REALS_ENVIRONMENT", quoted("local"))
             buildConfigField("String", "REALS_BASE_URL", quoted(localBaseUrl))
+            buildConfigField("boolean", "SHOW_MANUAL_LOCATION_FALLBACK", "true")
+            buildConfigField("boolean", "SHOW_EXPLICIT_REFRESH_BUTTONS", "true")
         }
         create("dev") {
             dimension = "environment"
             manifestPlaceholders["usesCleartextTraffic"] = "false"
             buildConfigField("String", "REALS_ENVIRONMENT", quoted("dev"))
             buildConfigField("String", "REALS_BASE_URL", quoted(devBaseUrl))
+            buildConfigField("boolean", "SHOW_MANUAL_LOCATION_FALLBACK", "true")
+            buildConfigField("boolean", "SHOW_EXPLICIT_REFRESH_BUTTONS", "true")
         }
         create("prod") {
             dimension = "environment"
             manifestPlaceholders["usesCleartextTraffic"] = "false"
             buildConfigField("String", "REALS_ENVIRONMENT", quoted("prod"))
             buildConfigField("String", "REALS_BASE_URL", quoted(prodBaseUrl))
+            buildConfigField("boolean", "SHOW_MANUAL_LOCATION_FALLBACK", "false")
+            buildConfigField("boolean", "SHOW_EXPLICIT_REFRESH_BUTTONS", "false")
         }
     }
 

@@ -52,10 +52,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
-private val showManualLocationFallback =
-    BuildConfig.DEBUG ||
-        BuildConfig.REALS_ENVIRONMENT == "local" ||
-        BuildConfig.REALS_ENVIRONMENT == "dev"
+private val showManualLocationFallback = BuildConfig.SHOW_MANUAL_LOCATION_FALLBACK
 
 private enum class LocationPermissionRequestMode {
     None,

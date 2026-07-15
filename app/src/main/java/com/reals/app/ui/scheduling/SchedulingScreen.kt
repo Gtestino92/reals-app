@@ -22,10 +22,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.reals.app.BuildConfig
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.BackendErrorCode
 import com.reals.app.core.network.ErrorContext
@@ -59,6 +62,7 @@ import kotlinx.coroutines.delay
 private val PickerControlSlotHeight = 48.dp
 private val PickerOptionSlotHeight = 156.dp
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SchedulingScreen(
     connectionId: String,
@@ -130,141 +134,153 @@ fun SchedulingScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .safeDrawingPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Column {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "Coordinar horarios",
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                ManualBlockOverflowMenu(
-                    enabled = !interactionBusy,
-                    onRequestBlock = {
-                        onClearManualBlockError()
-                        showingManualBlockDialog = true
-                    },
-                )
+    PullToRefreshBox(
+        isRefreshing = refreshing,
+        onRefresh = {
+            if (!interactionBusy) {
+                onRefresh()
             }
-            Text(
-                text = partnerDisplayName?.let { "Con $it" } ?: "Con la otra persona",
-                modifier = Modifier.padding(top = 8.dp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        if (negotiation != null && stage != SchedulingStage.Loading) {
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "Ronda ${negotiation.roundNumber}",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (refreshing) {
+        },
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .safeDrawingPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Text(
-                        text = "Actualizando...",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = "Coordinar horarios",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.headlineLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    ManualBlockOverflowMenu(
+                        enabled = !interactionBusy,
+                        onRequestBlock = {
+                            onClearManualBlockError()
+                            showingManualBlockDialog = true
+                        },
                     )
                 }
+                Text(
+                    text = partnerDisplayName?.let { "Con $it" } ?: "Con la otra persona",
+                    modifier = Modifier.padding(top = 8.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-        }
-        Spacer(modifier = Modifier.height(16.dp))
+            if (negotiation != null && stage != SchedulingStage.Loading) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Ronda ${negotiation.roundNumber}",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (refreshing) {
+                        Text(
+                            text = "Actualizando...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
 
-        errorPlacement.topLevelError?.let {
-            ApiErrorFeedbackCard(it, ErrorContext.Scheduling)
-            Spacer(modifier = Modifier.height(12.dp))
-        }
+            errorPlacement.topLevelError?.let {
+                ApiErrorFeedbackCard(it, ErrorContext.Scheduling)
+                Spacer(modifier = Modifier.height(12.dp))
+            }
 
-        if (lifecycle.expired) {
-            FeedbackCard(
-                title = "Estado",
-                message = "La coordinaci\u00f3n venci\u00f3. Actualizando estado...",
-                tone = FeedbackTone.Warning,
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-        } else if (lifecycle.showWarning) {
-            FeedbackCard(
-                title = "Coordinaci\u00f3n por vencer",
-                message = "La coordinaci\u00f3n de horarios vence pronto. Confirm\u00e1 o envi\u00e1 opciones para no perder la conexi\u00f3n.",
-                tone = FeedbackTone.Warning,
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-        }
+            if (lifecycle.expired) {
+                FeedbackCard(
+                    title = "Estado",
+                    message = "La coordinaci\u00f3n venci\u00f3. Actualizando estado...",
+                    tone = FeedbackTone.Warning,
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            } else if (lifecycle.showWarning) {
+                FeedbackCard(
+                    title = "Coordinaci\u00f3n por vencer",
+                    message = "La coordinaci\u00f3n de horarios vence pronto. Confirm\u00e1 o envi\u00e1 opciones para no perder la conexi\u00f3n.",
+                    tone = FeedbackTone.Warning,
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
 
-        when (stage) {
-            SchedulingStage.Loading -> LoadingCard()
-            SchedulingStage.WaitingForMyProposals -> ProposalSelectorCard(
-                submitting = submitting,
-                actionsDisabled = actionsDisabled,
-                submittingLabel = submittingLabel,
-                proposalError = errorPlacement.proposalError,
-                nowMillis = nowMillis,
-                selected = selectedProposalDraft,
-                onSelectedChange = { selectedProposalDraft = it },
-                onSubmitProposals = onSubmitProposals,
-            )
-
-            SchedulingStage.WaitingForPartnerProposals -> WaitingPartnerCard(
-                myPendingProposals = myPendingProposals,
-                nowMillis = nowMillis,
-            )
-            SchedulingStage.ReviewPartnerProposals -> {
-                ReviewProposalsCard(
-                    myPendingProposals = myPendingProposals,
-                    partnerPendingProposals = partnerPendingProposals,
+            when (stage) {
+                SchedulingStage.Loading -> LoadingCard()
+                SchedulingStage.WaitingForMyProposals -> ProposalSelectorCard(
                     submitting = submitting,
                     actionsDisabled = actionsDisabled,
                     submittingLabel = submittingLabel,
-                    reviewError = errorPlacement.reviewError,
+                    proposalError = errorPlacement.proposalError,
                     nowMillis = nowMillis,
-                    onAcceptProposal = onAcceptProposal,
-                    onRejectPartnerProposals = onRejectPartnerProposals,
+                    selected = selectedProposalDraft,
+                    onSelectedChange = { selectedProposalDraft = it },
+                    onSubmitProposals = onSubmitProposals,
                 )
+
+                SchedulingStage.WaitingForPartnerProposals -> WaitingPartnerCard(
+                    myPendingProposals = myPendingProposals,
+                    nowMillis = nowMillis,
+                )
+                SchedulingStage.ReviewPartnerProposals -> {
+                    ReviewProposalsCard(
+                        myPendingProposals = myPendingProposals,
+                        partnerPendingProposals = partnerPendingProposals,
+                        submitting = submitting,
+                        actionsDisabled = actionsDisabled,
+                        submittingLabel = submittingLabel,
+                        reviewError = errorPlacement.reviewError,
+                        nowMillis = nowMillis,
+                        onAcceptProposal = onAcceptProposal,
+                        onRejectPartnerProposals = onRejectPartnerProposals,
+                    )
+                }
+
+                SchedulingStage.Scheduled -> ScheduledCard(negotiation?.confirmedDateTime, nowMillis)
+                SchedulingStage.Failed -> FailedCard()
+                SchedulingStage.Unknown -> UnknownCard()
             }
 
-            SchedulingStage.Scheduled -> ScheduledCard(negotiation?.confirmedDateTime, nowMillis)
-            SchedulingStage.Failed -> FailedCard()
-            SchedulingStage.Unknown -> UnknownCard()
-        }
-
-        if (stage != SchedulingStage.Loading) {
-            Spacer(modifier = Modifier.height(18.dp))
-            OutlinedButton(
-                onClick = onRefresh,
-                enabled = !interactionBusy,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(if (refreshing) "Actualizando..." else "Actualizar")
-            }
-            OutlinedButton(
-                onClick = onOpenPartnerProfile,
-                enabled = !interactionBusy,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Ver perfil")
-            }
-            Button(
-                onClick = onBackHome,
-                enabled = !interactionBusy,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(if (submitting) submittingLabel ?: "Procesando..." else "Volver a Home")
+            if (stage != SchedulingStage.Loading) {
+                Spacer(modifier = Modifier.height(18.dp))
+                if (BuildConfig.SHOW_EXPLICIT_REFRESH_BUTTONS) {
+                    OutlinedButton(
+                        onClick = onRefresh,
+                        enabled = !interactionBusy,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(if (refreshing) "Actualizando..." else "Actualizar")
+                    }
+                }
+                OutlinedButton(
+                    onClick = onOpenPartnerProfile,
+                    enabled = !interactionBusy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Ver perfil")
+                }
+                Button(
+                    onClick = onBackHome,
+                    enabled = !interactionBusy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (submitting) submittingLabel ?: "Procesando..." else "Volver a Home")
+                }
             }
         }
     }
