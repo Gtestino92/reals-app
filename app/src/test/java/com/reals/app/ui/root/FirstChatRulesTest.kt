@@ -59,11 +59,11 @@ class FirstChatRulesTest {
     @Test
     fun `first chat messages cover decision and exit states`() {
         assertEquals(
-            "Guardamos tu decision. Esperamos la respuesta de la otra persona.",
+            "Guardamos tu decisión. Esperamos la respuesta de la otra persona.",
             firstChatDecisionMessage(MatchState.ChatActive),
         )
         assertEquals(
-            "Ambas personas aprobaron. La revision visual ya esta pendiente.",
+            "Ambas personas aprobáron. La revisión visual ya está pendiente.",
             firstChatDecisionMessage(MatchState.VisualPhase),
         )
         assertEquals(
@@ -71,13 +71,28 @@ class FirstChatRulesTest {
             firstChatExitMessage(MatchState.ChatRejected),
         )
         assertEquals(
-            "El chat cambio de estado. Actualizamos tu Home.",
+            "El chat cambió de estado. Actualizamos tu Home.",
             firstChatExitMessage(null),
         )
         assertEquals("El chat venci\u00f3.", ChatStatus.Expired.firstChatClosedMessage())
         assertEquals(
             "La conversaci\u00f3n se cerr\u00f3 por inactividad.",
             ChatStatus.Abandoned.firstChatClosedMessage(),
+        )
+    }
+
+    @Test
+    fun `resolved mutual exit messages distinguish requester and responder`() {
+        val accepted = exitRequest(status = ChatExitRequestStatus.Accepted)
+        val rejected = exitRequest(status = ChatExitRequestStatus.Rejected)
+
+        assertEquals("La otra persona aceptó la salida consensuada.", accepted.resolvedHomeMessage("user-1"))
+        assertEquals("Aceptaste la salida consensuada.", accepted.resolvedHomeMessage("user-2"))
+        assertEquals("La otra persona rechazó la salida consensuada.", rejected.resolvedHomeMessage("user-1"))
+        assertEquals("Rechazaste la salida consensuada.", rejected.resolvedHomeMessage("user-2"))
+        assertEquals(
+            "La solicitud de salida venció.",
+            exitRequest(status = ChatExitRequestStatus.TimedOut).resolvedHomeMessage("user-1"),
         )
     }
 
@@ -96,13 +111,17 @@ class FirstChatRulesTest {
         sentAt = sentAt,
     )
 
-    private fun exitRequest(id: String, createdAt: String) = ChatExitRequest(
+    private fun exitRequest(
+        id: String = "exit-1",
+        createdAt: String = "2026-06-18T21:00:00Z",
+        status: ChatExitRequestStatus = ChatExitRequestStatus.Pending,
+    ) = ChatExitRequest(
         id = id,
         chatId = "chat-1",
         requesterUserId = "user-1",
         responderUserId = "user-2",
         type = ChatExitRequestType.MutualCancel,
-        status = ChatExitRequestStatus.Pending,
+        status = status,
         reason = ChatExitReason.Other,
         details = null,
         createdAt = createdAt,

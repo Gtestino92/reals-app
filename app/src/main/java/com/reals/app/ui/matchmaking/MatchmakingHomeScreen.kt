@@ -131,11 +131,11 @@ fun MatchmakingHomeScreen(
             )
 
         if (permanentlyDenied) {
-            return "Necesitamos tu ubicacion para buscar chats cerca. " +
-                "Habilita el permiso de ubicacion desde los ajustes de la app."
+            return "Necesitamos tu ubicación para buscar chats cerca. " +
+                "Habilitá el permiso de ubicación desde los ajustes de la app."
         }
 
-        return "Necesitamos tu ubicacion para buscar chats cerca."
+        return "Necesitamos tu ubicación para buscar chats cerca."
     }
 
     fun enqueueWithDeviceLocation(attemptId: Long) {
@@ -469,20 +469,20 @@ private fun MatchmakingIdleScreen(
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Encontrar chat", style = MaterialTheme.typography.titleLarge)
                 Text(
-                    text = "Vamos a usar tu ubicacion actual para encontrar personas compatibles cerca.",
+                    text = "Vamos a usar tu ubicación actual para encontrar personas compatibles cerca.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 ActiveInteractionsSummary(
                     summary = screenModel.activeInteractionsSummary,
                     passiveNotices = screenModel.passiveNotices,
                 )
-                localError?.let { ErrorFeedback("No pudimos usar tu ubicacion", it) }
+                localError?.let { ErrorFeedback("No pudimos usar tu ubicación", it) }
                 homeError?.let { ApiErrorFeedbackCard(it, ErrorContext.Home) }
                 homeMessage?.let { SuccessFeedback(it) }
                 if (!canSearch && blockedReason != null) {
                     Text(
                         text = blockedReason.matchmakingBlockedMessage()
-                            ?: "No pudimos iniciar la busqueda. Revisa tu perfil e intenta nuevamente.",
+                            ?: "No pudimos iniciar la búsqueda. Revisá tu perfil e intenta nuevamente.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -491,7 +491,7 @@ private fun MatchmakingIdleScreen(
                     enabled = !busy && canSearch,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(if (homeLoading) "Preparando busqueda..." else "Buscar chat")
+                    Text(if (homeLoading) "Preparando búsqueda..." else "Buscar chat")
                 }
                 if (showManualLocationFallback) {
                     OutlinedButton(
@@ -515,7 +515,7 @@ private fun MatchmakingIdleScreen(
                             val location = validateLocation(latitude, longitude, accuracy)
                             if (location == null) {
                                 onLocalErrorChange(
-                                    "Ubicacion invalida. Latitud -90..90, " +
+                                    "Ubicación inválida. Latitud -90..90, " +
                                         "longitud -180..180, precision 0..100000."
                                 )
                             } else {
@@ -530,7 +530,7 @@ private fun MatchmakingIdleScreen(
                 }
                 if (homeError != null) {
                     OutlinedButton(onClick = onRefreshHome, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (homeLoading) "Actualizando..." else "Reintentar estado")
+                        Text(if (homeLoading) "Actualizándo..." else "Reintentar estado")
                     }
                 }
             }

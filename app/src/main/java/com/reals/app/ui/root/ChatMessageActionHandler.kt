@@ -101,7 +101,7 @@ internal object ChatMessageActionHandler {
     }
 
     private fun invalidMessageError(): ApiError =
-        ApiError.Unexpected("El mensaje no es valido.")
+        ApiError.Unexpected("El mensaje no es válido.")
 }
 
 internal sealed interface ChatMessageSendPreparation<out T> {

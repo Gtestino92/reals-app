@@ -99,7 +99,7 @@ class ApiExecutorTest {
             ).isAccountDeletionFinalized()
         )
         assertEquals(
-            "Tu sesion necesita renovarse. Volve a iniciar sesion.",
+            "Tu sesión necesita renovarse. Volvé a iniciar sesión.",
             ApiError.Auth(AuthFailureReason.TOKEN_MISSING, "missing").toUserMessage(),
         )
     }

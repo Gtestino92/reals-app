@@ -17,24 +17,24 @@ fun ProfileStatus.userLabel(): String = when (this) {
 
 fun ProfileStatus.userDescription(): String = when (this) {
     ProfileStatus.Active -> "Tu perfil está listo para buscar chat."
-    ProfileStatus.Draft -> "Tu perfil todavia esta en borrador. Activalo cuando termines de completar tus fotos."
+    ProfileStatus.Draft -> "Tu perfil todavía esta en borrador. Activalo cuando termines de completar tus fotos."
     ProfileStatus.Inactive -> "Tu perfil está pausado por el momento."
     is ProfileStatus.Unknown -> "No pudimos leer el estado actual de tu perfil."
 }
 
 fun photoValidationLabel(value: String): String = when (value.uppercase()) {
-    "VALIDATED", "APPROVED" -> "Aprobada"
-    "PENDING", "PENDING_VALIDATION", "PROCESSING" -> "En revision"
-    "REJECTED", "INVALID" -> "Necesita cambios"
-    else -> "En revision"
+    "VALIDATED", "APPROVED" -> "Aprobáda"
+    "PENDING", "PENDING_VALIDATION", "PROCESSING" -> "En revisión"
+    "REJECTED", "INVALID" -> "Necesita cambiós"
+    else -> "En revisión"
 }
 
 fun MatchState.userLabel(): String = when (this) {
     MatchState.ChatActive -> "Chat en curso"
-    MatchState.VisualPhase -> "Revision visual"
-    MatchState.VisualApproved -> "Revision aprobada"
+    MatchState.VisualPhase -> "Revisión visual"
+    MatchState.VisualApproved -> "Revisión aprobada"
     MatchState.ChatRejected -> "Chat cerrado"
-    MatchState.VisualRejected -> "Revision cerrada"
+    MatchState.VisualRejected -> "Revisión cerrada"
     MatchState.Expired -> "Expirado"
     is MatchState.Unknown -> "Estado no disponible"
 }
@@ -52,7 +52,7 @@ fun ChatStatus.userLabel(): String = when (this) {
 
 fun ChatDecisionState.userLabel(): String = when (this) {
     ChatDecisionState.Pending -> "Pendiente"
-    ChatDecisionState.Approved -> "Aprobado"
+    ChatDecisionState.Approved -> "Aprobádo"
     ChatDecisionState.Rejected -> "Rechazado"
     ChatDecisionState.Abandoned -> "Abandonado"
     is ChatDecisionState.Unknown -> "Estado no disponible"
@@ -74,7 +74,7 @@ fun ChatExitRequestStatus.userLabel(): String = when (this) {
 }
 
 fun ChatExitReason.userLabel(): String = when (this) {
-    ChatExitReason.NoLongerInterested -> "Ya no hay interes"
+    ChatExitReason.NoLongerInterested -> "Ya no hay interés"
     ChatExitReason.InappropriateBehavior -> "Comportamiento inapropiado"
     ChatExitReason.Harassment -> "Acoso"
     ChatExitReason.ChildSafetyConcern -> "Seguridad de menores"

@@ -115,9 +115,9 @@ class SchedulingSlotOptionsTest {
 
     @Test
     fun `validateSelectedSlots rejects empty too many duplicate past invalid and unaligned values`() {
-        assertEquals("Selecciona al menos un horario.", validateSelectedSlots(emptyList(), now))
+        assertEquals("Seleccioná al menos un horario.", validateSelectedSlots(emptyList(), now))
         assertEquals(
-            "Podes elegir hasta 3 horarios.",
+            "Podés elegir hasta 3 horarios.",
             validateSelectedSlots(
                 listOf(
                     "2026-06-18T11:00:00-03:00",
@@ -135,7 +135,7 @@ class SchedulingSlotOptionsTest {
                 now,
             ),
         )
-        assertEquals("Hay un horario con formato invalido.", validateSelectedSlots(listOf("not-a-date"), now))
+        assertEquals("Hay un horario con formato inválido.", validateSelectedSlots(listOf("not-a-date"), now))
         assertEquals(
             "Todos los horarios tienen que ser futuros.",
             validateSelectedSlots(listOf("2026-06-18T10:30:00-03:00"), now),

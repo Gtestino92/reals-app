@@ -54,7 +54,7 @@ internal data class NumberedSchedulingProposal<T>(
 )
 
 internal const val EXPIRED_SELECTED_SLOT_MESSAGE =
-    "Uno o mas horarios elegidos ya pasaron. Quitalos o elegi otro horario."
+    "Uno o más horarios elegidos ya pasaron. Quitalos o elegi otro horario."
 
 internal fun schedulingProposalTimeAvailability(
     proposedDateTime: String,
@@ -244,11 +244,11 @@ internal fun validateSelectedSlots(
     values: List<String>,
     now: OffsetDateTime = OffsetDateTime.now(),
 ): String? {
-    if (values.isEmpty()) return "Selecciona al menos un horario."
-    if (values.size > 3) return "Podes elegir hasta 3 horarios."
+    if (values.isEmpty()) return "Seleccioná al menos un horario."
+    if (values.size > 3) return "Podés elegir hasta 3 horarios."
     val parsed = values.map { value ->
         runCatching { OffsetDateTime.parse(value) }.getOrNull()
-            ?: return "Hay un horario con formato invalido."
+            ?: return "Hay un horario con formato inválido."
     }
     if (parsed.distinctBy { it.toInstant() }.size != parsed.size) {
         return "Los horarios no pueden repetirse."

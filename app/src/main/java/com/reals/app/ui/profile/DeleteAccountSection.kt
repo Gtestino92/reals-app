@@ -44,7 +44,7 @@ fun DeleteAccountSection(
             },
             title = { Text("Eliminar cuenta") },
             text = {
-                Text("Tu cuenta quedara pendiente de eliminacion y podras recuperarla durante 30 dias.")
+                Text("Tu cuenta quedará pendiente de eliminación y podrás recuperarla durante 30 días.")
             },
             confirmButton = {
                 TextButton(
@@ -54,7 +54,7 @@ fun DeleteAccountSection(
                         onDeleteAccount()
                     },
                 ) {
-                    Text("Programar eliminacion")
+                    Text("Programar eliminación")
                 }
             },
             dismissButton = {
@@ -90,7 +90,7 @@ fun DeleteAccountSection(
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                     )
                     Text(
-                        text = "Sesion y acciones sensibles.",
+                        text = "Sesión y acciones sensibles.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                     )
@@ -106,11 +106,11 @@ fun DeleteAccountSection(
                     enabled = !busy,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Cerrar sesion")
+                    Text("Cerrar sesión")
                 }
 
                 Text(
-                    text = "Eliminar la cuenta programa una eliminacion recuperable durante 30 dias y cierra la sesion.",
+                    text = "Eliminar la cuenta programa una eliminación recuperable durante 30 días y cierra la sesión.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
@@ -122,7 +122,7 @@ fun DeleteAccountSection(
                     enabled = !busy,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(if (loading) "Programando eliminacion..." else "Eliminar cuenta")
+                    Text(if (loading) "Programando eliminación..." else "Eliminar cuenta")
                 }
             }
         }

@@ -19,7 +19,7 @@ class ChatMessageActionHandlerTest {
         assertTrue(result is ChatMessageSendPreparation.Rejected<*>)
         val state = (result as ChatMessageSendPreparation.Rejected<RealsRootUiState.FirstChat>).state
         val error = state.error as ApiError.Unexpected
-        assertEquals("El mensaje no es valido.", error.message)
+        assertEquals("El mensaje no es válido.", error.message)
         assertEquals(null, state.message)
     }
 
@@ -83,7 +83,7 @@ class ChatMessageActionHandlerTest {
         assertTrue(result is ChatMessageSendPreparation.Rejected<*>)
         val state = (result as ChatMessageSendPreparation.Rejected<RealsRootUiState.SecondChat>).state
         val error = state.error as ApiError.Unexpected
-        assertEquals("El mensaje no es valido.", error.message)
+        assertEquals("El mensaje no es válido.", error.message)
         assertEquals(null, state.message)
     }
 

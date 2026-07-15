@@ -190,7 +190,7 @@ fun ChatScreen(
     if (loading && chat == null) {
         LoadingChatScreen(
             title = "Cargando $chatTitlePrefix",
-            body = "Estamos preparando la conversacion.",
+            body = "Estamos preparando la conversación.",
         )
         return
     }
@@ -500,7 +500,7 @@ private fun ChatOverflowMenu(
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_more_vert),
-                contentDescription = "Más acciones",
+                contentDescription = "Más acciónes",
             )
         }
 
@@ -586,7 +586,7 @@ private fun MessageList(
             if (messageItems.isEmpty()) {
                 item {
                     Text(
-                        "Todavia no hay mensajes.",
+                        "Todavía no hay mensajes.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -763,7 +763,7 @@ private fun ChatActionsPanel(
                 ) {
                     Text(
                         if (loadingChatAction) actionLoadingLabel
-                            ?: "Procesando..." else "Aprobar chat"
+                            ?: "Procesando..." else "Aprobár chat"
                     )
                 }
             }
@@ -793,7 +793,7 @@ private fun MessageComposer(
         ) {
             if (!canChat) {
                 Text(
-                    text = "Este chat no esta disponible para enviar mensajes.",
+                    text = "Este chat no está disponible para enviar mensajes.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -883,7 +883,7 @@ private fun TimedExitRequestCard(
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
             Text(
-                text = "Podes seguir enviando mensajes mientras se resuelve.",
+                text = "Podés seguir enviando mensajes mientras se resuelve.",
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -926,9 +926,9 @@ internal fun timedExitRequestBodyText(
     remainingSeconds: Long,
 ): String =
     when {
-        remainingSeconds == 0L -> "La solicitud vencio. Estamos cerrando el chat."
+        remainingSeconds == 0L -> "La solicitud venció. Estamos cerrando el chat."
         requestedByMe -> "Esperando respuesta. Si no contesta, el chat se cierra en ${remainingSeconds}s."
-        else -> "Te propusieron cerrar el chat. Responde en ${remainingSeconds}s."
+        else -> "Te propusieron cerrar el chat. Respondé en ${remainingSeconds}s."
     }
 
 @Composable
@@ -1034,7 +1034,7 @@ private fun SafetyReportDialog(
         title = { Text("Reportar y cerrar chat") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Describi que paso. Este reporte cerrara el chat por seguridad y sera revisado.")
+                Text("Describí que pasó. Este reporte cerrará el chat por seguridad y será revisado.")
                 Box(modifier = Modifier.fillMaxWidth()) {
                     OutlinedButton(
                         onClick = { reasonMenuExpanded = true },
@@ -1115,13 +1115,13 @@ private fun chatDecisionSummary(
 
     return when {
         myDecision == ChatDecisionState.Approved && partnerDecision == ChatDecisionState.Pending ->
-            "Aprobaste el chat. Esperando decision de $partnerLabel."
+            "Aprobáste el chat. Esperando decisión de $partnerLabel."
 
         myDecision == ChatDecisionState.Pending && partnerDecision == ChatDecisionState.Approved ->
-            "$partnerLabel aprobo el chat. Falta tu decision."
+            "$partnerLabel aprobó el chat. Falta tu decisión."
 
         myDecision == ChatDecisionState.Approved && partnerDecision == ChatDecisionState.Approved ->
-            "Ambas personas aprobaron. Pasando a revision visual."
+            "Ambas personas aprobáron. Pasando a revisión visual."
 
         myDecision == ChatDecisionState.Rejected || partnerDecision == ChatDecisionState.Rejected ->
             "El chat fue rechazado."

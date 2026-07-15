@@ -276,12 +276,12 @@ private fun MissingProfileCard() {
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                text = "Todavia no tenes perfil",
+                text = "Todavía no tenés perfil",
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
             Text(
-                text = "Tu cuenta ya esta autenticada y provisionada. El proximo paso es crear el perfil para completar el onboarding.",
+                text = "Tu cuenta ya está autenticada y provisionada. El proximo pasó es crear el perfil para completar el onboarding.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
@@ -786,13 +786,13 @@ private fun ProfileEditActions(
                     Text("Reintentar carga de países")
                 }
             }
-            localError?.let { ErrorFeedback("Revisa los datos", it) }
+            localError?.let { ErrorFeedback("Revisá los datos", it) }
             error?.let { ApiErrorFeedbackCard(it, ErrorContext.ProfileUpdate) }
             Button(
                 onClick = {
                     val input = validateUpdateProfileInput(displayName, bio, city, selectedCountryCode)
                     if (input == null) {
-                        localError = "Revisa nombre, ciudad, país y bio. No uses etiquetas o formato HTML."
+                        localError = "Revisá nombre, ciudad, país y bio. No uses etiquetas o formato HTML."
                     } else {
                         localError = null
                         onUpdateProfile(input)
@@ -801,7 +801,7 @@ private fun ProfileEditActions(
                 enabled = !loading,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (loading) "Guardando..." else "Guardar cambios")
+                Text(if (loading) "Guardando..." else "Guardar cambiós")
             }
     }
 }
@@ -1057,7 +1057,7 @@ private fun PhotoManagerActions(
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
-                text = "Subi, reemplaza o borra fotos. Las miniaturas se muestran cuadradas; la foto se publica en formato vertical 4:5. Para reordenarlas, mantené presionada una foto y arrastrala.",
+                text = "Subí, reemplaza o borra fotos. Las miniaturas se muestran cuadradas; la foto se publica en formato vertical 4:5. Para reordenarlas, mantené presionada una foto y arrastrala.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -1121,7 +1121,7 @@ private fun PhotoManagerActions(
                     },
                 )
             }
-            localError?.let { ErrorFeedback("Revisa las fotos", it) }
+            localError?.let { ErrorFeedback("Revisá las fotos", it) }
             photoActionError?.let { ApiErrorFeedbackCard(it, ErrorContext.PhotoUpload) }
             activationError?.let { ApiErrorFeedbackCard(it, ErrorContext.ProfileActivation) }
             val showEmailVerificationActions = shouldShowEmailVerificationActions(
@@ -1151,7 +1151,7 @@ private fun PhotoManagerActions(
                     enabled = activationEnabled,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(if (activationLoading) "Activando..." else "Intentar activar perfil")
+                    Text(if (activationLoading) "Activando..." else "Intentr activar perfil")
                 }
             }
     }
@@ -1214,7 +1214,7 @@ private fun EmailVerificationActions(
                 enabled = !busy && !checkCoolingDown && !emailVerificationLocallyVerified,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (checking) "Comprobando..." else "Ya verifiqué")
+                Text(if (checking) "Comprobándo..." else "Ya verifiqué")
             }
         }
     }

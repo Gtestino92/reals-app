@@ -391,7 +391,7 @@ class VisualApprovalCoordinatorTest {
         assertTrue(result is VisualApprovalFlowResult.Show)
         result as VisualApprovalFlowResult.Show
         assertEquals("match-1", result.hideVisualMatchId)
-        assertEquals("Guardamos tu decision.", result.state.message)
+        assertEquals("Guardamos tu decisión.", result.state.message)
         assertFalse(result.state.deciding)
     }
 

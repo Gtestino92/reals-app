@@ -16,7 +16,7 @@ class MissingFirebaseUserException : IllegalStateException(
 )
 
 class MissingFirebaseTokenException : IllegalStateException(
-    "Firebase no devolvio un ID token valido."
+    "Firebase no devolvio un ID token válido."
 )
 
 class FirebaseAuthTokenProvider(private val context: Context) : AuthTokenProvider {

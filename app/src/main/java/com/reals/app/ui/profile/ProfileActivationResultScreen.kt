@@ -45,7 +45,7 @@ fun ProfileActivationResultScreen(
             color = MaterialTheme.colorScheme.primary,
         )
         Text(
-            text = "Ya podes entrar a Home y buscar un chat cuando quieras.",
+            text = "Ya podés entrar a Home y buscar un chat cuando quieras.",
             modifier = Modifier.padding(top = 8.dp),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -61,7 +61,7 @@ fun ProfileActivationResultScreen(
             ) {
                 Text("Estado: ${result.profile.status.userLabel()}")
                 Text("Fotos totales: ${result.totalPhotoCount}")
-                Text("Tus fotos quedaron guardadas. Si mas adelante las cambias, puede que revisemos tu perfil otra vez.")
+                Text("Tus fotos quedaron guardadas. Si más adelante las cambias, puede que revisemos tu perfil otra vez.")
             }
         }
         Row(
@@ -72,7 +72,7 @@ fun ProfileActivationResultScreen(
                 Text("Ir a Home")
             }
             OutlinedButton(onClick = onSignOut) {
-                Text("Cerrar sesion")
+                Text("Cerrar sesión")
             }
         }
     }

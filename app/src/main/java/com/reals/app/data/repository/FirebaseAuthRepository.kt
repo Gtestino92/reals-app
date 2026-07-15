@@ -178,7 +178,7 @@ open class FirebaseAuthRepository(private val context: Context) {
                 "Ya existe una cuenta con ese email."
 
             is FirebaseAuthWeakPasswordException ->
-                "La contraseña es demasiado débil."
+                "La contraseña es demásiado débil."
 
             is FirebaseAuthInvalidCredentialsException ->
                 "El email no tiene un formato válido."

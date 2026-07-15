@@ -10,7 +10,7 @@ class ApiErrorTest {
         val error = backendError("ACTIVE_PENALTY")
 
         assertEquals(
-            "Por ahora no podes entrar a la busqueda. Intenta nuevamente mas adelante.",
+            "Por ahora no podés entrar a la búsqueda. Intent nuevamente más adelante.",
             error.toUserMessage(ErrorContext.Matchmaking),
         )
     }
@@ -20,7 +20,7 @@ class ApiErrorTest {
         val error = backendError("ACCOUNT_DELETED")
 
         assertEquals(
-            "Esta cuenta esta pendiente de eliminacion. Podes recuperarla si todavia esta dentro del plazo.",
+            "Esta cuenta está pendiente de eliminación. Podés recuperarla si todavía está dentro del plazo.",
             error.toUserMessage(),
         )
     }
@@ -30,7 +30,7 @@ class ApiErrorTest {
         val error = backendError("SECOND_CHAT_EXPIRED")
 
         assertEquals(
-            "El segundo chat ya vencio.",
+            "El segundo chat ya venció.",
             error.toUserMessage(ErrorContext.Chat),
         )
     }
@@ -78,11 +78,11 @@ class ApiErrorTest {
     fun `authenticity verification backend codes map to deterministic messages`() {
         mapOf(
             "AUTHENTICITY_VERIFICATION_NOT_CONFIGURED" to
-                "La verificacion de autenticidad del perfil no esta disponible en este entorno.",
+                "La verificación de autenticidad del perfil no está disponible en este entorno.",
             "AUTHENTICITY_VERIFICATION_PROVIDER_ERROR" to
-                "No pudimos completar la verificacion de autenticidad del perfil. Intenta nuevamente mas tarde.",
+                "No pudimos completar la verificación de autenticidad del perfil. Intent nuevamente más tarde.",
             "PROFILE_AUTHENTICITY_VERIFICATION_REQUIRED" to
-                "Necesitas verificar la autenticidad del perfil antes de activarlo.",
+                "Necesitás verificar la autenticidad del perfil antes de activarlo.",
         ).forEach { (code, expected) ->
             assertEquals(
                 expected,
@@ -133,18 +133,18 @@ class ApiErrorTest {
     @Test
     fun `chat backend codes map to deterministic chat messages`() {
         mapOf(
-            "CHAT_NOT_FOUND" to "No encontramos esta conversacion. Actualiza el estado.",
-            "CHAT_NOT_AVAILABLE" to "Esta conversacion ya no esta disponible. Actualiza el estado.",
+            "CHAT_NOT_FOUND" to "No encontramos esta conversación. Actualizá el estado.",
+            "CHAT_NOT_AVAILABLE" to "Esta conversación ya no está disponible. Actualizá el estado.",
             "CHAT_EXPIRED" to "La conversaci\u00f3n venci\u00f3.",
             "CHAT_ABANDONED" to "La conversaci\u00f3n se cerr\u00f3 por inactividad.",
             "CHAT_MESSAGE_INVALID" to
-                "Revisa el mensaje. No puede estar vacio ni superar el limite permitido.",
+                "Revisá el mensaje. No puede estar vacío ni superar el límite permitido.",
             "CHAT_DECISION_NOT_AVAILABLE" to
-                "La decision sobre esta conversacion ya no esta disponible. Actualiza el estado.",
+                "La decisión sobre esta conversación ya no está disponible. Actualizá el estado.",
             "CHAT_DECISION_ALREADY_SUBMITTED" to
-                "Ya enviaste tu decision para esta conversacion.",
+                "Ya enviaste tu decisión para esta conversación.",
             "CHAT_MIN_MESSAGES_REQUIRED" to
-                "Antes de decidir, envia al menos un poco mas de conversacion.",
+                "Antes de decidir, enviá al menos un poco más de conversación.",
             "CHAT_MUTUAL_CANCELLATION_PENDING" to
                 "Hay una solicitud de salida pendiente. Resolvela antes de decidir.",
             "FIRST_CHAT_GUIDANCE_PARTICIPATION_REQUIRED" to
@@ -154,9 +154,9 @@ class ApiErrorTest {
             "FIRST_CHAT_GUIDANCE_COMPLETED" to
                 "Ya completaron las preguntas de esta conversaci\u00f3n.",
             "CHAT_EXIT_REQUEST_NOT_FOUND" to
-                "No encontramos esa solicitud de salida. Actualiza la conversacion.",
+                "No encontramos esa solicitud de salida. Actualizá la conversación.",
             "CHAT_EXIT_REQUEST_NOT_AVAILABLE" to
-                "Esa solicitud de salida ya no esta disponible.",
+                "Esa solicitud de salida ya no está disponible.",
             "CHAT_EXIT_REQUEST_ALREADY_PENDING" to
                 "Ya hay una solicitud de salida pendiente.",
         ).forEach { (code, expected) ->
@@ -189,22 +189,22 @@ class ApiErrorTest {
     fun `scheduling backend codes map to deterministic scheduling messages`() {
         mapOf(
             "SCHEDULING_NOT_AVAILABLE" to
-                "La coordinacion de horarios ya no esta disponible. Actualiza el estado e intenta nuevamente.",
-            "SCHEDULING_EXPIRED" to "La coordinacion de horarios vencio.",
+                "La coordinación de horarios ya no está disponible. Actualizá el estado e intenta nuevamente.",
+            "SCHEDULING_EXPIRED" to "La coordinación de horarios venció.",
             "SCHEDULING_NEGOTIATION_NOT_FOUND" to
-                "No encontramos la coordinacion de horarios. Actualiza el estado.",
+                "No encontramos la coordinación de horarios. Actualizá el estado.",
             "SCHEDULING_INVALID_PROPOSALS" to
-                "Revisa los horarios elegidos. Deben ser futuros, unicos y estar alineados cada media hora.",
+                "Revisá los horarios elegidos. Deben ser futuros, únicos y estar alineados cada media hora.",
             "SCHEDULING_PROPOSALS_ALREADY_SUBMITTED" to
                 "Ya enviaste tus horarios para esta ronda.",
             "SCHEDULING_ROUND_CHANGED" to
-                "La ronda cambio. Actualizamos las opciones; revisalas antes de continuar.",
+                "La ronda cambió. Actualizamos las opciones; revisalas antes de continuar.",
             "SCHEDULING_PROPOSAL_NOT_AVAILABLE" to
-                "Ese horario ya no esta disponible. Actualizamos las opciones.",
+                "Ese horario ya no está disponible. Actualizamos las opciones.",
             "SCHEDULING_CANNOT_ACCEPT_OWN_PROPOSAL" to
-                "No podes aceptar un horario propuesto por vos.",
+                "No podés aceptar un horario propuesto por vos.",
             "SCHEDULING_PARTNER_PROPOSALS_NOT_AVAILABLE" to
-                "Esas opciones ya no estan disponibles. Actualizamos el estado de la coordinacion.",
+                "Esas opciones ya no están disponibles. Actualizamos el estado de la coordinación.",
         ).forEach { (code, expected) ->
             assertEquals(
                 expected,
@@ -218,7 +218,7 @@ class ApiErrorTest {
         val error = backendError("DOMAIN_CONFLICT", message = "raw backend message")
 
         assertEquals(
-            "Esta accion no esta disponible con el estado actual.",
+            "Esta acción no está disponible con el estado actual.",
             error.toUserMessage(ErrorContext.Scheduling),
         )
     }
@@ -228,7 +228,7 @@ class ApiErrorTest {
         val error = backendError("SOME_NEW_BACKEND_CODE", message = "technical backend detail")
 
         assertEquals(
-            "Intenta nuevamente en unos segundos.",
+            "Intent nuevamente en unos segundos.",
             error.toUserMessage(),
         )
     }
@@ -236,11 +236,11 @@ class ApiErrorTest {
     @Test
     fun `null and empty codes map to generic fallback`() {
         assertEquals(
-            "Intenta nuevamente en unos segundos.",
+            "Intent nuevamente en unos segundos.",
             backendError(null).toUserMessage(),
         )
         assertEquals(
-            "Intenta nuevamente en unos segundos.",
+            "Intent nuevamente en unos segundos.",
             backendError("").toUserMessage(),
         )
     }

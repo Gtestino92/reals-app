@@ -95,7 +95,7 @@ class SchedulingRepositoryTest {
         assertEquals("SCHEDULING_INVALID_PROPOSALS", error.code)
         assertEquals(BackendErrorCode.SchedulingInvalidProposals, error.backendErrorCode)
         assertEquals(
-            "Revisa los horarios elegidos. Deben ser futuros, unicos y estar alineados cada media hora.",
+            "Revisá los horarios elegidos. Deben ser futuros, únicos y estar alineados cada media hora.",
             error.toUserMessage(ErrorContext.Scheduling),
         )
     }

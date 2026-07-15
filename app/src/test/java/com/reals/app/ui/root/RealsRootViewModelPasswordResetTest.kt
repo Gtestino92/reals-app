@@ -313,7 +313,7 @@ class RealsRootViewModelPasswordResetTest {
         assertFalse(state.sendingEmailVerification)
         assertNull(state.emailVerificationMessage)
         assertEquals(
-            "No pudimos enviar el correo de verificación. Intentá nuevamente.",
+            "No pudimos enviar el correo de verificación. Intent nuevamente.",
             state.emailVerificationError,
         )
     }
@@ -485,7 +485,7 @@ class RealsRootViewModelPasswordResetTest {
             profileResponse = backendErrorResponse(
                 statusCode = 409,
                 code = "PROFILE_PHOTOS_REQUIRED",
-                message = "Subi mas fotos para poder activar tu perfil.",
+                message = "Subí más fotos para poder activar tu perfil.",
             )
         }
         val viewModel = viewModel(FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically), api)
@@ -586,7 +586,7 @@ class RealsRootViewModelPasswordResetTest {
         advanceUntilIdle()
 
         val state = viewModel.uiState.value as RealsRootUiState.Ready
-        assertEquals("La nueva contraseña es demasiado débil.", state.changePasswordError)
+        assertEquals("La nueva contraseña es demásiado débil.", state.changePasswordError)
     }
 
     @Test
@@ -707,7 +707,7 @@ class RealsRootViewModelPasswordResetTest {
 
         val state = viewModel.uiState.value as RealsRootUiState.Ready
         assertEquals(
-            "El cambio de contraseña no está disponible para este método de inicio de sesión.",
+            "El cambió de contraseña no está disponible para este método de inicio de sesión.",
             state.changePasswordError,
         )
         assertEquals(false, viewModel.currentUserHasPasswordProvider())

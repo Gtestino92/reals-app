@@ -157,7 +157,7 @@ class HomeCardsTest {
         )
 
         assertEquals(
-            "Programado para Mañana, 18:00. Duracion maxima: 2 horas.",
+            "Programado para Mañana, 18:00. Duracion máxima: 2 horas.",
             item.homeNextStepBody(nowMillis, buenosAires, locale),
         )
     }
@@ -176,7 +176,7 @@ class HomeCardsTest {
         )
 
         assertEquals(
-            "Disponible desde Hoy, 20:30. Duracion maxima: 2 horas.",
+            "Disponible desde Hoy, 20:30. Duracion máxima: 2 horas.",
             item.homeNextStepBody(nowMillis, buenosAires, locale),
         )
     }

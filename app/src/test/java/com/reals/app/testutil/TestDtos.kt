@@ -197,7 +197,7 @@ object TestDtos {
 
     fun firstChatGuidance(
         questionId: String = "Q027",
-        questionText: String = "Que cosa pequena te mejora mucho el dia?",
+        questionText: String = "¿Qué cosa pequeña te mejora mucho el día?",
         questionOrdinal: Int = 1,
         maxQuestions: Int = 3,
         requiredCharacters: Int = 40,

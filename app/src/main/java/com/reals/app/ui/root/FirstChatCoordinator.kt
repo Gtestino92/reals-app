@@ -66,12 +66,12 @@ internal class FirstChatCoordinator(
 
         if (!chat.status.isOpenFirstChatStatus()) {
             return FirstChatLoadResult.RouteHome(
-                chat.status.firstChatClosedMessage() ?: "El chat cambio de estado. Actualizamos tu Home."
+                chat.status.firstChatClosedMessage() ?: "El chat cambió de estado. Actualizamos tu Home."
             )
         }
 
         if (chat.myDecision != ChatDecisionState.Pending) {
-            return FirstChatLoadResult.RouteHome("Ya registramos tu decision. Actualizamos tu Home.")
+            return FirstChatLoadResult.RouteHome("Ya registramos tu decisión. Actualizamos tu Home.")
         }
 
         val (messagesResult, exitsResult) = coroutineScope {
@@ -113,6 +113,15 @@ internal class FirstChatCoordinator(
         val updatedMatch = (matchResult as? ApiResult.Success)?.value ?: pending.match
         val updatedChat = (chatResult as? ApiResult.Success)?.value ?: pending.chat
         val updatedExitRequests = (exitsResult as? ApiResult.Success)?.value ?: pending.exitRequests
+        val resolvedExitRequest = updatedExitRequests
+            .latestExitRequest()
+            ?.takeIf { it.status.isResolvedExitStatus() }
+
+        if (resolvedExitRequest != null) {
+            return FirstChatRefreshResult.ExitResolved(
+                message = resolvedExitRequest.resolvedHomeMessage(current.session.user.id)
+            )
+        }
 
         if (
             (updatedMatch != null &&
@@ -131,10 +140,6 @@ internal class FirstChatCoordinator(
                 matchState = updatedMatch?.state,
                 chatStatus = updatedChat?.status,
             )
-        }
-
-        if (updatedExitRequests.latestExitRequest()?.status.isResolvedExitStatus()) {
-            return FirstChatRefreshResult.ExitResolved
         }
 
         return FirstChatRefreshResult.Show(
@@ -208,7 +213,7 @@ internal class FirstChatCoordinator(
         if (chat != null && chat.myDecision != ChatDecisionState.Pending) {
             return FirstChatActionResult.Show(
                 current.copy(
-                    message = "Ya registramos tu decision para este chat.",
+                    message = "Ya registramos tu decisión para este chat.",
                     error = null,
                 )
             )
@@ -233,7 +238,7 @@ internal class FirstChatCoordinator(
                         if (decision == ChatContinueDecision.Approved) {
                             FirstChatActionResult.ReloadHome(
                                 session = current.session,
-                                message = "Aprobaste el chat. Te avisaremos si la otra persona tambiÃ©n aprueba.",
+                                message = "Aprobáste el chat. Te avisaremos si la otra persona también aprueba.",
                                 hideFirstChatMatchId = current.matchId,
                                 autoNavigateEngagements = false,
                             )
@@ -376,7 +381,7 @@ internal class FirstChatCoordinator(
 
         return runExitAction(
             current = current,
-            successMessage = "Reporte enviado. Cerramos esta conversacion por seguridad y no volveremos a cruzarte con esta persona.",
+            successMessage = "Reporte enviado. Cerramos esta conversación por seguridad y no volveremos a cruzarte con esta persona.",
             loadingLabel = "Enviando reporte...",
             onPending = onPending,
         ) { chatId ->
@@ -420,7 +425,7 @@ internal class FirstChatCoordinator(
         onPending: (RealsRootUiState.FirstChat) -> Unit,
     ): FirstChatActionResult = runExitAction(
         current = current,
-        successMessage = "La solicitud de salida vencio.",
+        successMessage = "La solicitud de salida venció.",
         loadingLabel = "Cerrando por timeout...",
         onPending = onPending,
     ) { chatId ->
@@ -501,7 +506,7 @@ internal sealed interface FirstChatRefreshResult {
     data class Show(val state: RealsRootUiState.FirstChat) : FirstChatRefreshResult
     data class Reopen(val matchId: String, val chatId: String?) : FirstChatRefreshResult
     data class Closed(val matchState: MatchState?, val chatStatus: ChatStatus?) : FirstChatRefreshResult
-    data object ExitResolved : FirstChatRefreshResult
+    data class ExitResolved(val message: String) : FirstChatRefreshResult
 }
 
 internal sealed interface FirstChatSendResult {
@@ -571,4 +576,4 @@ internal fun normalizeSafetyReportDetails(details: String): String? =
         .takeUnless { it.isBlank() || TextSafety.containsHtmlLikeMarkup(it) }
 
 internal fun invalidSafetyReportDetailsError(): ApiError =
-    ApiError.Unexpected("El detalle del reporte no es valido.")
+    ApiError.Unexpected("El detalle del reporte no es válido.")

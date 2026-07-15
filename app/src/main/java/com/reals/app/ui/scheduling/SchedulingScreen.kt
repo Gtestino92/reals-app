@@ -190,7 +190,7 @@ fun SchedulingScreen(
                     )
                     if (refreshing) {
                         Text(
-                            text = "Actualizando...",
+                            text = "Actualizándo...",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -207,7 +207,7 @@ fun SchedulingScreen(
             if (lifecycle.expired) {
                 FeedbackCard(
                     title = "Estado",
-                    message = "La coordinaci\u00f3n venci\u00f3. Actualizando estado...",
+                    message = "La coordinaci\u00f3n venci\u00f3. Actualizándo estado...",
                     tone = FeedbackTone.Warning,
                 )
                 Spacer(modifier = Modifier.height(12.dp))
@@ -264,7 +264,7 @@ fun SchedulingScreen(
                         enabled = !interactionBusy,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text(if (refreshing) "Actualizando..." else "Actualizar")
+                        Text(if (refreshing) "Actualizándo..." else "Actualizár")
                     }
                 }
                 OutlinedButton(
@@ -404,9 +404,9 @@ private fun ProposalSelectorCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Elegir horarios", style = MaterialTheme.typography.titleMedium)
+            Text("Elegír horarios", style = MaterialTheme.typography.titleMedium)
             Text(
-                text = "Selecciona entre 1 y 3 opciones futuras. El orden en que las agregas marca tu prioridad.",
+                text = "Seleccioná entre 1 y 3 opciones futuras. El orden en que las agregas marca tu prioridad.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
@@ -481,9 +481,9 @@ private fun ProposalSelectorCard(
                     val value = candidateValue
                     val validation = value?.let { validateSelectedSlots(selected + it, now) }
                     when {
-                        value == null -> validationError = "Selecciona un horario valido."
+                        value == null -> validationError = "Seleccioná un horario válido."
                         value in selected -> validationError = "Ese horario ya esta en la lista."
-                        selected.size >= 3 -> validationError = "Podes elegir hasta 3 horarios."
+                        selected.size >= 3 -> validationError = "Podés elegir hasta 3 horarios."
                         validation != null -> validationError = validation
                         else -> {
                             onSelectedChange(selected + value)
@@ -494,13 +494,13 @@ private fun ProposalSelectorCard(
                 enabled = !submitting && !actionsDisabled && selected.size < 3 && candidateValue != null,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Agregar opcion")
+                Text("Agregar opción")
             }
 
             Text("Opciones elegidas", style = MaterialTheme.typography.titleSmall)
             if (selectedLabels.isEmpty()) {
                 Text(
-                    text = "Todavia no agregaste horarios.",
+                    text = "Todavía no agregaste horarios.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
@@ -777,7 +777,7 @@ private fun WaitingPartnerCard(
                 text = if (myPendingProposals.isNotEmpty()) {
                     "Esperando que la otra persona revise tus opciones."
                 } else {
-                    "La otra persona rechazo tus opciones. Ahora esperamos que envie las suyas."
+                    "La otra persona rechazó tus opciones. Ahora esperamos que envie las suyas."
                 },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -807,9 +807,9 @@ private fun ReviewProposalsCard(
     val reviewState = schedulingReceivedProposalReviewState(partnerPendingProposals, nowMillis)
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Revisa las opciones recibidas", style = MaterialTheme.typography.titleMedium)
+            Text("Revisá las opciones recibidas", style = MaterialTheme.typography.titleMedium)
             Text(
-                text = "Elegi una opcion recibida o rechaza estas opciones antes de proponer las tuyas.",
+                text = "Elegí una opción recibida o rechaza estas opciones antes de proponer las tuyas.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             ReceivedProposalList(reviewState, nowMillis)
@@ -949,7 +949,7 @@ private fun ScheduledCard(
 private fun FailedCard() {
     Card(modifier = Modifier.fillMaxWidth()) {
         Text(
-            text = "No hubo acuerdo. La coordinacion ya no esta disponible.",
+            text = "No hubo acuerdo. La coordinación ya no está disponible.",
             modifier = Modifier.padding(16.dp),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -960,7 +960,7 @@ private fun FailedCard() {
 private fun UnknownCard() {
     Card(modifier = Modifier.fillMaxWidth()) {
         Text(
-            text = "No pudimos interpretar el estado actual. Actualiza para intentarlo de nuevo.",
+            text = "No pudimos interpretar el estado actual. Actualizá para intentarlo de nuevo.",
             modifier = Modifier.padding(16.dp),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

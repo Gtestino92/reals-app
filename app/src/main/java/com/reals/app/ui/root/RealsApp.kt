@@ -94,11 +94,11 @@ fun RealsApp(
             )
 
             is RealsRootUiState.AccountDeletionScheduled -> FullScreenMessage(
-                title = "Cuenta programada para eliminacion",
-                body = "Tu cuenta fue programada para eliminacion. " +
-                    "Podes recuperarla${
+                title = "Cuenta programada para eliminación",
+                body = "Tu cuenta fue programada para eliminación. " +
+                    "Podés recuperarla${
                         current.deletionFinalizesAt?.let { " hasta el ${formatBackendDate(it)}" }
-                            ?: " durante 30 dias"
+                            ?: " durante 30 días"
                     }.",
                 primaryActionLabel = "Entendido",
                 onPrimaryAction = viewModel::signOut,
@@ -382,7 +382,7 @@ fun RealsApp(
                 body = current.body,
                 primaryActionLabel = "Volver a Home",
                 onPrimaryAction = viewModel::returnToHomeFromPendingEngagement,
-                secondaryActionLabel = "Cerrar sesion",
+                secondaryActionLabel = "Cerrar sesión",
                 onSecondaryAction = viewModel::signOut,
             )
 

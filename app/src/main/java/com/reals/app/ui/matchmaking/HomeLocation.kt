@@ -19,7 +19,7 @@ private const val SEARCH_LOCATION_MAX_ACCURACY_METERS = 1000
 private const val CURRENT_LOCATION_TIMEOUT_MILLIS = 7_000L
 
 internal const val SEARCH_LOCATION_UNAVAILABLE_MESSAGE =
-    "No pudimos obtener tu ubicacion. Verifica que la ubicacion del telefono este activada e intenta nuevamente."
+    "No pudimos obtener tu ubicación. Verificá que la ubicación del teléfono este activada e intenta nuevamente."
 
 private val sharedSearchLocationCache = SearchLocationMemoryCache()
 
@@ -58,7 +58,7 @@ internal class SearchLocationResolver(
 
     suspend fun resolveForSearch(): SearchLocationInput {
         if (!source.hasLocationPermission()) {
-            error("Falta permiso de ubicacion.")
+            error("Falta permiso de ubicación.")
         }
 
         return bestAvailableLocation(allowCurrentRequest = true)

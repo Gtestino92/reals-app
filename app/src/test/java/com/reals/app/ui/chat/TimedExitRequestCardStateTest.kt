@@ -32,14 +32,14 @@ class TimedExitRequestCardStateTest {
     @Test
     fun `responder copy before expiry prompts response`() {
         assertEquals(
-            "Te propusieron cerrar el chat. Responde en 12s.",
+            "Te propusieron cerrar el chat. Respondé en 12s.",
             timedExitRequestBodyText(requestedByMe = false, remainingSeconds = 12L),
         )
     }
 
     @Test
     fun `expired copy is shared by requester and responder`() {
-        val expected = "La solicitud vencio. Estamos cerrando el chat."
+        val expected = "La solicitud venció. Estamos cerrando el chat."
 
         assertEquals(expected, timedExitRequestBodyText(requestedByMe = true, remainingSeconds = 0L))
         assertEquals(expected, timedExitRequestBodyText(requestedByMe = false, remainingSeconds = 0L))

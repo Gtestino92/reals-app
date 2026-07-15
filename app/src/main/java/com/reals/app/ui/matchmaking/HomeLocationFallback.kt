@@ -25,7 +25,7 @@ internal fun ManualLocationFallback(
     onSubmit: () -> Unit,
 ) {
     Text(
-        text = "Solo para desarrollo/emulador cuando no hay ubicacion disponible.",
+        text = "Solo para desarrollo/emulador cuando no hay ubicación disponible.",
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         style = MaterialTheme.typography.bodyMedium,
     )
