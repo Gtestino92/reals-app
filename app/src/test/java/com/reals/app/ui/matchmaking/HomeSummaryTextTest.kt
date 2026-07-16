@@ -12,11 +12,11 @@ class HomeSummaryTextTest {
         val summaryText = activeExperiencesSummaryText(
             summary(activeInitialCount = 0, activeConnectionCount = 0),
         )
-        val noticeText = passiveNoticeText(HomePassiveNoticeItem.SchedulingPreparing(count = 1))
+        val noticeText = passiveNoticeText(HomePassiveNoticeItem.SchedulingPreparing)
 
         assertNull(summaryText)
         assertEquals(
-            "Tenes una coordinacion en preparacion. Se habilitara mas adelante.",
+            "Estamos preparando uno de tus próximos pasós.",
             noticeText,
         )
         assertTrue(noticeText?.contains("0 iniciales") != true)
@@ -39,27 +39,27 @@ class HomeSummaryTextTest {
             summary(activeInitialCount = 0, activeConnectionCount = 1),
         )
 
-        assertEquals("Experiencias activas: 1 conexion.", text)
+        assertEquals("Experiencias activas: 1 conexión.", text)
         assertTrue(text?.contains("0 iniciales") != true)
     }
 
     @Test
     fun `visible counts and passive notice both render text`() {
         assertEquals(
-            "Experiencias activas: 1 inicial, 1 conexion.",
+            "Experiencias activas: 1 inicial, 1 conexión.",
             activeExperiencesSummaryText(summary(activeInitialCount = 1, activeConnectionCount = 1)),
         )
         assertEquals(
-            "Tenes una coordinacion en preparacion. Se habilitara mas adelante.",
-            passiveNoticeText(HomePassiveNoticeItem.SchedulingPreparing(count = 1)),
+            "Estamos preparando uno de tus próximos pasós.",
+            passiveNoticeText(HomePassiveNoticeItem.SchedulingPreparing),
         )
     }
 
     @Test
-    fun `plural scheduling preparing notice renders count`() {
+    fun `scheduling preparing notice is generic and count-free`() {
         assertEquals(
-            "Tenes 2 coordinaciones en preparacion. Se habilitaran mas adelante.",
-            passiveNoticeText(HomePassiveNoticeItem.SchedulingPreparing(count = 2)),
+            "Estamos preparando uno de tus próximos pasós.",
+            passiveNoticeText(HomePassiveNoticeItem.SchedulingPreparing),
         )
     }
 
@@ -69,7 +69,7 @@ class HomeSummaryTextTest {
     ): HomeActiveInteractionsSummary = HomeActiveInteractionsSummary(
         activeInitialCount = activeInitialCount,
         activeConnectionCount = activeConnectionCount,
-        pendingSchedulingConnectionCount = 0,
+        hasPendingSchedulingConnection = false,
         actionableConnectionCount = 0,
     )
 }

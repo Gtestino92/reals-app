@@ -101,7 +101,7 @@ class ChatRepositoryTest {
         assertEquals("CHAT_MESSAGE_INVALID", error.code)
         assertEquals(BackendErrorCode.ChatMessageInvalid, error.backendErrorCode)
         assertEquals(
-            "Revisa el mensaje. No puede estar vacio ni superar el limite permitido.",
+            "Revisá el mensaje. No puede estar vacío ni superar el límite permitido.",
             error.toUserMessage(ErrorContext.Chat),
         )
     }

@@ -25,7 +25,7 @@ fun ApiErrorScreen(
         body = error.toUserMessage(context),
         primaryActionLabel = if (onRetry != null) "Reintentar" else null,
         onPrimaryAction = onRetry,
-        secondaryActionLabel = if (onDismiss != null) "Cerrar sesion" else null,
+        secondaryActionLabel = if (onDismiss != null) "Cerrar sesión" else null,
         onSecondaryAction = onDismiss,
     )
 }

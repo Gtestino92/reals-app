@@ -19,10 +19,18 @@ class HomeUiMapper {
         localHidden: LocalHiddenInteractions,
         localMatchmakingBlockedReason: ApiError?,
     ): HomeScreenModel {
+        val pendingActionItems = home.pendingActionItems(localHidden)
+        val nextStepItems = home.nextStepItems()
+        val displayedSummary = home?.activeInteractionsSummary?.copy(
+            activeInitialCount = pendingActionItems.size,
+            activeConnectionCount = nextStepItems.size,
+            actionableConnectionCount = nextStepItems.size,
+        )
+
         return HomeScreenModel(
-            pendingActions = home.pendingActionItems(localHidden),
-            nextSteps = home.nextStepItems(),
-            activeInteractionsSummary = home?.activeInteractionsSummary,
+            pendingActions = pendingActionItems,
+            nextSteps = nextStepItems,
+            activeInteractionsSummary = displayedSummary,
             passiveNotices = home.passiveNoticeItems(),
             matchmaking = home.matchmakingUiState(localMatchmakingBlockedReason),
         )
@@ -136,13 +144,12 @@ class HomeUiMapper {
 
         return passiveNotices.map { notice ->
             when (notice) {
-                is HomePassiveNotice.SchedulingPreparing ->
-                    HomePassiveNoticeItem.SchedulingPreparing(notice.count)
+                HomePassiveNotice.SchedulingPreparing ->
+                    HomePassiveNoticeItem.SchedulingPreparing
 
                 is HomePassiveNotice.Unknown ->
                     HomePassiveNoticeItem.Unknown(
                         rawType = notice.rawType,
-                        count = notice.count,
                     )
             }
         }

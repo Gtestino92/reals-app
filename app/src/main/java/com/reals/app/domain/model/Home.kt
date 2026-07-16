@@ -37,7 +37,7 @@ data class HomeMatchmakingBlockedReason(
 data class HomeActiveInteractionsSummary(
     val activeInitialCount: Int,
     val activeConnectionCount: Int,
-    val pendingSchedulingConnectionCount: Int,
+    val hasPendingSchedulingConnection: Boolean,
     val actionableConnectionCount: Int,
 )
 
@@ -95,8 +95,8 @@ sealed interface HomeNextStep {
 }
 
 sealed interface HomePassiveNotice {
-    data class SchedulingPreparing(val count: Int) : HomePassiveNotice
-    data class Unknown(val rawType: String, val count: Int?) : HomePassiveNotice
+    data object SchedulingPreparing : HomePassiveNotice
+    data class Unknown(val rawType: String) : HomePassiveNotice
 }
 
 data class HomeChat(

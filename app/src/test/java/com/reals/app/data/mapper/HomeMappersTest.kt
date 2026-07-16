@@ -18,6 +18,8 @@ import com.reals.app.domain.model.ChatType
 import com.reals.app.domain.model.HomeNextStep
 import com.reals.app.domain.model.HomePassiveNotice
 import com.reals.app.domain.model.HomePendingAction
+import com.reals.app.testutil.testJson
+import kotlinx.serialization.Serializable
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -83,7 +85,6 @@ class HomeMappersTest {
             passiveNotices = listOf(
                 HomePassiveNoticeResponseDto(
                     type = "SCHEDULING_PREPARING",
-                    count = 2,
                 ),
             ),
         )
@@ -107,7 +108,19 @@ class HomeMappersTest {
         assertEquals("2026-06-20T18:00:00-03:00", secondChat.secondChat?.availableAt)
         assertEquals(120L, secondChat.secondChat?.durationMinutes)
 
-        assertEquals(HomePassiveNotice.SchedulingPreparing(2), home.passiveNotices.single())
+        assertEquals(HomePassiveNotice.SchedulingPreparing, home.passiveNotices.single())
+    }
+
+    @Test
+    fun `Home summary DTO maps pending scheduling boolean`() {
+        val summary = HomeActiveInteractionsSummaryResponseDto(
+            activeInitialCount = 0,
+            activeConnectionCount = 0,
+            hasPendingSchedulingConnection = true,
+            actionableConnectionCount = 0,
+        ).toDomain()
+
+        assertEquals(true, summary.hasPendingSchedulingConnection)
     }
 
     @Test
@@ -184,7 +197,7 @@ class HomeMappersTest {
                     matchId = "match-unknown",
                 ),
             ),
-            passiveNotices = listOf(HomePassiveNoticeResponseDto(type = "SCHEDULING_PREPARING", count = 1)),
+            passiveNotices = listOf(HomePassiveNoticeResponseDto(type = "SCHEDULING_PREPARING")),
             serverTime = "2026-06-18T21:00:00Z",
         ).toDomain()
 
@@ -219,7 +232,42 @@ class HomeMappersTest {
         val incomplete = pending.nextSteps[4] as HomeNextStep.SecondChatAvailable
         assertEquals(null, incomplete.secondChat)
         assertTrue(pending.nextSteps[5] is HomeNextStep.Unknown)
-        assertEquals(HomePassiveNotice.SchedulingPreparing(1), pending.passiveNotices.single())
+        assertEquals(HomePassiveNotice.SchedulingPreparing, pending.passiveNotices.single())
+    }
+
+    @Test
+    fun `Home pending state DTO maps count-free scheduling preparing passive notice`() {
+        val pending = HomePendingStateResponseDto(
+            version = 14,
+            passiveNotices = listOf(HomePassiveNoticeResponseDto(type = "SCHEDULING_PREPARING")),
+            serverTime = "2026-06-18T21:00:00Z",
+        ).toDomain()
+
+        assertEquals(HomePassiveNotice.SchedulingPreparing, pending.passiveNotices.single())
+    }
+
+    @Test
+    fun `Home contract deserializes count-free passive notices and summary boolean`() {
+        val dto = testJson.decodeFromString<HomeContractProbeDto>(
+            """
+            {
+              "activeInteractionsSummary": {
+                "activeInitialCount": 0,
+                "activeConnectionCount": 0,
+                "hasPendingSchedulingConnection": true,
+                "actionableConnectionCount": 0
+              },
+              "passiveNotices": [
+                {
+                  "type": "SCHEDULING_PREPARING"
+                }
+              ]
+            }
+            """.trimIndent()
+        )
+
+        assertEquals(true, dto.activeInteractionsSummary.hasPendingSchedulingConnection)
+        assertEquals(HomePassiveNotice.SchedulingPreparing, dto.passiveNotices.single().toDomain())
     }
 
     @Test
@@ -261,7 +309,7 @@ class HomeMappersTest {
                     matchId = "match-1",
                 ),
             ),
-            passiveNotices = listOf(HomePassiveNoticeResponseDto(type = "NEW_NOTICE", count = 1)),
+            passiveNotices = listOf(HomePassiveNoticeResponseDto(type = "NEW_NOTICE")),
         ).toDomain()
 
         assertTrue(home.pendingActions.single() is HomePendingAction.Unknown)
@@ -286,5 +334,11 @@ class HomeMappersTest {
         userId = "user-$name",
         profileId = "profile-$name",
         displayName = name,
+    )
+
+    @Serializable
+    private data class HomeContractProbeDto(
+        val activeInteractionsSummary: HomeActiveInteractionsSummaryResponseDto,
+        val passiveNotices: List<HomePassiveNoticeResponseDto>,
     )
 }

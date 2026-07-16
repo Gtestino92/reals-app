@@ -736,11 +736,11 @@ class RealsRootViewModel(
                     )
                 }
 
-                FirstChatRefreshResult.ExitResolved -> {
+                is FirstChatRefreshResult.ExitResolved -> {
                     homeCoordinator.hideFirstChatLocally(current.matchId)
                     homeCoordinator.returnHome(
                         session = current.session,
-                        message = "El chat fue cerrado.",
+                        message = result.message,
                     )
                 }
             }
@@ -1403,4 +1403,3 @@ class RealsRootViewModelFactory(
         throw IllegalArgumentException("Unknown ViewModel class ${modelClass.name}")
     }
 }
-

@@ -40,7 +40,7 @@ fun AccountDeletionRecoveryScreen(
         horizontalAlignment = Alignment.Start,
     ) {
         Text(
-            text = "Cuenta pendiente de eliminacion",
+            text = "Cuenta pendiente de eliminación",
             style = MaterialTheme.typography.headlineLarge,
             color = MaterialTheme.colorScheme.primary,
         )
@@ -54,7 +54,7 @@ fun AccountDeletionRecoveryScreen(
             if (it.isAccountDeletionFinalized()) {
                 FeedbackCard(
                     title = "La cuenta ya no puede recuperarse",
-                    message = "Podes crear una cuenta nueva.",
+                    message = "Podés crear una cuenta nueva.",
                     tone = FeedbackTone.Error,
                     modifier = Modifier.padding(top = 16.dp),
                 )
@@ -80,7 +80,7 @@ fun AccountDeletionRecoveryScreen(
                 enabled = !reactivating,
                 onClick = onKeepDeletion,
             ) {
-                Text("Mantener eliminacion")
+                Text("Mantener eliminación")
             }
         }
     }
@@ -88,8 +88,8 @@ fun AccountDeletionRecoveryScreen(
 
 private fun recoveryMessage(deletionFinalizesAt: String?): String {
     val dateText = deletionFinalizesAt?.let { " hasta el ${formatBackendDate(it)}" }
-        ?: " durante 30 dias"
-    return "Esta cuenta esta pendiente de eliminacion$dateText. Si la recuperas, conservaras tu perfil y fotos, " +
-        "pero deberas activar el perfil nuevamente. Tus conexiones activas anteriores no se restauraran."
+        ?: " durante 30 días"
+    return "Esta cuenta está pendiente de eliminación$dateText. Si la recuperas, conservaras tu perfil y fotos, " +
+        "pero deberás activar el perfil nuevamente. Tus conexiones activas anteriores no se restaurarán."
 }
 

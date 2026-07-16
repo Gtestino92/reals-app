@@ -30,7 +30,7 @@ class RealsRootSystemBackTest {
             RealsRootUiState.PendingEngagement(
                 session = session,
                 title = "Pendiente",
-                body = "Hay una accion pendiente.",
+                body = "Hay una acción pendiente.",
             ),
             RealsRootUiState.ActivationComplete(
                 session = session,

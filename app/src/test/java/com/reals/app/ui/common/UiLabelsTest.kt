@@ -22,10 +22,10 @@ class UiLabelsTest {
     @Test
     fun `labels cover match and chat states`() {
         assertEquals("Chat en curso", MatchState.ChatActive.userLabel())
-        assertEquals("Revision visual", MatchState.VisualPhase.userLabel())
-        assertEquals("Revision aprobada", MatchState.VisualApproved.userLabel())
+        assertEquals("Revisión visual", MatchState.VisualPhase.userLabel())
+        assertEquals("Revisión aprobada", MatchState.VisualApproved.userLabel())
         assertEquals("Chat cerrado", MatchState.ChatRejected.userLabel())
-        assertEquals("Revision cerrada", MatchState.VisualRejected.userLabel())
+        assertEquals("Revisión cerrada", MatchState.VisualRejected.userLabel())
         assertEquals("Expirado", MatchState.Expired.userLabel())
         assertEquals("Estado no disponible", MatchState.Unknown("NEW").userLabel())
 
@@ -37,11 +37,11 @@ class UiLabelsTest {
     @Test
     fun `labels cover decisions exit types and reasons`() {
         assertEquals("Pendiente", ChatDecisionState.Pending.userLabel())
-        assertEquals("Aprobado", ChatDecisionState.Approved.userLabel())
+        assertEquals("Aprobádo", ChatDecisionState.Approved.userLabel())
         assertEquals("Rechazado", ChatDecisionState.Rejected.userLabel())
         assertEquals("Cancelacion propuesta", ChatExitRequestType.MutualCancel.userLabel())
         assertEquals("Reporte de seguridad", ChatExitRequestType.SafetyReport.userLabel())
-        assertEquals("Ya no hay interes", ChatExitReason.NoLongerInterested.userLabel())
+        assertEquals("Ya no hay interés", ChatExitReason.NoLongerInterested.userLabel())
         assertEquals("Comportamiento inapropiado", ChatExitReason.InappropriateBehavior.userLabel())
         assertEquals("Acoso", ChatExitReason.Harassment.userLabel())
         assertEquals("Seguridad de menores", ChatExitReason.ChildSafetyConcern.userLabel())
@@ -50,10 +50,10 @@ class UiLabelsTest {
 
     @Test
     fun `photoValidationLabel covers backend variations`() {
-        assertEquals("Aprobada", photoValidationLabel("VALIDATED"))
-        assertEquals("Aprobada", photoValidationLabel("APPROVED"))
-        assertEquals("En revision", photoValidationLabel("PENDING_VALIDATION"))
-        assertEquals("Necesita cambios", photoValidationLabel("REJECTED"))
-        assertEquals("En revision", photoValidationLabel("SOMETHING_NEW"))
+        assertEquals("Aprobáda", photoValidationLabel("VALIDATED"))
+        assertEquals("Aprobáda", photoValidationLabel("APPROVED"))
+        assertEquals("En revisión", photoValidationLabel("PENDING_VALIDATION"))
+        assertEquals("Necesita cambiós", photoValidationLabel("REJECTED"))
+        assertEquals("En revisión", photoValidationLabel("SOMETHING_NEW"))
     }
 }

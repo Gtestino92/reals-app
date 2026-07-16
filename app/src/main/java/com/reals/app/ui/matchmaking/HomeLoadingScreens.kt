@@ -131,7 +131,7 @@ internal fun SearchingChatScreen(
             enabled = canCancelSearch && !accountDeleteLoading,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Cancelar busqueda")
+            Text("Cancelar búsqueda")
         }
     }
 }

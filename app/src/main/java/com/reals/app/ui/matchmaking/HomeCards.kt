@@ -325,7 +325,7 @@ private fun FirstChatItem(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                text = "Podes entrar cuando quieras.",
+                text = "Podés entrar cuando quieras.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Button(
@@ -364,7 +364,7 @@ private fun VisualApprovalItem(
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Abrir aprobacion visual")
+                Text("Abrir aprobácion visual")
             }
         }
     }
@@ -517,7 +517,7 @@ internal fun HomeNextStepItem.homeNextStepBody(
     locale: Locale = Locale.forLanguageTag("es-AR"),
 ): String =
     if (isStaleExpiredSecondChat(nowMillis)) {
-        "El horario ya vencio y el segundo chat no esta disponible."
+        "El horario ya venció y el segundo chat no está disponible."
     } else {
         when (this) {
             is HomeNextStepItem.Scheduling -> "Coordinando próximo encuentro."
@@ -529,7 +529,7 @@ internal fun HomeNextStepItem.homeNextStepBody(
                         zoneId,
                         locale,
                     )
-                }. Duracion maxima: ${durationLabel()}."
+                }. Duración máxima: ${durationLabel()}."
             is HomeNextStepItem.SecondChatAvailable ->
                 "Disponible desde ${
                     formatBackendContextualDateTime(
@@ -538,7 +538,7 @@ internal fun HomeNextStepItem.homeNextStepBody(
                         zoneId,
                         locale,
                     )
-                }. Duracion maxima: ${durationLabel()}."
+                }. Duración máxima: ${durationLabel()}."
             is HomeNextStepItem.SecondChatReadOnly ->
                 readOnlyUntil?.let {
                     "Disponible solo para lectura hasta ${

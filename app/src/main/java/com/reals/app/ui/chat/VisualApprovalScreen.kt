@@ -113,12 +113,12 @@ fun VisualApprovalScreen(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Aprobacion visual",
+                    text = "Aprobácion visual",
                     style = MaterialTheme.typography.headlineLarge,
                     color = MaterialTheme.colorScheme.primary,
                 )
                 Text(
-                    text = "Revisa el perfil visual antes de decidir si queres continuar.",
+                    text = "Revisá el perfil visual antes de decidir si queres continuar.",
                     modifier = Modifier.padding(top = 8.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -143,7 +143,7 @@ fun VisualApprovalScreen(
         if (lifecycle.expired) {
             FeedbackCard(
                 title = "Estado",
-                message = "La revisi\u00f3n visual venci\u00f3. Actualizando estado...",
+                message = "La revisi\u00f3n visual venci\u00f3. Actualizándo estado...",
                 tone = FeedbackTone.Warning,
             )
             Spacer(modifier = Modifier.height(16.dp))
@@ -163,11 +163,11 @@ fun VisualApprovalScreen(
                 Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Perfil visual", style = MaterialTheme.typography.titleLarge)
                     Text(
-                        text = if (loading) "Cargando perfil..." else "No pudimos cargar el perfil visual todavia.",
+                        text = if (loading) "Cargando perfil..." else "No pudimos cargar el perfil visual todavía.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     OutlinedButton(onClick = onRefresh, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (refreshing) "Actualizando..." else "Reintentar")
+                        Text(if (refreshing) "Actualizándo..." else "Reintentar")
                     }
                 }
             }
@@ -228,7 +228,7 @@ fun VisualApprovalScreen(
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Decision visual", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    text = "Si aprobas y la otra persona tambien aprueba, se crea la conexion para la siguiente etapa.",
+                    text = "Si aprobás y la otra persona también aprueba, se crea la conexión para la siguiente etapa.",
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
                 if (decisionBlockedByUnreadPartnerMessage) {
@@ -243,7 +243,7 @@ fun VisualApprovalScreen(
                         enabled = canMakeVisualDecision,
                         modifier = Modifier.weight(1f),
                     ) {
-                        Text(if (deciding) decidingLabel ?: "Procesando..." else "Aprobar")
+                        Text(if (deciding) decidingLabel ?: "Procesando..." else "Aprobár")
                     }
                     OutlinedButton(
                         onClick = onReject,
@@ -293,7 +293,7 @@ private fun StatusCard(
             Text("Match: ${match?.state?.userLabel() ?: "Cargando"}")
             if (loading || refreshing) {
                 Text(
-                    text = if (loading) "Cargando revision visual..." else "Actualizando revision visual...",
+                    text = if (loading) "Cargando revisión visual..." else "Actualizándo revisión visual...",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -324,17 +324,17 @@ private fun PartnerMessageCard(
             val partnerPersonalMessageSubmitted = profile?.partnerPersonalMessageSubmitted == true
             val body = when {
                 profile == null -> "Cargando mensaje personal..."
-                !partnerPersonalMessageSubmitted -> "La otra persona todavia no dejo un mensaje personal."
+                !partnerPersonalMessageSubmitted -> "La otra persona todavía no dejo un mensaje personal."
                 readingPartnerMessage -> "Leyendo mensaje..."
-                partnerMessageError != null -> "No pudimos cargar el mensaje personal. Intenta nuevamente."
+                partnerMessageError != null -> "No pudimos cargar el mensaje personal. Intent nuevamente."
                 partnerMessageLoaded -> partnerMessage
                     ?.takeIf { it.isNotBlank() }
                     ?.let { TextSafety.safeDisplay(it, maxLength = 280) }
-                    ?: "La otra persona todavia no dejo un mensaje personal."
+                    ?: "La otra persona todavía no dejo un mensaje personal."
                 !partnerMessageLoaded && decisionRequiresPartnerPersonalMessageRead ->
-                    "La otra persona dejo un mensaje personal. Tenes que leerlo antes de decidir."
+                    "La otra persona dejó un mensaje personal. Tenés que leerlo antes de decidir."
                 !partnerMessageLoaded -> "Cargando mensaje personal..."
-                else -> "La otra persona todavia no dejo un mensaje personal."
+                else -> "La otra persona todavía no dejo un mensaje personal."
             }
             Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (partnerPersonalMessageSubmitted && !partnerMessageLoaded) {

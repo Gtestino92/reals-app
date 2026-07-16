@@ -361,7 +361,7 @@ internal class HomeCoordinator(
                 ready = ready.copy(
                     home = ready.home.copy(
                         matchmakingBlockedReason = null,
-                        homeMessage = "Aprobaste el chat. Te avisaremos si la otra persona tambi\u00e9n aprueba.",
+                        homeMessage = "Aprobáste el chat. Te avisaremos si la otra persona tambi\u00e9n aprueba.",
                     ),
                 ),
                 publishLoadingState = false,
@@ -375,9 +375,9 @@ internal class HomeCoordinator(
                     ready = ready.copy(
                         home = ready.home.copy(
                             homeMessage = if (reachedLimit) {
-                                "Aprobaste el chat. Ya ten\u00e9s el m\u00e1ximo de interacciones activas."
+                                "Aprobáste el chat. Ya ten\u00e9s el m\u00e1ximo de interacciónes activas."
                             } else {
-                                "Aprobaste el chat. No pudimos volver a iniciar la b\u00fasqueda autom\u00e1ticamente."
+                                "Aprobáste el chat. No pudimos volver a iniciar la b\u00fasqueda autom\u00e1ticamente."
                             },
                             matchmakingBlockedReason = enqueueResult.error,
                         ),

@@ -13,7 +13,7 @@ internal fun activeExperiencesSummaryText(summary: HomeActiveInteractionsSummary
         if (summary.activeConnectionCount > 0) {
             add(
                 "${summary.activeConnectionCount} " +
-                    if (summary.activeConnectionCount == 1) "conexion" else "conexiones"
+                    if (summary.activeConnectionCount == 1) "conexión" else "conexiones"
             )
         }
     }
@@ -25,11 +25,7 @@ internal fun activeExperiencesSummaryText(summary: HomeActiveInteractionsSummary
 
 internal fun passiveNoticeText(notice: HomePassiveNoticeItem): String? =
     when (notice) {
-        is HomePassiveNoticeItem.SchedulingPreparing -> if (notice.count == 1) {
-            "Tenes una coordinacion en preparacion. Se habilitara mas adelante."
-        } else {
-            "Tenes ${notice.count} coordinaciones en preparacion. Se habilitaran mas adelante."
-        }
+        HomePassiveNoticeItem.SchedulingPreparing -> "Estamos preparando uno de tus próximos pasós."
 
         is HomePassiveNoticeItem.Unknown -> null
     }

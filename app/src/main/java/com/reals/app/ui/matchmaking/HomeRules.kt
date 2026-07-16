@@ -24,7 +24,7 @@ internal fun ApiError?.matchmakingBlockedMessage(): String? {
     if (this == null) return null
 
     if (isActiveMatchLimitReached()) {
-        return "Ya tenes conversaciones o experiencias activas. Termina una antes de buscar otra."
+        return "Ya tenés conversaciones o experiencias activas. Terminá una antes de buscar otra."
     }
 
     return when (this) {

@@ -79,7 +79,7 @@ internal fun AccountSection(
                 if (!accountDeleteLoading) confirmingDelete = false
             },
             title = { Text("Eliminar cuenta") },
-            text = { Text("Tu cuenta quedara pendiente de eliminacion y podras recuperarla durante 30 dias.") },
+            text = { Text("Tu cuenta quedará pendiente de eliminación y podrás recuperarla durante 30 días.") },
             confirmButton = {
                 TextButton(
                     enabled = !accountDeleteLoading,
@@ -88,7 +88,7 @@ internal fun AccountSection(
                         onDeleteAccount()
                     },
                 ) {
-                    Text("Programar eliminacion")
+                    Text("Programar eliminación")
                 }
             },
             dismissButton = {
@@ -157,7 +157,7 @@ internal fun AccountSection(
                 Column {
                     Text("Cuenta", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        text = "Sesion y acciones sensibles.",
+                        text = "Sesión y acciones sensibles.",
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -168,7 +168,7 @@ internal fun AccountSection(
             }
             if (expanded) {
                 OutlinedButton(onClick = onSignOut, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                    Text("Cerrar sesion")
+                    Text("Cerrar sesión")
                 }
                 if (canChangePassword) {
                     OutlinedButton(
@@ -190,7 +190,7 @@ internal fun AccountSection(
                     )
                 }
                 Text(
-                    text = "Eliminar la cuenta programa una eliminacion recuperable durante 30 dias y cierra la sesion.",
+                    text = "Eliminar la cuenta programa una eliminación recuperable durante 30 días y cierra la sesión.",
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -300,7 +300,7 @@ internal const val wrongCurrentPasswordMessage = "La contraseña actual no es co
 
 internal fun expandedAccountActionLabels(canChangePassword: Boolean): List<String> {
     return buildList {
-        add("Cerrar sesion")
+        add("Cerrar sesión")
         if (canChangePassword) add("Cambiar contraseña")
         add("Eliminar cuenta")
     }

@@ -217,7 +217,7 @@ class RealsRootViewModelLegalRoutingTest {
                     statusCode = 409,
                     code = "CHAT_DECISION_NOT_AVAILABLE",
                     error = "Conflict",
-                    message = "decision unavailable",
+                    message = "decisión unavailable",
                 ),
             )
         )

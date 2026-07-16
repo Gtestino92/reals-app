@@ -272,7 +272,25 @@ class FirstChatCoordinatorTest {
 
         val result = coordinator.refresh(current, silent = false)
 
-        assertEquals(FirstChatRefreshResult.ExitResolved, result)
+        assertEquals(
+            FirstChatRefreshResult.ExitResolved("La solicitud de salida venció."),
+            result,
+        )
+    }
+
+    @Test
+    fun `refresh prefers accepted mutual exit message over rejected match state`() = runBlocking {
+        api.matchResponse = Response.success(TestDtos.match(state = "CHAT_REJECTED"))
+        api.chatResponse = Response.success(TestDtos.chat(status = "CANCELLED"))
+        api.exitRequestsResponse = Response.success(listOf(TestDtos.exitRequest(status = "ACCEPTED")))
+        val current = firstChatState(chatStatus = ChatStatus.Active)
+
+        val result = coordinator.refresh(current, silent = false)
+
+        assertEquals(
+            FirstChatRefreshResult.ExitResolved("La otra persona aceptó la salida consensuada."),
+            result,
+        )
     }
 
     @Test
@@ -316,7 +334,7 @@ class FirstChatCoordinatorTest {
         assertEquals(false, state.sending)
         assertEquals(BackendErrorCode.ChatMessageInvalid, error.backendErrorCode)
         assertEquals(
-            "Revisa el mensaje. No puede estar vacio ni superar el limite permitido.",
+            "Revisá el mensaje. No puede estar vacío ni superar el límite permitido.",
             error.toUserMessage(ErrorContext.Chat),
         )
     }
@@ -353,7 +371,7 @@ class FirstChatCoordinatorTest {
         assertTrue(result is FirstChatActionResult.ReloadHome)
         result as FirstChatActionResult.ReloadHome
         assertEquals("match-1", result.hideFirstChatMatchId)
-        assertEquals("Aprobaste el chat. Te avisaremos si la otra persona tambiÃ©n aprueba.", result.message)
+        assertEquals("Aprobáste el chat. Te avisaremos si la otra persona también aprueba.", result.message)
         assertFalse(result.autoNavigateEngagements)
         assertEquals(listOf("submitChatDecision"), api.calls)
     }
@@ -372,7 +390,7 @@ class FirstChatCoordinatorTest {
         assertTrue(result is FirstChatActionResult.ReturnHome)
         result as FirstChatActionResult.ReturnHome
         assertEquals("match-1", result.hideFirstChatMatchId)
-        assertEquals("El chat paso a revision visual. Actualizamos tu lista.", result.message)
+        assertEquals("El chat pasó a revisión visual. Actualizamos tu lista.", result.message)
     }
 
     @Test
@@ -697,7 +715,7 @@ class FirstChatCoordinatorTest {
         val result = coordinator.safetyCancel(
             current = current,
             reason = ChatExitReason.ChildSafetyConcern,
-            details = "detalle valido",
+            details = "detalle válido",
             onPending = {},
         )
 
@@ -705,7 +723,7 @@ class FirstChatCoordinatorTest {
         result as FirstChatActionResult.ReturnHome
         assertEquals("match-1", result.hideFirstChatMatchId)
         assertEquals(
-            "Reporte enviado. Cerramos esta conversacion por seguridad y no volveremos a cruzarte con esta persona.",
+            "Reporte enviado. Cerramos esta conversación por seguridad y no volveremos a cruzarte con esta persona.",
             result.message,
         )
         assertEquals(listOf("safetyCancelChat"), api.calls)
@@ -738,14 +756,14 @@ class FirstChatCoordinatorTest {
         val result = secondCoordinator.safetyCancel(
             current = current,
             reason = ChatExitReason.ChildSafetyConcern,
-            details = "detalle valido",
+            details = "detalle válido",
             onPending = {},
         )
 
         assertTrue(result is SecondChatActionResult.ReturnHome)
         result as SecondChatActionResult.ReturnHome
         assertEquals(
-            "Reporte enviado. Cerramos esta conversacion por seguridad y no volveremos a cruzarte con esta persona.",
+            "Reporte enviado. Cerramos esta conversación por seguridad y no volveremos a cruzarte con esta persona.",
             result.message,
         )
         assertEquals(listOf("safetyCancelChat"), api.calls)

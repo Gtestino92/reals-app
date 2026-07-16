@@ -66,7 +66,7 @@ fun HomeActiveInteractionsSummaryResponseDto.toDomain(): HomeActiveInteractionsS
     HomeActiveInteractionsSummary(
         activeInitialCount = activeInitialCount,
         activeConnectionCount = activeConnectionCount,
-        pendingSchedulingConnectionCount = pendingSchedulingConnectionCount,
+        hasPendingSchedulingConnection = hasPendingSchedulingConnection,
         actionableConnectionCount = actionableConnectionCount,
     )
 
@@ -177,8 +177,8 @@ fun HomeNextStepLiteResponseDto.toDomain(): HomeNextStep = when (type.uppercase(
 }
 
 fun HomePassiveNoticeResponseDto.toDomain(): HomePassiveNotice = when (type.uppercase()) {
-    "SCHEDULING_PREPARING" -> HomePassiveNotice.SchedulingPreparing(count)
-    else -> HomePassiveNotice.Unknown(rawType = type, count = count)
+    "SCHEDULING_PREPARING" -> HomePassiveNotice.SchedulingPreparing
+    else -> HomePassiveNotice.Unknown(rawType = type)
 }
 
 fun HomeChatResponseDto.toDomain(): HomeChat = HomeChat(

@@ -184,7 +184,7 @@ fun CreateProfileScreen(
                 OutlinedTextField(
                     value = bio,
                     onValueChange = { bio = it.take(1_000) },
-                    label = { Text("Bio opcional") },
+                    label = { Text("Bio opciónal") },
                     enabled = !busy,
                     isError = CreateProfileField.Bio in fieldErrors,
                     minLines = 3,
@@ -219,7 +219,7 @@ fun CreateProfileScreen(
 
                 localError?.let {
                     FeedbackCard(
-                        title = "Revisa los datos",
+                        title = "Revisá los datos",
                         message = it,
                         tone = FeedbackTone.Error,
                     )

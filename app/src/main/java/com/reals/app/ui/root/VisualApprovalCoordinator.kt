@@ -62,7 +62,7 @@ internal class VisualApprovalCoordinator(
             match.state !is MatchState.Unknown
         ) {
             return VisualApprovalLoadResult.RouteHome(
-                message = "La revision visual cambio de estado. Actualizamos tu Home.",
+                message = "La revisión visual cambió de estado. Actualizamos tu Home.",
             )
         }
 
@@ -231,7 +231,7 @@ internal class VisualApprovalCoordinator(
         if (cleanMessage.isBlank() || TextSafety.containsHtmlLikeMarkup(cleanMessage)) {
             return VisualApprovalFlowResult.Show(
                 current.copy(
-                    error = ApiError.Unexpected("El mensaje personal no es valido."),
+                    error = ApiError.Unexpected("El mensaje personal no es válido."),
                     message = null,
                 )
             )
@@ -296,7 +296,7 @@ internal class VisualApprovalCoordinator(
                             match = result.value,
                             deciding = false,
                             decidingLabel = null,
-                            message = "Guardamos tu decision.",
+                            message = "Guardamos tu decisión.",
                         ),
                         hideVisualMatchId = current.matchId,
                     )
