@@ -7,6 +7,7 @@ import com.reals.app.RealsApplication
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_AVAILABLE
 import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_REMINDER
 import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_AVAILABLE
+import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_REMINDER
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -34,7 +35,8 @@ class RealsFirebaseMessagingService : FirebaseMessagingService() {
         NotificationHelper.ensureChannels(this)
 
         when (remoteMessage.data["type"]) {
-            TYPE_VISUAL_REVIEW_AVAILABLE -> NotificationHelper.showVisualReviewAvailable(
+            TYPE_VISUAL_REVIEW_REMINDER,
+            TYPE_VISUAL_REVIEW_AVAILABLE -> NotificationHelper.showVisualReviewReminder(
                 context = this,
                 matchId = remoteMessage.data["matchId"],
             )
