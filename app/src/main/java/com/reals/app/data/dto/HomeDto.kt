@@ -54,6 +54,8 @@ data class HomePendingActionResponseDto(
     val type: String,
     val matchId: String,
     val chatId: String? = null,
+    val visualStartedAt: String? = null,
+    val visualExpiresAt: String? = null,
     val partner: ChatPartnerResponseDto? = null,
 )
 
@@ -62,6 +64,8 @@ data class HomePendingActionLiteResponseDto(
     val type: String,
     val matchId: String,
     val chatId: String? = null,
+    val visualStartedAt: String? = null,
+    val visualExpiresAt: String? = null,
 )
 
 @Serializable

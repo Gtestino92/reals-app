@@ -70,7 +70,7 @@ fun LegalRequirementsScreen(
             fontWeight = FontWeight.SemiBold,
         )
         Text(
-            text = "Revisá los documentos vigentes. Algunas acciónes de participación requieren que completes la acción indicada.",
+            text = "Revisá los documentos vigentes. Algunas acciones de participación requieren que completes la acción indicada.",
             style = MaterialTheme.typography.bodyLarge,
         )
 
@@ -112,7 +112,7 @@ fun LegalRequirementsScreen(
                     try {
                         uriHandler.openUri(document.url)
                     } catch (exception: Exception) {
-                        localOpenError = "No pudimos abrir el documento. Intent nuevamente."
+                        localOpenError = "No pudimos abrir el documento. Intentá nuevamente."
                     }
                 },
                 onRecordRequiredAction = { onRecordRequiredAction(document.key) },
@@ -250,7 +250,7 @@ private fun LegalDocumentCard(
 private fun LegalDocumentType.displayLabel(): String = when (this) {
     LegalDocumentType.TermsOfUse -> "Términos de uso"
     LegalDocumentType.PrivacyNotice -> "Aviso de privacidad"
-    LegalDocumentType.CommunityGuidelines -> "Normás de la comunidad"
+    LegalDocumentType.CommunityGuidelines -> "Normas de la comunidad"
     is LegalDocumentType.Unknown -> rawValue
         .replace('_', ' ')
         .lowercase()

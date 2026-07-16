@@ -482,7 +482,7 @@ private fun MatchmakingIdleScreen(
                 if (!canSearch && blockedReason != null) {
                     Text(
                         text = blockedReason.matchmakingBlockedMessage()
-                            ?: "No pudimos iniciar la búsqueda. Revisá tu perfil e intenta nuevamente.",
+                            ?: "No pudimos iniciar la búsqueda. Revisá tu perfil e intentá nuevamente.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -530,7 +530,7 @@ private fun MatchmakingIdleScreen(
                 }
                 if (homeError != null) {
                     OutlinedButton(onClick = onRefreshHome, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (homeLoading) "Actualizándo..." else "Reintentar estado")
+                        Text(if (homeLoading) "Actualizando..." else "Reintentar estado")
                     }
                 }
             }

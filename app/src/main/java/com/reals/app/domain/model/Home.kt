@@ -51,6 +51,8 @@ sealed interface HomePendingAction {
     data class VisualReview(
         val matchId: String,
         val partner: ChatPartner?,
+        val visualStartedAt: String? = null,
+        val visualExpiresAt: String? = null,
     ) : HomePendingAction
 
     data class Unknown(

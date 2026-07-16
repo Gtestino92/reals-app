@@ -17,15 +17,15 @@ fun ProfileStatus.userLabel(): String = when (this) {
 
 fun ProfileStatus.userDescription(): String = when (this) {
     ProfileStatus.Active -> "Tu perfil está listo para buscar chat."
-    ProfileStatus.Draft -> "Tu perfil todavía esta en borrador. Activalo cuando termines de completar tus fotos."
+    ProfileStatus.Draft -> "Tu perfil todavía está en borrador. Activalo cuando termines de completar tus fotos."
     ProfileStatus.Inactive -> "Tu perfil está pausado por el momento."
     is ProfileStatus.Unknown -> "No pudimos leer el estado actual de tu perfil."
 }
 
 fun photoValidationLabel(value: String): String = when (value.uppercase()) {
-    "VALIDATED", "APPROVED" -> "Aprobáda"
+    "VALIDATED", "APPROVED" -> "Aprobada"
     "PENDING", "PENDING_VALIDATION", "PROCESSING" -> "En revisión"
-    "REJECTED", "INVALID" -> "Necesita cambiós"
+    "REJECTED", "INVALID" -> "Necesita cambios"
     else -> "En revisión"
 }
 
@@ -52,7 +52,7 @@ fun ChatStatus.userLabel(): String = when (this) {
 
 fun ChatDecisionState.userLabel(): String = when (this) {
     ChatDecisionState.Pending -> "Pendiente"
-    ChatDecisionState.Approved -> "Aprobádo"
+    ChatDecisionState.Approved -> "Aprobado"
     ChatDecisionState.Rejected -> "Rechazado"
     ChatDecisionState.Abandoned -> "Abandonado"
     is ChatDecisionState.Unknown -> "Estado no disponible"

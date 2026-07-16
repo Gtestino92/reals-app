@@ -190,7 +190,7 @@ fun SchedulingScreen(
                     )
                     if (refreshing) {
                         Text(
-                            text = "Actualizándo...",
+                            text = "Actualizando...",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -207,7 +207,7 @@ fun SchedulingScreen(
             if (lifecycle.expired) {
                 FeedbackCard(
                     title = "Estado",
-                    message = "La coordinaci\u00f3n venci\u00f3. Actualizándo estado...",
+                    message = "La coordinaci\u00f3n venci\u00f3. Actualizando estado...",
                     tone = FeedbackTone.Warning,
                 )
                 Spacer(modifier = Modifier.height(12.dp))
@@ -264,7 +264,7 @@ fun SchedulingScreen(
                         enabled = !interactionBusy,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text(if (refreshing) "Actualizándo..." else "Actualizár")
+                        Text(if (refreshing) "Actualizando..." else "Actualizar")
                     }
                 }
                 OutlinedButton(
@@ -404,7 +404,7 @@ private fun ProposalSelectorCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Elegír horarios", style = MaterialTheme.typography.titleMedium)
+            Text("Elegir horarios", style = MaterialTheme.typography.titleMedium)
             Text(
                 text = "Seleccioná entre 1 y 3 opciones futuras. El orden en que las agregas marca tu prioridad.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -482,7 +482,7 @@ private fun ProposalSelectorCard(
                     val validation = value?.let { validateSelectedSlots(selected + it, now) }
                     when {
                         value == null -> validationError = "Seleccioná un horario válido."
-                        value in selected -> validationError = "Ese horario ya esta en la lista."
+                        value in selected -> validationError = "Ese horario ya está en la lista."
                         selected.size >= 3 -> validationError = "Podés elegir hasta 3 horarios."
                         validation != null -> validationError = validation
                         else -> {

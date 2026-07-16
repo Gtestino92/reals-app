@@ -63,7 +63,7 @@ class FirstChatRulesTest {
             firstChatDecisionMessage(MatchState.ChatActive),
         )
         assertEquals(
-            "Ambas personas aprobáron. La revisión visual ya está pendiente.",
+            "Ambas personas aprobaron. La revisión visual ya está pendiente.",
             firstChatDecisionMessage(MatchState.VisualPhase),
         )
         assertEquals(

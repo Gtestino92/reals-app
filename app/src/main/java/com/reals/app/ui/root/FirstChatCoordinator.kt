@@ -238,7 +238,7 @@ internal class FirstChatCoordinator(
                         if (decision == ChatContinueDecision.Approved) {
                             FirstChatActionResult.ReloadHome(
                                 session = current.session,
-                                message = "Aprobáste el chat. Te avisaremos si la otra persona también aprueba.",
+                                message = "Aprobaste el chat. Te avisaremos si la otra persona también aprueba.",
                                 hideFirstChatMatchId = current.matchId,
                                 autoNavigateEngagements = false,
                             )

@@ -8,7 +8,7 @@ import com.reals.app.data.api.AuthTokenProvider
 import kotlinx.coroutines.tasks.await
 
 class FirebaseNotConfiguredException : IllegalStateException(
-    "Firebase no esta configurado. Registra com.reals.app en Firebase y agrega app/google-services.json."
+    "Firebase no está configurado. Registrá com.reals.app en Firebase y agregá app/google-services.json."
 )
 
 class MissingFirebaseUserException : IllegalStateException(
@@ -16,7 +16,7 @@ class MissingFirebaseUserException : IllegalStateException(
 )
 
 class MissingFirebaseTokenException : IllegalStateException(
-    "Firebase no devolvio un ID token válido."
+    "Firebase no devolvió un ID token válido."
 )
 
 class FirebaseAuthTokenProvider(private val context: Context) : AuthTokenProvider {

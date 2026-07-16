@@ -154,14 +154,14 @@ fun ApiError.toUserMessage(context: ErrorContext = ErrorContext.General): String
     } else {
         userMessageForBackendError(backendErrorCode, context)
     }
-    is ApiError.Network -> "No pudimos conectarnos. Revisá tu conexión e intenta nuevamente."
+    is ApiError.Network -> "No pudimos conectarnos. Revisá tu conexión e intentá nuevamente."
     is ApiError.Auth -> when (reason) {
         AuthFailureReason.FIREBASE_NOT_CONFIGURED -> "La app todavía no está lista para iniciar sesión en este entorno."
         AuthFailureReason.NOT_SIGNED_IN,
         AuthFailureReason.TOKEN_MISSING,
         AuthFailureReason.TOKEN_UNAVAILABLE -> "Tu sesión necesita renovarse. Volvé a iniciar sesión."
     }
-    is ApiError.Unexpected -> "Algo no salió como esperábamos. Intent nuevamente."
+    is ApiError.Unexpected -> "Algo no salió como esperábamos. Intentá nuevamente."
 }
 
 fun ApiError.toUserTitle(context: ErrorContext = ErrorContext.General): String = when (context) {
@@ -186,18 +186,18 @@ fun ApiError.toUserTitle(context: ErrorContext = ErrorContext.General): String =
 private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorContext): String = when (code) {
     BackendErrorCode.ProfileRequired -> "Necesitás crear tu perfil antes de seguir."
     BackendErrorCode.ProfileNotActive -> "Tu perfil está en borrador. Activa tu perfil para poder buscar chat."
-    BackendErrorCode.ActivePenalty -> "Por ahora no podés entrar a la búsqueda. Intent nuevamente más adelante."
+    BackendErrorCode.ActivePenalty -> "Por ahora no podés entrar a la búsqueda. Intentá nuevamente más adelante."
     BackendErrorCode.ActiveMatchLimitReached,
     BackendErrorCode.ActiveConnectionLimitReached -> "Ya tenés conversaciones o experiencias activas. Terminá una antes de buscar otra."
-    BackendErrorCode.InvalidSearchLocation -> "No pudimos usar tu ubicación actual. Revisá los permisos o intenta nuevamente."
+    BackendErrorCode.InvalidSearchLocation -> "No pudimos usar tu ubicación actual. Revisá los permisos o intentá nuevamente."
     BackendErrorCode.ProfileAlreadyExists -> "Ya tenés un perfil creado."
-    BackendErrorCode.ProfileNotFound -> "No encontramos tu perfil. Actualizá la sesión e intenta nuevamente."
+    BackendErrorCode.ProfileNotFound -> "No encontramos tu perfil. Actualizá la sesión e intentá nuevamente."
     BackendErrorCode.ProfileNotActivatable -> "Tu perfil necesita completarse antes de activarlo."
     BackendErrorCode.EmailNotVerified -> "Verificá tu email antes de activar el perfil."
     BackendErrorCode.AuthenticityVerificationNotConfigured ->
         "La verificación de autenticidad del perfil no está disponible en este entorno."
     BackendErrorCode.AuthenticityVerificationProviderError ->
-        "No pudimos completar la verificación de autenticidad del perfil. Intent nuevamente más tarde."
+        "No pudimos completar la verificación de autenticidad del perfil. Intentá nuevamente más tarde."
     BackendErrorCode.ProfileAuthenticityVerificationRequired ->
         "Necesitás verificar la autenticidad del perfil antes de activarlo."
     BackendErrorCode.ProfilePhotosRequired -> "Subí más fotos para poder activar tu perfil."
@@ -211,7 +211,7 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.PhotoPositionOccupied -> "Ya hay una foto en esa posición. Podés reemplazarla o elegir otra."
     BackendErrorCode.PhotoUrlInvalid -> "La foto no tiene un formato válido."
     BackendErrorCode.InvalidProfilePhoto -> "La foto no parece válida. Probá con otra imagen."
-    BackendErrorCode.ProfilePhotoNotFound -> "No encontramos esa foto. Actualizá la lista e intenta nuevamente."
+    BackendErrorCode.ProfilePhotoNotFound -> "No encontramos esa foto. Actualizá la lista e intentá nuevamente."
     BackendErrorCode.AccountDeleted -> "Esta cuenta está pendiente de eliminación. Podés recuperarla si todavía está dentro del plazo."
     BackendErrorCode.AccountDeletionFinalized -> "La cuenta ya no puede recuperarse. Podés crear una cuenta nueva."
     BackendErrorCode.LegalActionRequired -> "Necesitás completar los documentos vigentes antes de continuar."
@@ -220,12 +220,12 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.LegalDocumentActionInvalid -> "La acción requerida cambió. Actualizá los documentos e intentá nuevamente."
     BackendErrorCode.UserPairBlocked -> "Esta interacción ya no está disponible."
     BackendErrorCode.DomainConflict -> when (context) {
-        ErrorContext.Chat -> "La conversación no cumple una regla del flujo todavía. Revisá el estado e intenta nuevamente."
+        ErrorContext.Chat -> "La conversación no cumple una regla del flujo todavía. Revisá el estado e intentá nuevamente."
         ErrorContext.VisualReview -> "La revisión visual no cumple una regla del flujo todavía. Revisá el mensaje personal o actualiza el estado."
         else -> "Esta acción no está disponible con el estado actual."
     }
     BackendErrorCode.PartnerPersonalMessageNotRead,
-    BackendErrorCode.VisualReviewPartnerMessageNotRead -> "Lee el mensaje personal de la otra persona antes de decidir."
+    BackendErrorCode.VisualReviewPartnerMessageNotRead -> "Leé el mensaje personal de la otra persona antes de decidir."
     BackendErrorCode.ChatNotFound -> "No encontramos esta conversación. Actualizá el estado."
     BackendErrorCode.ChatNotAvailable -> "Esta conversación ya no está disponible. Actualizá el estado."
     BackendErrorCode.ChatExpired -> "La conversaci\u00f3n venci\u00f3."
@@ -245,7 +245,7 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.SecondChatNotAvailable -> "El segundo chat todavía no está disponible o ya no se puede abrir."
     BackendErrorCode.SecondChatNotAvailableYet -> "El segundo chat todavía no está disponible."
     BackendErrorCode.SecondChatExpired -> "El segundo chat ya venció."
-    BackendErrorCode.SchedulingNotAvailable -> "La coordinación de horarios ya no está disponible. Actualizá el estado e intenta nuevamente."
+    BackendErrorCode.SchedulingNotAvailable -> "La coordinación de horarios ya no está disponible. Actualizá el estado e intentá nuevamente."
     BackendErrorCode.SchedulingExpired -> "La coordinación de horarios venció."
     BackendErrorCode.SchedulingNegotiationNotFound -> "No encontramos la coordinación de horarios. Actualizá el estado."
     BackendErrorCode.SchedulingInvalidProposals -> "Revisá los horarios elegidos. Deben ser futuros, únicos y estar alineados cada media hora."
@@ -257,11 +257,11 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.Unknown -> when (context) {
         ErrorContext.ProfileActivation -> "Revisá que tu perfil tenga la información y fotos necesarias."
         ErrorContext.PhotoUpload,
-        ErrorContext.PhotoReplace -> "Probá con otra foto o intenta nuevamente en unos segundos."
-        ErrorContext.Matchmaking -> "No pudimos iniciar la búsqueda. Revisá tu perfil e intenta nuevamente."
-        ErrorContext.Chat -> "La conversación cambió de estado. Actualizá e intenta nuevamente."
-        ErrorContext.VisualReview -> "La revisión visual cambió de estado. Actualizá e intenta nuevamente."
-        ErrorContext.Scheduling -> "La coordinación de horarios cambió de estado. Actualizá e intenta nuevamente."
-        else -> "Intent nuevamente en unos segundos."
+        ErrorContext.PhotoReplace -> "Probá con otra foto o intentá nuevamente en unos segundos."
+        ErrorContext.Matchmaking -> "No pudimos iniciar la búsqueda. Revisá tu perfil e intentá nuevamente."
+        ErrorContext.Chat -> "La conversación cambió de estado. Actualizá e intentá nuevamente."
+        ErrorContext.VisualReview -> "La revisión visual cambió de estado. Actualizá e intentá nuevamente."
+        ErrorContext.Scheduling -> "La coordinación de horarios cambió de estado. Actualizá e intentá nuevamente."
+        else -> "Intentá nuevamente en unos segundos."
     }
 }

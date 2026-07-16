@@ -89,7 +89,7 @@ fun AccountDeletionRecoveryScreen(
 private fun recoveryMessage(deletionFinalizesAt: String?): String {
     val dateText = deletionFinalizesAt?.let { " hasta el ${formatBackendDate(it)}" }
         ?: " durante 30 días"
-    return "Esta cuenta está pendiente de eliminación$dateText. Si la recuperas, conservaras tu perfil y fotos, " +
+    return "Esta cuenta está pendiente de eliminación$dateText. Si la recuperás, conservarás tu perfil y fotos, " +
         "pero deberás activar el perfil nuevamente. Tus conexiones activas anteriores no se restaurarán."
 }
 

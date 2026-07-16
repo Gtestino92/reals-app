@@ -430,7 +430,7 @@ class ProfileOperationHandler(
                         profileOp = pending.profileOp.copy(
                             activatingProfile = false,
                             emailVerificationMessage = null,
-                            emailVerificationError = "No pudimos comprobár la verificación. Intent nuevamente.",
+                            emailVerificationError = "No pudimos comprobar la verificación. Intentá nuevamente.",
                         ),
                     )
                     return@launch
@@ -515,7 +515,7 @@ class ProfileOperationHandler(
                 EmailVerificationSendResult.NotSignedIn -> error("Handled above")
 
                 EmailVerificationSendResult.Failure -> EmailVerificationFeedback(
-                    error = "No pudimos enviar el correo de verificación. Intent nuevamente.",
+                    error = "No pudimos enviar el correo de verificación. Intentá nuevamente.",
                 )
             }
             uiState.value = pending.copy(
@@ -572,7 +572,7 @@ class ProfileOperationHandler(
                 EmailVerificationCheckResult.NotSignedIn -> error("Handled above")
 
                 EmailVerificationCheckResult.Failure -> EmailVerificationFeedback(
-                    error = "No pudimos comprobár la verificación. Intent nuevamente.",
+                    error = "No pudimos comprobar la verificación. Intentá nuevamente.",
                 )
             }
             uiState.value = pending.copy(

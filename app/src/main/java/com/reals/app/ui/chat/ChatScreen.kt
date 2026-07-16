@@ -500,7 +500,7 @@ private fun ChatOverflowMenu(
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_more_vert),
-                contentDescription = "Más acciónes",
+                contentDescription = "Más acciones",
             )
         }
 
@@ -763,7 +763,7 @@ private fun ChatActionsPanel(
                 ) {
                     Text(
                         if (loadingChatAction) actionLoadingLabel
-                            ?: "Procesando..." else "Aprobár chat"
+                            ?: "Procesando..." else "Aprobar chat"
                     )
                 }
             }
@@ -1115,13 +1115,13 @@ private fun chatDecisionSummary(
 
     return when {
         myDecision == ChatDecisionState.Approved && partnerDecision == ChatDecisionState.Pending ->
-            "Aprobáste el chat. Esperando decisión de $partnerLabel."
+            "Aprobaste el chat. Esperando decisión de $partnerLabel."
 
         myDecision == ChatDecisionState.Pending && partnerDecision == ChatDecisionState.Approved ->
             "$partnerLabel aprobó el chat. Falta tu decisión."
 
         myDecision == ChatDecisionState.Approved && partnerDecision == ChatDecisionState.Approved ->
-            "Ambas personas aprobáron. Pasando a revisión visual."
+            "Ambas personas aprobaron. Pasando a revisión visual."
 
         myDecision == ChatDecisionState.Rejected || partnerDecision == ChatDecisionState.Rejected ->
             "El chat fue rechazado."

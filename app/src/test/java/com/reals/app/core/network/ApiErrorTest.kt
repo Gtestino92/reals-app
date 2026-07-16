@@ -10,7 +10,7 @@ class ApiErrorTest {
         val error = backendError("ACTIVE_PENALTY")
 
         assertEquals(
-            "Por ahora no podés entrar a la búsqueda. Intent nuevamente más adelante.",
+            "Por ahora no podés entrar a la búsqueda. Intentá nuevamente más adelante.",
             error.toUserMessage(ErrorContext.Matchmaking),
         )
     }
@@ -42,7 +42,7 @@ class ApiErrorTest {
             "VISUAL_REVIEW_PARTNER_MESSAGE_NOT_READ",
         ).forEach { code ->
             assertEquals(
-                "Lee el mensaje personal de la otra persona antes de decidir.",
+                "Leé el mensaje personal de la otra persona antes de decidir.",
                 backendError(code).toUserMessage(ErrorContext.VisualReview),
             )
         }
@@ -80,7 +80,7 @@ class ApiErrorTest {
             "AUTHENTICITY_VERIFICATION_NOT_CONFIGURED" to
                 "La verificación de autenticidad del perfil no está disponible en este entorno.",
             "AUTHENTICITY_VERIFICATION_PROVIDER_ERROR" to
-                "No pudimos completar la verificación de autenticidad del perfil. Intent nuevamente más tarde.",
+                "No pudimos completar la verificación de autenticidad del perfil. Intentá nuevamente más tarde.",
             "PROFILE_AUTHENTICITY_VERIFICATION_REQUIRED" to
                 "Necesitás verificar la autenticidad del perfil antes de activarlo.",
         ).forEach { (code, expected) ->
@@ -189,7 +189,7 @@ class ApiErrorTest {
     fun `scheduling backend codes map to deterministic scheduling messages`() {
         mapOf(
             "SCHEDULING_NOT_AVAILABLE" to
-                "La coordinación de horarios ya no está disponible. Actualizá el estado e intenta nuevamente.",
+                "La coordinación de horarios ya no está disponible. Actualizá el estado e intentá nuevamente.",
             "SCHEDULING_EXPIRED" to "La coordinación de horarios venció.",
             "SCHEDULING_NEGOTIATION_NOT_FOUND" to
                 "No encontramos la coordinación de horarios. Actualizá el estado.",
@@ -228,7 +228,7 @@ class ApiErrorTest {
         val error = backendError("SOME_NEW_BACKEND_CODE", message = "technical backend detail")
 
         assertEquals(
-            "Intent nuevamente en unos segundos.",
+            "Intentá nuevamente en unos segundos.",
             error.toUserMessage(),
         )
     }
@@ -236,11 +236,11 @@ class ApiErrorTest {
     @Test
     fun `null and empty codes map to generic fallback`() {
         assertEquals(
-            "Intent nuevamente en unos segundos.",
+            "Intentá nuevamente en unos segundos.",
             backendError(null).toUserMessage(),
         )
         assertEquals(
-            "Intent nuevamente en unos segundos.",
+            "Intentá nuevamente en unos segundos.",
             backendError("").toUserMessage(),
         )
     }

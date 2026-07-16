@@ -16,7 +16,7 @@ class HomeSummaryTextTest {
 
         assertNull(summaryText)
         assertEquals(
-            "Estamos preparando uno de tus próximos pasós.",
+            "Estamos preparando uno de tus próximos pasos.",
             noticeText,
         )
         assertTrue(noticeText?.contains("0 iniciales") != true)
@@ -50,7 +50,7 @@ class HomeSummaryTextTest {
             activeExperiencesSummaryText(summary(activeInitialCount = 1, activeConnectionCount = 1)),
         )
         assertEquals(
-            "Estamos preparando uno de tus próximos pasós.",
+            "Estamos preparando uno de tus próximos pasos.",
             passiveNoticeText(HomePassiveNoticeItem.SchedulingPreparing),
         )
     }
@@ -58,7 +58,7 @@ class HomeSummaryTextTest {
     @Test
     fun `scheduling preparing notice is generic and count-free`() {
         assertEquals(
-            "Estamos preparando uno de tus próximos pasós.",
+            "Estamos preparando uno de tus próximos pasos.",
             passiveNoticeText(HomePassiveNoticeItem.SchedulingPreparing),
         )
     }

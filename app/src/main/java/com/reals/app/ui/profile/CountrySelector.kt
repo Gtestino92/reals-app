@@ -34,7 +34,7 @@ fun CountrySelector(
     val sections = countryMenuSections(countries)
     val selectedLabel = when {
         loading -> "Cargando países..."
-        selectedCountryCode.isBlank() -> "Seleccionár país ▼"
+        selectedCountryCode.isBlank() -> "Seleccionar país ▼"
         else -> countries.firstOrNull { it.code == selectedCountryCode }?.displayName ?: selectedCountryCode
     }
     val selectorEnabled = enabled && !loading && countries.isNotEmpty()

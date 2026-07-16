@@ -82,6 +82,8 @@ fun HomePendingActionResponseDto.toDomain(): HomePendingAction = when (type.uppe
     "VISUAL_REVIEW" -> HomePendingAction.VisualReview(
         matchId = matchId,
         partner = partner?.toDomain(),
+        visualStartedAt = visualStartedAt,
+        visualExpiresAt = visualExpiresAt,
     )
 
     else -> HomePendingAction.Unknown(rawType = type)
@@ -99,6 +101,8 @@ fun HomePendingActionLiteResponseDto.toDomain(): HomePendingAction = when (type.
     "VISUAL_REVIEW" -> HomePendingAction.VisualReview(
         matchId = matchId,
         partner = null,
+        visualStartedAt = visualStartedAt,
+        visualExpiresAt = visualExpiresAt,
     )
 
     else -> HomePendingAction.Unknown(rawType = type)

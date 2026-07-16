@@ -21,6 +21,8 @@ sealed interface HomeActionItem {
     data class VisualReview(
         val matchId: String,
         val partnerDisplayName: String?,
+        val visualStartedAt: String? = null,
+        val visualExpiresAt: String? = null,
     ) : HomeActionItem
 }
 

@@ -59,6 +59,6 @@ internal fun FirstChatLifecycleUiState.warningCopy(): String =
 
 internal fun FirstChatLifecycleUiState.expiredCopy(): String =
     when (reason) {
-        FirstChatExpiryReason.Absolute -> "El chat venci\u00f3. Actualizándo estado..."
-        FirstChatExpiryReason.Inactivity -> "El chat se cerr\u00f3 por inactividad. Actualizándo estado..."
+        FirstChatExpiryReason.Absolute -> "El chat venci\u00f3. Actualizando estado..."
+        FirstChatExpiryReason.Inactivity -> "El chat se cerr\u00f3 por inactividad. Actualizando estado..."
     }
