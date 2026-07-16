@@ -14,6 +14,7 @@ import com.reals.app.notifications.PushNotificationContract.EXTRA_REFRESH_HOME
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_AVAILABLE
 import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_REMINDER
 import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_AVAILABLE
+import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_REMINDER
 import com.reals.app.ui.root.RealsApp
 import com.reals.app.ui.theme.RealsAppTheme
 
@@ -49,6 +50,7 @@ class MainActivity : ComponentActivity() {
         val pushType = intent.getStringExtra(EXTRA_PUSH_TYPE)
         val shouldRefreshHome = intent.getBooleanExtra(EXTRA_REFRESH_HOME, false) ||
             pushType == TYPE_VISUAL_REVIEW_AVAILABLE ||
+            pushType == TYPE_VISUAL_REVIEW_REMINDER ||
             pushType == TYPE_SCHEDULING_AVAILABLE ||
             pushType == TYPE_SECOND_CHAT_REMINDER
         if (!shouldRefreshHome) return

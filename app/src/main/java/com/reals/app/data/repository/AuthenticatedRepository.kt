@@ -52,7 +52,7 @@ abstract class AuthenticatedRepository(
             ApiResult.Failure(
                 ApiError.Auth(
                     reason = AuthFailureReason.FIREBASE_NOT_CONFIGURED,
-                    message = exception.message ?: "Firebase no esta configurado.",
+                    message = exception.message ?: "Firebase no está configurado.",
                 ),
             )
         } catch (exception: MissingFirebaseUserException) {

@@ -61,7 +61,7 @@ fun ProfileActivationResultScreen(
             ) {
                 Text("Estado: ${result.profile.status.userLabel()}")
                 Text("Fotos totales: ${result.totalPhotoCount}")
-                Text("Tus fotos quedaron guardadas. Si más adelante las cambias, puede que revisemos tu perfil otra vez.")
+                Text("Tus fotos quedaron guardadas. Si más adelante las cambiás, puede que revisemos tu perfil otra vez.")
             }
         }
         Row(

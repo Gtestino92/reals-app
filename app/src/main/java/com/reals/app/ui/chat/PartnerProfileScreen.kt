@@ -85,7 +85,7 @@ fun PartnerProfileScreen(
             if (profile != null && !loading) {
                 Spacer(modifier = Modifier.height(12.dp))
                 OutlinedButton(onClick = onRefresh, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (refreshing) "Actualizándo..." else "Reintentar")
+                    Text(if (refreshing) "Actualizando..." else "Reintentar")
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
@@ -106,7 +106,7 @@ fun PartnerProfileScreen(
                     )
                     if (!loading) {
                         OutlinedButton(onClick = onRefresh, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                            Text(if (refreshing) "Actualizándo..." else "Reintentar")
+                            Text(if (refreshing) "Actualizando..." else "Reintentar")
                         }
                     }
                 }
@@ -116,7 +116,7 @@ fun PartnerProfileScreen(
             if (refreshing) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "Actualizándo perfil...",
+                    text = "Actualizando perfil...",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

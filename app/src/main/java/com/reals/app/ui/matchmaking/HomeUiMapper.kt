@@ -61,6 +61,8 @@ class HomeUiMapper {
                         HomeActionItem.VisualReview(
                             matchId = action.matchId,
                             partnerDisplayName = action.partner?.displayName?.takeIf { it.isNotBlank() },
+                            visualStartedAt = action.visualStartedAt,
+                            visualExpiresAt = action.visualExpiresAt,
                         )
                     }
 

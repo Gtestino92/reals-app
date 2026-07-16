@@ -16,7 +16,7 @@ import com.reals.app.notifications.PushNotificationContract.SCHEDULING_AVAILABLE
 import com.reals.app.notifications.PushNotificationContract.SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_AVAILABLE
 import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_REMINDER
-import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_AVAILABLE
+import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_REMINDER
 import com.reals.app.notifications.PushNotificationContract.VISUAL_REVIEW_CHANNEL_ID
 import com.reals.app.notifications.PushNotificationContract.VISUAL_REVIEW_NOTIFICATION_ID_BASE
 
@@ -40,16 +40,16 @@ object NotificationHelper {
     }
 
     @SuppressLint("MissingPermission")
-    fun showVisualReviewAvailable(context: Context, matchId: String?) {
+    fun showVisualReviewReminder(context: Context, matchId: String?) {
         if (!canPostNotifications(context)) return
 
         val notification = NotificationCompat.Builder(context, VISUAL_REVIEW_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Tenés una revisión disponible")
-            .setContentText("Ya podés revisar el perfil visual de una conversación reciente.")
+            .setContentTitle("Revisión visual pendiente")
+            .setContentText("Entrá a Reals para completarla antes de que venza.")
             .setStyle(
                 NotificationCompat.BigTextStyle()
-                    .bigText("Ya podés revisar el perfil visual de una conversación reciente."),
+                    .bigText("Entrá a Reals para completarla antes de que venza."),
             )
             .setPriority(VISUAL_REVIEW_NOTIFICATION_PRIORITY)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
@@ -65,7 +65,7 @@ object NotificationHelper {
         } catch (exception: SecurityException) {
             Log.w(
                 TAG,
-                "Could not show visual review notification because permission was denied.",
+                "Could not show visual review reminder because permission was denied.",
                 exception
             )
         }
@@ -135,7 +135,7 @@ object NotificationHelper {
         NotificationPendingIntents.mainActivity(
             context,
             VISUAL_REVIEW_NOTIFICATION_ID_BASE + notificationSuffix(matchId),
-            TYPE_VISUAL_REVIEW_AVAILABLE,
+            TYPE_VISUAL_REVIEW_REMINDER,
         )
 
     private fun secondChatReminderPendingIntent(

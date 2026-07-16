@@ -37,7 +37,7 @@ class UiLabelsTest {
     @Test
     fun `labels cover decisions exit types and reasons`() {
         assertEquals("Pendiente", ChatDecisionState.Pending.userLabel())
-        assertEquals("Aprobádo", ChatDecisionState.Approved.userLabel())
+        assertEquals("Aprobado", ChatDecisionState.Approved.userLabel())
         assertEquals("Rechazado", ChatDecisionState.Rejected.userLabel())
         assertEquals("Cancelacion propuesta", ChatExitRequestType.MutualCancel.userLabel())
         assertEquals("Reporte de seguridad", ChatExitRequestType.SafetyReport.userLabel())
@@ -50,10 +50,10 @@ class UiLabelsTest {
 
     @Test
     fun `photoValidationLabel covers backend variations`() {
-        assertEquals("Aprobáda", photoValidationLabel("VALIDATED"))
-        assertEquals("Aprobáda", photoValidationLabel("APPROVED"))
+        assertEquals("Aprobada", photoValidationLabel("VALIDATED"))
+        assertEquals("Aprobada", photoValidationLabel("APPROVED"))
         assertEquals("En revisión", photoValidationLabel("PENDING_VALIDATION"))
-        assertEquals("Necesita cambiós", photoValidationLabel("REJECTED"))
+        assertEquals("Necesita cambios", photoValidationLabel("REJECTED"))
         assertEquals("En revisión", photoValidationLabel("SOMETHING_NEW"))
     }
 }

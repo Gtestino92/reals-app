@@ -25,7 +25,7 @@ internal fun activeExperiencesSummaryText(summary: HomeActiveInteractionsSummary
 
 internal fun passiveNoticeText(notice: HomePassiveNoticeItem): String? =
     when (notice) {
-        HomePassiveNoticeItem.SchedulingPreparing -> "Estamos preparando uno de tus próximos pasós."
+        HomePassiveNoticeItem.SchedulingPreparing -> "Estamos preparando uno de tus próximos pasos."
 
         is HomePassiveNoticeItem.Unknown -> null
     }

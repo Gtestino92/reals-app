@@ -63,7 +63,7 @@ internal fun ChatExitRequest.resolvedHomeMessage(currentUserId: String): String 
 
 internal fun firstChatDecisionMessage(state: MatchState): String = when (state) {
     MatchState.ChatActive -> "Guardamos tu decisión. Esperamos la respuesta de la otra persona."
-    MatchState.VisualPhase -> "Ambas personas aprobáron. La revisión visual ya está pendiente."
+    MatchState.VisualPhase -> "Ambas personas aprobaron. La revisión visual ya está pendiente."
     MatchState.ChatRejected -> "El chat fue rechazado. Actualizamos tu Home."
     MatchState.Expired -> "El chat venci\u00f3."
     MatchState.VisualApproved -> "La revisión ya fue aprobada. Actualizamos tu Home."

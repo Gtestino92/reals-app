@@ -178,7 +178,7 @@ open class FirebaseAuthRepository(private val context: Context) {
                 "Ya existe una cuenta con ese email."
 
             is FirebaseAuthWeakPasswordException ->
-                "La contraseña es demásiado débil."
+                "La contraseña es demasiado débil."
 
             is FirebaseAuthInvalidCredentialsException ->
                 "El email no tiene un formato válido."
@@ -195,7 +195,7 @@ open class FirebaseAuthRepository(private val context: Context) {
 
     companion object {
         const val firebaseMissingMessage =
-            "Firebase no esta configurado. Registra com.reals.app y agrega app/google-services.json."
+            "Firebase no está configurado. Registrá com.reals.app y agregá app/google-services.json."
     }
 }
 

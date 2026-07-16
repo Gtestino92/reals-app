@@ -47,6 +47,8 @@ class HomeUiMapperTest {
                     HomePendingAction.VisualReview(
                         matchId = "match-visual",
                         partner = partner("Riley"),
+                        visualStartedAt = "2026-06-19T18:00:00Z",
+                        visualExpiresAt = "2026-06-20T18:00:00Z",
                     ),
                 ),
             ),
@@ -57,6 +59,8 @@ class HomeUiMapperTest {
         val item = model.pendingActions.single() as HomeActionItem.VisualReview
         assertEquals("match-visual", item.matchId)
         assertEquals("Riley", item.partnerDisplayName)
+        assertEquals("2026-06-19T18:00:00Z", item.visualStartedAt)
+        assertEquals("2026-06-20T18:00:00Z", item.visualExpiresAt)
     }
 
     @Test

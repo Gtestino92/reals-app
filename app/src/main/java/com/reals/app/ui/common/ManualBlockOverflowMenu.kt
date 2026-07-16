@@ -30,7 +30,7 @@ fun ManualBlockOverflowMenu(
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_more_vert),
-                contentDescription = "Más acciónes",
+                contentDescription = "Más acciones",
             )
         }
         DropdownMenu(

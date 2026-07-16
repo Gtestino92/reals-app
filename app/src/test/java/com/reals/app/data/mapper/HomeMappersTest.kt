@@ -57,6 +57,8 @@ class HomeMappersTest {
                 HomePendingActionResponseDto(
                     type = "VISUAL_REVIEW",
                     matchId = "match-visual",
+                    visualStartedAt = "2026-06-19T18:00:00Z",
+                    visualExpiresAt = "2026-06-20T18:00:00Z",
                     partner = partnerDto("visual-partner"),
                 ),
             ),
@@ -97,6 +99,8 @@ class HomeMappersTest {
 
         val visualReview = home.pendingActions[1] as HomePendingAction.VisualReview
         assertEquals("match-visual", visualReview.matchId)
+        assertEquals("2026-06-19T18:00:00Z", visualReview.visualStartedAt)
+        assertEquals("2026-06-20T18:00:00Z", visualReview.visualExpiresAt)
 
         val scheduling = home.nextSteps[0] as HomeNextStep.Scheduling
         assertEquals("connection-scheduling", scheduling.connectionId)
@@ -136,6 +140,8 @@ class HomeMappersTest {
                 HomePendingActionLiteResponseDto(
                     type = "VISUAL_REVIEW",
                     matchId = "match-visual",
+                    visualStartedAt = "2026-06-19T18:00:00Z",
+                    visualExpiresAt = "2026-06-20T18:00:00Z",
                 ),
                 HomePendingActionLiteResponseDto(
                     type = "FIRST_CHAT",
@@ -212,6 +218,8 @@ class HomeMappersTest {
         val visualReview = pending.pendingActions[1] as HomePendingAction.VisualReview
         assertEquals("match-visual", visualReview.matchId)
         assertEquals(null, visualReview.partner)
+        assertEquals("2026-06-19T18:00:00Z", visualReview.visualStartedAt)
+        assertEquals("2026-06-20T18:00:00Z", visualReview.visualExpiresAt)
         assertTrue(pending.pendingActions[2] is HomePendingAction.Unknown)
         assertTrue(pending.pendingActions[3] is HomePendingAction.Unknown)
 
@@ -268,6 +276,84 @@ class HomeMappersTest {
 
         assertEquals(true, dto.activeInteractionsSummary.hasPendingSchedulingConnection)
         assertEquals(HomePassiveNotice.SchedulingPreparing, dto.passiveNotices.single().toDomain())
+    }
+
+    @Test
+    fun `Home pending action DTO deserializes visual review timestamps and remains additive`() {
+        val visual = testJson.decodeFromString<HomePendingActionResponseDto>(
+            """
+            {
+              "type": "VISUAL_REVIEW",
+              "matchId": "match-visual",
+              "visualStartedAt": "2026-06-19T18:00:00Z",
+              "visualExpiresAt": "2026-06-20T18:00:00Z"
+            }
+            """.trimIndent()
+        )
+        val legacy = testJson.decodeFromString<HomePendingActionResponseDto>(
+            """
+            {
+              "type": "VISUAL_REVIEW",
+              "matchId": "match-legacy"
+            }
+            """.trimIndent()
+        )
+        val firstChat = testJson.decodeFromString<HomePendingActionResponseDto>(
+            """
+            {
+              "type": "FIRST_CHAT",
+              "matchId": "match-first",
+              "chatId": "chat-first",
+              "visualStartedAt": "bad",
+              "visualExpiresAt": "bad"
+            }
+            """.trimIndent()
+        ).toDomain()
+
+        assertEquals("2026-06-19T18:00:00Z", visual.visualStartedAt)
+        assertEquals("2026-06-20T18:00:00Z", visual.visualExpiresAt)
+        assertEquals(null, legacy.visualStartedAt)
+        assertEquals(null, legacy.visualExpiresAt)
+        assertTrue(firstChat is HomePendingAction.FirstChat)
+    }
+
+    @Test
+    fun `Home pending action lite DTO deserializes visual review timestamps and remains additive`() {
+        val visual = testJson.decodeFromString<HomePendingActionLiteResponseDto>(
+            """
+            {
+              "type": "VISUAL_REVIEW",
+              "matchId": "match-visual",
+              "visualStartedAt": "2026-06-19T18:00:00Z",
+              "visualExpiresAt": "2026-06-20T18:00:00Z"
+            }
+            """.trimIndent()
+        )
+        val legacy = testJson.decodeFromString<HomePendingActionLiteResponseDto>(
+            """
+            {
+              "type": "VISUAL_REVIEW",
+              "matchId": "match-legacy"
+            }
+            """.trimIndent()
+        )
+        val firstChat = testJson.decodeFromString<HomePendingActionLiteResponseDto>(
+            """
+            {
+              "type": "FIRST_CHAT",
+              "matchId": "match-first",
+              "chatId": "chat-first",
+              "visualStartedAt": "bad",
+              "visualExpiresAt": "bad"
+            }
+            """.trimIndent()
+        ).toDomain()
+
+        assertEquals("2026-06-19T18:00:00Z", visual.visualStartedAt)
+        assertEquals("2026-06-20T18:00:00Z", visual.visualExpiresAt)
+        assertEquals(null, legacy.visualStartedAt)
+        assertEquals(null, legacy.visualExpiresAt)
+        assertTrue(firstChat is HomePendingAction.FirstChat)
     }
 
     @Test

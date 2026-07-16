@@ -371,7 +371,7 @@ class FirstChatCoordinatorTest {
         assertTrue(result is FirstChatActionResult.ReloadHome)
         result as FirstChatActionResult.ReloadHome
         assertEquals("match-1", result.hideFirstChatMatchId)
-        assertEquals("Aprobáste el chat. Te avisaremos si la otra persona también aprueba.", result.message)
+        assertEquals("Aprobaste el chat. Te avisaremos si la otra persona también aprueba.", result.message)
         assertFalse(result.autoNavigateEngagements)
         assertEquals(listOf("submitChatDecision"), api.calls)
     }

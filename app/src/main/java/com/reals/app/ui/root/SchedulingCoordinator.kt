@@ -151,7 +151,7 @@ private fun RealsRootUiState.Scheduling.missingNegotiationError(): RealsRootUiSt
     copy(
         submitting = false,
         submittingLabel = null,
-        error = ApiError.Unexpected("No encontramos la ronda actual. Actualizá la coordinación e intenta nuevamente."),
+        error = ApiError.Unexpected("No encontramos la ronda actual. Actualizá la coordinación e intentá nuevamente."),
         message = null,
     )
 

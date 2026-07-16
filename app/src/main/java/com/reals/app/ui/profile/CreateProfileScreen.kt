@@ -184,7 +184,7 @@ fun CreateProfileScreen(
                 OutlinedTextField(
                     value = bio,
                     onValueChange = { bio = it.take(1_000) },
-                    label = { Text("Bio opciónal") },
+                    label = { Text("Bio opcional") },
                     enabled = !busy,
                     isError = CreateProfileField.Bio in fieldErrors,
                     minLines = 3,

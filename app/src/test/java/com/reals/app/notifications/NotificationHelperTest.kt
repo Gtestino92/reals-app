@@ -23,6 +23,14 @@ class NotificationHelperTest {
     }
 
     @Test
+    fun `visual review reminder contract keeps historical type compatibility`() {
+        assertEquals("VISUAL_REVIEW_REMINDER", PushNotificationContract.TYPE_VISUAL_REVIEW_REMINDER)
+        assertEquals("VISUAL_REVIEW_AVAILABLE", PushNotificationContract.TYPE_VISUAL_REVIEW_AVAILABLE)
+        assertEquals("match_id", PushNotificationContract.EXTRA_MATCH_ID)
+        assertEquals(10_000, PushNotificationContract.VISUAL_REVIEW_NOTIFICATION_ID_BASE)
+    }
+
+    @Test
     fun `second chat reminder contract refreshes home instead of deep linking`() {
         assertEquals("SECOND_CHAT_REMINDER", PushNotificationContract.TYPE_SECOND_CHAT_REMINDER)
         assertEquals("connection_id", PushNotificationContract.EXTRA_CONNECTION_ID)

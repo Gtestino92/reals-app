@@ -801,7 +801,7 @@ private fun ProfileEditActions(
                 enabled = !loading,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (loading) "Guardando..." else "Guardar cambiós")
+                Text(if (loading) "Guardando..." else "Guardar cambios")
             }
     }
 }
