@@ -27,6 +27,10 @@ class ChatRepository(
     tokenProvider: AuthTokenProvider,
     apiExecutor: ApiExecutor,
 ) : AuthenticatedRepository(tokenProvider, apiExecutor) {
+    private companion object {
+        const val CHAT_MESSAGES_PAGE_LIMIT = 500
+    }
+
     suspend fun getChat(chatId: String): ApiResult<Chat> =
         authorizedCall { authorization -> api.getChat(authorization, chatId) }
             .map { it.toDomain() }
@@ -46,6 +50,7 @@ class ChatRepository(
                 chatId = chatId,
                 afterMessageId = afterMessageId,
                 afterMessageIdAlias = afterMessageId,
+                limit = CHAT_MESSAGES_PAGE_LIMIT,
             )
         }
             .map { payload -> payload.toMessageDtos().map { it.toDomain() } }

@@ -267,6 +267,7 @@ interface RealsApi {
         @Path("chatId") chatId: String,
         @Query("after") afterMessageId: String? = null,
         @Query("afterMessageId") afterMessageIdAlias: String? = null,
+        @Query("limit") limit: Int? = null,
     ): Response<JsonElement>
 
     @POST("api/chats/{chatId}/guidance/next-request")
