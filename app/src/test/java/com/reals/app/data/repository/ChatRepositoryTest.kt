@@ -51,6 +51,7 @@ class ChatRepositoryTest {
         val messages = repository.getMessages("chat-1").successValue()
 
         assertEquals(listOf("message-1", "message-2"), messages.map { it.id })
+        assertEquals(500, api.lastChatMessagesLimit)
     }
 
     @Test
@@ -62,6 +63,7 @@ class ChatRepositoryTest {
         val messages = repository.getMessages("chat-1", afterMessageId = "message-2").successValue()
 
         assertEquals(listOf("message-3"), messages.map { it.id })
+        assertEquals(500, api.lastChatMessagesLimit)
     }
 
     @Test

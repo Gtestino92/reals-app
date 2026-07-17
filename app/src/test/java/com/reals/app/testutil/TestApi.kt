@@ -90,6 +90,8 @@ class FakeRealsApi : RealsApi {
         private set
     var chatMessageBody: SendMessageRequestDto? = null
         private set
+    var lastChatMessagesLimit: Int? = null
+        private set
     var exitBody: ChatExitRequestCreateRequestDto? = null
         private set
     var visualDecisionBody: VisualDecisionRequestDto? = null
@@ -391,8 +393,10 @@ class FakeRealsApi : RealsApi {
         chatId: String,
         afterMessageId: String?,
         afterMessageIdAlias: String?,
+        limit: Int?,
     ): Response<JsonElement> =
         record("getChatMessages", authorization, chatId, beforeResponse = beforeGetChatMessagesResponse) {
+            lastChatMessagesLimit = limit
             chatMessagesResponse
         }
 

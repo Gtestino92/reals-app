@@ -1151,7 +1151,7 @@ private fun PhotoManagerActions(
                     enabled = activationEnabled,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(if (activationLoading) "Activando..." else "Intentr activar perfil")
+                    Text(if (activationLoading) "Activando..." else "Intentar activar perfil")
                 }
             }
     }
