@@ -38,6 +38,17 @@ class FirstChatGuidancePanelStateTest {
     }
 
     @Test
+    fun `button disabled when mutual cancellation pauses first chat advancement`() {
+        val state = panelState(
+            canRequestNext = true,
+            canRequestNextWhileChatOpen = false,
+        )
+
+        assertEquals(true, state.showButton)
+        assertEquals(false, state.buttonEnabled)
+    }
+
+    @Test
     fun `button hidden and waiting copy visible after own request`() {
         val state = panelState(myNextRequested = true)
 
@@ -91,17 +102,19 @@ class FirstChatGuidancePanelStateTest {
         questionText: String = "Pregunta inicial",
         questionOrdinal: Int = 1,
         canRequestNext: Boolean = true,
+        canRequestNextWhileChatOpen: Boolean = true,
         myNextRequested: Boolean = false,
         completed: Boolean = false,
     ): FirstChatGuidancePanelState =
         firstChatGuidancePanelState(
-            TestDtos.firstChatGuidance(
+            guidance = TestDtos.firstChatGuidance(
                 questionId = questionId,
                 questionText = questionText,
                 questionOrdinal = questionOrdinal,
                 canRequestNext = canRequestNext,
                 myNextRequested = myNextRequested,
                 completed = completed,
-            ).toDomain()
+            ).toDomain(),
+            canRequestNextWhileChatOpen = canRequestNextWhileChatOpen,
         ) ?: error("Expected guidance panel state")
 }

@@ -234,7 +234,8 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.ChatDecisionNotAvailable -> "La decisión sobre esta conversación ya no está disponible. Actualizá el estado."
     BackendErrorCode.ChatDecisionAlreadySubmitted -> "Ya enviaste tu decisión para esta conversación."
     BackendErrorCode.ChatMinMessagesRequired -> "Antes de decidir, enviá al menos un poco más de conversación."
-    BackendErrorCode.ChatMutualCancellationPending -> "Hay una solicitud de salida pendiente. Resolvela antes de decidir."
+    BackendErrorCode.ChatMutualCancellationPending ->
+        "La conversaci\u00f3n est\u00e1 pausada mientras se resuelve la solicitud."
     BackendErrorCode.FirstChatGuidanceParticipationRequired ->
         "Particip\u00e1 un poco m\u00e1s antes de pedir otra pregunta."
     BackendErrorCode.FirstChatGuidanceNextAlreadyRequested -> "Ya pediste cambiar esta pregunta."

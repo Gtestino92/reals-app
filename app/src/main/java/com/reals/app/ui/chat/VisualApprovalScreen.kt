@@ -116,37 +116,38 @@ fun VisualApprovalScreen(
             .padding(24.dp),
         verticalArrangement = Arrangement.Center,
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
                     text = "Aprobación visual",
+                    modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.headlineLarge,
                     color = MaterialTheme.colorScheme.primary,
                 )
-                Text(
-                    text = "Revisá el perfil visual antes de decidir si querés continuar.",
-                    modifier = Modifier.padding(top = 8.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                ManualBlockOverflowMenu(
+                    enabled = !busy,
+                    onRequestBlock = {
+                        onClearManualBlockError()
+                        showingManualBlockDialog = true
+                    },
                 )
-                visualDeadlineText?.let {
-                    Text(
-                        text = it,
-                        modifier = Modifier.padding(top = 6.dp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
             }
-            ManualBlockOverflowMenu(
-                enabled = !busy,
-                onRequestBlock = {
-                    onClearManualBlockError()
-                    showingManualBlockDialog = true
-                },
+            Text(
+                text = "Revisá el perfil visual antes de decidir si querés continuar.",
+                modifier = Modifier.padding(top = 8.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            visualDeadlineText?.let {
+                Text(
+                    text = it,
+                    modifier = Modifier.padding(top = 6.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
         }
         Spacer(modifier = Modifier.height(16.dp))
         StatusCard(

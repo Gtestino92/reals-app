@@ -2,6 +2,7 @@ package com.reals.app.ui.root
 
 import com.reals.app.core.network.ApiError
 import com.reals.app.data.mapper.toDomain
+import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.testutil.TestDomain
 import com.reals.app.testutil.TestDtos
 import org.junit.Assert.assertEquals
@@ -60,6 +61,31 @@ class ChatMessageActionHandlerTest {
         assertEquals("user-1", optimistic.senderId)
         assertEquals("hola mundo", optimistic.content)
         assertEquals(OutgoingMessageDeliveryState.Sending, optimistic.deliveryState)
+    }
+
+    @Test
+    fun `first chat send is ignored while mutual cancellation is pending`() {
+        val result = ChatMessageActionHandler.prepareFirstChatSend(
+            current = firstChatState(
+                exitRequests = listOf(TestDtos.exitRequest(status = "PENDING").toDomain()),
+            ),
+            content = "hola",
+        )
+
+        assertEquals(ChatMessageSendPreparation.Ignored, result)
+    }
+
+    @Test
+    fun `first chat retry keeps failed optimistic message while mutual cancellation is pending`() {
+        val failed = failedOptimisticMessage(localId = "local-failed")
+        val current = firstChatState(
+            optimisticMessages = listOf(failed),
+            exitRequests = listOf(TestDtos.exitRequest(status = "PENDING").toDomain()),
+        )
+
+        val state = ChatMessageActionHandler.retryFirstChat(current, "local-failed")
+
+        assertEquals(listOf("local-failed"), state.optimisticMessages.map { it.localId })
     }
 
     @Test
@@ -139,6 +165,7 @@ class ChatMessageActionHandlerTest {
 
     private fun firstChatState(
         optimisticMessages: List<OptimisticOutgoingMessage> = emptyList(),
+        exitRequests: List<ChatExitRequest> = emptyList(),
         error: ApiError? = null,
         message: String? = null,
     ): RealsRootUiState.FirstChat = RealsRootUiState.FirstChat(
@@ -147,6 +174,7 @@ class ChatMessageActionHandlerTest {
         chatId = "chat-1",
         chat = TestDtos.chat().toDomain(),
         optimisticMessages = optimisticMessages,
+        exitRequests = exitRequests,
         error = error,
         message = message,
     )

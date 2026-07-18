@@ -2,6 +2,7 @@ package com.reals.app.ui.root
 
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.security.TextSafety
+import com.reals.app.domain.model.ChatExitRequestStatus
 
 internal object ChatMessageActionHandler {
     fun prepareFirstChatSend(
@@ -9,6 +10,9 @@ internal object ChatMessageActionHandler {
         content: String,
     ): ChatMessageSendPreparation<RealsRootUiState.FirstChat> {
         if (current.loading || current.refreshing || current.sending || current.actionLoading) {
+            return ChatMessageSendPreparation.Ignored
+        }
+        if (current.hasPendingExitRequest()) {
             return ChatMessageSendPreparation.Ignored
         }
         val chat = current.chat ?: return ChatMessageSendPreparation.Ignored
@@ -65,9 +69,14 @@ internal object ChatMessageActionHandler {
     fun retryFirstChat(
         current: RealsRootUiState.FirstChat,
         localId: String,
-    ): RealsRootUiState.FirstChat = current.copy(
-        optimisticMessages = current.optimisticMessages.withoutOptimisticMessage(localId),
-    )
+    ): RealsRootUiState.FirstChat =
+        if (current.hasPendingExitRequest()) {
+            current
+        } else {
+            current.copy(
+                optimisticMessages = current.optimisticMessages.withoutOptimisticMessage(localId),
+            )
+        }
 
     fun retrySecondChat(
         current: RealsRootUiState.SecondChat,
@@ -102,6 +111,9 @@ internal object ChatMessageActionHandler {
 
     private fun invalidMessageError(): ApiError =
         ApiError.Unexpected("El mensaje no es válido.")
+
+    private fun RealsRootUiState.FirstChat.hasPendingExitRequest(): Boolean =
+        exitRequests.any { it.status == ChatExitRequestStatus.Pending }
 }
 
 internal sealed interface ChatMessageSendPreparation<out T> {

@@ -22,6 +22,17 @@ class TimedExitRequestCardStateTest {
     }
 
     @Test
+    fun `responder accept and reject actions remain available while request is pending`() {
+        assertTrue(showExitRequestResponseActions(requestedByMe = false, remainingSeconds = 12L))
+        assertTrue(exitRequestActionsEnabled(actionsDisabled = false))
+    }
+
+    @Test
+    fun `requester does not see accept or reject actions while waiting`() {
+        assertFalse(showExitRequestResponseActions(requestedByMe = true, remainingSeconds = 12L))
+    }
+
+    @Test
     fun `requester copy before expiry waits for other user`() {
         assertEquals(
             "Esperando respuesta. Si no contesta, el chat se cierra en 12s.",

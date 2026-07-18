@@ -340,6 +340,41 @@ class FirstChatCoordinatorTest {
     }
 
     @Test
+    fun `sendMessage mutual cancellation pending refreshes exits and removes optimistic message`() = runBlocking {
+        api.chatMessageResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "CHAT_MUTUAL_CANCELLATION_PENDING",
+        )
+        api.chatResponse = Response.success(TestDtos.chat(status = "ACTIVE"))
+        api.exitRequestsResponse = Response.success(listOf(TestDtos.exitRequest(status = "PENDING")))
+        val optimistic = newOptimisticOutgoingMessage(
+            chatId = "chat-1",
+            senderId = "user-1",
+            content = "hola",
+            localId = "local-1",
+            createdAtMillis = 123L,
+        )
+        val current = firstChatState(chatStatus = ChatStatus.Active).copy(
+            optimisticMessages = listOf(optimistic),
+            sending = true,
+        )
+
+        val result = coordinator.sendMessage(current, "hola", localId = "local-1")
+
+        assertTrue(result is FirstChatSendResult.Show)
+        val state = (result as FirstChatSendResult.Show).state
+        val error = state.error as ApiError.Backend
+        assertFalse(state.sending)
+        assertTrue(state.optimisticMessages.isEmpty())
+        assertEquals(ChatExitRequestStatus.Pending, state.exitRequests.single().status)
+        assertEquals(BackendErrorCode.ChatMutualCancellationPending, error.backendErrorCode)
+        assertEquals(
+            listOf("sendChatMessage", "getFirstChatForMatch", "getChatExitRequests"),
+            api.calls,
+        )
+    }
+
+    @Test
     fun `sendMessage chat abandoned returns home and hides first chat`() = runBlocking {
         api.chatMessageResponse = backendErrorResponse(
             statusCode = 409,
@@ -374,6 +409,51 @@ class FirstChatCoordinatorTest {
         assertEquals("Aprobaste el chat. Te avisaremos si la otra persona también aprueba.", result.message)
         assertFalse(result.autoNavigateEngagements)
         assertEquals(listOf("submitChatDecision"), api.calls)
+    }
+
+    @Test
+    fun `decision is ignored while mutual cancellation is pending`() = runBlocking {
+        val current = firstChatState(chatStatus = ChatStatus.Active).copy(
+            exitRequests = listOf(TestDtos.exitRequest(status = "PENDING").toDomain()),
+        )
+
+        val result = coordinator.submitDecision(
+            current = current,
+            decision = ChatContinueDecision.Approved,
+            onPending = {},
+        )
+
+        assertEquals(FirstChatActionResult.Ignore, result)
+        assertTrue(api.calls.isEmpty())
+    }
+
+    @Test
+    fun `decision mutual cancellation pending refreshes exits`() = runBlocking {
+        api.matchResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "CHAT_MUTUAL_CANCELLATION_PENDING",
+        )
+        api.chatResponse = Response.success(TestDtos.chat(status = "ACTIVE"))
+        api.exitRequestsResponse = Response.success(listOf(TestDtos.exitRequest(status = "PENDING")))
+        val current = firstChatState(chatStatus = ChatStatus.Active)
+
+        val result = coordinator.submitDecision(
+            current = current,
+            decision = ChatContinueDecision.Approved,
+            onPending = {},
+        )
+
+        assertTrue(result is FirstChatActionResult.Show)
+        val state = (result as FirstChatActionResult.Show).state
+        val error = state.error as ApiError.Backend
+        assertFalse(state.actionLoading)
+        assertEquals(null, state.actionLoadingLabel)
+        assertEquals(ChatExitRequestStatus.Pending, state.exitRequests.single().status)
+        assertEquals(BackendErrorCode.ChatMutualCancellationPending, error.backendErrorCode)
+        assertEquals(
+            listOf("submitChatDecision", "getFirstChatForMatch", "getChatExitRequests"),
+            api.calls,
+        )
     }
 
     @Test
@@ -590,6 +670,52 @@ class FirstChatCoordinatorTest {
     }
 
     @Test
+    fun `guidance request is ignored while mutual cancellation is pending`() = runBlocking {
+        val current = firstChatState(
+            chatStatus = ChatStatus.Active,
+            guidance = TestDtos.firstChatGuidance(),
+        ).copy(
+            exitRequests = listOf(TestDtos.exitRequest(status = "PENDING").toDomain()),
+        )
+
+        val result = coordinator.requestNextGuidanceQuestion(current, onPending = {})
+
+        assertEquals(FirstChatActionResult.Ignore, result)
+        assertTrue(api.calls.isEmpty())
+    }
+
+    @Test
+    fun `guidance request mutual cancellation pending refreshes exits`() = runBlocking {
+        api.firstChatGuidanceResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "CHAT_MUTUAL_CANCELLATION_PENDING",
+        )
+        api.chatResponse = Response.success(TestDtos.chat(status = "ACTIVE"))
+        api.exitRequestsResponse = Response.success(listOf(TestDtos.exitRequest(status = "PENDING")))
+        val current = firstChatState(
+            chatStatus = ChatStatus.Active,
+            guidance = TestDtos.firstChatGuidance(),
+        )
+
+        val result = coordinator.requestNextGuidanceQuestion(current, onPending = {})
+
+        assertTrue(result is FirstChatActionResult.Show)
+        val state = (result as FirstChatActionResult.Show).state
+        val error = state.error as ApiError.Backend
+        assertFalse(state.guidanceActionLoading)
+        assertEquals(ChatExitRequestStatus.Pending, state.exitRequests.single().status)
+        assertEquals(BackendErrorCode.ChatMutualCancellationPending, error.backendErrorCode)
+        assertEquals(
+            listOf(
+                "requestNextFirstChatGuidanceQuestion",
+                "getFirstChatForMatch",
+                "getChatExitRequests",
+            ),
+            api.calls,
+        )
+    }
+
+    @Test
     fun `guidance request preserves unrelated first chat state`() = runBlocking {
         val message = TestDtos.chatMessage("message-old").toDomain()
         val optimistic = newOptimisticOutgoingMessage(
@@ -599,7 +725,7 @@ class FirstChatCoordinatorTest {
             localId = "local-old",
             createdAtMillis = 1L,
         )
-        val exitRequest = TestDtos.exitRequest(status = "PENDING").toDomain()
+        val exitRequest = TestDtos.exitRequest(status = "REJECTED").toDomain()
         api.firstChatGuidanceResponse = Response.success(TestDtos.firstChatGuidance(myNextRequested = true))
         val current = firstChatState(
             chatStatus = ChatStatus.Active,

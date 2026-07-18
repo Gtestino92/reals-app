@@ -10,6 +10,7 @@ import com.reals.app.domain.model.ChatContinueDecision
 import com.reals.app.domain.model.ChatDecisionState
 import com.reals.app.domain.model.ChatExitOutcome
 import com.reals.app.domain.model.ChatExitReason
+import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.MatchState
 import com.reals.app.domain.model.ProvisionedSession
@@ -191,14 +192,106 @@ internal class FirstChatCoordinator(
             }
 
             is ApiResult.Failure -> result.error.firstChatSendExpiryRoute(current)
+                ?: refreshAfterPendingMutualCancellation(
+                    error = result.error,
+                    current = current,
+                    chatId = chat.id,
+                    localId = localId,
+                )
                 ?: FirstChatSendResult.Show(
                     current.copy(
                         optimisticMessages = current.optimisticMessages.markOptimisticMessageFailed(localId),
                         sending = false,
                         error = result.error,
                     )
-                )
+            )
         }
+    }
+
+    private suspend fun refreshAfterPendingMutualCancellation(
+        error: ApiError,
+        current: RealsRootUiState.FirstChat,
+        chatId: String,
+        localId: String,
+    ): FirstChatSendResult.Show? {
+        if (error !is ApiError.Backend ||
+            error.backendErrorCode != BackendErrorCode.ChatMutualCancellationPending
+        ) {
+            return null
+        }
+
+        val chatResult = dependencies.getFirstChatForMatch(current.matchId)
+        val exitsResult = dependencies.getChatExitRequests(chatId)
+        return FirstChatSendResult.Show(
+            current.copy(
+                chat = (chatResult as? ApiResult.Success)?.value ?: current.chat,
+                exitRequests = (exitsResult as? ApiResult.Success)?.value
+                    ?: current.exitRequests,
+                optimisticMessages = current.optimisticMessages.filterNot { it.localId == localId },
+                sending = false,
+                error = (chatResult as? ApiResult.Failure)?.error
+                    ?: (exitsResult as? ApiResult.Failure)?.error
+                    ?: error,
+            )
+        )
+    }
+
+    private suspend fun refreshActionAfterPendingMutualCancellation(
+        error: ApiError,
+        current: RealsRootUiState.FirstChat,
+        pending: RealsRootUiState.FirstChat,
+    ): FirstChatActionResult.Show? {
+        val chatId = current.chat?.id ?: return null
+        return refreshLockedExitStateAfterPendingMutualCancellation(
+            error = error,
+            current = pending,
+            chatId = chatId,
+        )?.let { refreshed ->
+            FirstChatActionResult.Show(
+                refreshed.copy(
+                    actionLoading = false,
+                    actionLoadingLabel = null,
+                )
+            )
+        }
+    }
+
+    private suspend fun refreshGuidanceAfterPendingMutualCancellation(
+        error: ApiError,
+        pending: RealsRootUiState.FirstChat,
+        chatId: String,
+    ): FirstChatActionResult.Show? =
+        refreshLockedExitStateAfterPendingMutualCancellation(
+            error = error,
+            current = pending,
+            chatId = chatId,
+        )?.let { refreshed ->
+            FirstChatActionResult.Show(
+                refreshed.copy(guidanceActionLoading = false)
+            )
+        }
+
+    private suspend fun refreshLockedExitStateAfterPendingMutualCancellation(
+        error: ApiError,
+        current: RealsRootUiState.FirstChat,
+        chatId: String,
+    ): RealsRootUiState.FirstChat? {
+        if (error !is ApiError.Backend ||
+            error.backendErrorCode != BackendErrorCode.ChatMutualCancellationPending
+        ) {
+            return null
+        }
+
+        val chatResult = dependencies.getFirstChatForMatch(current.matchId)
+        val exitsResult = dependencies.getChatExitRequests(chatId)
+        return current.copy(
+            chat = (chatResult as? ApiResult.Success)?.value ?: current.chat,
+            exitRequests = (exitsResult as? ApiResult.Success)?.value
+                ?: current.exitRequests,
+            error = (chatResult as? ApiResult.Failure)?.error
+                ?: (exitsResult as? ApiResult.Failure)?.error
+                ?: error,
+        )
     }
 
     suspend fun submitDecision(
@@ -207,6 +300,9 @@ internal class FirstChatCoordinator(
         onPending: (RealsRootUiState.FirstChat) -> Unit,
     ): FirstChatActionResult {
         if (current.loading || current.refreshing || current.sending || current.actionLoading) {
+            return FirstChatActionResult.Ignore
+        }
+        if (current.hasPendingExitRequest()) {
             return FirstChatActionResult.Ignore
         }
         val chat = current.chat
@@ -288,6 +384,11 @@ internal class FirstChatCoordinator(
             }
 
             is ApiResult.Failure -> result.error.firstChatActionExpiryRoute(current)
+                ?: refreshActionAfterPendingMutualCancellation(
+                    error = result.error,
+                    current = current,
+                    pending = pending,
+                )
                 ?: FirstChatActionResult.Show(
                     pending.copy(
                         actionLoading = false,
@@ -303,6 +404,9 @@ internal class FirstChatCoordinator(
         onPending: (RealsRootUiState.FirstChat) -> Unit,
     ): FirstChatActionResult {
         if (current.loading || current.refreshing || current.actionLoading || current.guidanceActionLoading) {
+            return FirstChatActionResult.Ignore
+        }
+        if (current.hasPendingExitRequest()) {
             return FirstChatActionResult.Ignore
         }
         val chat = current.chat ?: return FirstChatActionResult.Ignore
@@ -328,6 +432,11 @@ internal class FirstChatCoordinator(
             )
 
             is ApiResult.Failure -> result.error.firstChatActionExpiryRoute(current)
+                ?: refreshGuidanceAfterPendingMutualCancellation(
+                    error = result.error,
+                    pending = pending,
+                    chatId = chat.id,
+                )
                 ?: FirstChatActionResult.Show(
                     pending.copy(
                         guidanceActionLoading = false,
@@ -495,6 +604,9 @@ internal class FirstChatCoordinator(
             )
         }
     }
+
+    private fun RealsRootUiState.FirstChat.hasPendingExitRequest(): Boolean =
+        exitRequests.any { it.status == ChatExitRequestStatus.Pending }
 }
 
 internal sealed interface FirstChatLoadResult {

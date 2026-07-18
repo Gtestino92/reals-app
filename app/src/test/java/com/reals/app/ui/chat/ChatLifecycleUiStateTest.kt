@@ -5,6 +5,7 @@ import com.reals.app.testutil.TestDtos
 import java.time.OffsetDateTime
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -62,7 +63,7 @@ class ChatLifecycleUiStateTest {
     }
 
     @Test
-    fun `header deadline prefers absolute expiresAt over inactivity deadline`() {
+    fun `first chat header hides permanent expiration deadline`() {
         val lifecycle = FirstChatLifecycleUiState(
             deadline = "2026-06-18T21:05:00Z",
             reason = FirstChatExpiryReason.Inactivity,
@@ -76,7 +77,66 @@ class ChatLifecycleUiStateTest {
             firstChatLifecycle = lifecycle,
         )
 
-        assertEquals("2026-06-18T21:10:00Z", label)
+        assertNull(label)
+        assertNull(
+            chatHeaderStatusText(
+                expiresAt = "2026-06-18T21:10:00Z",
+                firstChatLifecycle = lifecycle,
+                secondChatReadOnlyUntil = null,
+                secondChatUnavailable = false,
+                formatDateTime = { "formatted-$it" },
+            )
+        )
+    }
+
+    @Test
+    fun `absolute countdown copy remains distinct`() {
+        val lifecycle = FirstChatLifecycleUiState(
+            deadline = "2026-06-18T21:05:00Z",
+            reason = FirstChatExpiryReason.Absolute,
+            remainingMillis = 30_000L,
+            showCountdown = true,
+            expired = false,
+        )
+
+        assertEquals("El chat vence en 30s.", lifecycle.warningCopy())
+    }
+
+    @Test
+    fun `second chat expiration and read only text remains unchanged`() {
+        val readOnlyText = chatHeaderStatusText(
+            expiresAt = "2026-06-18T21:10:00Z",
+            firstChatLifecycle = null,
+            secondChatReadOnlyUntil = "2026-06-18T22:10:00Z",
+            secondChatUnavailable = false,
+            formatDateTime = { value -> "formatted-$value" },
+        )
+        val unavailableText = chatHeaderStatusText(
+            expiresAt = "2026-06-18T21:10:00Z",
+            firstChatLifecycle = null,
+            secondChatReadOnlyUntil = null,
+            secondChatUnavailable = true,
+            formatDateTime = { value -> "formatted-$value" },
+        )
+
+        assertEquals(
+            "Este segundo chat venció. Podés leerlo hasta formatted-2026-06-18T22:10:00Z.",
+            readOnlyText,
+        )
+        assertEquals("Este segundo chat ya no está disponible.", unavailableText)
+    }
+
+    @Test
+    fun `second chat header keeps permanent expiration when available`() {
+        val text = chatHeaderStatusText(
+            expiresAt = "2026-06-18T21:10:00Z",
+            firstChatLifecycle = null,
+            secondChatReadOnlyUntil = null,
+            secondChatUnavailable = false,
+            formatDateTime = { value -> "formatted-$value" },
+        )
+
+        assertEquals("Válido hasta formatted-2026-06-18T21:10:00Z", text)
     }
 
     private fun millis(value: String): Long =

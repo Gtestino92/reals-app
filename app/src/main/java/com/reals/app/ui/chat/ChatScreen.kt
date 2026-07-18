@@ -78,6 +78,8 @@ import kotlin.time.Duration.Companion.milliseconds
 
 private const val MUTUAL_EXIT_TIMEOUT_SECONDS = 20L
 private const val MUTUAL_EXIT_TIMEOUT_RETRY_MILLIS = 2_000L
+internal const val MUTUAL_EXIT_CONVERSATION_PAUSED_COPY =
+    "La conversaci\u00f3n est\u00e1 pausada mientras se resuelve la solicitud."
 
 @Composable
 fun ChatScreen(
@@ -157,14 +159,17 @@ fun ChatScreen(
                     )
     val sendingMessage = sending
     val loadingChatAction = actionLoading || manualBlockLoading
-    val canEditDraft = canChat && !loadingChatAction
     val canUseChatActions = canChat && !loadingChatAction
     val canUseNavigationActions = !loadingChatAction
-    val guidancePanelState = firstChatGuidancePanelState(guidance)
     val pendingExitRequest = exitRequests
         .filter { it.status == ChatExitRequestStatus.Pending }
         .maxByOrNull { it.createdAt }
     val exitFlowLocked = pendingExitRequest != null
+    val canSendMessages = canChat && !exitFlowLocked
+    val guidancePanelState = firstChatGuidancePanelState(
+        guidance = guidance,
+        canRequestNextWhileChatOpen = canSendMessages,
+    )
     val canUseExistingChatActions =
         canUseChatActions && (!showMutualExitActions || !exitFlowLocked)
     val manualBlockBusy =
@@ -186,6 +191,13 @@ fun ChatScreen(
     var bottomBarHeight by remember { mutableStateOf(0.dp) }
     val density = LocalDensity.current
     val bottomContentPadding = bottomBarHeight.takeIf { it > 0.dp } ?: 180.dp
+    val composerState = messageComposerUiState(
+        canChat = canChat,
+        canSendMessages = canSendMessages,
+        sendingMessage = sendingMessage,
+        loadingChatAction = loadingChatAction,
+        draft = draft,
+    )
 
     if (loading && chat == null) {
         LoadingChatScreen(
@@ -195,8 +207,9 @@ fun ChatScreen(
         return
     }
 
-    LaunchedEffect(chat?.id, canChat) {
-        while (canChat) {
+    val pollChat = chatPollingEnabled(canChat)
+    LaunchedEffect(chat?.id, pollChat) {
+        while (pollChat) {
             delay(2000.milliseconds)
             onRefresh()
         }
@@ -330,13 +343,14 @@ fun ChatScreen(
             ) {
                 MessageComposer(
                     draft = draft,
-                    canChat = canChat,
-                    canEditDraft = canEditDraft,
-                    sendingMessage = sendingMessage,
-                    loadingChatAction = loadingChatAction,
-                    onDraftChange = { draft = it.take(1_000) },
+                    state = composerState,
+                    onDraftChange = {
+                        if (composerState.canEditDraft) {
+                            draft = it.take(1_000)
+                        }
+                    },
                     onSend = {
-                        if (onSendMessage(draft)) {
+                        if (composerState.sendButtonEnabled && onSendMessage(draft)) {
                             draft = ""
                         }
                     },
@@ -448,21 +462,17 @@ private fun ChatHeader(
 
                 trailingContent?.invoke()
             }
-            val deadlineLabel = firstChatHeaderDeadlineLabel(expiresAt, firstChatLifecycle)
-            Text(
-                text = when {
-                    secondChatReadOnlyUntil != null ->
-                        "Este segundo chat venci\u00f3. Pod\u00e9s leerlo hasta ${
-                            formatBackendDateTime(
-                                secondChatReadOnlyUntil
-                            )
-                        }."
-
-                    secondChatUnavailable -> "Este segundo chat ya no est\u00e1 disponible."
-                    else -> "V\u00e1lido hasta ${formatBackendDateTime(deadlineLabel)}"
-                },
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            chatHeaderStatusText(
+                expiresAt = expiresAt,
+                firstChatLifecycle = firstChatLifecycle,
+                secondChatReadOnlyUntil = secondChatReadOnlyUntil,
+                secondChatUnavailable = secondChatUnavailable,
+            )?.let { statusText ->
+                Text(
+                    text = statusText,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             if (showDecisionSummary) chatDecisionSummary(
                 myDecision,
                 partnerDecision,
@@ -626,13 +636,18 @@ internal data class FirstChatGuidancePanelState(
 
 internal fun firstChatGuidancePanelState(
     guidance: FirstChatGuidance?,
+    canRequestNextWhileChatOpen: Boolean = true,
 ): FirstChatGuidancePanelState? {
     if (guidance == null) return null
     val finalQuestion = guidance.questionOrdinal >= guidance.maxQuestions
     return FirstChatGuidancePanelState(
         questionText = guidance.question.text,
         showButton = !guidance.completed && !finalQuestion && !guidance.myNextRequested,
-        buttonEnabled = !guidance.completed && !finalQuestion && !guidance.myNextRequested && guidance.canRequestNext,
+        buttonEnabled = !guidance.completed &&
+                !finalQuestion &&
+                !guidance.myNextRequested &&
+                guidance.canRequestNext &&
+                canRequestNextWhileChatOpen,
         showWaitingCopy = !guidance.completed && guidance.myNextRequested,
     )
 }
@@ -774,10 +789,7 @@ private fun ChatActionsPanel(
 @Composable
 private fun MessageComposer(
     draft: String,
-    canChat: Boolean,
-    canEditDraft: Boolean,
-    sendingMessage: Boolean,
-    loadingChatAction: Boolean,
+    state: MessageComposerUiState,
     onDraftChange: (String) -> Unit,
     onSend: () -> Unit,
 ) {
@@ -791,9 +803,9 @@ private fun MessageComposer(
             modifier = Modifier.padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            if (!canChat) {
+            state.explanatoryCopy?.let { copy ->
                 Text(
-                    text = "Este chat no está disponible para enviar mensajes.",
+                    text = copy,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -807,7 +819,7 @@ private fun MessageComposer(
                     value = draft,
                     onValueChange = onDraftChange,
                     placeholder = { Text("Mensaje") },
-                    enabled = canEditDraft,
+                    enabled = state.canEditDraft,
                     minLines = 1,
                     maxLines = 4,
                     modifier = Modifier.weight(1f),
@@ -815,12 +827,9 @@ private fun MessageComposer(
 
                 FilledIconButton(
                     onClick = onSend,
-                    enabled = canChat &&
-                            !sendingMessage &&
-                            !loadingChatAction &&
-                            draft.isNotBlank(),
+                    enabled = state.sendButtonEnabled,
                 ) {
-                    if (sendingMessage) {
+                    if (state.sendingMessage) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(20.dp),
                             strokeWidth = 2.dp,
@@ -883,15 +892,15 @@ private fun TimedExitRequestCard(
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
             Text(
-                text = "Podés seguir enviando mensajes mientras se resuelve.",
+                text = MUTUAL_EXIT_CONVERSATION_PAUSED_COPY,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                 style = MaterialTheme.typography.bodySmall,
             )
-            if (!requestedByMe && remainingSeconds > 0) {
+            if (showExitRequestResponseActions(requestedByMe, remainingSeconds)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(
                         onClick = { onAcceptExitRequest(request.id) },
-                        enabled = !actionsDisabled,
+                        enabled = exitRequestActionsEnabled(actionsDisabled),
                         modifier = Modifier.weight(1f),
                     ) {
                         Text(
@@ -901,7 +910,7 @@ private fun TimedExitRequestCard(
                     }
                     OutlinedButton(
                         onClick = { onRejectExitRequest(request.id) },
-                        enabled = !actionsDisabled,
+                        enabled = exitRequestActionsEnabled(actionsDisabled),
                         modifier = Modifier.weight(1f),
                     ) {
                         Text(
@@ -920,6 +929,13 @@ internal fun shouldRequestExitTimeout(
     actionsDisabled: Boolean,
 ): Boolean =
     remainingSeconds == 0L && !actionsDisabled
+
+internal fun showExitRequestResponseActions(
+    requestedByMe: Boolean,
+    remainingSeconds: Long,
+): Boolean = !requestedByMe && remainingSeconds > 0L
+
+internal fun exitRequestActionsEnabled(actionsDisabled: Boolean): Boolean = !actionsDisabled
 
 internal fun timedExitRequestBodyText(
     requestedByMe: Boolean,
@@ -1103,7 +1119,60 @@ private fun SuccessFeedback(message: String, modifier: Modifier = Modifier) {
 internal fun firstChatHeaderDeadlineLabel(
     expiresAt: String?,
     firstChatLifecycle: FirstChatLifecycleUiState?,
-): String? = expiresAt ?: firstChatLifecycle?.deadline
+): String? = if (firstChatLifecycle == null) {
+    expiresAt?.takeIf { it.isNotBlank() }
+} else {
+    null
+}
+
+internal fun chatHeaderStatusText(
+    expiresAt: String?,
+    firstChatLifecycle: FirstChatLifecycleUiState?,
+    secondChatReadOnlyUntil: String?,
+    secondChatUnavailable: Boolean,
+    formatDateTime: (String?) -> String = ::formatBackendDateTime,
+): String? = when {
+    secondChatReadOnlyUntil != null ->
+        "Este segundo chat venci\u00f3. Pod\u00e9s leerlo hasta ${formatDateTime(secondChatReadOnlyUntil)}."
+
+    secondChatUnavailable -> "Este segundo chat ya no est\u00e1 disponible."
+    else -> firstChatHeaderDeadlineLabel(expiresAt, firstChatLifecycle)
+        ?.let { "V\u00e1lido hasta ${formatDateTime(it)}" }
+}
+
+internal data class MessageComposerUiState(
+    val canSendMessages: Boolean,
+    val canEditDraft: Boolean,
+    val sendButtonEnabled: Boolean,
+    val sendingMessage: Boolean,
+    val explanatoryCopy: String?,
+)
+
+internal fun messageComposerUiState(
+    canChat: Boolean,
+    canSendMessages: Boolean,
+    sendingMessage: Boolean,
+    loadingChatAction: Boolean,
+    draft: String,
+): MessageComposerUiState {
+    val canEditDraft = canSendMessages && !loadingChatAction
+    return MessageComposerUiState(
+        canSendMessages = canSendMessages,
+        canEditDraft = canEditDraft,
+        sendButtonEnabled = canSendMessages &&
+                !sendingMessage &&
+                !loadingChatAction &&
+                draft.isNotBlank(),
+        sendingMessage = sendingMessage,
+        explanatoryCopy = when {
+            !canChat -> "Este chat no est\u00e1 disponible para enviar mensajes."
+            !canSendMessages -> MUTUAL_EXIT_CONVERSATION_PAUSED_COPY
+            else -> null
+        },
+    )
+}
+
+internal fun chatPollingEnabled(canChat: Boolean): Boolean = canChat
 
 private fun chatDecisionSummary(
     myDecision: ChatDecisionState?,

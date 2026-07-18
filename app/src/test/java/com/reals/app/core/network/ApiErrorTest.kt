@@ -146,7 +146,7 @@ class ApiErrorTest {
             "CHAT_MIN_MESSAGES_REQUIRED" to
                 "Antes de decidir, enviá al menos un poco más de conversación.",
             "CHAT_MUTUAL_CANCELLATION_PENDING" to
-                "Hay una solicitud de salida pendiente. Resolvela antes de decidir.",
+                "La conversaci\u00f3n est\u00e1 pausada mientras se resuelve la solicitud.",
             "FIRST_CHAT_GUIDANCE_PARTICIPATION_REQUIRED" to
                 "Particip\u00e1 un poco m\u00e1s antes de pedir otra pregunta.",
             "FIRST_CHAT_GUIDANCE_NEXT_ALREADY_REQUESTED" to
