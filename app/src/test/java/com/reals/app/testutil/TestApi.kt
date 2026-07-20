@@ -133,12 +133,15 @@ class FakeRealsApi : RealsApi {
 
     var pingResponse: Response<PingResponseDto> = Response.success(PingResponseDto("ok"))
     var userResponse: Response<UserResponseDto> = Response.success(TestDtos.user())
+    var getMeResponse: Response<UserResponseDto>? = null
+    var provisionMeResponse: Response<UserResponseDto>? = null
     var deleteMeResponse: Response<Unit> = Response.success(Unit)
     var homeResponse: Response<HomeResponseDto> = Response.success(TestDtos.home())
     var homeStatusResponse: Response<HomeStatusResponseDto> = Response.success(TestDtos.homeStatus())
     var homePendingResponse: Response<HomePendingStateResponseDto> = Response.success(TestDtos.homePending())
     var registerPushTokenResponse: Response<RegisterPushTokenResponseDto> =
         Response.success(RegisterPushTokenResponseDto(registered = true))
+    var localFirebaseEmailVerificationResponse: Response<Unit> = Response.success(Unit)
     var currentLegalDocumentsResponse: Response<CurrentLegalDocumentsResponseDto> =
         Response.success(TestDtos.currentLegalDocuments())
     var legalStatusResponse: Response<LegalStatusResponseDto> = Response.success(TestDtos.legalStatus())
@@ -177,10 +180,10 @@ class FakeRealsApi : RealsApi {
     override suspend fun ping(): Response<PingResponseDto> = record("ping", null) { pingResponse }
 
     override suspend fun provisionMe(authorization: String): Response<UserResponseDto> =
-        record("provisionMe", authorization) { userResponse }
+        record("provisionMe", authorization) { provisionMeResponse ?: userResponse }
 
     override suspend fun getMe(authorization: String): Response<UserResponseDto> =
-        record("getMe", authorization) { userResponse }
+        record("getMe", authorization) { getMeResponse ?: userResponse }
 
     override suspend fun getHome(authorization: String): Response<HomeResponseDto> =
         record("getHome", authorization, beforeResponse = beforeGetHomeResponse) { homeResponse }
@@ -205,6 +208,13 @@ class FakeRealsApi : RealsApi {
 
     override suspend fun reactivateMe(authorization: String): Response<UserResponseDto> =
         record("reactivateMe", authorization) { userResponse }
+
+    override suspend fun markCurrentFirebaseEmailVerifiedForLocalDevelopment(
+        authorization: String,
+    ): Response<Unit> =
+        record("markCurrentFirebaseEmailVerifiedForLocalDevelopment", authorization) {
+            localFirebaseEmailVerificationResponse
+        }
 
     override suspend fun getCurrentLegalDocuments(): Response<CurrentLegalDocumentsResponseDto> =
         record("getCurrentLegalDocuments", null) { currentLegalDocumentsResponse }

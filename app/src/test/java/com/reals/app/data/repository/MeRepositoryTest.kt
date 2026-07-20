@@ -6,6 +6,7 @@ import com.reals.app.domain.model.HomePendingAction
 import com.reals.app.testutil.FakeAuthTokenProvider
 import com.reals.app.testutil.FakeRealsApi
 import com.reals.app.testutil.TestDtos
+import com.reals.app.testutil.backendErrorResponse
 import com.reals.app.testutil.failureError
 import com.reals.app.testutil.successValue
 import com.reals.app.testutil.testApiExecutor
@@ -73,6 +74,26 @@ class MeRepositoryTest {
         assertEquals("Bearer test-token", api.lastAuthorization)
         assertEquals("fcm-token", api.registerPushTokenBody?.token)
         assertEquals("ANDROID", api.registerPushTokenBody?.platform)
+    }
+
+    @Test
+    fun `local firebase email verification uses authenticated unit call`() = runBlocking {
+        api.localFirebaseEmailVerificationResponse = retrofit2.Response.success(204, Unit)
+
+        repository.markCurrentFirebaseEmailVerifiedForLocalDevelopment().successValue()
+
+        assertEquals(listOf("markCurrentFirebaseEmailVerifiedForLocalDevelopment"), api.calls)
+        assertEquals("Bearer test-token", api.lastAuthorization)
+    }
+
+    @Test
+    fun `local firebase email verification backend failure maps through api error`() = runBlocking {
+        api.localFirebaseEmailVerificationResponse = backendErrorResponse(403, "FORBIDDEN", "forbidden")
+
+        val error = repository.markCurrentFirebaseEmailVerifiedForLocalDevelopment().failureError()
+
+        assertTrue(error is ApiError.Backend)
+        assertEquals(403, (error as ApiError.Backend).statusCode)
     }
 
     @Test

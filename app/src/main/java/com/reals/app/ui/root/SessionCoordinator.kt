@@ -15,6 +15,7 @@ import com.reals.app.domain.model.BackendUser
 import com.reals.app.domain.model.BackendUserStatus
 import com.reals.app.domain.model.ProvisionedSession
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
@@ -37,8 +38,11 @@ internal class SessionCoordinator(
     private val provisionAndLoadProfile = dependencies.provisionAndLoadProfile
     private val getMeUseCase = dependencies.getMe
     private val pushTokenRegistrationService = dependencies.pushTokenRegistrationService
+    private val localFirebaseEmailVerificationCoordinator =
+        dependencies.localFirebaseEmailVerificationCoordinator
     private val reactivateAccountUseCase = accountDependencies.reactivateAccount
     private val deleteAccountUseCase = accountDependencies.deleteAccount
+    private var refreshSessionJob: Job? = null
 
     fun refreshSession() {
         if (!authRepository.isConfigured()) {
@@ -50,7 +54,8 @@ internal class SessionCoordinator(
             uiState.value = RealsRootUiState.Login()
             return
         }
-        loadBackendSession()
+        if (refreshSessionJob?.isActive == true) return
+        refreshSessionJob = loadBackendSession()
     }
 
     fun signIn(email: String, password: String) {
@@ -76,7 +81,9 @@ internal class SessionCoordinator(
             )
             when (val result = authRepository.signUp(cleanEmail, password)) {
                 AuthOperationResult.Success -> {
-                    authRepository.sendEmailVerificationEmail()
+                    if (!dependencies.localFirebaseEmailAutoVerificationEnabled) {
+                        authRepository.sendEmailVerificationEmail()
+                    }
                     loadBackendSession()
                 }
 
@@ -258,8 +265,10 @@ internal class SessionCoordinator(
             when (val result = reactivateAccountUseCase()) {
                 is ApiResult.Success -> {
                     val session = loadProvisionedSessionForActiveUser(result.value) ?: return@launch
-                    registerPushTokenBestEffort()
-                    onReactivatedSessionLoaded(session)
+                    finalizeActiveSession(
+                        session = session,
+                        onLoaded = onReactivatedSessionLoaded,
+                    )
                 }
 
                 is ApiResult.Failure -> uiState.value = current.copy(
@@ -270,8 +279,8 @@ internal class SessionCoordinator(
         }
     }
 
-    fun loadBackendSession() {
-        scope.launch {
+    fun loadBackendSession(): Job {
+        return scope.launch {
             uiState.value = RealsRootUiState.LoadingSession(authRepository.currentUserEmail())
             when (val userResult = getMeUseCase()) {
                 is ApiResult.Success -> when (userResult.value.status) {
@@ -300,8 +309,10 @@ internal class SessionCoordinator(
 
     suspend fun loadBackendSessionForActiveUser(user: BackendUser) {
         loadProvisionedSessionForActiveUser(user)?.let { session ->
-            registerPushTokenBestEffort()
-            onActiveSessionLoaded(session)
+            finalizeActiveSession(
+                session = session,
+                onLoaded = onActiveSessionLoaded,
+            )
         }
     }
 
@@ -360,8 +371,10 @@ internal class SessionCoordinator(
     private suspend fun provisionAndLoadBackendSession() {
         when (val result = provisionAndLoadProfile()) {
             is ApiResult.Success -> {
-                registerPushTokenBestEffort()
-                onActiveSessionLoaded(result.value)
+                finalizeActiveSession(
+                    session = result.value,
+                    onLoaded = onActiveSessionLoaded,
+                )
             }
 
             is ApiResult.Failure -> handleSessionLoadFailure(result.error)
@@ -374,6 +387,23 @@ internal class SessionCoordinator(
             is ApiResult.Failure -> {
                 handleSessionLoadFailure(result.error)
                 null
+            }
+        }
+    }
+
+    private suspend fun finalizeActiveSession(
+        session: ProvisionedSession,
+        onLoaded: suspend (ProvisionedSession) -> Unit,
+    ) {
+        when (val verification = localFirebaseEmailVerificationCoordinator.ensureVerifiedForLocalBootstrap()) {
+            LocalFirebaseEmailVerificationResult.Verified -> {
+                registerPushTokenBestEffort()
+                onLoaded(session)
+            }
+
+            LocalFirebaseEmailVerificationResult.NotSignedIn -> invalidateTerminalSession()
+            is LocalFirebaseEmailVerificationResult.Failure -> {
+                uiState.value = RealsRootUiState.Failure(verification.error)
             }
         }
     }

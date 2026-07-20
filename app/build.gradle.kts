@@ -95,6 +95,7 @@ android {
             manifestPlaceholders["usesCleartextTraffic"] = "true"
             buildConfigField("String", "REALS_ENVIRONMENT", quoted("local"))
             buildConfigField("String", "REALS_BASE_URL", quoted(localBaseUrl))
+            buildConfigField("boolean", "ENABLE_LOCAL_FIREBASE_EMAIL_AUTO_VERIFICATION", "true")
             buildConfigField("boolean", "SHOW_MANUAL_LOCATION_FALLBACK", "true")
             buildConfigField("boolean", "SHOW_EXPLICIT_REFRESH_BUTTONS", "true")
         }
@@ -103,6 +104,7 @@ android {
             manifestPlaceholders["usesCleartextTraffic"] = "false"
             buildConfigField("String", "REALS_ENVIRONMENT", quoted("dev"))
             buildConfigField("String", "REALS_BASE_URL", quoted(devBaseUrl))
+            buildConfigField("boolean", "ENABLE_LOCAL_FIREBASE_EMAIL_AUTO_VERIFICATION", "false")
             buildConfigField("boolean", "SHOW_MANUAL_LOCATION_FALLBACK", "true")
             buildConfigField("boolean", "SHOW_EXPLICIT_REFRESH_BUTTONS", "true")
         }
@@ -111,6 +113,7 @@ android {
             manifestPlaceholders["usesCleartextTraffic"] = "false"
             buildConfigField("String", "REALS_ENVIRONMENT", quoted("prod"))
             buildConfigField("String", "REALS_BASE_URL", quoted(prodBaseUrl))
+            buildConfigField("boolean", "ENABLE_LOCAL_FIREBASE_EMAIL_AUTO_VERIFICATION", "false")
             buildConfigField("boolean", "SHOW_MANUAL_LOCATION_FALLBACK", "false")
             buildConfigField("boolean", "SHOW_EXPLICIT_REFRESH_BUTTONS", "false")
         }

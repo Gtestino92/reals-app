@@ -44,6 +44,7 @@ import com.reals.app.domain.usecase.GetSchedulingProposalsUseCase
 import com.reals.app.domain.usecase.GetSecondChatForConnectionUseCase
 import com.reals.app.domain.usecase.GetVisualProfileUseCase
 import com.reals.app.domain.usecase.LeaveQueueUseCase
+import com.reals.app.domain.usecase.MarkLocalFirebaseEmailVerifiedUseCase
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
 import com.reals.app.domain.usecase.PutMyPersonalMessageUseCase
 import com.reals.app.domain.usecase.ReactivateAccountUseCase
@@ -64,6 +65,7 @@ import com.reals.app.domain.usecase.TimeoutChatExitRequestUseCase
 import com.reals.app.domain.usecase.UpdateMatchFiltersUseCase
 import com.reals.app.domain.usecase.UpdateProfileUseCase
 import com.reals.app.notifications.registration.PushTokenRegistrationService
+import com.reals.app.ui.root.LocalFirebaseEmailVerificationCoordinator
 import kotlinx.serialization.json.Json
 
 class AppContainer(context: Context) {
@@ -98,6 +100,12 @@ class AppContainer(context: Context) {
     val getHomePendingUseCase = GetHomePendingUseCase(meRepository)
     val registerPushTokenUseCase = RegisterPushTokenUseCase(meRepository)
     val pushTokenRegistrationService = PushTokenRegistrationService(appContext, registerPushTokenUseCase)
+    val markLocalFirebaseEmailVerifiedUseCase = MarkLocalFirebaseEmailVerifiedUseCase(meRepository)
+    val localFirebaseEmailVerificationCoordinator = LocalFirebaseEmailVerificationCoordinator(
+        localFirebaseEmailAutoVerificationEnabled = BuildConfig.ENABLE_LOCAL_FIREBASE_EMAIL_AUTO_VERIFICATION,
+        authRepository = authRepository,
+        markLocalFirebaseEmailVerified = markLocalFirebaseEmailVerifiedUseCase,
+    )
     val getProfilePhotosUseCase = GetProfilePhotosUseCase(profileRepository)
     val addProfilePhotoFileUseCase = AddProfilePhotoFileUseCase(profileRepository)
     val replaceProfilePhotoFileUseCase = ReplaceProfilePhotoFileUseCase(profileRepository)
@@ -145,6 +153,10 @@ class AppContainer(context: Context) {
             provisionAndLoadProfile = provisionAndLoadProfileUseCase,
             getMe = getMeUseCase,
             pushTokenRegistrationService = pushTokenRegistrationService,
+            markLocalFirebaseEmailVerified = markLocalFirebaseEmailVerifiedUseCase,
+            localFirebaseEmailAutoVerificationEnabled =
+                BuildConfig.ENABLE_LOCAL_FIREBASE_EMAIL_AUTO_VERIFICATION,
+            localFirebaseEmailVerificationCoordinator = localFirebaseEmailVerificationCoordinator,
         ),
         account = AccountFeatureDependencies(
             reactivateAccount = reactivateAccountUseCase,

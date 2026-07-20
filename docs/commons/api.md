@@ -17,6 +17,7 @@ The formal OpenAPI contract lives in `openapi.yaml`.
 - `PUT /api/me/push-tokens`: register or refresh the authenticated user's Android FCM device token. Body: `{ "token": "...", "platform": "ANDROID" }`. Returns `{ "registered": true }`.
 - `DELETE /api/me`: schedule soft deletion for the authenticated user account. The account remains recoverable during `account.deletion.recovery-window-days`.
 - `POST /api/me/reactivation`: reactivate an account that is still inside the deletion recovery window.
+- `POST /api/me/local-dev/email-verification`: local-only `local-firebase` helper gated by `local-dev.firebase.email-auto-verification-enabled=true`. Requires an authenticated provisioned Firebase-backed `ROLE_USER`, marks only the caller's Firebase Auth account `emailVerified=true` through Firebase Admin, returns `204`, and does not mutate PostgreSQL or profile state. The client must reload Firebase user state and force-refresh the ID token before using normal photo upload/replacement and profile activation.
 - `GET /api/legal/documents/current`: public endpoint that returns the current configured legal document catalog. It may return an empty `documents` array.
 - `GET /api/me/legal-status`: authenticated authoritative status for current configured legal document versions only.
 - `POST /api/me/legal-document-actions`: authenticated factual record that the current user performed `ACCEPTED` or `ACKNOWLEDGED` for a configured legal document type/version. Returns `201 Created` for a new row and `200 OK` for an identical replay.
@@ -194,7 +195,7 @@ these values as text, not HTML.
 - `POST /api/me/profile`: create the authenticated user's profile.
 - `GET /api/me/profile`: get authenticated user's profile.
 - `PATCH /api/me/profile`: update authenticated user's editable profile fields.
-- `POST /api/me/profile/activation`: activate authenticated user's profile. Requires the current Firebase ID token to have `emailVerified=true`; otherwise returns `409 EMAIL_NOT_VERIFIED` with message `Verificá tu email antes de activar el perfil.` Email verification is not required for profile creation, editing, photo upload/replacement/deletion or match-filter configuration.
+- `POST /api/me/profile/activation`: activate authenticated user's profile. Requires the current Firebase ID token to have `emailVerified=true`; otherwise returns `409 EMAIL_NOT_VERIFIED` with message `Verificá tu email antes de activar el perfil.` Email verification is not required for profile creation, editing, photo deletion, photo reorder or match-filter configuration.
 - `PUT /api/me/profile/match-filters`: replace matchmaking preferences. Body: `intention`, `lookingForGenders`, `preferredMinAge`, `preferredMaxAge`, `maxDistanceKm`.
 - `POST /api/me/profile/authenticity-verification`: optionally run profile authenticity verification for the authenticated user's profile. Profile Authenticity Verification is not legal identity verification. With provider `none` outside `prod`, the MVP compatibility path may mark the profile `VERIFIED`; this does not represent liveness, face comparison, legal identity, document verification or age assurance. With provider `none` in `prod`, verification is unavailable and returns `409 AUTHENTICITY_VERIFICATION_NOT_CONFIGURED`; no `VERIFIED` state is persisted.
 - `POST /api/me/profile/photos`: add a profile photo using multipart file upload with `file` and `position`.
@@ -242,8 +243,20 @@ returned to clients. For private S3/R2/MinIO storage these URLs may be presigned
 and time-limited, so clients should use them for display and refetch photo
 responses when needed instead of persisting URLs permanently.
 
+Adding a profile photo and replacing an existing photo file require the current
+Firebase email to be verified. List, read, delete, reorder and non-photo profile
+edits do not gain this verified-email gate from photo upload hardening.
+
 Photo upload validation has two separate fields. `validationStatus` is the
 blocking technical upload result for file type, size, decoding and dimensions.
+The server accepts only actual JPEG and PNG content whose declared multipart
+content type matches the detected format. WebP and other formats are rejected.
+Accepted images are normalized server-side to metadata-stripped `image/jpeg`;
+EXIF orientation is applied, transparent PNG pixels use a fixed neutral
+background, and neither object storage nor moderation receives original source
+bytes when normalization changes them. Defaults are 5 MiB compressed size, 6000
+input width, 6000 input height, 20,000,000 input pixels, 2048 maximum output
+dimension and JPEG quality `0.88`.
 Successful technical image validation is not semantic person/full-body
 validation. Outside `prod`, the temporary MVP shortcut still returns
 `isPersonPhoto=true`, `isFullBody=true` and `validationStatus=VALIDATED`. In
@@ -295,6 +308,17 @@ Automatic provider moderation does not create safety reports, child-safety
 reports, blocks, penalties, bans or account deletions. Production defaults to requiring
 `moderationStatus=APPROVED` for activation through
 `PROFILE_PHOTO_REQUIRE_MODERATION_APPROVAL_FOR_ACTIVATION=true`.
+
+Upload and replacement share a single-instance global concurrency guard. With
+the default limit of two pipelines, an additional concurrent request fails
+immediately with `503 PROFILE_PHOTO_UPLOAD_BUSY` and `Retry-After: 1`. Upload
+and replacement also share the authenticated post-auth rate-limit group
+`profile-photo-uploads`, keyed by backend user id, defaulting to 12 requests per
+60 seconds. Delete and reorder do not consume that bucket. The concurrency guard
+and rate-limit buckets are single-instance/in-memory controls. Servlet
+multipart parsing happens before the controller acquires the semaphore, so
+deployment gateways should enforce an equivalent request-body limit before the
+request reaches the application.
 
 `PhotoValidationStatus.PENDING` and `PhotoModerationStatus.NEEDS_REVIEW` are
 separate states. Validation `PENDING` means semantic person/full-body analysis
@@ -497,7 +521,7 @@ Selected stable frontend-facing domain codes:
 - `PROFILE_ALREADY_EXISTS`: user attempted to create a second profile.
 - `PROFILE_NOT_FOUND`: authenticated user or match partner profile was not found.
 - `PROFILE_NOT_ACTIVATABLE`: profile cannot be activated from its current status.
-- `EMAIL_NOT_VERIFIED`: profile activation or legacy backend-account linking requires a verified email in the current Firebase ID token.
+- `EMAIL_NOT_VERIFIED`: profile activation, profile-photo upload/replacement, or legacy backend-account linking requires a verified email in the current Firebase ID token.
 - `PROFILE_PHOTOS_REQUIRED`: activation requires more profile photos.
 - `PROFILE_PERSON_PHOTO_REQUIRED`: activation requires more person photos.
 - `PROFILE_FULL_BODY_PHOTO_REQUIRED`: activation requires a full-body photo.
@@ -510,6 +534,7 @@ Selected stable frontend-facing domain codes:
 - `PHOTO_POSITION_INVALID`: requested photo position is outside the configured range.
 - `PHOTO_POSITION_OCCUPIED`: requested photo position is already used.
 - `INVALID_PROFILE_PHOTO`: uploaded profile photo file is invalid.
+- `PROFILE_PHOTO_UPLOAD_BUSY`: profile-photo upload/replacement capacity is temporarily exhausted; retry after the response `Retry-After` value.
 - `PROFILE_PHOTO_NOT_FOUND`: requested profile photo does not belong to the current profile.
 - `USER_NOT_FOUND`: authenticated user id could not be locked for a state-changing operation.
 - `CHAT_EXPIRED`: chat action was attempted after the absolute chat deadline.

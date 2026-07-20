@@ -51,4 +51,9 @@ class MeRepository(
     suspend fun reactivateMe(): ApiResult<BackendUser> =
         authorizedCall { authorization -> api.reactivateMe(authorization) }
             .map { it.toDomain() }
+
+    suspend fun markCurrentFirebaseEmailVerifiedForLocalDevelopment(): ApiResult<Unit> =
+        authorizedUnitCall { authorization ->
+            api.markCurrentFirebaseEmailVerifiedForLocalDevelopment(authorization)
+        }
 }

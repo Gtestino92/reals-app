@@ -41,6 +41,8 @@ class ProfileOperationHandler(
     private val uiState: MutableStateFlow<RealsRootUiState>,
     private val dependencies: ProfileFeatureDependencies,
     private val authRepository: FirebaseAuthRepository,
+    private val localFirebaseEmailVerificationCoordinator: LocalFirebaseEmailVerificationCoordinator =
+        LocalFirebaseEmailVerificationCoordinator.disabled(authRepository),
     private val getProfilePhotosUseCase: GetProfilePhotosUseCase,
     private val scope: CoroutineScope,
     private val onTerminalAuthFailure: () -> Unit,
@@ -309,9 +311,7 @@ class ProfileOperationHandler(
                 )
 
                 is ApiResult.Failure -> {
-                    uiState.value = pending.copy(
-                        photos = pending.photos.copy(addingPhoto = false, photoActionError = result.error),
-                    )
+                    uiState.value = photoActionFailureState(pending, result.error)
                 }
             }
         }
@@ -333,9 +333,7 @@ class ProfileOperationHandler(
                 )
 
                 is ApiResult.Failure -> {
-                    uiState.value = pending.copy(
-                        photos = pending.photos.copy(addingPhoto = false, photoActionError = result.error),
-                    )
+                    uiState.value = photoActionFailureState(pending, result.error)
                 }
             }
         }
@@ -384,12 +382,7 @@ class ProfileOperationHandler(
             )
             uiState.value = pending
 
-            val verificationResult =
-                if (current.emailVerificationLocallyVerified) {
-                    EmailVerificationCheckResult.Verified
-                } else {
-                    authRepository.reloadAndRefreshEmailVerification()
-                }
+            val verificationResult = authRepository.reloadAndRefreshEmailVerification()
 
             val verifiedPending = when (verificationResult) {
                 EmailVerificationCheckResult.Verified -> {
@@ -549,7 +542,7 @@ class ProfileOperationHandler(
                 ),
             )
             uiState.value = pending
-            val result = authRepository.reloadAndRefreshEmailVerification()
+            val result = localFirebaseEmailVerificationCoordinator.checkOrVerifyForUserAction()
             if (result == EmailVerificationCheckResult.NotSignedIn) {
                 onTerminalAuthFailure()
                 return@launch
@@ -717,6 +710,29 @@ internal fun photoDeletedState(
         photoActionError = null,
     ),
 )
+
+internal fun photoActionFailureState(
+    previous: RealsRootUiState.Ready,
+    error: ApiError,
+): RealsRootUiState.Ready {
+    val emailNotVerified = error.isEmailNotVerified()
+    return previous.copy(
+        profileOp = if (emailNotVerified) {
+            previous.profileOp.copy(
+                emailVerificationRequired = true,
+                emailVerificationLocallyVerified = false,
+                emailVerificationMessage = null,
+                emailVerificationError = null,
+            )
+        } else {
+            previous.profileOp
+        },
+        photos = previous.photos.copy(
+            addingPhoto = false,
+            photoActionError = error,
+        ),
+    )
+}
 
 internal fun upsertPhoto(photos: List<ProfilePhoto>, photo: ProfilePhoto): List<ProfilePhoto> {
     val replaced = photos.map {
