@@ -47,6 +47,8 @@ class RealsRootViewModel(
         uiState = _uiState,
         dependencies = dependencies.profile,
         authRepository = authRepository,
+        localFirebaseEmailVerificationCoordinator =
+            dependencies.session.localFirebaseEmailVerificationCoordinator,
         getProfilePhotosUseCase = getProfilePhotosUseCase,
         scope = viewModelScope,
         onTerminalAuthFailure = { sessionCoordinator.invalidateTerminalSession() },

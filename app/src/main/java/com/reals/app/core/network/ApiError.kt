@@ -21,6 +21,8 @@ sealed interface ApiError {
         val message: String,
     ) : ApiError
 
+    data object LocalFirebaseEmailVerification : ApiError
+
     data class Unexpected(val message: String) : ApiError
 
 }
@@ -175,6 +177,8 @@ fun ApiError.toUserMessage(context: ErrorContext = ErrorContext.General): String
         AuthFailureReason.TOKEN_UNAVAILABLE -> "Tu sesión necesita renovarse. Volvé a iniciar sesión."
     }
     is ApiError.PhotoPreparation -> "No se pudo preparar la foto. Probá con otra imagen o intentá nuevamente."
+    ApiError.LocalFirebaseEmailVerification ->
+        "No pudimos preparar la cuenta Firebase para pruebas locales. Verificá que el backend local tenga habilitada la auto-verificación y volvé a intentar."
     is ApiError.Unexpected -> "Algo no salió como esperábamos. Intentá nuevamente."
 }
 

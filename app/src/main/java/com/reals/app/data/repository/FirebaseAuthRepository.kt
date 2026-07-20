@@ -52,9 +52,12 @@ sealed interface ChangePasswordResult {
 open class FirebaseAuthRepository(private val context: Context) {
     open fun isConfigured(): Boolean = FirebaseApp.getApps(context).isNotEmpty()
 
-    fun hasSignedInUser(): Boolean = authOrNull()?.currentUser != null
+    open fun hasSignedInUser(): Boolean = authOrNull()?.currentUser != null
 
-    fun currentUserEmail(): String? = authOrNull()?.currentUser?.email
+    open fun currentUserEmail(): String? = authOrNull()?.currentUser?.email
+
+    open fun currentUserEmailVerified(): Boolean? =
+        authOrNull()?.currentUser?.isEmailVerified
 
     open fun currentUserHasPasswordProvider(): Boolean {
         val user = authOrNull()?.currentUser ?: return false

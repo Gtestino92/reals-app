@@ -190,6 +190,24 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '409':
           $ref: '#/components/responses/Conflict'
+  /api/me/local-dev/email-verification:
+    post:
+      tags: [Me]
+      summary: Local-only Firebase email verification helper
+      description: Local-firebase only and additionally gated by local-dev.firebase.email-auto-verification-enabled=true. Requires a provisioned authenticated Firebase-backed ROLE_USER. Marks only the authenticated Firebase UID emailVerified=true in Firebase Auth through Firebase Admin. Does not mutate PostgreSQL, activate profiles, bypass upload or activation checks, return tokens, accept arbitrary UIDs or emails, or exist in hosted dev/prod. After 204, clients must reload the Firebase user and force-refresh the ID token before using normal profile-photo upload/replacement and profile activation.
+      responses:
+        '204':
+          description: Authenticated Firebase user marked email verified in Firebase Auth, or already verified
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '502':
+          description: Firebase Admin update failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/legal/documents/current:
     get:
       tags: [Legal]
@@ -314,7 +332,7 @@ paths:
     post:
       tags: [Profiles]
       summary: Activate authenticated user's profile
-      description: Requires the current Firebase ID token to have emailVerified=true. Email verification is not required for profile creation, editing, photo upload, photo replacement, photo deletion or match-filter configuration.
+      description: Requires the current Firebase ID token to have emailVerified=true. Email verification is not required for profile creation, editing, photo deletion, photo reorder or match-filter configuration.
       responses:
         '200':
           $ref: '#/components/responses/Profile'
@@ -383,7 +401,7 @@ paths:
     post:
       tags: [Profiles]
       summary: Add a profile photo at a position
-      description: Multipart file upload is the only supported profile photo creation flow.
+      description: Multipart file upload is the only supported profile photo creation flow. Requires verified Firebase email. Server accepts actual JPEG or PNG only, rejects WebP and mismatched content types, normalizes accepted input to metadata-stripped image/jpeg, and applies the shared photo-upload concurrency and authenticated rate limits.
       requestBody:
         $ref: '#/components/requestBodies/AddPhoto'
       responses:
@@ -395,6 +413,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ProfilePhotoUploadBusy'
     get:
       tags: [Profiles]
       summary: List authenticated user's profile photos
@@ -452,6 +472,7 @@ paths:
     put:
       tags: [Profiles]
       summary: Replace a profile photo file by id
+      description: Requires verified Firebase email. Server accepts actual JPEG or PNG only, rejects WebP and mismatched content types, normalizes accepted input to metadata-stripped image/jpeg, and applies the shared photo-upload concurrency and authenticated rate limits.
       requestBody:
         $ref: '#/components/requestBodies/ReplacePhotoFile'
       responses:
@@ -463,6 +484,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ProfilePhotoUploadBusy'
   /api/matchmaking/queue:
     post:
       tags: [Matchmaking]
@@ -1414,6 +1437,22 @@ components:
                 code: LEGAL_ACTION_REQUIRED
                 error: Conflict
                 message: Current legal document actions are required before continuing
+    ProfilePhotoUploadBusy:
+      description: Profile photo upload or replacement capacity is temporarily exhausted. Stable code `PROFILE_PHOTO_UPLOAD_BUSY`; response includes `Retry-After`.
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying.
+          schema:
+            type: integer
+            format: int64
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: PROFILE_PHOTO_UPLOAD_BUSY
+            error: Service Unavailable
+            message: Profile photo upload capacity is temporarily exhausted. Please retry later.
     ChatMessageInvalid:
       description: "Invalid chat message or chat-action text. Stable code: `CHAT_MESSAGE_INVALID`."
       content:
@@ -2113,6 +2152,7 @@ components:
         file:
           type: string
           format: binary
+          description: Actual JPEG or PNG bytes only. WebP and other formats are rejected server-side.
         position: { type: integer, minimum: 1, maximum: 9 }
     ReplacePhotoFileRequest:
       type: object
@@ -2121,6 +2161,7 @@ components:
         file:
           type: string
           format: binary
+          description: Actual JPEG or PNG bytes only. WebP and other formats are rejected server-side.
     ReorderProfilePhotosRequest:
       type: object
       required: [placements]

@@ -101,6 +101,11 @@ interface RealsApi {
         @Header("Authorization") authorization: String,
     ): Response<UserResponseDto>
 
+    @POST("api/me/local-dev/email-verification")
+    suspend fun markCurrentFirebaseEmailVerifiedForLocalDevelopment(
+        @Header("Authorization") authorization: String,
+    ): Response<Unit>
+
     @GET("api/legal/documents/current")
     suspend fun getCurrentLegalDocuments(): Response<CurrentLegalDocumentsResponseDto>
 

@@ -31,6 +31,7 @@ import com.reals.app.domain.usecase.GetSchedulingProposalsUseCase
 import com.reals.app.domain.usecase.GetSecondChatForConnectionUseCase
 import com.reals.app.domain.usecase.GetVisualProfileUseCase
 import com.reals.app.domain.usecase.LeaveQueueUseCase
+import com.reals.app.domain.usecase.MarkLocalFirebaseEmailVerified
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
 import com.reals.app.domain.usecase.PutMyPersonalMessageUseCase
 import com.reals.app.domain.usecase.ReactivateAccountUseCase
@@ -50,6 +51,7 @@ import com.reals.app.domain.usecase.TimeoutChatExitRequestUseCase
 import com.reals.app.domain.usecase.UpdateMatchFiltersUseCase
 import com.reals.app.domain.usecase.UpdateProfileUseCase
 import com.reals.app.notifications.registration.PushTokenRegistrationService
+import com.reals.app.ui.root.LocalFirebaseEmailVerificationCoordinator
 
 data class RealsRootDependencies(
     val session: SessionFeatureDependencies,
@@ -72,6 +74,15 @@ data class SessionFeatureDependencies(
     val provisionAndLoadProfile: ProvisionAndLoadProfileUseCase,
     val getMe: GetMeUseCase,
     val pushTokenRegistrationService: PushTokenRegistrationService,
+    val markLocalFirebaseEmailVerified: MarkLocalFirebaseEmailVerified =
+        MarkLocalFirebaseEmailVerified { com.reals.app.core.network.ApiResult.Success(Unit) },
+    val localFirebaseEmailAutoVerificationEnabled: Boolean = false,
+    val localFirebaseEmailVerificationCoordinator: LocalFirebaseEmailVerificationCoordinator =
+        LocalFirebaseEmailVerificationCoordinator(
+            localFirebaseEmailAutoVerificationEnabled = localFirebaseEmailAutoVerificationEnabled,
+            authRepository = authRepository,
+            markLocalFirebaseEmailVerified = markLocalFirebaseEmailVerified,
+        ),
 )
 
 data class AccountFeatureDependencies(

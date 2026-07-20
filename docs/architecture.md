@@ -57,6 +57,22 @@ email-verification operations and password changes converge on that operation.
 Generic token acquisition failures remain `TOKEN_UNAVAILABLE`; they are recoverable and do not force logout.
 Recoverable backend `ACCOUNT_DELETED` is a separate state and continues to route to `AccountDeletionPending`.
 
+In the `local` flavor only, `SessionCoordinator` runs the local Firebase
+email-verification helper after the backend user is known to be provisioned and
+active. The shared `LocalFirebaseEmailVerificationCoordinator` performs:
+
+```text
+Firebase reload + forced token refresh
+-> backend local verification helper when still unverified
+-> Firebase reload + forced token refresh
+-> require Verified before ready session routing
+```
+
+Deleted or pending-deletion backend users do not run this helper. `dev` and
+`prod` skip the helper entirely and preserve the normal email-link verification
+flow. The helper never changes profile state or PostgreSQL state; upload and
+activation remain backend-enforced through the refreshed Firebase token claim.
+
 ## Contract Changes
 
 When backend contracts change:
@@ -98,6 +114,12 @@ positive shortcut states; in `prod`, provider `none` does not create positive tr
 `POST /api/me/profile/authenticity-verification` can return `409 AUTHENTICITY_VERIFICATION_NOT_CONFIGURED` when real
 profile authenticity verification is not configured. Android currently does not expose a native authenticity
 verification flow.
+
+Profile-photo upload and replacement can fail with backend
+`EMAIL_NOT_VERIFIED`. Android keeps the original photo action error available
+for normal presentation and also marks email verification as required so the
+existing remediation actions become visible. The failed upload is not retried
+automatically.
 
 ## Chat Safety Reporting
 
