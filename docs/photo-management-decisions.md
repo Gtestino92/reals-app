@@ -12,6 +12,17 @@
 - Reordering is intentionally not implemented in MVP.
 - The MVP grid uses existing image URLs and Coil image loading. It does not generate real thumbnails.
 
+## Android Upload Preprocessing
+
+- The backend remains authoritative for profile-photo security, validation, moderation and abuse prevention. Android preprocessing is defense in depth for the official client only; it must not be treated as preventing direct API abuse.
+- Before multipart upload or file replacement, Android normalizes the selected/cropped image into a fresh temporary JPEG for privacy, memory, bandwidth and reliability.
+- Android output is `image/jpeg`, uses maximum dimension `2048px`, JPEG quality `88`, normalized orientation and no intentionally copied client metadata such as GPS, EXIF, device model, timestamps, thumbnails, XMP or IPTC.
+- Transparent source pixels are rendered onto a fixed opaque white background before JPEG encoding.
+- Multipart uploads use the existing endpoint contract and `file` field, but the request body is file-backed instead of `readBytes()`-backed.
+- Prepared upload files live in an app cache subdirectory with opaque `.jpg` names and are deleted after success, failure or cancellation. Original user-selected content is not deleted.
+- Reals intentionally disables Android cloud backup and device-transfer backup for application-managed data because the app handles sensitive dating-profile and session-related state.
+- Firebase App Check remains future work and is not part of this Android preprocessing change.
+
 ## Post-MVP
 
 - Ordering should use a dedicated backend endpoint, for example `PUT /api/me/profile/photos/order`, with a list of `photoIds`.
