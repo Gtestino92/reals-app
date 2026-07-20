@@ -235,6 +235,15 @@ before the visual phase expires. Home `VISUAL_REVIEW` pending actions expose
 `visualStartedAt` and `visualExpiresAt` for the currently actionable phase. New
 visual decisions after that deadline are rejected by the backend.
 
+Visual-profile and visual personal-message content is also request-time guarded.
+During `VISUAL_PHASE`, the visual review must exist and the server clock must
+still be before `visualExpiresAt`; the scheduler does not have to run first for
+expired content to be denied. During `VISUAL_APPROVED`, the backend requires an
+existing non-closed connection for the match and requester. `CHAT_ACTIVE`,
+`CHAT_REJECTED`, `VISUAL_REJECTED` and `EXPIRED` matches do not expose visual
+content. Blocked pairs are denied, and denied partner-message reads do not set
+read timestamps.
+
 Visual-review reminder eligibility is persisted as `VisualReview.reminderEligibleAt`
 when the visual review is created. The default configuration makes the reminder
 eligible when 40% of the visual-review duration remains. The backend no longer
@@ -257,13 +266,22 @@ does not include the connection in `nextSteps`; clients can see it only through
 `activeInteractionsSummary.hasPendingSchedulingConnection` and one generic
 count-free passive notice `SCHEDULING_PREPARING`. This intentionally does not
 expose the exact number of internal pending scheduling connections.
+Production runs the activation job on a six-hour fixed-delay cadence by default;
+base/dev profiles keep a one-minute cadence, and local profiles keep scheduler
+execution manual.
 
 `SchedulingNegotiationTimeoutJob` applies only after activation, while the
 connection is in `SCHEDULING_PHASE`. The `schedulingExpiresAt` value created
 with `SCHEDULING_PENDING` is provisional; activation recalculates the actionable
-deadline from the moment scheduling becomes available. In local profiles, where
+deadline from the actual activation time. In local profiles, where
 schedulers are disabled, run `SchedulingActivationJob` manually before testing
 scheduling proposals or scheduling timeout.
+
+Scheduling proposal submissions and confirmations emit after-commit push events.
+`SCHEDULING_PROPOSALS_RECEIVED` goes only to the partner for one connection and
+round, and is skipped when the submission immediately confirms an overlap.
+`SCHEDULING_CONFIRMED` goes only to the non-triggering participant. Both visible
+messages are privacy-safe and omit identities and times.
 
 Once active, users submit ordered lists of future date/time proposals for the second chat inside the app. This is not the same as scheduling an in-person meeting; any real-world meeting is outside the backend's current scope.
 

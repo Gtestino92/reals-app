@@ -25,6 +25,8 @@ import com.reals.app.domain.model.UpdateProfileInput
 import com.reals.app.domain.model.VisualDecision
 import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_AVAILABLE
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_AVAILABLE
+import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_CONFIRMED
+import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_PROPOSALS_RECEIVED
 import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_REMINDER
 import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_REMINDER
 import kotlinx.coroutines.Job
@@ -207,6 +209,8 @@ class RealsRootViewModel(
             type != TYPE_VISUAL_REVIEW_AVAILABLE &&
             type != TYPE_VISUAL_REVIEW_REMINDER &&
             type != TYPE_SCHEDULING_AVAILABLE &&
+            type != TYPE_SCHEDULING_PROPOSALS_RECEIVED &&
+            type != TYPE_SCHEDULING_CONFIRMED &&
             type != TYPE_SECOND_CHAT_REMINDER
         ) return
 

@@ -12,6 +12,8 @@ import androidx.compose.runtime.setValue
 import com.reals.app.notifications.PushNotificationContract.EXTRA_PUSH_TYPE
 import com.reals.app.notifications.PushNotificationContract.EXTRA_REFRESH_HOME
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_AVAILABLE
+import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_CONFIRMED
+import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_PROPOSALS_RECEIVED
 import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_REMINDER
 import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_AVAILABLE
 import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_REMINDER
@@ -52,6 +54,8 @@ class MainActivity : ComponentActivity() {
             pushType == TYPE_VISUAL_REVIEW_AVAILABLE ||
             pushType == TYPE_VISUAL_REVIEW_REMINDER ||
             pushType == TYPE_SCHEDULING_AVAILABLE ||
+            pushType == TYPE_SCHEDULING_PROPOSALS_RECEIVED ||
+            pushType == TYPE_SCHEDULING_CONFIRMED ||
             pushType == TYPE_SECOND_CHAT_REMINDER
         if (!shouldRefreshHome) return
 

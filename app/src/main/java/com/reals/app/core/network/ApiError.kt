@@ -1,4 +1,4 @@
-package com.reals.app.core.network
+﻿package com.reals.app.core.network
 
 sealed interface ApiError {
 
@@ -56,6 +56,7 @@ enum class BackendErrorCode(val raw: String) {
     DomainConflict("DOMAIN_CONFLICT"),
     PartnerPersonalMessageNotRead("PARTNER_PERSONAL_MESSAGE_NOT_READ"),
     VisualReviewPartnerMessageNotRead("VISUAL_REVIEW_PARTNER_MESSAGE_NOT_READ"),
+    VisualContentNotAvailable("VISUAL_CONTENT_NOT_AVAILABLE"),
     ChatNotFound("CHAT_NOT_FOUND"),
     ChatNotAvailable("CHAT_NOT_AVAILABLE"),
     ChatExpired("CHAT_EXPIRED"),
@@ -226,6 +227,7 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     }
     BackendErrorCode.PartnerPersonalMessageNotRead,
     BackendErrorCode.VisualReviewPartnerMessageNotRead -> "Leé el mensaje personal de la otra persona antes de decidir."
+    BackendErrorCode.VisualContentNotAvailable -> "El contenido visual ya no está disponible. Actualizá tu Home."
     BackendErrorCode.ChatNotFound -> "No encontramos esta conversación. Actualizá el estado."
     BackendErrorCode.ChatNotAvailable -> "Esta conversación ya no está disponible. Actualizá el estado."
     BackendErrorCode.ChatExpired -> "La conversaci\u00f3n venci\u00f3."
