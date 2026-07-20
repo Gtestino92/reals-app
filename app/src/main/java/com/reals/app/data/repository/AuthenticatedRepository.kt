@@ -9,6 +9,7 @@ import com.reals.app.core.network.ApiResult
 import com.reals.app.core.network.AuthFailureReason
 import com.reals.app.data.api.AuthTokenProvider
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
+import kotlinx.coroutines.CancellationException
 import retrofit2.Response
 
 abstract class AuthenticatedRepository(
@@ -76,6 +77,8 @@ abstract class AuthenticatedRepository(
                     message = exception.message ?: "La sesión de Firebase ya no es válida.",
                 ),
             )
+        } catch (exception: CancellationException) {
+            throw exception
         } catch (exception: Exception) {
             ApiResult.Failure(
                 ApiError.Auth(

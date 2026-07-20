@@ -3,6 +3,7 @@ package com.reals.app.core.network
 import android.util.Log
 import com.reals.app.data.dto.ErrorResponseDto
 import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import retrofit2.Response
@@ -21,6 +22,8 @@ class ApiExecutor(private val json: Json) {
             } else {
                 ApiResult.Failure(parseBackendError(response))
             }
+        } catch (exception: CancellationException) {
+            throw exception
         } catch (exception: IOException) {
             ApiResult.Failure(ApiError.Network(exception.message ?: "Fallo de red."))
         } catch (exception: SerializationException) {
@@ -38,6 +41,8 @@ class ApiExecutor(private val json: Json) {
             } else {
                 ApiResult.Failure(parseBackendError(response))
             }
+        } catch (exception: CancellationException) {
+            throw exception
         } catch (exception: IOException) {
             ApiResult.Failure(ApiError.Network(exception.message ?: "Fallo de red."))
         } catch (exception: SerializationException) {

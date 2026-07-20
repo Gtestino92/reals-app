@@ -26,3 +26,7 @@ If any future feature adds `WebView`, rich text, Markdown, or external link open
 ## Validation Ownership
 
 Frontend validation is for immediate UX and risk reduction. Backend validation remains authoritative and must not rely on frontend checks.
+
+## Android Backup
+
+The Android app sets `android:allowBackup="false"` and does not declare backup or data-extraction rules. Reals intentionally disables Android cloud backup and device-transfer backup for application-managed data because dating-profile, session-related and cached media state are sensitive.

@@ -2,16 +2,22 @@ package com.reals.app.data.repository
 
 import android.content.Context
 import android.net.Uri
-import android.provider.OpenableColumns
 import com.reals.app.core.media.deleteOwnedProfilePhotoCropFile
+import com.reals.app.core.media.PreparedProfilePhotoUpload
+import com.reals.app.core.media.ProfilePhotoPreprocessingException
+import com.reals.app.core.media.ProfilePhotoPreprocessingFailure
+import com.reals.app.core.media.ProfilePhotoPreprocessor
+import com.reals.app.core.media.ProfilePhotoUploadPreprocessor
 import com.reals.app.core.media.profilePhotoCropCacheDirectory
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ApiExecutor
 import com.reals.app.core.network.ApiResult
+import com.reals.app.core.network.PhotoPreparationReason
 import com.reals.app.core.network.map
 import com.reals.app.data.api.AuthTokenProvider
 import com.reals.app.data.api.RealsApi
 import com.reals.app.data.dto.PhotoPlacementRequestDto
+import com.reals.app.data.dto.PhotoResponseDto
 import com.reals.app.data.dto.ReorderProfilePhotosRequestDto
 import com.reals.app.data.mapper.toDto
 import com.reals.app.data.mapper.toDomain
@@ -23,16 +29,15 @@ import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.UpdateProfileInput
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.MultipartBody
-import okhttp3.RequestBody
-import okhttp3.RequestBody.Companion.toRequestBody
+import retrofit2.Response
 
 class ProfileRepository(
     private val context: Context?,
     private val api: RealsApi,
     tokenProvider: AuthTokenProvider,
     apiExecutor: ApiExecutor,
+    private val photoPreprocessor: ProfilePhotoUploadPreprocessor? =
+        context?.let { ProfilePhotoPreprocessor(it) },
 ) : AuthenticatedRepository(tokenProvider, apiExecutor) {
     suspend fun getMyProfileSnapshot(): ApiResult<ProfileSnapshot> {
         return when (val result = authorizedCall { authorization -> api.getMyProfile(authorization) }) {
@@ -89,11 +94,11 @@ class ProfileRepository(
         fileUri: Uri,
         position: Int,
     ): ApiResult<ProfilePhoto> =
-        authorizedCall { authorization ->
+        uploadPreparedProfilePhoto(fileUri) { authorization, prepared ->
             api.addMyProfilePhotoFile(
                 authorization = authorization,
-                file = filePart(fileUri),
-                position = positionPart(position),
+                file = ProfilePhotoUploadMultipart.filePart(prepared),
+                position = ProfilePhotoUploadMultipart.positionPart(position),
             )
         }.map { it.toDomain() }
 
@@ -105,11 +110,11 @@ class ProfileRepository(
         photoId: String,
         fileUri: Uri,
     ): ApiResult<ProfilePhoto> =
-        authorizedCall { authorization ->
+        uploadPreparedProfilePhoto(fileUri) { authorization, prepared ->
             api.replaceMyProfilePhotoFile(
                 authorization = authorization,
                 photoId = photoId,
-                file = filePart(fileUri),
+                file = ProfilePhotoUploadMultipart.filePart(prepared),
             )
         }.map { it.toDomain() }
 
@@ -117,40 +122,41 @@ class ProfileRepository(
         authorizedCall { authorization -> api.activateMyProfile(authorization) }
             .map { it.toDomain() }
 
-    private fun filePart(uri: Uri): MultipartBody.Part {
-        val uploadContext = requireNotNull(context) { "Context is required for file uploads." }
-        val resolver = uploadContext.contentResolver
-        val filename = displayName(uri)
-        val contentType = ProfileUploadFileMetadata.contentType(
-            resolverMimeType = resolver.getType(uri),
-            filename = filename,
-        ).toMediaType()
-        val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
-            ?: error("No se pudo leer el archivo seleccionado.")
-        deleteOwnedProfilePhotoCropFile(uri, profilePhotoCropCacheDirectory(uploadContext))
-        return MultipartBody.Part.createFormData(
-            name = "file",
-            filename = filename,
-            body = bytes.toRequestBody(contentType),
-        )
-    }
-
-    private fun displayName(uri: Uri): String {
-        val resolver = requireNotNull(context) { "Context is required for file uploads." }.contentResolver
-        var queryDisplayName: String? = null
-        resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (nameIndex >= 0 && cursor.moveToFirst()) {
-                val value = cursor.getString(nameIndex)
-                if (!value.isNullOrBlank()) queryDisplayName = value
+    private suspend fun uploadPreparedProfilePhoto(
+        sourceUri: Uri,
+        call: suspend (authorization: String, prepared: PreparedProfilePhotoUpload) -> Response<PhotoResponseDto>,
+    ): ApiResult<PhotoResponseDto> {
+        val preprocessor = photoPreprocessor ?: return ApiResult.Failure(photoPreparationError())
+        return try {
+            val preparation = preprocessor.prepare(sourceUri)
+            if (preparation.isFailure) {
+                return ApiResult.Failure(photoPreparationError(preparation.exceptionOrNull()))
             }
+            val upload = preparation.getOrThrow()
+            upload.useDeletingFile { prepared ->
+                authorizedCall { authorization -> call(authorization, prepared) }
+            }
+        } finally {
+            deleteOwnedSourceCropFile(sourceUri)
         }
-        return ProfileUploadFileMetadata.displayName(
-            queryDisplayName = queryDisplayName,
-            lastPathSegment = uri.lastPathSegment,
-        )
     }
 
-    private fun positionPart(position: Int): RequestBody =
-        position.toString().toRequestBody("text/plain".toMediaType())
+    private fun deleteOwnedSourceCropFile(sourceUri: Uri) {
+        val uploadContext = context ?: return
+        deleteOwnedProfilePhotoCropFile(sourceUri, profilePhotoCropCacheDirectory(uploadContext))
+    }
+
+    private fun photoPreparationError(cause: Throwable? = null): ApiError.PhotoPreparation {
+        val reason = (cause as? ProfilePhotoPreprocessingException)?.failure
+            ?: ProfilePhotoPreprocessingFailure.UndecodableSource
+        return ApiError.PhotoPreparation(
+            reason = when (reason) {
+                ProfilePhotoPreprocessingFailure.UndecodableSource -> PhotoPreparationReason.UndecodableSource
+                ProfilePhotoPreprocessingFailure.SourceTooLarge -> PhotoPreparationReason.SourceTooLarge
+                ProfilePhotoPreprocessingFailure.CacheWriteFailure -> PhotoPreparationReason.CacheWriteFailure
+                ProfilePhotoPreprocessingFailure.EncodingFailure -> PhotoPreparationReason.EncodingFailure
+            },
+            message = "No se pudo preparar la foto.",
+        )
+    }
 }
