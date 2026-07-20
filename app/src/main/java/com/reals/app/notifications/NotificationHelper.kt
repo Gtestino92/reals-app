@@ -15,6 +15,8 @@ import com.reals.app.R
 import com.reals.app.notifications.PushNotificationContract.SCHEDULING_AVAILABLE_NOTIFICATION_ID_BASE
 import com.reals.app.notifications.PushNotificationContract.SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_AVAILABLE
+import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_CONFIRMED
+import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_PROPOSALS_RECEIVED
 import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_REMINDER
 import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_REMINDER
 import com.reals.app.notifications.PushNotificationContract.VISUAL_REVIEW_CHANNEL_ID
@@ -102,19 +104,24 @@ object NotificationHelper {
     }
 
     @SuppressLint("MissingPermission")
-    fun showSchedulingAvailable(context: Context, connectionId: String?, matchId: String?) {
+    fun showSchedulingAvailable(
+        context: Context,
+        connectionId: String?,
+        matchId: String?,
+        type: String = TYPE_SCHEDULING_AVAILABLE,
+    ) {
         if (!canPostNotifications(context)) return
 
-        val body = "Ya pod\u00e9s coordinar horarios en Reals."
+        val (title, body) = schedulingNotificationCopy(type)
         val notification = NotificationCompat.Builder(context, VISUAL_REVIEW_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Coordinaci\u00f3n disponible")
+            .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(VISUAL_REVIEW_NOTIFICATION_PRIORITY)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
-            .setContentIntent(schedulingAvailablePendingIntent(context, connectionId, matchId))
+            .setContentIntent(schedulingAvailablePendingIntent(context, type, connectionId, matchId))
             .build()
 
         try {
@@ -153,16 +160,26 @@ object NotificationHelper {
 
     private fun schedulingAvailablePendingIntent(
         context: Context,
+        type: String,
         connectionId: String?,
         matchId: String?,
     ) = NotificationPendingIntents.mainActivity(
         context,
         SCHEDULING_AVAILABLE_NOTIFICATION_ID_BASE + notificationSuffix(connectionId ?: matchId),
-        TYPE_SCHEDULING_AVAILABLE,
+        type,
         connectionId,
         matchId,
         null,
     )
+
+    internal fun schedulingNotificationCopy(type: String): Pair<String, String> = when (type) {
+        TYPE_SCHEDULING_PROPOSALS_RECEIVED -> "Nuevos horarios propuestos" to
+                "Entr\u00e1 a Reals para revisar las opciones."
+        TYPE_SCHEDULING_CONFIRMED -> "Horario confirmado" to
+                "Entr\u00e1 a Reals para ver la segunda charla."
+        else -> "Coordinaci\u00f3n disponible" to
+                "Ya pod\u00e9s coordinar horarios en Reals."
+    }
 
     private fun notificationSuffix(matchId: String?): Int =
         matchId?.hashCode()?.floorMod(9000) ?: 0

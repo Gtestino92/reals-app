@@ -67,6 +67,11 @@ internal class VisualApprovalCoordinator(
         }
 
         val profileResult = dependencies.getVisualProfile(matchId)
+        if ((profileResult as? ApiResult.Failure)?.error.isVisualContentNotAvailable()) {
+            return VisualApprovalLoadResult.RouteHome(
+                message = "El contenido visual ya no est\u00e1 disponible. Actualizamos tu Home.",
+            )
+        }
         val profile = (profileResult as? ApiResult.Success)?.value
         val latestProfile = profile ?: loadingState.profile
         val partnerMessageResult = if (latestProfile.shouldLoadPartnerMessageAutomatically()) {
@@ -179,7 +184,17 @@ internal class VisualApprovalCoordinator(
                 message = null,
             )
         )
-        return VisualApprovalFlowResult.Show(readPartnerPersonalMessage(current))
+        val updated = readPartnerPersonalMessage(current)
+        return if (updated.error.isVisualContentNotAvailable()) {
+            VisualApprovalFlowResult.ReloadHome(
+                session = current.session,
+                message = "El contenido visual ya no est\u00e1 disponible. Actualizamos tu Home.",
+                hideVisualMatchId = current.matchId,
+                autoNavigateEngagements = false,
+            )
+        } else {
+            VisualApprovalFlowResult.Show(updated)
+        }
     }
 
     suspend fun savePersonalMessage(
@@ -238,7 +253,17 @@ internal class VisualApprovalCoordinator(
         }
 
         onPending(current.copy(writingMessage = true, error = null, message = null))
-        return VisualApprovalFlowResult.Show(savePersonalMessage(current, cleanMessage))
+        val updated = savePersonalMessage(current, cleanMessage)
+        return if (updated.error.isVisualContentNotAvailable()) {
+            VisualApprovalFlowResult.ReloadHome(
+                session = current.session,
+                message = "El contenido visual ya no est\u00e1 disponible. Actualizamos tu Home.",
+                hideVisualMatchId = current.matchId,
+                autoNavigateEngagements = false,
+            )
+        } else {
+            VisualApprovalFlowResult.Show(updated)
+        }
     }
 
     suspend fun submitDecision(
@@ -303,13 +328,22 @@ internal class VisualApprovalCoordinator(
                 }
             }
 
-            is ApiResult.Failure -> VisualApprovalFlowResult.Show(
-                pending.copy(
-                    deciding = false,
-                    decidingLabel = null,
-                    error = result.error,
+            is ApiResult.Failure -> if (result.error.isVisualContentNotAvailable()) {
+                VisualApprovalFlowResult.ReloadHome(
+                    session = current.session,
+                    message = "El contenido visual ya no est\u00e1 disponible. Actualizamos tu Home.",
+                    hideVisualMatchId = current.matchId,
+                    autoNavigateEngagements = false,
                 )
-            )
+            } else {
+                VisualApprovalFlowResult.Show(
+                    pending.copy(
+                        deciding = false,
+                        decidingLabel = null,
+                        error = result.error,
+                    )
+                )
+            }
         }
     }
 
@@ -381,6 +415,9 @@ private fun partnerMessageLoadedForProfile(
 
 private fun ApiError.isDomainConflict(): Boolean =
     this is ApiError.Backend && backendErrorCode == BackendErrorCode.DomainConflict
+
+private fun ApiError?.isVisualContentNotAvailable(): Boolean =
+    this is ApiError.Backend && backendErrorCode == BackendErrorCode.VisualContentNotAvailable
 
 internal sealed interface VisualApprovalLoadResult {
     data class Show(val state: RealsRootUiState.VisualApproval) : VisualApprovalLoadResult

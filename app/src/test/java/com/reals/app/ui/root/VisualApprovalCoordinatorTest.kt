@@ -169,6 +169,28 @@ class VisualApprovalCoordinatorTest {
     }
 
     @Test
+    fun `read partner personal message routes home when visual content is unavailable`() = runBlocking {
+        api.partnerMessageResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "VISUAL_CONTENT_NOT_AVAILABLE",
+        )
+        val current = visualState(
+            profile = TestDtos.visualProfile(
+                partnerPersonalMessageSubmitted = true,
+                partnerPersonalMessageRead = false,
+                decisionRequiresPartnerPersonalMessageRead = true,
+            ).toDomain(),
+        )
+
+        val result = coordinator.readPartnerPersonalMessageAction(current, onPending = {})
+
+        assertTrue(result is VisualApprovalFlowResult.ReloadHome)
+        result as VisualApprovalFlowResult.ReloadHome
+        assertEquals("match-1", result.hideVisualMatchId)
+        assertEquals("El contenido visual ya no est\u00e1 disponible. Actualizamos tu Home.", result.message)
+    }
+
+    @Test
     fun `load fetches partner message automatically when already read`() = runBlocking {
         api.matchResponse = Response.success(TestDtos.match("VISUAL_PHASE"))
         api.visualProfileResponse = Response.success(
@@ -327,6 +349,29 @@ class VisualApprovalCoordinatorTest {
     }
 
     @Test
+    fun `load routes home when visual content is no longer available`() = runBlocking {
+        api.matchResponse = Response.success(TestDtos.match("VISUAL_PHASE"))
+        api.visualProfileResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "VISUAL_CONTENT_NOT_AVAILABLE",
+        )
+
+        val result = coordinator.load(
+            session = TestDomain.session(),
+            matchId = "match-1",
+            initialMatch = TestDtos.match("VISUAL_PHASE").toDomain(),
+            previous = null,
+            locallyHidden = false,
+        )
+
+        assertTrue(result is VisualApprovalLoadResult.RouteHome)
+        assertEquals(
+            "El contenido visual ya no est\u00e1 disponible. Actualizamos tu Home.",
+            (result as VisualApprovalLoadResult.RouteHome).message,
+        )
+    }
+
+    @Test
     fun `savePersonalMessage non conflict keeps error`() = runBlocking {
         api.unitResponse = backendErrorResponse(403, "ACCESS_DENIED", "forbidden")
         val current = RealsRootUiState.VisualApproval(
@@ -338,6 +383,25 @@ class VisualApprovalCoordinatorTest {
 
         assertEquals(false, state.myPersonalMessageSubmitted)
         assertTrue(state.error is ApiError.Backend)
+    }
+
+    @Test
+    fun `save personal message routes home when visual content is unavailable`() = runBlocking {
+        api.unitResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "VISUAL_CONTENT_NOT_AVAILABLE",
+        )
+
+        val result = coordinator.savePersonalMessageAction(
+            current = visualState(),
+            message = "mensaje",
+            onPending = {},
+        )
+
+        assertTrue(result is VisualApprovalFlowResult.ReloadHome)
+        result as VisualApprovalFlowResult.ReloadHome
+        assertEquals("match-1", result.hideVisualMatchId)
+        assertEquals("El contenido visual ya no est\u00e1 disponible. Actualizamos tu Home.", result.message)
     }
 
     @Test
@@ -410,6 +474,25 @@ class VisualApprovalCoordinatorTest {
         assertFalse(state.deciding)
         assertEquals(null, state.decidingLabel)
         assertTrue(state.error is ApiError.Backend)
+    }
+
+    @Test
+    fun `submit visual decision routes home when visual content is unavailable`() = runBlocking {
+        api.matchResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "VISUAL_CONTENT_NOT_AVAILABLE",
+        )
+
+        val result = coordinator.submitDecision(
+            current = visualState(),
+            decision = VisualDecision.Approved,
+            onPending = {},
+        )
+
+        assertTrue(result is VisualApprovalFlowResult.ReloadHome)
+        result as VisualApprovalFlowResult.ReloadHome
+        assertEquals("match-1", result.hideVisualMatchId)
+        assertEquals("El contenido visual ya no est\u00e1 disponible. Actualizamos tu Home.", result.message)
     }
 
     private fun visualState(

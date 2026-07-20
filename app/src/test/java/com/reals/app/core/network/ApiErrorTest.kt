@@ -49,6 +49,17 @@ class ApiErrorTest {
     }
 
     @Test
+    fun `visual content unavailable maps to visual review message`() {
+        val error = backendError("VISUAL_CONTENT_NOT_AVAILABLE")
+
+        assertEquals(BackendErrorCode.VisualContentNotAvailable, error.backendErrorCode)
+        assertEquals(
+            "El contenido visual ya no est\u00e1 disponible. Actualiz\u00e1 tu Home.",
+            error.toUserMessage(ErrorContext.VisualReview),
+        )
+    }
+
+    @Test
     fun `email not verified maps to profile activation message`() {
         val error = backendError("EMAIL_NOT_VERIFIED")
 

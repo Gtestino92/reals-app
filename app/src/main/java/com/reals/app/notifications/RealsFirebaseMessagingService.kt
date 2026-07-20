@@ -5,6 +5,8 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.reals.app.RealsApplication
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_AVAILABLE
+import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_CONFIRMED
+import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_PROPOSALS_RECEIVED
 import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_REMINDER
 import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_AVAILABLE
 import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_REMINDER
@@ -41,8 +43,11 @@ class RealsFirebaseMessagingService : FirebaseMessagingService() {
                 matchId = remoteMessage.data["matchId"],
             )
 
-            TYPE_SCHEDULING_AVAILABLE -> NotificationHelper.showSchedulingAvailable(
+            TYPE_SCHEDULING_AVAILABLE,
+            TYPE_SCHEDULING_PROPOSALS_RECEIVED,
+            TYPE_SCHEDULING_CONFIRMED -> NotificationHelper.showSchedulingAvailable(
                 context = this,
+                type = remoteMessage.data["type"] ?: TYPE_SCHEDULING_AVAILABLE,
                 connectionId = remoteMessage.data["connectionId"],
                 matchId = remoteMessage.data["matchId"],
             )
