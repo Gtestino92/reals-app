@@ -169,6 +169,22 @@ Use the `localDebug` variant for emulator or physical-device testing against a b
 
 Do not mark this smoke test as passed unless it was executed on an installed, optimized `localRelease` APK.
 
+Recorded result:
+
+- July 21, 2026: a manually installed, signed and optimized `localRelease` APK passed the exercised MVP runtime smoke
+  paths on a physical Android device.
+- The smoke verified startup, Firebase initialization, Firebase Authentication login, local App Check debug-provider
+  verification, authenticated backend connectivity through the intended local setup, session bootstrap, Home loading,
+  basic navigation, chat loading/interaction, representative profile-photo/image flows, first-chat decision flow,
+  visual-review decision flow, representative FCM visual-review reminder delivery, and notification open recovery
+  through Home.
+- No R8, serialization, reflection, resource-shrinking, or release-only runtime blocker was observed in the exercised
+  flows.
+- The exact R8 `mapping.txt` remains build-specific and must be retained with the corresponding release artifact.
+- This local smoke does not prove `devRelease`, `prodRelease`, Play Integrity, Google Play distribution, remote HTTPS
+  deployment, every screen/lifecycle edge case, every provider, every device model, manufacturer background behavior,
+  lock-screen behavior, or all production-device conditions.
+
 Prerequisites:
 
 - `app/src/local/google-services.json` contains an Android client for `com.reals.app.local`.

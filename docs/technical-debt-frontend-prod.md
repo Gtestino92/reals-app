@@ -8,27 +8,54 @@ Do not implement these implicitly while working on unrelated tasks.
 
 ## 1. Push notifications
 
-Push notifications are not implemented yet.
+Push notifications are partially implemented for the MVP Android client, but are not production-complete.
 
 Production goal:
-- Add Firebase Cloud Messaging support to reduce polling and notify users about time-sensitive interactions.
+- Use Firebase Cloud Messaging to notify users about time-sensitive interactions while keeping backend Home state
+  authoritative.
+- Reduce polling only after production delivery/open reliability is measured.
 
-Required client work:
-- Add Firebase Cloud Messaging dependency.
-- Add Android notification permission handling for Android 13+.
-- Add notification channel setup for Android 8+.
-- Add client token retrieval.
-- Add token refresh handling.
-- Add foreground/background message handling.
-- Add notification tap routing.
-- Add stale-notification handling.
+Implemented or substantially implemented:
+- Firebase Cloud Messaging dependency and Android service are present.
+- Android notification permission handling exists for Android 13+.
+- Notification channel creation exists for Android 8+.
+- The app retrieves the current FCM registration token after active session bootstrap when possible.
+- Token registration and refresh handling send the Android token to `PUT /api/me/push-tokens`.
+- Supported notification contracts include visual-review available/reminder, scheduling available/proposals/confirmed,
+  and second-chat reminder.
+- Notification taps open the app and refresh authoritative backend/Home state instead of trusting stale local payload
+  targets.
+- Home polling remains the fallback source of truth.
+- A representative visual-review reminder delivery and notification open recovery path passed the July 21, 2026 signed,
+  optimized `localRelease` smoke.
 
-Acceptance criteria:
+Remaining production work:
+- Broaden notification coverage across all intended product events.
+- Verify production Play Integrity, Google Play distribution, remote HTTPS deployment, and production-device delivery
+  conditions; the local App Check debug-provider smoke is not evidence for Play Integrity.
+- Add notification delivery/open observability without logging tokens, private payloads, or sensitive identifiers.
+- Harden stale registration-token lifecycle handling in coordination with backend cleanup/disable semantics.
+- Make foreground/background notification presentation consistent.
+- Deliberately choose between mixed `notification + data` FCM payloads and `data-only` payloads.
+- Test broader device/manufacturer/background-restriction behavior.
+- Review lock-screen privacy for notification content.
+- Reduce polling only when production evidence shows push delivery/open behavior is reliable enough.
+
+Still-valid acceptance criteria:
 - App can retrieve a current FCM registration token.
 - App can send token registration/refresh to backend.
 - App can request notification permission contextually.
-- App can receive foreground/background notification payloads.
+- App can receive supported foreground/background notification payloads.
 - App can handle notification taps safely.
+- Polling and push do not produce conflicting UI states.
+
+Notification presentation limitation:
+- The backend can send a mixed FCM payload containing both display notification fields and data.
+- Android also constructs a local notification for recognized data types.
+- Foreground and background delivery paths can therefore use different title/body copy.
+- This did not block the July 21, 2026 local release smoke.
+- Future work should either unify copy across both paths or adopt a single presentation owner after an explicit contract
+  decision.
 
 Potential notification targets:
 - First chat created.
@@ -47,6 +74,12 @@ Potential notification targets:
 ## 2. Notification tap routing
 
 Notification taps should not blindly open old local state.
+
+Current behavior:
+- Supported notification taps open the app and trigger a Home refresh.
+- If the app is already in a feature flow, supported notification opens return through Home so backend state is reloaded.
+- Unknown notification types are ignored or fall back to normal app state instead of navigating from untrusted payload
+  data.
 
 Required behavior:
 - Parse notification payload type.
@@ -245,6 +278,8 @@ Implemented:
 - Release builds enable R8 code shrinking, optimization, obfuscation, and resource shrinking.
 - CI builds and inspects optimized `localRelease`, uploads its APK and exact mapping file, and skips dev/prod release
   validation unless real Firebase, URL, and signing prerequisites are present.
+- The July 21, 2026 manually installed, signed, optimized `localRelease` APK smoke passed for exercised MVP runtime
+  paths using the local App Check debug provider.
 
 Future work:
 - Configure real production API URL.
@@ -252,7 +287,8 @@ Future work:
 - Sign release builds with production keystore.
 - Define app versioning strategy.
 - Define test track/release process if Play Store is used.
-- Execute and record the manual optimized-APK smoke test against real Firebase/backend/device prerequisites.
+- Execute and record `devRelease` and `prodRelease` smokes against real Firebase, real HTTPS backend URLs, Play
+  Integrity, production signing/distribution prerequisites, and representative production devices.
 
 Acceptance criteria:
 - Dev builds cannot accidentally target production.
