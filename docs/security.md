@@ -44,6 +44,21 @@ App Check limitations:
 If a local debug secret is exposed, revoke it in Firebase Console and register a new one. Do not weaken backend JWT
 verification for debug tokens; Firebase still issues normal App Check JWTs after a registered debug secret is accepted.
 
+Provider isolation is compile-time flavor-specific:
+
+- `local` uses `DebugAppCheckProviderFactory` and installs as `com.reals.app.local`.
+- `dev` uses `PlayIntegrityAppCheckProviderFactory` and installs as `com.reals.app.dev`.
+- `prod` uses `PlayIntegrityAppCheckProviderFactory` and installs as `com.reals.app`.
+
+Backend allowlists must use Firebase App IDs from the matching Firebase Android App, not Android package names alone.
+The debug App Check dependency must remain local-only.
+
+## Android Network Boundaries
+
+The `local` flavor permits cleartext only for local Android development hosts needed by the backend and MinIO ADB
+reverse workflow. The `dev` and `prod` flavors prohibit cleartext traffic and reject localhost, loopback,
+emulator-only, and placeholder backend URLs at build time.
+
 ## Android Backup
 
 The Android app sets `android:allowBackup="false"` and does not declare backup or data-extraction rules. Reals intentionally disables Android cloud backup and device-transfer backup for application-managed data because dating-profile, session-related and cached media state are sensitive.

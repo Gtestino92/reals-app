@@ -55,6 +55,11 @@ docker compose up -d
 
 Then select and run `localDebug` from Android Studio.
 
+`localDebug` installs as `com.reals.app.local` with the visible name `Reals Local`. This is a distinct app from
+`dev` and `prod`, so it has separate app data, Firebase Auth state, FCM registration, and App Check debug-token
+lifecycle. Register the debug token printed by this new local app under the Firebase Android App for
+`com.reals.app.local`.
+
 ## Verify ADB Mappings
 
 For one connected device:
@@ -105,6 +110,8 @@ http://127.0.0.1:8080/api/ping
 No `realsLocalBaseUrl` override is needed for the normal local workflow because
 `http://127.0.0.1:8080/` is the local default.
 
+`dev` and `prod` must not depend on ADB reverse. They require HTTPS backend URLs and cleartext remains prohibited.
+
 ## Backend MinIO Requirement
 
 The backend repository must expose MinIO on host port `9000` and produce
@@ -132,6 +139,9 @@ S3_PRESIGNED_URL_ENDPOINT
 
 Do not change backend files from this Android repository. Apply or verify the
 backend Compose/environment value in the backend repository separately.
+
+Android does not rewrite backend-provided presigned photo URLs. The backend must emit Android-readable local URLs when
+the local app is expected to load images through reverse port `9000`.
 
 ## Important Limitations
 

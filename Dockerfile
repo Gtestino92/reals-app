@@ -42,4 +42,4 @@ COPY app app
 COPY docs docs
 
 RUN --mount=type=cache,target=/home/gradle/.gradle \
-    ./gradlew :app:assembleLocalDebug --no-daemon --console=plain
+    ./gradlew :app:validateEnvironmentIsolation :app:verifyAppCheckDependencyIsolation :app:assembleLocalDebug --no-daemon --console=plain

@@ -15,6 +15,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.RealsApp"
+        android:networkSecurityConfig="${networkSecurityConfig}"
         android:usesCleartextTraffic="${usesCleartextTraffic}"
         tools:targetApi="31">
         <meta-data
