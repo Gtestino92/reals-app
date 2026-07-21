@@ -1,12 +1,9 @@
-# Add project specific R8 rules here.
-# AGP will combine all keep rule files in src/main/keepRules to pass to R8
+# Project-specific R8 rules for the Reals Android app.
 #
-# For more details, see
-#   https://d.android.com/r/tools/r8/keep-rules
-
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# The current app code does not require app-specific keep rules beyond:
+# - AGP default optimized Android rules.
+# - Consumer rules from Retrofit, OkHttp, Kotlin Serialization, Firebase, Compose, and AndroidX.
+# - AGP-generated rules for manifest-declared Android components and resources.
+#
+# Add narrow rules here only after a concrete optimized-build or optimized-APK runtime failure
+# proves dependency consumer rules and generated Android rules are insufficient.

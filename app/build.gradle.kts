@@ -17,18 +17,89 @@ fun quoted(value: String): String {
     return "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
 }
 
-fun releaseKeystoreFile(): File? {
-    providers.gradleProperty("realsReleaseKeystorePath").orNull
-        ?.takeIf { it.isNotBlank() }
-        ?.let { return file(it) }
+data class ReleaseSigningInputs(
+    val configured: Boolean,
+    val keystoreFile: File?,
+    val storePassword: String?,
+    val keyAlias: String?,
+    val keyPassword: String?,
+)
 
-    val encoded = providers.environmentVariable("REALS_RELEASE_KEYSTORE_BASE64").orNull
+fun releaseSigningInputs(): ReleaseSigningInputs {
+    val keystorePath = providers.gradleProperty("realsReleaseKeystorePath").orNull
         ?.takeIf { it.isNotBlank() }
-        ?: return null
-    val output = layout.buildDirectory.file("signing/reals-release.keystore").get().asFile
-    output.parentFile.mkdirs()
-    output.writeBytes(Base64.getDecoder().decode(encoded))
-    return output
+    val encodedKeystore = providers.environmentVariable("REALS_RELEASE_KEYSTORE_BASE64").orNull
+        ?.takeIf { it.isNotBlank() }
+    val storePassword = providers.environmentVariable("REALS_RELEASE_STORE_PASSWORD").orNull
+        ?.takeIf { it.isNotBlank() }
+    val keyAlias = providers.environmentVariable("REALS_RELEASE_KEY_ALIAS").orNull
+        ?.takeIf { it.isNotBlank() }
+    val keyPassword = providers.environmentVariable("REALS_RELEASE_KEY_PASSWORD").orNull
+        ?.takeIf { it.isNotBlank() }
+
+    val anySigningInput = listOf(
+        keystorePath,
+        encodedKeystore,
+        storePassword,
+        keyAlias,
+        keyPassword,
+    ).any { it != null }
+
+    if (!anySigningInput) {
+        return ReleaseSigningInputs(
+            configured = false,
+            keystoreFile = null,
+            storePassword = null,
+            keyAlias = null,
+            keyPassword = null,
+        )
+    }
+
+    if (keystorePath != null && encodedKeystore != null) {
+        throw GradleException(
+            "Configure only one release keystore source: realsReleaseKeystorePath or REALS_RELEASE_KEYSTORE_BASE64.",
+        )
+    }
+
+    val missingInputs = buildList {
+        if (keystorePath == null && encodedKeystore == null) {
+            add("realsReleaseKeystorePath or REALS_RELEASE_KEYSTORE_BASE64")
+        }
+        if (storePassword == null) add("REALS_RELEASE_STORE_PASSWORD")
+        if (keyAlias == null) add("REALS_RELEASE_KEY_ALIAS")
+        if (keyPassword == null) add("REALS_RELEASE_KEY_PASSWORD")
+    }
+
+    if (missingInputs.isNotEmpty()) {
+        throw GradleException(
+            "Incomplete release signing configuration; missing ${missingInputs.joinToString()}.",
+        )
+    }
+
+    val keystoreFile = if (keystorePath != null) {
+        file(keystorePath).also {
+            if (!it.isFile) {
+                throw GradleException("Release keystore file does not exist: ${it.path}.")
+            }
+        }
+    } else {
+        val output = layout.buildDirectory.file("signing/reals-release.keystore").get().asFile
+        output.parentFile.mkdirs()
+        output.writeBytes(
+            runCatching { Base64.getDecoder().decode(encodedKeystore) }.getOrElse {
+                throw GradleException("REALS_RELEASE_KEYSTORE_BASE64 is not valid base64.", it)
+            },
+        )
+        output
+    }
+
+    return ReleaseSigningInputs(
+        configured = true,
+        keystoreFile = keystoreFile,
+        storePassword = storePassword,
+        keyAlias = keyAlias,
+        keyPassword = keyPassword,
+    )
 }
 
 val versionCodeValue = configValue(
@@ -70,14 +141,8 @@ val requestedEnvironments = expectedApplicationIds.keys.filter { environment ->
     requestedTaskNames.any { taskName -> taskName.contains(environment) }
 }.toSet()
 
-val releaseKeystore = releaseKeystoreFile()
-val releaseStorePassword = providers.environmentVariable("REALS_RELEASE_STORE_PASSWORD").orNull
-val releaseKeyAlias = providers.environmentVariable("REALS_RELEASE_KEY_ALIAS").orNull
-val releaseKeyPassword = providers.environmentVariable("REALS_RELEASE_KEY_PASSWORD").orNull
-val hasReleaseSigning = releaseKeystore != null &&
-    !releaseStorePassword.isNullOrBlank() &&
-    !releaseKeyAlias.isNullOrBlank() &&
-    !releaseKeyPassword.isNullOrBlank()
+val releaseSigningInputs = releaseSigningInputs()
+val hasReleaseSigning = releaseSigningInputs.configured
 
 val flavorGoogleServicesFiles = expectedApplicationIds.keys.associateWith { flavor ->
     file("src/$flavor/google-services.json")
@@ -145,10 +210,10 @@ android {
 
     val releaseSigningConfig = if (hasReleaseSigning) {
         signingConfigs.create("release") {
-            storeFile = releaseKeystore
-            storePassword = releaseStorePassword
-            keyAlias = releaseKeyAlias
-            keyPassword = releaseKeyPassword
+            storeFile = releaseSigningInputs.keystoreFile
+            storePassword = releaseSigningInputs.storePassword
+            keyAlias = releaseSigningInputs.keyAlias
+            keyPassword = releaseSigningInputs.keyPassword
         }
     } else {
         null
@@ -158,8 +223,11 @@ android {
         debug {
         }
         release {
+            isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             optimization {
-                enable = false
+                enable = true
             }
             if (releaseSigningConfig != null) {
                 signingConfig = releaseSigningConfig
@@ -181,7 +249,54 @@ android {
     }
 }
 
+val androidSdkDirectoryProvider = androidComponents.sdkComponents.sdkDirectory.map { it.asFile }
+
 fun String.capitalized(): String = replaceFirstChar { it.uppercase() }
+
+fun commandOutput(command: List<String>, allowFailure: Boolean = false): Pair<Int, String> {
+    val process = ProcessBuilder(command)
+        .redirectErrorStream(true)
+        .start()
+    val output = process.inputStream.bufferedReader().use { it.readText() }
+    val exitValue = process.waitFor()
+    if (!allowFailure && exitValue != 0) {
+        throw GradleException("Command failed ($exitValue): ${command.joinToString(" ")}\n$output")
+    }
+    return Pair(exitValue, output)
+}
+
+fun executableNames(toolName: String): List<String> {
+    val isWindows = System.getProperty("os.name").lowercase().contains("windows")
+    if (!isWindows) return listOf(toolName)
+    return when (toolName) {
+        "aapt2" -> listOf("aapt2.exe", "aapt2.bat", "aapt2")
+        else -> listOf("$toolName.bat", "$toolName.exe", toolName)
+    }
+}
+
+fun findAndroidSdkTool(toolName: String, sdkDirectory: File): File {
+    val executableNames = executableNames(toolName)
+    val candidateDirectories = buildList {
+        val buildTools = sdkDirectory.resolve("build-tools")
+        if (buildTools.isDirectory) {
+            addAll(buildTools.listFiles { file -> file.isDirectory }.orEmpty().sortedByDescending { it.name })
+        }
+        add(sdkDirectory.resolve("cmdline-tools/latest/bin"))
+        add(sdkDirectory.resolve("tools/bin"))
+        add(sdkDirectory.resolve("platform-tools"))
+    }
+
+    return candidateDirectories
+        .flatMap { directory -> executableNames.map { directory.resolve(it) } }
+        .firstOrNull { it.isFile }
+        ?: throw GradleException("$toolName not found under Android SDK directory ${sdkDirectory.path}.")
+}
+
+fun requireContains(value: String, expected: String, failureMessage: String) {
+    if (!value.contains(expected)) {
+        throw GradleException(failureMessage)
+    }
+}
 
 fun parseBaseUrl(environment: String, value: String): URI {
     return runCatching { URI(value) }.getOrElse {
@@ -338,6 +453,123 @@ tasks.register("verifyAppCheckDependencyIsolation") {
         if (debugModule in devModules || debugModule in devReleaseModules || debugModule in prodDebugModules || debugModule in prodModules) {
             throw GradleException("Firebase App Check debug provider must not be present in dev or prod runtime classpaths.")
         }
+    }
+}
+
+tasks.register("validateReleaseSigningConfiguration") {
+    group = "verification"
+    description = "Reports whether release signing is fully configured; partial inputs fail during configuration."
+    notCompatibleWithConfigurationCache("Reads script-level release signing state for validation reporting.")
+    doLast {
+        if (hasReleaseSigning) {
+            logger.lifecycle("Release signing is configured from external inputs; secret values are not logged.")
+        } else {
+            logger.lifecycle("Release signing is not configured; release APK outputs may be unsigned.")
+        }
+    }
+}
+
+tasks.register("verifyReleaseBuildHardening") {
+    group = "verification"
+    description = "Verifies release build types enable R8 optimization and resource shrinking."
+    notCompatibleWithConfigurationCache("Reads the Android build type DSL after configuration.")
+    doLast {
+        val release = android.buildTypes.getByName("release")
+        if (release.isDebuggable) {
+            throw GradleException("release build type must not be debuggable.")
+        }
+        if (!release.isMinifyEnabled) {
+            throw GradleException("release build type must enable code shrinking and obfuscation.")
+        }
+        if (!release.optimization.enable) {
+            throw GradleException("release build type must enable AGP optimization.")
+        }
+        if (!release.isShrinkResources) {
+            throw GradleException("release build type must enable resource shrinking.")
+        }
+    }
+}
+
+tasks.register("verifyLocalReleaseArtifacts") {
+    group = "verification"
+    description = "Inspects the optimized localRelease APK and R8 mapping outputs."
+    dependsOn("assembleLocalRelease")
+    notCompatibleWithConfigurationCache("Runs Android SDK inspection tools and inspects generated APK outputs.")
+    doLast {
+        val apkDirectory = layout.buildDirectory.dir("outputs/apk/local/release").get().asFile
+        val apk = apkDirectory
+            .listFiles { file -> file.isFile && file.extension == "apk" }
+            .orEmpty()
+            .maxByOrNull { it.lastModified() }
+            ?: throw GradleException("No localRelease APK found in ${apkDirectory.path}.")
+
+        val mappingFile = layout.buildDirectory.file("outputs/mapping/localRelease/mapping.txt").get().asFile
+        if (!mappingFile.isFile || mappingFile.length() == 0L) {
+            throw GradleException("R8 mapping file is missing or empty: ${mappingFile.path}.")
+        }
+
+        val sdkDirectory = androidSdkDirectoryProvider.get()
+        val aapt2 = findAndroidSdkTool("aapt2", sdkDirectory)
+        val badging = commandOutput(listOf(aapt2.path, "dump", "badging", apk.path)).second
+        requireContains(
+            badging,
+            "package: name='com.reals.app.local'",
+            "localRelease APK applicationId must be com.reals.app.local.",
+        )
+        requireContains(
+            badging,
+            "application-label:'Reals Local'",
+            "localRelease APK label must be Reals Local.",
+        )
+        val packageLine = badging.lineSequence().firstOrNull { it.startsWith("package:") }.orEmpty()
+        val versionCode = Regex("""versionCode='([^']*)'""").find(packageLine)?.groupValues?.get(1) ?: "unknown"
+        val versionName = Regex("""versionName='([^']*)'""").find(packageLine)?.groupValues?.get(1) ?: "unknown"
+        if (badging.contains("application-debuggable")) {
+            throw GradleException("localRelease APK must not be debuggable.")
+        }
+
+        val manifest = commandOutput(listOf(aapt2.path, "dump", "xmltree", "--file", "AndroidManifest.xml", apk.path)).second
+        requireContains(
+            manifest,
+            "com.reals.app.notifications.RealsFirebaseMessagingService",
+            "localRelease APK manifest must include RealsFirebaseMessagingService.",
+        )
+        requireContains(
+            manifest,
+            "networkSecurityConfig",
+            "localRelease APK manifest must reference a Network Security Config.",
+        )
+
+        val apksigner = findAndroidSdkTool("apksigner", sdkDirectory)
+        val (signatureExit, signatureOutput) = commandOutput(
+            listOf(apksigner.path, "verify", "--verbose", apk.path),
+            allowFailure = true,
+        )
+        val signingStatus = if (signatureExit == 0) "signed" else "unsigned"
+
+        val reportFile = layout.buildDirectory.file("reports/release/localRelease-apk-inspection.txt").get().asFile
+        reportFile.parentFile.mkdirs()
+        reportFile.writeText(
+            buildString {
+                appendLine("variant=localRelease")
+                appendLine("apk=${apk.path}")
+                appendLine("applicationId=com.reals.app.local")
+                appendLine("label=Reals Local")
+                appendLine("debuggable=false")
+                appendLine("versionCode=$versionCode")
+                appendLine("versionName=$versionName")
+                appendLine("mapping=${mappingFile.path}")
+                appendLine("mappingBytes=${mappingFile.length()}")
+                appendLine("signing=$signingStatus")
+                appendLine("aapt2=${aapt2.path}")
+                appendLine("apksigner=${apksigner.path}")
+                appendLine("signatureOutput=")
+                appendLine(signatureOutput.trim())
+            },
+        )
+        logger.lifecycle("localRelease APK inspection passed: ${apk.path} ($signingStatus).")
+        logger.lifecycle("localRelease mapping file: ${mappingFile.path} (${mappingFile.length()} bytes).")
+        logger.lifecycle("localRelease inspection report: ${reportFile.path}.")
     }
 }
 

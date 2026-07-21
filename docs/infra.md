@@ -81,10 +81,17 @@ Current checks are:
 - Local debug unit tests and lint.
 - Kotlin local debug compilation.
 - Local debug APK assembly.
+- Release-hardening configuration validation.
+- Kotlin local release compilation, local release lint, and optimized local release APK assembly.
+- Local release APK inspection for application ID, label, debuggable state, manifest content, signing status, and
+  non-empty R8 mapping output.
 - Conditional dev debug compilation/APK assembly when `GOOGLE_SERVICES_DEV_JSON_BASE64` and `REALS_DEV_BASE_URL` are configured.
-- Conditional prod release compilation/APK assembly when `GOOGLE_SERVICES_PROD_JSON_BASE64` and `REALS_PROD_BASE_URL` are configured.
+- Conditional dev release compilation/APK assembly only when dev Firebase config, dev HTTPS URL, and complete release
+  signing inputs are configured.
+- Conditional prod release compilation/APK assembly only when production Firebase config, production HTTPS URL, and
+  complete production release signing inputs are configured.
 - Docker image build validation.
-- APK artifact upload.
+- Local debug APK, local release APK, local release R8 mapping, and local release inspection-report artifact upload.
 - Dependency review on pull requests.
 
 ## Versioning
@@ -174,13 +181,58 @@ Compatibility notes:
 
 ## Release Optimization
 
-R8, code minification, resource shrinking and broad ProGuard hardening remain intentionally disabled for this
-environment-isolation phase. Enable and validate them in a separate release-hardening task after isolated variants are
-stable.
+Release build types enable AGP 9.2 R8 optimization with:
+
+```kotlin
+release {
+    isDebuggable = false
+    isMinifyEnabled = true
+    isShrinkResources = true
+    optimization {
+        enable = true
+    }
+}
+```
+
+`android.r8.gradual.support=true` is set because AGP 9.2 requires that flag when `optimization.enable=true` is used.
+Debug variants remain unminified.
+
+Project-specific rules live in `app/src/main/keepRules/rules.keep`. The current file intentionally contains no
+app-specific keep directives: Retrofit, OkHttp, Kotlin Serialization, Firebase, Compose, AndroidX and AGP-generated
+manifest/resource rules provide the required baseline rules. Add app rules only for a demonstrated optimized-build or
+optimized-APK runtime failure, and keep each rule as narrow as possible.
+
+Useful release-like commands:
+
+```bash
+./gradlew :app:verifyReleaseBuildHardening --no-daemon --console=plain
+./gradlew :app:compileLocalReleaseKotlin --no-daemon --console=plain
+./gradlew :app:lintLocalRelease --no-daemon --console=plain
+./gradlew :app:assembleLocalRelease --no-daemon --console=plain
+./gradlew :app:verifyLocalReleaseArtifacts --no-daemon --console=plain
+```
+
+Current AGP output locations for `localRelease` are:
+
+- APK: `app/build/outputs/apk/local/release/`.
+- R8 mapping: `app/build/outputs/mapping/localRelease/mapping.txt`.
+- R8 diagnostics when generated: `app/build/outputs/mapping/localRelease/`.
+- APK inspection report: `app/build/reports/release/localRelease-apk-inspection.txt`.
+
+`mapping.txt` is build-specific. Retain it with the exact APK/AAB that produced an obfuscated crash; do not commit it.
+Retrace with the Android SDK tool and that exact mapping:
+
+```bash
+retrace app/build/outputs/mapping/localRelease/mapping.txt obfuscated-stacktrace.txt
+```
 
 ## Release Signing
 
-Release signing is optional unless all required secrets are present. Provide either:
+Release signing material stays outside the repository. Release signing is optional for local release-like assembly when
+no signing inputs are present, so AGP may produce an unsigned release APK. Partial signing input is rejected during
+Gradle configuration.
+
+Provide exactly one keystore source:
 
 - `realsReleaseKeystorePath` Gradle property pointing to a local keystore file.
 - `REALS_RELEASE_KEYSTORE_BASE64` containing the base64-encoded keystore.
@@ -191,7 +243,21 @@ And always provide:
 - `REALS_RELEASE_KEY_ALIAS`
 - `REALS_RELEASE_KEY_PASSWORD`
 
-Example CI command once secrets exist:
+Do not use the Android debug key for prod. Do not commit keystores, passwords, base64 keystores, or generated
+production signing material.
+
+For an installable local smoke-test APK, create an ignored non-production test keystore under `secrets/` and supply the
+same release signing inputs only for that local build:
+
+```bash
+keytool -genkeypair -v -keystore secrets/local-release-test.keystore -alias local-release-test \
+  -keyalg RSA -keysize 4096 -validity 30 -storepass "$REALS_RELEASE_STORE_PASSWORD" \
+  -keypass "$REALS_RELEASE_KEY_PASSWORD" -dname "CN=Reals Local Release Test"
+./gradlew :app:assembleLocalRelease :app:verifyLocalReleaseArtifacts --no-daemon --console=plain \
+  -PrealsReleaseKeystorePath=secrets/local-release-test.keystore
+```
+
+Example production command once real production Firebase, URL, and signing prerequisites exist:
 
 ```bash
 ./gradlew :app:assembleProdRelease --no-daemon --console=plain
