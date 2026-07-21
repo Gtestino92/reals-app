@@ -2,6 +2,8 @@
 
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import com.reals.app.BuildConfig
+import com.reals.app.core.appcheck.AppCheckInterceptor
+import com.reals.app.core.appcheck.AppCheckTokenProvider
 import java.util.concurrent.TimeUnit
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
@@ -12,7 +14,7 @@ import retrofit2.Retrofit
 
 object RealsApiClient {
     @OptIn(ExperimentalSerializationApi::class)
-    fun create(baseUrl: String, json: Json): RealsApi {
+    fun create(baseUrl: String, json: Json, appCheckTokenProvider: AppCheckTokenProvider): RealsApi {
         val shouldLogNetwork = BuildConfig.DEBUG && BuildConfig.REALS_ENVIRONMENT != "prod"
         val logging = HttpLoggingInterceptor().apply {
             redactHeader("Authorization")
@@ -29,6 +31,7 @@ object RealsApiClient {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
+            .addInterceptor(AppCheckInterceptor(appCheckTokenProvider, json))
             .addInterceptor(logging)
             .build()
 

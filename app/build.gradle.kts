@@ -174,6 +174,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.firebase.auth)
     implementation(libs.firebase.messaging)
+    add("localImplementation", libs.firebase.appcheck.debug)
+    add("devImplementation", libs.firebase.appcheck.playintegrity)
+    add("prodImplementation", libs.firebase.appcheck.playintegrity)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.kotlinx.serialization.json)
@@ -183,6 +186,7 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.okhttp.mockwebserver)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)

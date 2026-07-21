@@ -27,6 +27,23 @@ If any future feature adds `WebView`, rich text, Markdown, or external link open
 
 Frontend validation is for immediate UX and risk reduction. Backend validation remains authoritative and must not rely on frontend checks.
 
+## Firebase App Check
+
+Android sends Firebase App Check tokens to the Reals backend with `X-Firebase-AppCheck`. This helps the backend reject
+requests that do not come from a registered app installation, but it is not a user-authentication or authorization
+mechanism.
+
+App Check limitations:
+
+- It does not replace Firebase Authentication, backend authorization, rate limiting, TLS or request validation.
+- It does not prove that user content is safe or that a user is allowed to perform an action.
+- Replay protection and limited-use tokens are intentionally deferred for this MVP.
+- Debug provider secrets must never be committed, copied into docs, embedded in `BuildConfig`, stored in Gradle
+  properties or logged.
+
+If a local debug secret is exposed, revoke it in Firebase Console and register a new one. Do not weaken backend JWT
+verification for debug tokens; Firebase still issues normal App Check JWTs after a registered debug secret is accepted.
+
 ## Android Backup
 
 The Android app sets `android:allowBackup="false"` and does not declare backup or data-extraction rules. Reals intentionally disables Android cloud backup and device-transfer backup for application-managed data because dating-profile, session-related and cached media state are sensitive.

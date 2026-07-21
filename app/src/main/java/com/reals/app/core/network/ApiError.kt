@@ -1,5 +1,7 @@
 ﻿package com.reals.app.core.network
 
+import com.reals.app.core.appcheck.AppCheckFailureReason
+
 sealed interface ApiError {
 
     data class Backend(
@@ -13,6 +15,11 @@ sealed interface ApiError {
 
     data class Auth(
         val reason: AuthFailureReason,
+        val message: String,
+    ) : ApiError
+
+    data class AppCheck(
+        val reason: AppCheckFailureReason,
         val message: String,
     ) : ApiError
 
@@ -45,6 +52,10 @@ enum class BackendErrorCode(val raw: String) {
     ProfileNotFound("PROFILE_NOT_FOUND"),
     ProfileNotActivatable("PROFILE_NOT_ACTIVATABLE"),
     EmailNotVerified("EMAIL_NOT_VERIFIED"),
+    InvalidToken("INVALID_TOKEN"),
+    MissingAppCheckToken("MISSING_APP_CHECK_TOKEN"),
+    InvalidAppCheckToken("INVALID_APP_CHECK_TOKEN"),
+    AppCheckVerificationUnavailable("APP_CHECK_VERIFICATION_UNAVAILABLE"),
     AuthenticityVerificationNotConfigured("AUTHENTICITY_VERIFICATION_NOT_CONFIGURED"),
     AuthenticityVerificationProviderError("AUTHENTICITY_VERIFICATION_PROVIDER_ERROR"),
     ProfileAuthenticityVerificationRequired("PROFILE_AUTHENTICITY_VERIFICATION_REQUIRED"),
@@ -59,6 +70,7 @@ enum class BackendErrorCode(val raw: String) {
     PhotoPositionOccupied("PHOTO_POSITION_OCCUPIED"),
     PhotoUrlInvalid("PHOTO_URL_INVALID"),
     InvalidProfilePhoto("INVALID_PROFILE_PHOTO"),
+    ProfilePhotoUploadBusy("PROFILE_PHOTO_UPLOAD_BUSY"),
     ProfilePhotoNotFound("PROFILE_PHOTO_NOT_FOUND"),
     AccountDeleted("ACCOUNT_DELETED"),
     AccountDeletionFinalized("ACCOUNT_DELETION_FINALIZED"),
@@ -176,6 +188,7 @@ fun ApiError.toUserMessage(context: ErrorContext = ErrorContext.General): String
         AuthFailureReason.TOKEN_MISSING,
         AuthFailureReason.TOKEN_UNAVAILABLE -> "Tu sesión necesita renovarse. Volvé a iniciar sesión."
     }
+    is ApiError.AppCheck -> "No pudimos verificar esta instalación. Revisá tu conexión e intentá nuevamente."
     is ApiError.PhotoPreparation -> "No se pudo preparar la foto. Probá con otra imagen o intentá nuevamente."
     ApiError.LocalFirebaseEmailVerification ->
         "No pudimos preparar la cuenta Firebase para pruebas locales. Verificá que el backend local tenga habilitada la auto-verificación y volvé a intentar."
@@ -212,6 +225,11 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.ProfileNotFound -> "No encontramos tu perfil. Actualizá la sesión e intentá nuevamente."
     BackendErrorCode.ProfileNotActivatable -> "Tu perfil necesita completarse antes de activarlo."
     BackendErrorCode.EmailNotVerified -> "Verificá tu email antes de activar el perfil."
+    BackendErrorCode.InvalidToken -> "Tu sesión necesita renovarse. Volvé a iniciar sesión."
+    BackendErrorCode.MissingAppCheckToken,
+    BackendErrorCode.InvalidAppCheckToken,
+    BackendErrorCode.AppCheckVerificationUnavailable ->
+        "No pudimos verificar esta instalación. Revisá tu conexión e intentá nuevamente."
     BackendErrorCode.AuthenticityVerificationNotConfigured ->
         "La verificación de autenticidad del perfil no está disponible en este entorno."
     BackendErrorCode.AuthenticityVerificationProviderError ->
@@ -229,6 +247,7 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.PhotoPositionOccupied -> "Ya hay una foto en esa posición. Podés reemplazarla o elegir otra."
     BackendErrorCode.PhotoUrlInvalid -> "La foto no tiene un formato válido."
     BackendErrorCode.InvalidProfilePhoto -> "La foto no parece válida. Probá con otra imagen."
+    BackendErrorCode.ProfilePhotoUploadBusy -> "La carga de fotos está ocupada. Esperá unos segundos e intentá nuevamente."
     BackendErrorCode.ProfilePhotoNotFound -> "No encontramos esa foto. Actualizá la lista e intentá nuevamente."
     BackendErrorCode.AccountDeleted -> "Esta cuenta está pendiente de eliminación. Podés recuperarla si todavía está dentro del plazo."
     BackendErrorCode.AccountDeletionFinalized -> "La cuenta ya no puede recuperarse. Podés crear una cuenta nueva."

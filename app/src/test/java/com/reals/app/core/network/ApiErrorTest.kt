@@ -71,6 +71,17 @@ class ApiErrorTest {
     }
 
     @Test
+    fun `profile photo upload busy maps to retryable photo message`() {
+        val error = backendError("PROFILE_PHOTO_UPLOAD_BUSY")
+
+        assertEquals(BackendErrorCode.ProfilePhotoUploadBusy, error.backendErrorCode)
+        assertEquals(
+            "La carga de fotos está ocupada. Esperá unos segundos e intentá nuevamente.",
+            error.toUserMessage(ErrorContext.PhotoUpload),
+        )
+    }
+
+    @Test
     fun `invalid profile country maps to deterministic profile message`() {
         val error = backendError("INVALID_PROFILE_COUNTRY", message = "technical detail")
 

@@ -32,6 +32,63 @@ The Google Services plugin is applied only when one of these files exists:
 
 Firebase Auth is required for real sign-in/provisioning flows. Push notification testing requires FCM configuration and Android notification permission on Android 13+.
 
+## Firebase App Check
+
+App Check is installed before the application container is created, so API repositories use it from startup. The
+provider is selected by source set:
+
+- `local`: debug provider.
+- `dev`: Play Integrity.
+- `prod`: Play Integrity.
+
+All requests made through the Reals Retrofit client include:
+
+```http
+X-Firebase-AppCheck: <token>
+```
+
+The token is not added to URLs, query parameters, cookies or request bodies. The OkHttp logger redacts the header.
+
+### Local debug provider
+
+Run the `local` flavor with a valid Firebase configuration and let the Firebase SDK print the generated debug secret
+for that developer machine/device. Register that secret in Firebase Console under App Check for the Android app, then
+retry the app. Never commit or paste the debug secret into repository files, examples, Gradle properties or
+`BuildConfig`. If a debug secret is exposed, revoke it in Firebase Console and generate/register a new one.
+
+The backend must still verify App Check JWTs normally. A registered debug secret allows Firebase to issue a normal App
+Check token; it is not a reason to disable JWT verification.
+
+If Firebase Console requires registering the Android app with a SHA-256 fingerprint even for local setup, use the
+`localDebug` signing certificate from the local Android debug keystore. On this Windows development machine the
+standard debug keystore path is:
+
+```text
+C:\Users\Administrador\.android\debug.keystore
+```
+
+Get the exact `localDebug` fingerprint with:
+
+```powershell
+.\gradlew.bat :app:signingReport --no-daemon --console=plain
+```
+
+Copy the `SHA-256` value for `Variant: localDebug` / `Config: debug`. The SHA-256 fingerprint is not a secret, but the
+App Check debug token printed by `DebugAppCheckProvider` is a secret and must not be committed.
+
+### Play Integrity providers
+
+For `dev` and `prod`, register the corresponding Firebase Android app for App Check with Play Integrity. The Firebase
+project, `google-services.json`, package name and linked Play Integrity configuration must match the flavor's target
+environment. Register the required SHA-256 signing certificates for the app build that will be distributed. Do not
+hardcode Firebase Console identifiers, project numbers or secrets in Android code.
+
+App Check acquisition failures are recoverable and use the generic API error presentation:
+
+```text
+No pudimos verificar esta instalación. Revisá tu conexión e intentá nuevamente.
+```
+
 ## Local Firebase Email Verification
 
 For fictitious local-development accounts, Android can administratively verify

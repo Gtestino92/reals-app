@@ -2,6 +2,7 @@
 
 import android.content.Context
 import com.reals.app.BuildConfig
+import com.reals.app.core.appcheck.FirebaseAppCheckTokenProvider
 import com.reals.app.core.firebase.FirebaseAuthTokenProvider
 import com.reals.app.core.network.ApiExecutor
 import com.reals.app.data.api.RealsApiClient
@@ -76,7 +77,8 @@ class AppContainer(context: Context) {
     }
     private val apiExecutor = ApiExecutor(json)
     private val tokenProvider = FirebaseAuthTokenProvider(appContext)
-    private val api = RealsApiClient.create(BuildConfig.REALS_BASE_URL, json)
+    private val appCheckTokenProvider = FirebaseAppCheckTokenProvider(appContext)
+    private val api = RealsApiClient.create(BuildConfig.REALS_BASE_URL, json, appCheckTokenProvider)
 
     val authRepository = FirebaseAuthRepository(appContext)
     private val meRepository = MeRepository(api, tokenProvider, apiExecutor)

@@ -57,6 +57,40 @@ email-verification operations and password changes converge on that operation.
 Generic token acquisition failures remain `TOKEN_UNAVAILABLE`; they are recoverable and do not force logout.
 Recoverable backend `ACCOUNT_DELETED` is a separate state and continues to route to `AccountDeletionPending`.
 
+## Firebase App Check
+
+`RealsApplication.onCreate()` initializes or obtains the default Firebase app, installs the flavor-specific App Check
+provider, constructs `AppContainer`, and then initializes notification channels. If Firebase configuration is absent,
+the app preserves the existing missing-Firebase behavior instead of crashing during startup.
+
+Provider selection is compile-time/flavor-specific:
+
+- `local`: Firebase App Check debug provider.
+- `dev`: Play Integrity provider.
+- `prod`: Play Integrity provider.
+
+`RealsApiClient` owns the common OkHttp application interceptor for App Check. All requests sent through that client,
+including provisioning, authenticated endpoints, legal catalog, profile/photo operations, local Firebase email
+verification, chat, matchmaking and scheduling, send:
+
+```http
+X-Firebase-AppCheck: <token>
+```
+
+The token is never sent in query parameters, URLs, cookies or request bodies, and the network logger redacts the
+header. Android relies on the Firebase SDK cache and does not persist raw App Check tokens.
+
+App Check is separate from Firebase Authentication. App Check verifies the app installation/app binary posture;
+Firebase Authentication identifies the signed-in user. App Check does not replace authentication, authorization, rate
+limiting, TLS, backend validation or abuse monitoring.
+
+When the backend returns `401 INVALID_APP_CHECK_TOKEN`, the interceptor may inspect a bounded copy of the error body,
+force-refresh App Check once, and retry the HTTP request once. It does not retry `MISSING_APP_CHECK_TOKEN`,
+`APP_CHECK_VERIFICATION_UNAVAILABLE`, ordinary Firebase Auth errors, network errors or a second invalid-token response.
+
+Firebase Auth ID-token refresh remains repository-owned and is limited to backend `401 INVALID_TOKEN`. App Check
+failures, account deletion and access-denied responses must not trigger Firebase Auth refresh or local sign-out.
+
 In the `local` flavor only, `SessionCoordinator` runs the local Firebase
 email-verification helper after the backend user is known to be provisioned and
 active. The shared `LocalFirebaseEmailVerificationCoordinator` performs:
