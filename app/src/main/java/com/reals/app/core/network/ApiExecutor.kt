@@ -1,6 +1,7 @@
 package com.reals.app.core.network
 
 import android.util.Log
+import com.reals.app.core.appcheck.AppCheckTokenAcquisitionException
 import com.reals.app.data.dto.ErrorResponseDto
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
@@ -24,6 +25,13 @@ class ApiExecutor(private val json: Json) {
             }
         } catch (exception: CancellationException) {
             throw exception
+        } catch (exception: AppCheckTokenAcquisitionException) {
+            ApiResult.Failure(
+                ApiError.AppCheck(
+                    reason = exception.reason,
+                    message = exception.message ?: "No se pudo obtener el token de Firebase App Check.",
+                ),
+            )
         } catch (exception: IOException) {
             ApiResult.Failure(ApiError.Network(exception.message ?: "Fallo de red."))
         } catch (exception: SerializationException) {
@@ -43,6 +51,13 @@ class ApiExecutor(private val json: Json) {
             }
         } catch (exception: CancellationException) {
             throw exception
+        } catch (exception: AppCheckTokenAcquisitionException) {
+            ApiResult.Failure(
+                ApiError.AppCheck(
+                    reason = exception.reason,
+                    message = exception.message ?: "No se pudo obtener el token de Firebase App Check.",
+                ),
+            )
         } catch (exception: IOException) {
             ApiResult.Failure(ApiError.Network(exception.message ?: "Fallo de red."))
         } catch (exception: SerializationException) {

@@ -7,6 +7,8 @@ import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ApiExecutor
 import com.reals.app.core.network.ApiResult
 import com.reals.app.core.network.AuthFailureReason
+import com.reals.app.core.network.BackendErrorCode
+import com.reals.app.core.network.backendErrorCode
 import com.reals.app.data.api.AuthTokenProvider
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import kotlinx.coroutines.CancellationException
@@ -92,6 +94,6 @@ abstract class AuthenticatedRepository(
     private fun ApiResult<*>.shouldRefreshToken(): Boolean {
         val failure = this as? ApiResult.Failure ?: return false
         val backend = failure.error as? ApiError.Backend ?: return false
-        return backend.statusCode == 401
+        return backend.statusCode == 401 && backend.backendErrorCode == BackendErrorCode.InvalidToken
     }
 }

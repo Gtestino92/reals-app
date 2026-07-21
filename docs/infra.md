@@ -113,6 +113,35 @@ The Gradle config applies `com.google.gms.google-services` only when one of thes
 
 Use flavor-specific Firebase files when dev/prod Firebase projects diverge.
 
+## Firebase App Check Operations
+
+App Check provider by flavor:
+
+| Flavor | Provider | Operational setup |
+| --- | --- | --- |
+| `local` | Debug provider | Register each developer/device debug secret in Firebase Console. Never commit the secret. |
+| `dev` | Play Integrity | Register the dev Firebase Android app for App Check and add the dev signing SHA-256. |
+| `prod` | Play Integrity | Register the production Firebase Android app for App Check and add the production signing SHA-256. |
+
+Deployment checklist:
+
+1. Add the correct flavor-specific `google-services.json` outside source control.
+2. Register the Android app for App Check in the matching Firebase project.
+3. Register SHA-256 signing certificates for `dev` and `prod`.
+4. Validate Android against the backend while backend App Check mode is `MONITOR`.
+5. Distribute the App Check-enabled Android build to the target environment.
+6. Switch backend rollout from `DISABLED` to `MONITOR` to `ENFORCED` only after compatible clients are available.
+7. Revoke any exposed local debug token and register a replacement.
+
+Compatibility notes:
+
+- Older backends should ignore the additional `X-Firebase-AppCheck` header.
+- Do not switch backend enforcement to `ENFORCED` before this Android version is available in the target environment.
+- Validate `dev` first while the backend is in `MONITOR`.
+- Production enforcement should occur only after the production Firebase Android app is registered and the distributed
+  app uses Play Integrity App Check.
+- The Play Integrity verdict policy is a Firebase Console setting, not Android source code.
+
 ## Release Signing
 
 Release signing is optional unless all required secrets are present. Provide either:

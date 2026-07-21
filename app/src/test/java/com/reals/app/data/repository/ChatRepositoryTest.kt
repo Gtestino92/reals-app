@@ -7,6 +7,7 @@ import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.reals.app.core.network.BackendErrorCode
 import com.reals.app.core.network.ErrorContext
 import com.reals.app.core.network.backendErrorCode
+import com.reals.app.core.network.isAccountDeleted
 import com.reals.app.core.network.toUserMessage
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequestStatus
@@ -173,9 +174,9 @@ class ChatRepositoryTest {
     }
 
     @Test
-    fun `401 refreshes token and retries once`() = runBlocking {
+    fun `invalid auth token refreshes token and retries once`() = runBlocking {
         api.chatResponseQueue = mutableListOf(
-            backendErrorResponse(401, "UNAUTHORIZED"),
+            backendErrorResponse(401, "INVALID_TOKEN"),
             Response.success(TestDtos.chat(status = "ACTIVE")),
         )
 
@@ -184,6 +185,50 @@ class ChatRepositoryTest {
         assertEquals(ChatStatus.Active, chat.status)
         assertEquals(listOf(false, true), tokenProvider.calls)
         assertEquals(listOf("getChat", "getChat"), api.calls)
+    }
+
+    @Test
+    fun `invalid app check token does not refresh Firebase auth token`() = runBlocking {
+        api.chatResponseQueue = mutableListOf(backendErrorResponse(401, "INVALID_APP_CHECK_TOKEN"))
+
+        val error = repository.getChat("chat-1").failureError()
+
+        assertEquals(listOf(false), tokenProvider.calls)
+        assertEquals(listOf("getChat"), api.calls)
+        assertEquals(BackendErrorCode.InvalidAppCheckToken, (error as ApiError.Backend).backendErrorCode)
+    }
+
+    @Test
+    fun `missing app check token does not refresh Firebase auth token`() = runBlocking {
+        api.chatResponseQueue = mutableListOf(backendErrorResponse(401, "MISSING_APP_CHECK_TOKEN"))
+
+        val error = repository.getChat("chat-1").failureError()
+
+        assertEquals(listOf(false), tokenProvider.calls)
+        assertEquals(listOf("getChat"), api.calls)
+        assertEquals(BackendErrorCode.MissingAppCheckToken, (error as ApiError.Backend).backendErrorCode)
+    }
+
+    @Test
+    fun `app check verification unavailable does not refresh Firebase auth token`() = runBlocking {
+        api.chatResponseQueue = mutableListOf(backendErrorResponse(503, "APP_CHECK_VERIFICATION_UNAVAILABLE"))
+
+        val error = repository.getChat("chat-1").failureError()
+
+        assertEquals(listOf(false), tokenProvider.calls)
+        assertEquals(listOf("getChat"), api.calls)
+        assertEquals(BackendErrorCode.AppCheckVerificationUnavailable, (error as ApiError.Backend).backendErrorCode)
+    }
+
+    @Test
+    fun `account deletion does not refresh Firebase auth token`() = runBlocking {
+        api.chatResponseQueue = mutableListOf(backendErrorResponse(410, "ACCOUNT_DELETED"))
+
+        val error = repository.getChat("chat-1").failureError()
+
+        assertEquals(listOf(false), tokenProvider.calls)
+        assertEquals(listOf("getChat"), api.calls)
+        assertTrue(error.isAccountDeleted())
     }
 
     @Test
@@ -199,7 +244,7 @@ class ChatRepositoryTest {
 
     @Test
     fun `invalid Firebase user during forced refresh does not retry api request`() = runBlocking {
-        api.chatResponseQueue = mutableListOf(backendErrorResponse(401, "UNAUTHORIZED"))
+        api.chatResponseQueue = mutableListOf(backendErrorResponse(401, "INVALID_TOKEN"))
         tokenProvider.failWhen(forceRefresh = true, throwable = invalidFirebaseUser())
 
         val error = repository.getChat("chat-1").failureError()

@@ -1,5 +1,7 @@
 package com.reals.app.core.network
 
+import com.reals.app.core.appcheck.AppCheckFailureReason
+import com.reals.app.core.appcheck.AppCheckTokenAcquisitionException
 import com.reals.app.data.dto.PingResponseDto
 import com.reals.app.testutil.backendErrorResponse
 import com.reals.app.testutil.testApiExecutor
@@ -66,6 +68,23 @@ class ApiExecutorTest {
 
         val error = (result as ApiResult.Failure).error as ApiError.Network
         assertEquals("offline", error.message)
+    }
+
+    @Test
+    fun `app check token failure maps to app check error before network error`() = runBlocking {
+        val result = executor.execute<PingResponseDto> {
+            throw AppCheckTokenAcquisitionException(
+                reason = AppCheckFailureReason.TOKEN_UNAVAILABLE,
+                message = "temporary app check failure",
+            )
+        }
+
+        val error = (result as ApiResult.Failure).error as ApiError.AppCheck
+        assertEquals(AppCheckFailureReason.TOKEN_UNAVAILABLE, error.reason)
+        assertEquals(
+            "No pudimos verificar esta instalación. Revisá tu conexión e intentá nuevamente.",
+            error.toUserMessage(),
+        )
     }
 
     @Test

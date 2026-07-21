@@ -10,6 +10,8 @@ This directory is the canonical documentation set for the Android frontend.
 - `logging-and-logcat.md`: Reals logging policy and Android Studio/ADB Logcat filters.
 - `testing.md`: automated test strategy and Gradle commands.
 - `security.md`: frontend security and user-content rendering notes.
+- App Check setup is covered in `architecture.md`, `local-development.md`, `infra.md`, `security.md`, and
+  `commons/api.md`.
 - `photo-management-decisions.md`: profile photo UX and implementation decisions.
 - `infra.md`: Android/frontend infrastructure notes.
 - `technical-debt-frontend-mvp.md`: MVP frontend decisions, shortcuts and deferred work.

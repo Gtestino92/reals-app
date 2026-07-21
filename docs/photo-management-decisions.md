@@ -21,7 +21,7 @@
 - Multipart uploads use the existing endpoint contract and `file` field, but the request body is file-backed instead of `readBytes()`-backed.
 - Prepared upload files live in an app cache subdirectory with opaque `.jpg` names and are deleted after success, failure or cancellation. Original user-selected content is not deleted.
 - Reals intentionally disables Android cloud backup and device-transfer backup for application-managed data because the app handles sensitive dating-profile and session-related state.
-- Firebase App Check remains future work and is not part of this Android preprocessing change.
+- Firebase App Check is handled centrally by the shared Reals API client and is independent of Android photo preprocessing.
 
 ## Post-MVP
 
