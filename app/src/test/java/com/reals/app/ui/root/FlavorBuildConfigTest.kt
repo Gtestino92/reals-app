@@ -6,6 +6,51 @@ import org.junit.Test
 
 class FlavorBuildConfigTest {
     @Test
+    fun `application ids and namespace are environment isolated`() {
+        val gradleFile = appFile("build.gradle.kts").readText()
+
+        assertTrue(gradleFile.contains("""namespace = baseApplicationId"""))
+        assertTrue(gradleFile.contains("""applicationId = baseApplicationId"""))
+        assertTrue(flavorBlockContains(gradleFile, "local", """applicationIdSuffix = ".local""""))
+        assertTrue(flavorBlockContains(gradleFile, "dev", """applicationIdSuffix = ".dev""""))
+        assertTrue(!flavorBlockContains(gradleFile, "prod", "applicationIdSuffix"))
+        assertTrue(gradleFile.contains(""""prod" to baseApplicationId"""))
+    }
+
+    @Test
+    fun `application labels are resource overlays per flavor`() {
+        assertTrue(appFile("src/main/res/values/strings.xml").readText().contains("""<string name="app_name">Reals</string>"""))
+        assertTrue(appFile("src/local/res/values/strings.xml").readText().contains("""<string name="app_name">Reals Local</string>"""))
+        assertTrue(appFile("src/dev/res/values/strings.xml").readText().contains("""<string name="app_name">Reals Dev</string>"""))
+    }
+
+    @Test
+    fun `cleartext network policy is local only`() {
+        val manifest = appFile("src/main/AndroidManifest.xml").readText()
+        val localNetworkConfig = appFile("src/local/res/xml/network_security_config.xml").readText()
+        val devNetworkConfig = appFile("src/dev/res/xml/network_security_config.xml").readText()
+        val prodNetworkConfig = appFile("src/prod/res/xml/network_security_config.xml").readText()
+
+        assertTrue(manifest.contains("""android:networkSecurityConfig="${'$'}{networkSecurityConfig}""""))
+        assertTrue(flavorBlockContains(appFile("build.gradle.kts").readText(), "local", """manifestPlaceholders["usesCleartextTraffic"] = "true""""))
+        assertTrue(localNetworkConfig.contains("""<base-config cleartextTrafficPermitted="false" />"""))
+        assertTrue(localNetworkConfig.contains("127.0.0.1"))
+        assertTrue(localNetworkConfig.contains("10.0.2.2"))
+        assertTrue(!devNetworkConfig.contains("""cleartextTrafficPermitted="true""""))
+        assertTrue(!prodNetworkConfig.contains("""cleartextTrafficPermitted="true""""))
+    }
+
+    @Test
+    fun `dev and prod base urls are validated against cleartext local and placeholder hosts`() {
+        val gradleFile = appFile("build.gradle.kts").readText()
+
+        assertTrue(gradleFile.contains("""if (scheme != "https")"""))
+        assertTrue(gradleFile.contains("""isLocalOnlyHost(host)"""))
+        assertTrue(gradleFile.contains("placeholderHosts"))
+        assertTrue(gradleFile.contains("""${'$'}environment REALS_BASE_URL must be configured to a real non-placeholder HTTPS host."""))
+    }
+
+    @Test
     fun `local firebase email auto verification build flag is flavor scoped`() {
         val gradleFile = appFile("build.gradle.kts").readText()
 
@@ -43,5 +88,13 @@ class FlavorBuildConfigTest {
         return Regex(
             """create\("$flavor"\)\s*\{[\s\S]*?buildConfigField\("boolean", "ENABLE_LOCAL_FIREBASE_EMAIL_AUTO_VERIFICATION", "$enabled"\)""",
         ).containsMatchIn(gradleFile)
+    }
+
+    private fun flavorBlockContains(
+        gradleFile: String,
+        flavor: String,
+        expected: String,
+    ): Boolean {
+        return Regex("""create\("$flavor"\)\s*\{[\s\S]*?${Regex.escape(expected)}""").containsMatchIn(gradleFile)
     }
 }

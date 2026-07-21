@@ -14,11 +14,13 @@ The Docker image in this repo is a reproducible build environment. It builds the
 
 The app has one flavor dimension, `environment`:
 
-| Flavor | Default API URL | Cleartext HTTP |
-| --- | --- | --- |
-| `local` | `http://127.0.0.1:8080/` | yes |
-| `dev` | `https://api-dev.reals.example.com/` | no |
-| `prod` | `https://api.reals.example.com/` | no |
+| Flavor | Application ID | App label | API URL | Cleartext HTTP |
+| --- | --- | --- | --- | --- |
+| `local` | `com.reals.app.local` | `Reals Local` | Defaults to `http://127.0.0.1:8080/`. | Only local hosts allowed. |
+| `dev` | `com.reals.app.dev` | `Reals Dev` | Must be configured to a real HTTPS host. | no |
+| `prod` | `com.reals.app` | `Reals` | Must be configured to a real HTTPS host. | no |
+
+The Android namespace remains `com.reals.app`; do not rename Kotlin packages to match flavor application IDs.
 
 The URL is compiled into `BuildConfig.REALS_BASE_URL`. Override defaults with Gradle properties or environment variables:
 
@@ -73,10 +75,14 @@ docker compose --profile build build app-build
 
 `.github/workflows/ci.yml` runs on pull requests and pushes to `development`, `main`, and `master`.
 
-It intentionally does not run tests yet. Current checks are:
+Current checks are:
 
+- Environment-isolation and App Check dependency validation.
+- Local debug unit tests and lint.
 - Kotlin local debug compilation.
 - Local debug APK assembly.
+- Conditional dev debug compilation/APK assembly when `GOOGLE_SERVICES_DEV_JSON_BASE64` and `REALS_DEV_BASE_URL` are configured.
+- Conditional prod release compilation/APK assembly when `GOOGLE_SERVICES_PROD_JSON_BASE64` and `REALS_PROD_BASE_URL` are configured.
 - Docker image build validation.
 - APK artifact upload.
 - Dependency review on pull requests.
@@ -99,19 +105,43 @@ Examples:
 Do not commit Firebase or signing secrets:
 
 - `app/google-services.json`
+- `app/src/local/google-services.json`
+- `app/src/dev/google-services.json`
+- `app/src/prod/google-services.json`
 - `google-services.json`
 - `*.jks`
 - `*.keystore`
 - `secrets/`
 
-The Gradle config applies `com.google.gms.google-services` only when one of these files exists, so CI can compile without Firebase files:
+Preferred Firebase client config locations:
 
-- `app/google-services.json`
 - `app/src/local/google-services.json`
 - `app/src/dev/google-services.json`
 - `app/src/prod/google-services.json`
 
-Use flavor-specific Firebase files when dev/prod Firebase projects diverge.
+Each file must contain an Android client for the final application ID:
+
+- `local`: `com.reals.app.local`
+- `dev`: `com.reals.app.dev`
+- `prod`: `com.reals.app`
+
+`app/google-services.json` is legacy production-only compatibility. Move real production config to
+`app/src/prod/google-services.json` before enabling full prod validation.
+
+CI injects Firebase config from base64-encoded secrets when present:
+
+- `GOOGLE_SERVICES_LOCAL_JSON_BASE64`
+- `GOOGLE_SERVICES_DEV_JSON_BASE64`
+- `GOOGLE_SERVICES_PROD_JSON_BASE64`
+
+Dev/prod build validation also requires:
+
+- `REALS_DEV_BASE_URL`
+- `REALS_PROD_BASE_URL`
+
+Release signing remains optional for `assembleProdRelease`; when real signing is required, use the existing
+`REALS_RELEASE_KEYSTORE_BASE64`, `REALS_RELEASE_STORE_PASSWORD`, `REALS_RELEASE_KEY_ALIAS`, and
+`REALS_RELEASE_KEY_PASSWORD` secrets.
 
 ## Firebase App Check Operations
 
@@ -141,6 +171,12 @@ Compatibility notes:
 - Production enforcement should occur only after the production Firebase Android app is registered and the distributed
   app uses Play Integrity App Check.
 - The Play Integrity verdict policy is a Firebase Console setting, not Android source code.
+
+## Release Optimization
+
+R8, code minification, resource shrinking and broad ProGuard hardening remain intentionally disabled for this
+environment-isolation phase. Enable and validate them in a separate release-hardening task after isolated variants are
+stable.
 
 ## Release Signing
 

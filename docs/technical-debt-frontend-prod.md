@@ -238,17 +238,24 @@ Acceptance criteria:
 
 ## 10. Production environment and release management
 
+Implemented:
+- Android environment isolation now gives `local`, `dev`, and `prod` distinct application IDs, labels, Firebase
+  config locations, App Check providers, and cleartext policies.
+- Build-time validation rejects dev/prod cleartext, local-only hosts, and placeholder backend URLs.
+
 Future work:
 - Configure real production API URL.
-- Separate local/dev/prod Firebase configuration clearly.
-- Ensure production release builds do not allow cleartext traffic.
+- Create and supply real production Firebase Android App configuration.
 - Sign release builds with production keystore.
 - Define app versioning strategy.
 - Define test track/release process if Play Store is used.
+- Enable and validate R8, code minification, resource shrinking, and focused release keep rules in a separate
+  release-hardening task.
 
 Acceptance criteria:
 - Dev builds cannot accidentally target production.
 - Production builds cannot accidentally target dev/staging.
+- Production Firebase config is sourced from the production Firebase project.
 - Release signing is reproducible and documented.
 - Version names/codes are managed consistently.
 

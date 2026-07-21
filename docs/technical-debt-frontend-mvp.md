@@ -131,11 +131,13 @@ Acceptance criteria:
 
 Dev/prod base URLs must be configured before generating real installable builds.
 
+Status:
+- Android now enforces HTTPS, non-local, non-placeholder dev/prod backend URLs at build time.
+- Real hosted dev and prod API URLs are still external deployment prerequisites.
+
 MVP requirement:
 - Configure real dev/staging API URL through Gradle properties or environment variables.
-- Confirm local build still uses emulator-compatible backend URL.
-- Confirm release builds do not allow cleartext traffic unless explicitly intended.
-- Avoid placeholder URLs in release-like builds.
+- Confirm each hosted URL is reachable from device builds.
 
 Acceptance criteria:
 - Local flavor points to local backend.
@@ -165,6 +167,12 @@ Acceptance criteria:
 MVP requirement:
 - Validate Firebase Auth configuration for each intended build flavor/environment.
 - Ensure `google-services.json` and Firebase project settings match the Android package/application IDs used for MVP builds.
+
+Status:
+- Android now expects flavor-specific files at `app/src/local/google-services.json`, `app/src/dev/google-services.json`,
+  and `app/src/prod/google-services.json`.
+- The expected Android clients are `com.reals.app.local`, `com.reals.app.dev`, and `com.reals.app`.
+- Real Firebase Android App registration and secret injection remain operational prerequisites.
 
 Acceptance criteria:
 - Email/password auth works on local/dev APKs.

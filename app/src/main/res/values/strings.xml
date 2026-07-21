@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Reals App</string>
+    <string name="app_name">Reals</string>
     <string name="visual_review_deadline_home_expired">vencida</string>
     <string name="visual_review_deadline_home_under_one_hour">vence en %1$d min</string>
     <string name="visual_review_deadline_home_today">vence hoy %1$s</string>

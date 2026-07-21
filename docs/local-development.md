@@ -11,9 +11,15 @@
 
 The app has one environment flavor dimension:
 
-- `local`: local backend through ADB reverse. Default base URL is `http://127.0.0.1:8080/`; cleartext traffic is allowed.
-- `dev`: dev/staging backend. Set `realsDevBaseUrl` or `REALS_DEV_BASE_URL`.
-- `prod`: production backend. Set `realsProdBaseUrl` or `REALS_PROD_BASE_URL`.
+| Flavor | Application ID | Visible app name | Backend URL rule | Cleartext |
+| --- | --- | --- | --- | --- |
+| `local` | `com.reals.app.local` | `Reals Local` | Defaults to `http://127.0.0.1:8080/` for ADB reverse. | Allowed only for local hosts by Network Security Config. |
+| `dev` | `com.reals.app.dev` | `Reals Dev` | Must set `realsDevBaseUrl` or `REALS_DEV_BASE_URL` to a real HTTPS host. | Prohibited. |
+| `prod` | `com.reals.app` | `Reals` | Must set `realsProdBaseUrl` or `REALS_PROD_BASE_URL` to a real HTTPS host. | Prohibited. |
+
+The Kotlin/Android namespace remains `com.reals.app`. The installable application ID is flavor-specific, so `local`,
+`dev`, and `prod` can coexist on one device with separate app data, Firebase Auth state, FCM registration, and App
+Check debug-token lifecycle.
 
 The local base URL can be overridden with Gradle property `realsLocalBaseUrl` or environment variable `REALS_LOCAL_BASE_URL`.
 
@@ -23,12 +29,29 @@ email-link verification flow.
 
 ## Firebase
 
-The Google Services plugin is applied only when one of these files exists:
+Use flavor-specific Google Services files:
 
-- `app/google-services.json`
 - `app/src/local/google-services.json`
 - `app/src/dev/google-services.json`
 - `app/src/prod/google-services.json`
+
+These files are ignored and must be supplied locally or by CI secrets. Do not commit Firebase project IDs, app IDs, API
+keys, certificates, service accounts, App Check debug secrets, or tokens.
+
+Each file must contain a Firebase Android App client matching the final application ID:
+
+| Flavor | Required Android client package |
+| --- | --- |
+| `local` | `com.reals.app.local` |
+| `dev` | `com.reals.app.dev` |
+| `prod` | `com.reals.app` |
+
+`local` and `dev` may initially be separate Firebase Android Apps in the same non-production Firebase project. `prod`
+must be capable of using a separate production Firebase project. Backend App Check allowlists use Firebase App IDs from
+the Google Services resources, not Android package names alone.
+
+The legacy ignored `app/google-services.json` location is treated as production-only compatibility for isolated builds.
+Move real production config to `app/src/prod/google-services.json` when enabling full variant validation.
 
 Firebase Auth is required for real sign-in/provisioning flows. Push notification testing requires FCM configuration and Android notification permission on Android 13+.
 
@@ -56,16 +79,15 @@ for that developer machine/device. Register that secret in Firebase Console unde
 retry the app. Never commit or paste the debug secret into repository files, examples, Gradle properties or
 `BuildConfig`. If a debug secret is exposed, revoke it in Firebase Console and generate/register a new one.
 
+Because `local` now installs as `com.reals.app.local`, old debug tokens registered for `com.reals.app` do not cover the
+new local app. Install `localDebug`, capture the newly printed debug token, and register it under the Firebase Android
+App whose package is `com.reals.app.local`.
+
 The backend must still verify App Check JWTs normally. A registered debug secret allows Firebase to issue a normal App
 Check token; it is not a reason to disable JWT verification.
 
 If Firebase Console requires registering the Android app with a SHA-256 fingerprint even for local setup, use the
-`localDebug` signing certificate from the local Android debug keystore. On this Windows development machine the
-standard debug keystore path is:
-
-```text
-C:\Users\Administrador\.android\debug.keystore
-```
+`localDebug` signing certificate from the local Android debug keystore.
 
 Get the exact `localDebug` fingerprint with:
 
@@ -130,6 +152,8 @@ activation is no longer the recommended local workflow.
 ## Useful Commands
 
 ```bash
+./gradlew :app:validateEnvironmentIsolation
+./gradlew :app:verifyAppCheckDependencyIsolation
 ./gradlew :app:compileLocalDebugKotlin
 ./gradlew :app:testLocalDebugUnitTest
 ./gradlew :app:assembleLocalDebug

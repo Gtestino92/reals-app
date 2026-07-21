@@ -21,4 +21,7 @@ secrets/
 *.apk
 *.aab
 app/google-services.json
+/app/src/local/google-services.json
+/app/src/dev/google-services.json
+/app/src/prod/google-services.json
 /google-services.json

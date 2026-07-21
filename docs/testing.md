@@ -9,15 +9,27 @@
 ## Primary Commands
 
 ```bash
+./gradlew :app:validateEnvironmentIsolation
+./gradlew :app:verifyAppCheckDependencyIsolation
 ./gradlew :app:testLocalDebugUnitTest
+./gradlew :app:lintLocalDebug
 ./gradlew :app:compileLocalDebugKotlin
-```
-
-Use `assembleLocalDebug` when APK/build integration is the thing being verified:
-
-```bash
 ./gradlew :app:assembleLocalDebug
 ```
+
+Run dev/prod validation only after the required Firebase client config and HTTPS backend URL are available:
+
+```bash
+./gradlew :app:compileDevDebugKotlin
+./gradlew :app:assembleDevDebug
+./gradlew :app:compileProdReleaseKotlin
+./gradlew :app:assembleProdRelease
+```
+
+`devDebug` requires `app/src/dev/google-services.json` with `com.reals.app.dev` and `REALS_DEV_BASE_URL` or
+`realsDevBaseUrl`. `prodRelease` requires `app/src/prod/google-services.json` with `com.reals.app` and
+`REALS_PROD_BASE_URL` or `realsProdBaseUrl`. These builds must not use placeholder, localhost, loopback, or cleartext
+backend URLs.
 
 ## What To Test
 
