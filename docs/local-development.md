@@ -76,6 +76,11 @@ Get the exact `localDebug` fingerprint with:
 Copy the `SHA-256` value for `Variant: localDebug` / `Config: debug`. The SHA-256 fingerprint is not a secret, but the
 App Check debug token printed by `DebugAppCheckProvider` is a secret and must not be committed.
 
+For App Check debug-token registration, match the Firebase Console app by Firebase App ID, not only by package name.
+The effective local Firebase App ID is generated from the `google_app_id` value in the localDebug Google Services
+resources. Register the debug token under that exact App Check Android app. Reinstalling the APK or clearing app data
+may generate a different debug token, so keep the same installation while verifying.
+
 ### Play Integrity providers
 
 For `dev` and `prod`, register the corresponding Firebase Android app for App Check with Play Integrity. The Firebase
