@@ -242,6 +242,9 @@ Implemented:
 - Android environment isolation now gives `local`, `dev`, and `prod` distinct application IDs, labels, Firebase
   config locations, App Check providers, and cleartext policies.
 - Build-time validation rejects dev/prod cleartext, local-only hosts, and placeholder backend URLs.
+- Release builds enable R8 code shrinking, optimization, obfuscation, and resource shrinking.
+- CI builds and inspects optimized `localRelease`, uploads its APK and exact mapping file, and skips dev/prod release
+  validation unless real Firebase, URL, and signing prerequisites are present.
 
 Future work:
 - Configure real production API URL.
@@ -249,8 +252,7 @@ Future work:
 - Sign release builds with production keystore.
 - Define app versioning strategy.
 - Define test track/release process if Play Store is used.
-- Enable and validate R8, code minification, resource shrinking, and focused release keep rules in a separate
-  release-hardening task.
+- Execute and record the manual optimized-APK smoke test against real Firebase/backend/device prerequisites.
 
 Acceptance criteria:
 - Dev builds cannot accidentally target production.
@@ -258,6 +260,7 @@ Acceptance criteria:
 - Production Firebase config is sourced from the production Firebase project.
 - Release signing is reproducible and documented.
 - Version names/codes are managed consistently.
+- Each distributed release retains its exact `mapping.txt` for retrace.
 
 ---
 

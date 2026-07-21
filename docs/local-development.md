@@ -157,9 +157,75 @@ activation is no longer the recommended local workflow.
 ./gradlew :app:compileLocalDebugKotlin
 ./gradlew :app:testLocalDebugUnitTest
 ./gradlew :app:assembleLocalDebug
+./gradlew :app:compileLocalReleaseKotlin
+./gradlew :app:lintLocalRelease
+./gradlew :app:assembleLocalRelease
+./gradlew :app:verifyLocalReleaseArtifacts
 ```
 
 Use the `localDebug` variant for emulator or physical-device testing against a backend running on the host machine. See `local-android-networking.md` for the ADB reverse workflow.
+
+## Optimized Local Release Smoke Test
+
+Do not mark this smoke test as passed unless it was executed on an installed, optimized `localRelease` APK.
+
+Prerequisites:
+
+- `app/src/local/google-services.json` contains an Android client for `com.reals.app.local`.
+- Local backend runs with the intended Firebase-backed local profile and required test state.
+- A non-production release-test keystore is supplied from an ignored path such as `secrets/local-release-test.keystore`,
+  or an ephemeral CI/local-only keystore is generated and discarded.
+- `REALS_RELEASE_STORE_PASSWORD`, `REALS_RELEASE_KEY_ALIAS`, and `REALS_RELEASE_KEY_PASSWORD` are set for that
+  non-production keystore, or the equivalent CI secret values are present for the job.
+- ADB reverse is configured for the backend and MinIO when using the normal local setup.
+- The App Check debug token printed by the `localRelease` installation is registered under the exact Firebase Android
+  App/Firebase App ID used by `app/src/local/google-services.json`.
+- A test account and backend state exist for profile, chats, photos, scheduling, and notifications where applicable.
+
+Build and install:
+
+```bash
+./gradlew :app:assembleLocalRelease :app:verifyLocalReleaseArtifacts --no-daemon --console=plain \
+  -PrealsReleaseKeystorePath=secrets/local-release-test.keystore
+adb install -r app/build/outputs/apk/local/release/*.apk
+```
+
+Checklist:
+
+1. Install or update the optimized release APK.
+2. Launch without startup crashes.
+3. Confirm Firebase initializes.
+4. Log in.
+5. Log out and log back in.
+6. Confirm authenticated calls obtain and use a Firebase ID token.
+7. Confirm API calls obtain and use an App Check token.
+8. Complete authenticated `GET /api/me`.
+9. Parse a normal successful backend response.
+10. Parse and present a normal backend error response.
+11. Load Home.
+12. Enter and load a first or second chat when test state permits.
+13. Load messages.
+14. Send a message.
+15. Upload a profile photo.
+16. Load profile photos.
+17. Receive and parse one representative FCM data notification when Firebase test infrastructure permits.
+18. Open the notification/app and recover through Home.
+19. Exercise basic screen transitions.
+20. Confirm Logcat has no `ClassNotFoundException`, `NoSuchMethodException`, missing serializer, missing Retrofit
+    annotation, Firebase component-discovery, or resource-not-found crash.
+
+Capture Logcat while testing:
+
+```bash
+adb logcat -c
+adb logcat > local-release-smoke-logcat.txt
+```
+
+If an obfuscated stack trace appears, retrace it with the exact mapping from the same APK build:
+
+```bash
+retrace app/build/outputs/mapping/localRelease/mapping.txt obfuscated-stacktrace.txt
+```
 
 ## Backend Contract Docs
 

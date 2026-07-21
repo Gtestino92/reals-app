@@ -68,6 +68,9 @@ jobs:
       - name: Validate environment isolation
         run: ./gradlew :app:validateEnvironmentIsolation :app:verifyAppCheckDependencyIsolation --no-daemon --console=plain
 
+      - name: Validate release hardening configuration
+        run: ./gradlew :app:verifyReleaseBuildHardening :app:validateReleaseSigningConfiguration --no-daemon --console=plain
+
       - name: Run local unit tests
         run: ./gradlew :app:testLocalDebugUnitTest --no-daemon --console=plain
 
@@ -108,6 +111,37 @@ jobs:
       - name: Build local debug APK
         run: ./gradlew :app:assembleLocalDebug --no-daemon --console=plain
 
+      - name: Compile local release Kotlin
+        run: ./gradlew :app:compileLocalReleaseKotlin --no-daemon --console=plain
+
+      - name: Run local release lint
+        run: ./gradlew :app:lintLocalRelease --no-daemon --console=plain
+
+      - name: Build optimized local release APK
+        run: ./gradlew :app:assembleLocalRelease --no-daemon --console=plain
+
+      - name: Verify optimized local release outputs
+        run: ./gradlew :app:verifyLocalReleaseArtifacts --no-daemon --console=plain
+
+      - name: Classify local release APK signing
+        id: local_release_apk
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="$(find app/build/outputs/apk/local/release -maxdepth 1 -type f -name '*.apk' -printf '%T@ %p\n' | sort -nr | head -n1 | cut -d' ' -f2-)"
+          if [ -z "$apk" ]; then
+            echo "No localRelease APK found."
+            exit 1
+          fi
+          if "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify "$apk" >/dev/null 2>&1; then
+            signing="signed"
+          else
+            signing="unsigned"
+          fi
+          echo "apk=$apk" >> "$GITHUB_OUTPUT"
+          echo "signing=$signing" >> "$GITHUB_OUTPUT"
+          echo "localRelease APK: $apk ($signing)"
+
       - name: Build dev debug APK when configured
         shell: bash
         env:
@@ -120,6 +154,32 @@ jobs:
             echo "Skipping devDebug build: requires GOOGLE_SERVICES_DEV_JSON_BASE64 and REALS_DEV_BASE_URL secrets."
           fi
 
+      - name: Build dev release APK when configured and signed
+        shell: bash
+        env:
+          REALS_DEV_BASE_URL: ${{ secrets.REALS_DEV_BASE_URL }}
+          REALS_RELEASE_KEYSTORE_BASE64: ${{ secrets.REALS_RELEASE_KEYSTORE_BASE64 }}
+          REALS_RELEASE_STORE_PASSWORD: ${{ secrets.REALS_RELEASE_STORE_PASSWORD }}
+          REALS_RELEASE_KEY_ALIAS: ${{ secrets.REALS_RELEASE_KEY_ALIAS }}
+          REALS_RELEASE_KEY_PASSWORD: ${{ secrets.REALS_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          signing_count=0
+          for value in "${REALS_RELEASE_KEYSTORE_BASE64:-}" "${REALS_RELEASE_STORE_PASSWORD:-}" "${REALS_RELEASE_KEY_ALIAS:-}" "${REALS_RELEASE_KEY_PASSWORD:-}"; do
+            if [ -n "$value" ]; then
+              signing_count=$((signing_count + 1))
+            fi
+          done
+          if [ "$signing_count" -gt 0 ] && [ "$signing_count" -lt 4 ]; then
+            echo "Incomplete release signing secrets: configure all four REALS_RELEASE_* signing secrets or none."
+            exit 1
+          fi
+          if [ -f app/src/dev/google-services.json ] && [ -n "${REALS_DEV_BASE_URL:-}" ] && [ "$signing_count" -eq 4 ]; then
+            ./gradlew :app:compileDevReleaseKotlin :app:assembleDevRelease --no-daemon --console=plain
+          else
+            echo "Skipping devRelease build: requires GOOGLE_SERVICES_DEV_JSON_BASE64, REALS_DEV_BASE_URL, and complete release signing secrets."
+          fi
+
       - name: Build prod release APK when configured
         shell: bash
         env:
@@ -130,10 +190,20 @@ jobs:
           REALS_RELEASE_KEY_PASSWORD: ${{ secrets.REALS_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ -f app/src/prod/google-services.json ] && [ -n "${REALS_PROD_BASE_URL:-}" ]; then
+          signing_count=0
+          for value in "${REALS_RELEASE_KEYSTORE_BASE64:-}" "${REALS_RELEASE_STORE_PASSWORD:-}" "${REALS_RELEASE_KEY_ALIAS:-}" "${REALS_RELEASE_KEY_PASSWORD:-}"; do
+            if [ -n "$value" ]; then
+              signing_count=$((signing_count + 1))
+            fi
+          done
+          if [ "$signing_count" -gt 0 ] && [ "$signing_count" -lt 4 ]; then
+            echo "Incomplete release signing secrets: configure all four REALS_RELEASE_* signing secrets or none."
+            exit 1
+          fi
+          if [ -f app/src/prod/google-services.json ] && [ -n "${REALS_PROD_BASE_URL:-}" ] && [ "$signing_count" -eq 4 ]; then
             ./gradlew :app:compileProdReleaseKotlin :app:assembleProdRelease --no-daemon --console=plain
           else
-            echo "Skipping prodRelease build: requires GOOGLE_SERVICES_PROD_JSON_BASE64 and REALS_PROD_BASE_URL secrets."
+            echo "Skipping prodRelease build: requires GOOGLE_SERVICES_PROD_JSON_BASE64, REALS_PROD_BASE_URL, and complete production release signing secrets."
           fi
 
       - name: Upload local debug APK
@@ -141,6 +211,27 @@ jobs:
         with:
           name: reals-app-local-debug-apk
           path: app/build/outputs/apk/local/debug/*.apk
+          if-no-files-found: error
+
+      - name: Upload local release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: reals-app-localRelease-apk-${{ steps.local_release_apk.outputs.signing }}-${{ github.run_id }}
+          path: ${{ steps.local_release_apk.outputs.apk }}
+          if-no-files-found: error
+
+      - name: Upload local release mapping
+        uses: actions/upload-artifact@v4
+        with:
+          name: reals-app-localRelease-mapping-${{ github.run_id }}
+          path: app/build/outputs/mapping/localRelease/mapping.txt
+          if-no-files-found: error
+
+      - name: Upload local release inspection report
+        uses: actions/upload-artifact@v4
+        with:
+          name: reals-app-localRelease-inspection-${{ github.run_id }}
+          path: app/build/reports/release/localRelease-apk-inspection.txt
           if-no-files-found: error
 
   docker-build:

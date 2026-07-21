@@ -59,6 +59,16 @@ The `local` flavor permits cleartext only for local Android development hosts ne
 reverse workflow. The `dev` and `prod` flavors prohibit cleartext traffic and reject localhost, loopback,
 emulator-only, and placeholder backend URLs at build time.
 
+## Release Obfuscation
+
+Release builds use R8 code shrinking, optimization, obfuscation, and resource shrinking. This is defense in depth and a
+code-size/runtime optimization measure. It is not an authentication, authorization, App Check, TLS, backend-validation,
+anti-tamper, or secret-protection boundary.
+
+Do not put secrets in Android code or resources because obfuscation cannot protect them. Keep Firebase configs,
+keystores, signing passwords, App Check debug tokens, backend service credentials, and deployment credentials outside
+source control and outside uploaded build artifacts.
+
 ## Android Backup
 
 The Android app sets `android:allowBackup="false"` and does not declare backup or data-extraction rules. Reals intentionally disables Android cloud backup and device-transfer backup for application-managed data because dating-profile, session-related and cached media state are sensitive.
