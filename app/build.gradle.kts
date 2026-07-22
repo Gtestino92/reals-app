@@ -249,6 +249,9 @@ android {
     }
 }
 
+configurations.maybeCreate("devDebugImplementation")
+configurations.maybeCreate("devReleaseImplementation")
+
 val androidSdkDirectoryProvider = androidComponents.sdkComponents.sdkDirectory.map { it.asFile }
 
 fun String.capitalized(): String = replaceFirstChar { it.uppercase() }
@@ -416,7 +419,7 @@ tasks.register("validateEnvironmentIsolation") {
 
 tasks.register("verifyAppCheckDependencyIsolation") {
     group = "verification"
-    description = "Verifies Firebase App Check debug dependency does not leak into dev or prod."
+    description = "Verifies Firebase App Check provider dependencies match each build variant."
     notCompatibleWithConfigurationCache("Resolves variant runtime classpaths for dependency isolation checks.")
     doLast {
         fun moduleIds(configurationName: String): Set<String> =
@@ -427,31 +430,73 @@ tasks.register("verifyAppCheckDependencyIsolation") {
                 .map { "${it.moduleGroup}:${it.moduleName}" }
                 .toSet()
 
-        val localModules = moduleIds("localDebugRuntimeClasspath")
-        val devModules = moduleIds("devDebugRuntimeClasspath")
-        val devReleaseModules = moduleIds("devReleaseRuntimeClasspath")
-        val prodDebugModules = moduleIds("prodDebugRuntimeClasspath")
-        val prodModules = moduleIds("prodReleaseRuntimeClasspath")
         val debugModule = "com.google.firebase:firebase-appcheck-debug"
         val playIntegrityModule = "com.google.firebase:firebase-appcheck-playintegrity"
 
-        if (debugModule !in localModules) {
-            throw GradleException("localDebug must include Firebase App Check debug provider.")
-        }
-        if (playIntegrityModule !in devModules) {
-            throw GradleException("devDebug must include Firebase App Check Play Integrity provider.")
-        }
-        if (playIntegrityModule !in devReleaseModules) {
-            throw GradleException("devRelease must include Firebase App Check Play Integrity provider.")
-        }
-        if (playIntegrityModule !in prodDebugModules) {
-            throw GradleException("prodDebug must include Firebase App Check Play Integrity provider.")
-        }
-        if (playIntegrityModule !in prodModules) {
-            throw GradleException("prodRelease must include Firebase App Check Play Integrity provider.")
-        }
-        if (debugModule in devModules || debugModule in devReleaseModules || debugModule in prodDebugModules || debugModule in prodModules) {
-            throw GradleException("Firebase App Check debug provider must not be present in dev or prod runtime classpaths.")
+        data class AppCheckProviderExpectation(
+            val configurationName: String,
+            val requiredModule: String,
+            val forbiddenModule: String,
+            val requiredProviderName: String,
+            val forbiddenProviderName: String,
+        )
+
+        listOf(
+            AppCheckProviderExpectation(
+                configurationName = "localDebugRuntimeClasspath",
+                requiredModule = debugModule,
+                forbiddenModule = playIntegrityModule,
+                requiredProviderName = "debug",
+                forbiddenProviderName = "Play Integrity",
+            ),
+            AppCheckProviderExpectation(
+                configurationName = "localReleaseRuntimeClasspath",
+                requiredModule = debugModule,
+                forbiddenModule = playIntegrityModule,
+                requiredProviderName = "debug",
+                forbiddenProviderName = "Play Integrity",
+            ),
+            AppCheckProviderExpectation(
+                configurationName = "devDebugRuntimeClasspath",
+                requiredModule = debugModule,
+                forbiddenModule = playIntegrityModule,
+                requiredProviderName = "debug",
+                forbiddenProviderName = "Play Integrity",
+            ),
+            AppCheckProviderExpectation(
+                configurationName = "devReleaseRuntimeClasspath",
+                requiredModule = playIntegrityModule,
+                forbiddenModule = debugModule,
+                requiredProviderName = "Play Integrity",
+                forbiddenProviderName = "debug",
+            ),
+            AppCheckProviderExpectation(
+                configurationName = "prodDebugRuntimeClasspath",
+                requiredModule = playIntegrityModule,
+                forbiddenModule = debugModule,
+                requiredProviderName = "Play Integrity",
+                forbiddenProviderName = "debug",
+            ),
+            AppCheckProviderExpectation(
+                configurationName = "prodReleaseRuntimeClasspath",
+                requiredModule = playIntegrityModule,
+                forbiddenModule = debugModule,
+                requiredProviderName = "Play Integrity",
+                forbiddenProviderName = "debug",
+            ),
+        ).forEach { expectation ->
+            val modules = moduleIds(expectation.configurationName)
+            val variantName = expectation.configurationName.removeSuffix("RuntimeClasspath")
+            if (expectation.requiredModule !in modules) {
+                throw GradleException(
+                    "$variantName must include Firebase App Check ${expectation.requiredProviderName} provider.",
+                )
+            }
+            if (expectation.forbiddenModule in modules) {
+                throw GradleException(
+                    "$variantName must not include Firebase App Check ${expectation.forbiddenProviderName} provider.",
+                )
+            }
         }
     }
 }
@@ -591,7 +636,8 @@ dependencies {
     implementation(libs.firebase.auth)
     implementation(libs.firebase.messaging)
     add("localImplementation", libs.firebase.appcheck.debug)
-    add("devImplementation", libs.firebase.appcheck.playintegrity)
+    add("devDebugImplementation", libs.firebase.appcheck.debug)
+    add("devReleaseImplementation", libs.firebase.appcheck.playintegrity)
     add("prodImplementation", libs.firebase.appcheck.playintegrity)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.play.services)

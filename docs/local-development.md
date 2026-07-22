@@ -60,9 +60,10 @@ Firebase Auth is required for real sign-in/provisioning flows. Push notification
 App Check is installed before the application container is created, so API repositories use it from startup. The
 provider is selected by source set:
 
-- `local`: debug provider.
-- `dev`: Play Integrity.
-- `prod`: Play Integrity.
+- `localDebug` and `localRelease`: debug provider.
+- `devDebug`: debug provider for emulator and direct-device testing against the hosted AWS `dev` environment.
+- `devRelease`: Play Integrity.
+- `prodDebug` and `prodRelease`: Play Integrity.
 
 All requests made through the Reals Retrofit client include:
 
@@ -72,16 +73,20 @@ X-Firebase-AppCheck: <token>
 
 The token is not added to URLs, query parameters, cookies or request bodies. The OkHttp logger redacts the header.
 
-### Local debug provider
+### Debug providers
 
-Run the `local` flavor with a valid Firebase configuration and let the Firebase SDK print the generated debug secret
-for that developer machine/device. Register that secret in Firebase Console under App Check for the Android app, then
-retry the app. Never commit or paste the debug secret into repository files, examples, Gradle properties or
-`BuildConfig`. If a debug secret is exposed, revoke it in Firebase Console and generate/register a new one.
+Run the `local` or `devDebug` variant with a valid Firebase configuration and let the Firebase SDK print the generated
+debug secret for that developer machine/device. Register that secret in Firebase Console under App Check for the Android
+app, then retry the app. Never commit or paste the debug secret into repository files, examples, Gradle properties,
+CI logs or `BuildConfig`. If a debug secret is exposed, revoke it in Firebase Console and generate/register a new one.
 
-Because `local` now installs as `com.reals.app.local`, old debug tokens registered for `com.reals.app` do not cover the
-new local app. Install `localDebug`, capture the newly printed debug token, and register it under the Firebase Android
-App whose package is `com.reals.app.local`.
+Because `local` installs as `com.reals.app.local`, old debug tokens registered for `com.reals.app` do not cover the
+local app. Install `localDebug`, capture the newly printed debug token, and register it under the Firebase Android App
+whose package is `com.reals.app.local`.
+
+Because `devDebug` installs as `com.reals.app.dev`, its Firebase App Check debug token must be registered manually under
+the Firebase Android App whose package is `com.reals.app.dev`. This is required for emulator and directly installed
+physical-device testing against the hosted AWS `dev` backend.
 
 The backend must still verify App Check JWTs normally. A registered debug secret allows Firebase to issue a normal App
 Check token; it is not a reason to disable JWT verification.
@@ -105,10 +110,11 @@ may generate a different debug token, so keep the same installation while verify
 
 ### Play Integrity providers
 
-For `dev` and `prod`, register the corresponding Firebase Android app for App Check with Play Integrity. The Firebase
-project, `google-services.json`, package name and linked Play Integrity configuration must match the flavor's target
-environment. Register the required SHA-256 signing certificates for the app build that will be distributed. Do not
-hardcode Firebase Console identifiers, project numbers or secrets in Android code.
+For `devRelease`, `prodDebug` and `prodRelease`, register the corresponding Firebase Android app for App Check with Play
+Integrity. The Firebase project, `google-services.json`, package name and linked Play Integrity configuration must match
+the flavor's target environment. Register the required SHA-256 signing certificates for the app build that will be
+tested or distributed. Do not hardcode Firebase Console identifiers, project numbers or secrets in Android code. Play
+Integrity setup remains required before testing or distributing `devRelease`.
 
 App Check acquisition failures are recoverable and use the generic API error presentation:
 
