@@ -193,6 +193,7 @@ sealed interface RealsRootUiState {
         val profile: VisualProfile? = null,
         val partnerMessage: String? = null,
         val partnerMessageLoaded: Boolean = false,
+        val loadingPartnerMessage: Boolean = false,
         val partnerMessageError: ApiError? = null,
         val loading: Boolean = false,
         val refreshing: Boolean = false,

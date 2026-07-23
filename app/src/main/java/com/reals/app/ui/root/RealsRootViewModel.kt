@@ -671,6 +671,17 @@ class RealsRootViewModel(
         }
     }
 
+    fun retryPartnerProfileMessage() {
+        val current = _uiState.value as? RealsRootUiState.PartnerProfile ?: return
+        if (current.manualBlock.loading) return
+        viewModelScope.launch {
+            _uiState.value = partnerProfileCoordinator.retryPartnerMessage(
+                current = current,
+                onPending = { _uiState.value = it },
+            )
+        }
+    }
+
     fun closePartnerProfile() {
         val current = _uiState.value as? RealsRootUiState.PartnerProfile ?: return
         viewModelScope.launch {

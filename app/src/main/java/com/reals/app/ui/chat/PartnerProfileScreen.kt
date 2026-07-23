@@ -38,6 +38,7 @@ fun PartnerProfileScreen(
     profile: VisualProfile?,
     partnerMessage: String?,
     partnerMessageLoaded: Boolean,
+    loadingPartnerMessage: Boolean,
     partnerMessageError: ApiError?,
     loading: Boolean,
     refreshing: Boolean,
@@ -45,6 +46,7 @@ fun PartnerProfileScreen(
     manualBlockError: ApiError?,
     error: ApiError?,
     onRefresh: () -> Unit,
+    onRetryPartnerMessage: () -> Unit,
     onManualBlock: () -> Unit,
     onClearManualBlockError: () -> Unit,
     onBackHome: () -> Unit,
@@ -120,7 +122,10 @@ fun PartnerProfileScreen(
                 profile = profile,
                 partnerMessage = partnerMessage,
                 partnerMessageLoaded = partnerMessageLoaded,
+                loadingPartnerMessage = loadingPartnerMessage,
                 partnerMessageError = partnerMessageError,
+                busy = busy,
+                onRetryPartnerMessage = onRetryPartnerMessage,
             )
             if (refreshing) {
                 Spacer(modifier = Modifier.height(12.dp))
@@ -158,7 +163,10 @@ private fun PartnerProfilePersonalMessageSection(
     profile: VisualProfile,
     partnerMessage: String?,
     partnerMessageLoaded: Boolean,
+    loadingPartnerMessage: Boolean,
     partnerMessageError: ApiError?,
+    busy: Boolean,
+    onRetryPartnerMessage: () -> Unit,
 ) {
     if (!profile.partnerPersonalMessageSubmitted) return
 
@@ -170,13 +178,6 @@ private fun PartnerProfilePersonalMessageSection(
         Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Mensaje personal", style = MaterialTheme.typography.titleMedium)
             when {
-                partnerMessageError != null -> {
-                    Text(
-                        text = "No pudimos cargar el mensaje personal.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    ApiErrorFeedbackCard(partnerMessageError, ErrorContext.VisualReview)
-                }
                 partnerMessageLoaded -> {
                     Text(
                         text = partnerMessage
@@ -185,6 +186,34 @@ private fun PartnerProfilePersonalMessageSection(
                             ?: "La otra persona todavía no dejó un mensaje personal.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (loadingPartnerMessage) {
+                        Text(
+                            text = "Actualizando mensaje personal...",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else if (partnerMessageError != null) {
+                        Text(
+                            text = "No pudimos actualizar el mensaje personal.",
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+                loadingPartnerMessage -> Text(
+                    text = "Cargando mensaje personal...",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                partnerMessageError != null -> {
+                    Text(
+                        text = "No pudimos cargar el mensaje personal.",
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    OutlinedButton(
+                        onClick = onRetryPartnerMessage,
+                        enabled = !busy && !loadingPartnerMessage,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Reintentar mensaje")
+                    }
                 }
                 else -> Text(
                     text = "Cargando mensaje personal...",

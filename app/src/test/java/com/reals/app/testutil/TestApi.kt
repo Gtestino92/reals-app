@@ -128,6 +128,7 @@ class FakeRealsApi : RealsApi {
     var beforeSubmitConnectionProposalsResponse: suspend () -> Unit = {}
     var beforeAcceptConnectionProposalResponse: suspend () -> Unit = {}
     var beforeRejectConnectionPartnerProposalsResponse: suspend () -> Unit = {}
+    var beforeGetPartnerPersonalMessageResponse: suspend () -> Unit = {}
     var beforeGetProfilePhotosResponse: suspend () -> Unit = {}
     var beforeReorderPhotosResponse: suspend () -> Unit = {}
 
@@ -380,7 +381,12 @@ class FakeRealsApi : RealsApi {
         authorization: String,
         matchId: String,
     ): Response<PartnerPersonalMessageResponseDto> =
-        record("getPartnerPersonalMessage", authorization, matchId) { partnerMessageResponse }
+        record(
+            "getPartnerPersonalMessage",
+            authorization,
+            matchId,
+            beforeResponse = beforeGetPartnerPersonalMessageResponse,
+        ) { partnerMessageResponse }
 
     override suspend fun getChat(
         authorization: String,
