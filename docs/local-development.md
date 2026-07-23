@@ -119,7 +119,7 @@ Integrity setup remains required before testing or distributing `devRelease`.
 App Check acquisition failures are recoverable and use the generic API error presentation:
 
 ```text
-No pudimos verificar éstainstalación. Revisá tu conexión e intentá nuevamente.
+No pudimos verificar ésta instalación. Revisá tu conexión e intentá nuevamente.
 ```
 
 ## Local Firebase Email Verification

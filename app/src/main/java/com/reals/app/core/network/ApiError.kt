@@ -188,7 +188,7 @@ fun ApiError.toUserMessage(context: ErrorContext = ErrorContext.General): String
         AuthFailureReason.TOKEN_MISSING,
         AuthFailureReason.TOKEN_UNAVAILABLE -> "Tu sesión necesita renovarse. Volvé a iniciar sesión."
     }
-    is ApiError.AppCheck -> "No pudimos verificarésta instalación. Revisá tu conexión e intentá nuevamente."
+    is ApiError.AppCheck -> "No pudimos verificar ésta instalación. Revisá tu conexión e intentá nuevamente."
     is ApiError.PhotoPreparation -> "No se pudo preparar la foto. Probá con otra imagen o intentá nuevamente."
     ApiError.LocalFirebaseEmailVerification ->
         "No pudimos preparar la cuenta Firebase para pruebas locales. Verificá que el backend local tenga habilitada la auto-verificación y volvé a intentar."
@@ -229,7 +229,7 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.MissingAppCheckToken,
     BackendErrorCode.InvalidAppCheckToken,
     BackendErrorCode.AppCheckVerificationUnavailable ->
-        "No pudimos verificar éstainstalación. Revisá tu conexión e intentá nuevamente."
+        "No pudimos verificar ésta instalación. Revisá tu conexión e intentá nuevamente."
     BackendErrorCode.AuthenticityVerificationNotConfigured ->
         "La verificación de autenticidad del perfil no está disponible en este entorno."
     BackendErrorCode.AuthenticityVerificationProviderError ->
