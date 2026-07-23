@@ -11,6 +11,30 @@ import org.junit.Test
 
 class ChatLifecycleUiStateTest {
     @Test
+    fun `second chat loading keeps short stable title`() {
+        val presentation = chatLoadingPresentation("Segundo chat", null)
+
+        assertEquals("Segundo chat", presentation.title)
+        assertEquals("Estamos cargando el segundo chat.", presentation.body)
+    }
+
+    @Test
+    fun `second chat loading keeps partner name out of headline`() {
+        val presentation = chatLoadingPresentation("Segundo chat", "Alex")
+
+        assertEquals("Segundo chat", presentation.title)
+        assertEquals("Estamos cargando el segundo chat con Alex.", presentation.body)
+    }
+
+    @Test
+    fun `first chat loading preserves generic loading body`() {
+        val presentation = chatLoadingPresentation("Chat", null)
+
+        assertEquals("Chat", presentation.title)
+        assertEquals("Estamos preparando la conversación.", presentation.body)
+    }
+
+    @Test
     fun `first chat does not warn before final minute`() {
         val chat = TestDtos.chat().copy(
             expiresAt = "2026-06-18T21:05:00Z",

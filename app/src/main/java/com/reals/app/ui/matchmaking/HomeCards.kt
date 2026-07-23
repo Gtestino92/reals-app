@@ -43,15 +43,11 @@ import com.reals.app.core.security.TextSafety
 import com.reals.app.ui.common.VisualReviewHomeDeadlineStrings
 import com.reals.app.ui.common.VisualReviewProgressUrgency
 import com.reals.app.ui.common.formatBackendContextualDateTime
-import com.reals.app.ui.common.formatBackendTime
 import com.reals.app.ui.common.formatVisualReviewHomeDeadline
 import com.reals.app.ui.common.visualReviewProgressUrgency
 import com.reals.app.ui.common.visualReviewRemainingFraction
 import kotlinx.coroutines.delay
-import java.time.Instant
-import java.time.OffsetDateTime
 import java.time.ZoneId
-import java.time.format.DateTimeParseException
 import java.util.Locale
 
 @Composable
@@ -558,22 +554,24 @@ private fun NextStepItem(
                 item is HomeNextStepItem.SecondChatAvailable ||
                 item is HomeNextStepItem.SecondChatReadOnly
             ) {
-                val canOpenSecondChat = item.canOpenSecondChat(nowMillis)
-                Button(
-                    onClick = {
-                        onOpenSecondChat(
-                            item.connectionIdForSecondChat(),
-                            item.matchIdForProfile(),
-                            item.partnerDisplayName(),
-                        )
-                    },
-                    enabled = !busy &&
-                        canOpenSecondChat &&
-                        item.connectionIdForSecondChat().isNotBlank() &&
-                        item.matchIdForProfile().isNotBlank(),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(item.secondChatCtaLabel(canOpenSecondChat, nowMillis))
+                val secondChatPresentation = item.secondChatHomePresentation(nowMillis)
+                secondChatPresentation?.primaryCtaLabel?.let { label ->
+                    Button(
+                        onClick = {
+                            onOpenSecondChat(
+                                item.connectionIdForSecondChat(),
+                                item.matchIdForProfile(),
+                                item.partnerDisplayName(),
+                            )
+                        },
+                        enabled = !busy &&
+                            secondChatPresentation.canOpenChat &&
+                            item.connectionIdForSecondChat().isNotBlank() &&
+                            item.matchIdForProfile().isNotBlank(),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(label)
+                    }
                 }
             }
             if (item.canShowPartnerProfile(nowMillis)) {
@@ -618,45 +616,25 @@ private fun HomeNextStepItem.canShowPartnerProfile(nowMillis: Long = System.curr
     if (matchIdForProfile().isBlank()) return false
 
     return when (this) {
-        is HomeNextStepItem.SecondChatReadOnly -> false
         is HomeNextStepItem.SecondChatScheduled,
-        is HomeNextStepItem.SecondChatAvailable -> !isUnavailableSecondChat(nowMillis)
+        is HomeNextStepItem.SecondChatAvailable,
+        is HomeNextStepItem.SecondChatReadOnly -> secondChatHomePresentation(nowMillis)?.canOpenPartnerProfile == true
         else -> true
     }
 }
 
 private fun HomeNextStepItem.canDismissSecondChat(nowMillis: Long = System.currentTimeMillis()): Boolean =
-    when (this) {
-        is HomeNextStepItem.SecondChatReadOnly -> connectionId.isNotBlank()
-        is HomeNextStepItem.SecondChatScheduled,
-        is HomeNextStepItem.SecondChatAvailable -> connectionIdForSecondChat().isNotBlank() &&
-            (isExpiredSecondChatStatus() || isStaleExpiredSecondChat(nowMillis))
-        else -> false
-    }
-
-private fun HomeNextStepItem.isExpiredSecondChatStatus(): Boolean =
-    when (this) {
-        is HomeNextStepItem.SecondChatScheduled -> chatStatus == "EXPIRED"
-        is HomeNextStepItem.SecondChatAvailable -> chatStatus == "EXPIRED"
-        is HomeNextStepItem.SecondChatReadOnly -> chatStatus == "EXPIRED"
-        else -> false
-    }
-
-private fun HomeNextStepItem.connectionIdForSecondChat(): String = when (this) {
-    is HomeNextStepItem.SecondChatScheduled -> connectionId
-    is HomeNextStepItem.SecondChatAvailable -> connectionId
-    is HomeNextStepItem.SecondChatReadOnly -> connectionId
-    else -> ""
-}
+    secondChatHomePresentation(nowMillis)?.canDismiss == true
 
 internal fun HomeNextStepItem.homeNextStepBody(
     nowMillis: Long = System.currentTimeMillis(),
     zoneId: ZoneId = ZoneId.systemDefault(),
     locale: Locale = Locale.forLanguageTag("es-AR"),
 ): String =
-    if (isStaleExpiredSecondChat(nowMillis)) {
-        "El horario ya venció y el segundo chat no está disponible."
-    } else {
+    when (secondChatHomePresentation(nowMillis)?.state) {
+        SecondChatHomeState.ReadOnlyEnded -> "El período de solo lectura terminó."
+        SecondChatHomeState.Expired -> "El horario ya venció y el segundo chat no está disponible."
+        else ->
         when (this) {
             is HomeNextStepItem.Scheduling -> "Coordinando próximo encuentro."
             is HomeNextStepItem.SecondChatScheduled ->
@@ -692,66 +670,6 @@ internal fun HomeNextStepItem.homeNextStepBody(
             is HomeNextStepItem.Unknown -> "Estado: $rawState."
         }
     }
-
-private fun HomeNextStepItem.canOpenSecondChat(nowMillis: Long = System.currentTimeMillis()): Boolean =
-    canOpenSecondChatNow(nowMillis)
-
-private fun HomeNextStepItem.secondChatCtaLabel(canOpenSecondChat: Boolean, nowMillis: Long): String =
-    if (canOpenSecondChat) {
-        if (this is HomeNextStepItem.SecondChatReadOnly) "Ver segundo chat" else "Entrar al segundo chat"
-    } else {
-        val availableInstant = secondChatAvailableAt().toInstantOrNull()
-        when {
-            isStaleExpiredSecondChat() -> "Segundo chat vencido"
-            availableInstant != null && !Instant.ofEpochMilli(nowMillis).isBefore(availableInstant) ->
-                "Preparando segundo chat..."
-            else -> secondChatAvailableAt()?.let { "Disponible a las ${formatBackendTime(it)}" }
-                ?: "Segundo chat pendiente"
-        }
-    }
-
-private fun HomeNextStepItem.secondChatAvailableAt(): String? =
-    when (this) {
-        is HomeNextStepItem.SecondChatScheduled -> availableAt
-        is HomeNextStepItem.SecondChatAvailable -> availableAt
-        is HomeNextStepItem.SecondChatReadOnly -> availableAt
-        else -> null
-    }
-
-private fun String?.toInstantOrNull(): Instant? =
-    this?.let { value ->
-        try {
-            OffsetDateTime.parse(value).toInstant()
-        } catch (_: DateTimeParseException) {
-            null
-        }
-    }
-
-private fun HomeNextStepItem.hasSecondChatReference(): Boolean =
-    when (this) {
-        is HomeNextStepItem.SecondChatAvailable ->
-            chatId?.isNotBlank() == true && (chatStatus == "AVAILABLE" || chatStatus == "ACTIVE")
-        is HomeNextStepItem.SecondChatReadOnly ->
-            chatId?.isNotBlank() == true && chatStatus == "EXPIRED"
-        else -> false
-    }
-
-private fun HomeNextStepItem.isStaleExpiredSecondChat(nowMillis: Long = System.currentTimeMillis()): Boolean {
-    val expiresAt = when (this) {
-        is HomeNextStepItem.SecondChatScheduled -> expiresAt
-        is HomeNextStepItem.SecondChatAvailable -> expiresAt
-        else -> null
-    }.toInstantOrNull() ?: return false
-
-    return !Instant.ofEpochMilli(nowMillis).isBefore(expiresAt)
-}
-
-private fun HomeNextStepItem.isUnavailableSecondChat(nowMillis: Long = System.currentTimeMillis()): Boolean {
-    if (isStaleExpiredSecondChat(nowMillis)) return true
-    val availableAt = secondChatAvailableAt().toInstantOrNull() ?: return false
-
-    return !hasSecondChatReference() && !Instant.ofEpochMilli(nowMillis).isBefore(availableAt)
-}
 
 private fun HomeNextStepItem.durationLabel(): String {
     val minutes = when (this) {

@@ -59,6 +59,7 @@ class RealsRootViewModel(
     private val visualApprovalCoordinator = VisualApprovalCoordinator(dependencies.visualApproval)
     private val partnerProfileCoordinator = PartnerProfileCoordinator(
         dependencies.visualApproval.getVisualProfile,
+        dependencies.visualApproval.getPartnerPersonalMessage,
     )
     private val schedulingCoordinator = SchedulingCoordinator(dependencies.scheduling)
     private val manualBlockCoordinator = ManualBlockCoordinator(

@@ -36,6 +36,9 @@ import com.reals.app.ui.common.ManualBlockOverflowMenu
 @Composable
 fun PartnerProfileScreen(
     profile: VisualProfile?,
+    partnerMessage: String?,
+    partnerMessageLoaded: Boolean,
+    partnerMessageError: ApiError?,
     loading: Boolean,
     refreshing: Boolean,
     manualBlockLoading: Boolean,
@@ -113,6 +116,12 @@ fun PartnerProfileScreen(
             }
         } else {
             VisualProfileCard(profile, showHeader = false)
+            PartnerProfilePersonalMessageSection(
+                profile = profile,
+                partnerMessage = partnerMessage,
+                partnerMessageLoaded = partnerMessageLoaded,
+                partnerMessageError = partnerMessageError,
+            )
             if (refreshing) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
@@ -141,5 +150,47 @@ fun PartnerProfileScreen(
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun PartnerProfilePersonalMessageSection(
+    profile: VisualProfile,
+    partnerMessage: String?,
+    partnerMessageLoaded: Boolean,
+    partnerMessageError: ApiError?,
+) {
+    if (!profile.partnerPersonalMessageSubmitted) return
+
+    Spacer(modifier = Modifier.height(12.dp))
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Mensaje personal", style = MaterialTheme.typography.titleMedium)
+            when {
+                partnerMessageError != null -> {
+                    Text(
+                        text = "No pudimos cargar el mensaje personal.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    ApiErrorFeedbackCard(partnerMessageError, ErrorContext.VisualReview)
+                }
+                partnerMessageLoaded -> {
+                    Text(
+                        text = partnerMessage
+                            ?.takeIf { it.isNotBlank() }
+                            ?.let { TextSafety.safeDisplay(it, maxLength = 280) }
+                            ?: "La otra persona todavía no dejó un mensaje personal.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                else -> Text(
+                    text = "Cargando mensaje personal...",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }

@@ -81,6 +81,29 @@ private const val MUTUAL_EXIT_TIMEOUT_RETRY_MILLIS = 2_000L
 internal const val MUTUAL_EXIT_CONVERSATION_PAUSED_COPY =
     "La conversaci\u00f3n est\u00e1 pausada mientras se resuelve la solicitud."
 
+internal data class ChatLoadingPresentation(
+    val title: String,
+    val body: String,
+)
+
+internal fun chatLoadingPresentation(
+    chatTitlePrefix: String,
+    partnerName: String?,
+): ChatLoadingPresentation {
+    val title = chatTitlePrefix.trim().ifBlank { "Chat" }
+    val safePartnerName = partnerName
+        ?.takeIf { it.isNotBlank() }
+        ?.let { TextSafety.safeDisplay(it, maxLength = 100) }
+    val isSecondChat = title.equals("Segundo chat", ignoreCase = true)
+    val body = when {
+        isSecondChat && safePartnerName != null -> "Estamos cargando el segundo chat con $safePartnerName."
+        isSecondChat -> "Estamos cargando el segundo chat."
+        safePartnerName != null -> "Estamos preparando la conversación con $safePartnerName."
+        else -> "Estamos preparando la conversación."
+    }
+    return ChatLoadingPresentation(title = title, body = body)
+}
+
 @Composable
 fun ChatScreen(
     currentUserId: String,
@@ -200,9 +223,10 @@ fun ChatScreen(
     )
 
     if (loading && chat == null) {
+        val loadingPresentation = chatLoadingPresentation(chatTitlePrefix, partnerNameFallback)
         LoadingChatScreen(
-            title = "Cargando $chatTitlePrefix",
-            body = "Estamos preparando la conversación.",
+            title = loadingPresentation.title,
+            body = loadingPresentation.body,
         )
         return
     }
@@ -421,6 +445,7 @@ private fun LoadingChatScreen(
             modifier = Modifier.padding(top = 12.dp),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
         )
     }
 }

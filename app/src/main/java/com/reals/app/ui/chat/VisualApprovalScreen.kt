@@ -43,6 +43,36 @@ import com.reals.app.ui.common.VisualReviewDetailDeadlineStrings
 import com.reals.app.ui.common.formatVisualReviewDetailDeadline
 import com.reals.app.ui.common.userLabel
 
+internal data class VisualApprovalPresentationState(
+    val showInitialLoading: Boolean,
+    val showInitialFailure: Boolean,
+    val showLoadedContent: Boolean,
+    val showRefreshingIndicator: Boolean,
+    val showProfileRetry: Boolean,
+    val showPartnerMessageRetry: Boolean,
+)
+
+internal fun visualApprovalPresentationState(
+    match: Match?,
+    profile: VisualProfile?,
+    loading: Boolean,
+    refreshing: Boolean,
+    error: ApiError?,
+    partnerMessageError: ApiError?,
+): VisualApprovalPresentationState {
+    val hasContent = match != null || profile != null
+    val showInitialLoading = loading && !hasContent && error == null
+    val showInitialFailure = !loading && !hasContent && error != null
+    return VisualApprovalPresentationState(
+        showInitialLoading = showInitialLoading,
+        showInitialFailure = showInitialFailure,
+        showLoadedContent = !showInitialLoading && !showInitialFailure,
+        showRefreshingIndicator = refreshing && hasContent,
+        showProfileRetry = !loading && profile == null && error != null,
+        showPartnerMessageRetry = profile != null && partnerMessageError != null,
+    )
+}
+
 @Composable
 fun VisualApprovalScreen(
     matchId: String,
@@ -86,6 +116,14 @@ fun VisualApprovalScreen(
         visualExpiresAt = visualExpiresAt,
         nowMillis = nowMillis,
         strings = visualReviewDetailDeadlineStrings(),
+    )
+    val presentationState = visualApprovalPresentationState(
+        match = match,
+        profile = profile,
+        loading = loading,
+        refreshing = refreshing,
+        error = error,
+        partnerMessageError = partnerMessageError,
     )
     val canMakeVisualDecision = !busy &&
         profile != null &&
@@ -150,6 +188,20 @@ fun VisualApprovalScreen(
             }
         }
         Spacer(modifier = Modifier.height(16.dp))
+        if (presentationState.showInitialLoading) {
+            VisualApprovalInitialLoadingCard()
+        } else if (presentationState.showInitialFailure) {
+            VisualApprovalInitialFailureCard(
+                error = error,
+                refreshing = refreshing,
+                busy = busy,
+                onRefresh = onRefresh,
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            OutlinedButton(onClick = onBackHome, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                Text("Volver a Home")
+            }
+        } else {
         StatusCard(
             match = match,
             loading = loading,
@@ -184,8 +236,10 @@ fun VisualApprovalScreen(
                         text = if (loading) "Cargando perfil..." else "No pudimos cargar el perfil visual todavía.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    OutlinedButton(onClick = onRefresh, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (refreshing) "Actualizando..." else "Reintentar")
+                    if (presentationState.showProfileRetry) {
+                        OutlinedButton(onClick = onRefresh, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                            Text(if (refreshing) "Actualizando..." else "Reintentar")
+                        }
                     }
                 }
             }
@@ -277,6 +331,7 @@ fun VisualApprovalScreen(
         OutlinedButton(onClick = onBackHome, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
             Text("Volver a Home")
         }
+        }
     }
 
     if (showingManualBlockDialog) {
@@ -291,6 +346,43 @@ fun VisualApprovalScreen(
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun VisualApprovalInitialLoadingCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Cargando revisión visual", style = MaterialTheme.typography.titleLarge)
+            Text(
+                text = "Estamos cargando el perfil y el estado de la revisión.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun VisualApprovalInitialFailureCard(
+    error: ApiError?,
+    refreshing: Boolean,
+    busy: Boolean,
+    onRefresh: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("No pudimos cargar la revisión visual", style = MaterialTheme.typography.titleLarge)
+            error?.let { ApiErrorFeedbackCard(it, ErrorContext.VisualReview) }
+            OutlinedButton(onClick = onRefresh, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                Text(if (refreshing) "Actualizando..." else "Reintentar")
+            }
+        }
     }
 }
 

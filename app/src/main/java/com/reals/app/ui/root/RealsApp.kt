@@ -366,6 +366,9 @@ fun RealsApp(
 
             is RealsRootUiState.PartnerProfile -> PartnerProfileScreen(
                 profile = current.profile,
+                partnerMessage = current.partnerMessage,
+                partnerMessageLoaded = current.partnerMessageLoaded,
+                partnerMessageError = current.partnerMessageError,
                 loading = current.loading,
                 refreshing = current.refreshing,
                 manualBlockLoading = current.manualBlock.loading,
