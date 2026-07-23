@@ -59,6 +59,7 @@ class RealsRootViewModel(
     private val visualApprovalCoordinator = VisualApprovalCoordinator(dependencies.visualApproval)
     private val partnerProfileCoordinator = PartnerProfileCoordinator(
         dependencies.visualApproval.getVisualProfile,
+        dependencies.visualApproval.getPartnerPersonalMessage,
     )
     private val schedulingCoordinator = SchedulingCoordinator(dependencies.scheduling)
     private val manualBlockCoordinator = ManualBlockCoordinator(
@@ -664,6 +665,17 @@ class RealsRootViewModel(
         if (current.manualBlock.loading) return
         viewModelScope.launch {
             _uiState.value = partnerProfileCoordinator.refresh(
+                current = current,
+                onPending = { _uiState.value = it },
+            )
+        }
+    }
+
+    fun retryPartnerProfileMessage() {
+        val current = _uiState.value as? RealsRootUiState.PartnerProfile ?: return
+        if (current.manualBlock.loading) return
+        viewModelScope.launch {
+            _uiState.value = partnerProfileCoordinator.retryPartnerMessage(
                 current = current,
                 onPending = { _uiState.value = it },
             )

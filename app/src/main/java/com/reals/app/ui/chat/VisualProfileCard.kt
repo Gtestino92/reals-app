@@ -1,5 +1,6 @@
 package com.reals.app.ui.chat
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
@@ -53,7 +54,8 @@ fun VisualProfileCard(
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .aspectRatio(ProfilePhotoPresentationAspectRatio),
+                                    .aspectRatio(ProfilePhotoPresentationAspectRatio)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant),
                             )
                         }
                     }

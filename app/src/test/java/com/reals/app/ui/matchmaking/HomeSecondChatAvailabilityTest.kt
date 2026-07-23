@@ -1,14 +1,16 @@
 package com.reals.app.ui.matchmaking
 
 import java.time.OffsetDateTime
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HomeSecondChatAvailabilityTest {
     @Test
-    fun `scheduled second chat opens when available time arrives`() {
-        val item = scheduledSecondChat()
+    fun `scheduled second chat opens when usable chat reference is exposed`() {
+        val item = scheduledSecondChat(chatId = "chat-second", chatStatus = "AVAILABLE")
 
         assertTrue(item.canOpenSecondChatNow(millis("2026-06-20T18:00:00-03:00")))
     }
@@ -28,7 +30,7 @@ class HomeSecondChatAvailabilityTest {
     }
 
     @Test
-    fun `available second chat opens without chat id while inside active window`() {
+    fun `available second chat waits for usable chat reference inside active window`() {
         val item = HomeNextStepItem.SecondChatAvailable(
             connectionId = "connection-second",
             matchId = "match-second",
@@ -40,7 +42,57 @@ class HomeSecondChatAvailabilityTest {
             durationMinutes = 120,
         )
 
-        assertTrue(item.canOpenSecondChatNow(millis("2026-06-20T18:30:00-03:00")))
+        val presentation = item.secondChatHomePresentation(millis("2026-06-20T18:30:00-03:00"))
+
+        assertFalse(item.canOpenSecondChatNow(millis("2026-06-20T18:30:00-03:00")))
+        assertEquals(SecondChatHomeState.Preparing, presentation?.state)
+        assertEquals("Preparando segundo chat...", presentation?.primaryCtaLabel)
+        assertTrue(presentation?.canOpenPartnerProfile == true)
+    }
+
+    @Test
+    fun `scheduled second chat keeps profile visible before available without chat reference`() {
+        val presentation = scheduledSecondChat()
+            .secondChatHomePresentation(millis("2026-06-20T17:59:59-03:00"))
+
+        assertEquals(SecondChatHomeState.Waiting, presentation?.state)
+        assertTrue(presentation?.canOpenPartnerProfile == true)
+    }
+
+    @Test
+    fun `scheduled second chat keeps profile visible exactly at available without chat reference`() {
+        val presentation = scheduledSecondChat()
+            .secondChatHomePresentation(millis("2026-06-20T18:00:00-03:00"))
+
+        assertEquals(SecondChatHomeState.Preparing, presentation?.state)
+        assertTrue(presentation?.canOpenPartnerProfile == true)
+    }
+
+    @Test
+    fun `scheduled second chat keeps profile visible after available without chat reference`() {
+        val presentation = scheduledSecondChat()
+            .secondChatHomePresentation(millis("2026-06-20T18:30:00-03:00"))
+
+        assertEquals(SecondChatHomeState.Preparing, presentation?.state)
+        assertTrue(presentation?.canOpenPartnerProfile == true)
+    }
+
+    @Test
+    fun `scheduled second chat keeps profile visible after active chat reference appears`() {
+        val presentation = scheduledSecondChat(chatId = "chat-second", chatStatus = "ACTIVE")
+            .secondChatHomePresentation(millis("2026-06-20T18:30:00-03:00"))
+
+        assertEquals(SecondChatHomeState.Open, presentation?.state)
+        assertTrue(presentation?.canOpenPartnerProfile == true)
+    }
+
+    @Test
+    fun `scheduled second chat hides profile at expiration`() {
+        val presentation = scheduledSecondChat()
+            .secondChatHomePresentation(millis("2026-06-20T20:00:00-03:00"))
+
+        assertEquals(SecondChatHomeState.Expired, presentation?.state)
+        assertFalse(presentation?.canOpenPartnerProfile == true)
     }
 
     @Test
@@ -61,13 +113,38 @@ class HomeSecondChatAvailabilityTest {
         assertFalse(item.canOpenSecondChatNow(millis("2026-06-21T20:00:00-03:00")))
     }
 
-    private fun scheduledSecondChat(): HomeNextStepItem.SecondChatScheduled =
+    @Test
+    fun `read only second chat omits primary cta after read only window`() {
+        val item = HomeNextStepItem.SecondChatReadOnly(
+            connectionId = "connection-second",
+            matchId = "match-second",
+            partnerDisplayName = "Partner",
+            chatId = "chat-second",
+            chatStatus = "EXPIRED",
+            availableAt = "2026-06-20T18:00:00-03:00",
+            expiresAt = "2026-06-20T20:00:00-03:00",
+            readOnlyUntil = "2026-06-21T20:00:00-03:00",
+            durationMinutes = 120,
+        )
+
+        val presentation = item.secondChatHomePresentation(millis("2026-06-21T20:00:00-03:00"))
+
+        assertEquals(SecondChatHomeState.ReadOnlyEnded, presentation?.state)
+        assertFalse(presentation?.canOpenChat == true)
+        assertTrue(presentation?.canDismiss == true)
+        assertNull(presentation?.primaryCtaLabel)
+    }
+
+    private fun scheduledSecondChat(
+        chatId: String? = null,
+        chatStatus: String? = null,
+    ): HomeNextStepItem.SecondChatScheduled =
         HomeNextStepItem.SecondChatScheduled(
             connectionId = "connection-second",
             matchId = "match-second",
             partnerDisplayName = "Partner",
-            chatId = null,
-            chatStatus = null,
+            chatId = chatId,
+            chatStatus = chatStatus,
             availableAt = "2026-06-20T18:00:00-03:00",
             expiresAt = "2026-06-20T20:00:00-03:00",
             durationMinutes = 120,

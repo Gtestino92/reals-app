@@ -366,12 +366,17 @@ fun RealsApp(
 
             is RealsRootUiState.PartnerProfile -> PartnerProfileScreen(
                 profile = current.profile,
+                partnerMessage = current.partnerMessage,
+                partnerMessageLoaded = current.partnerMessageLoaded,
+                loadingPartnerMessage = current.loadingPartnerMessage,
+                partnerMessageError = current.partnerMessageError,
                 loading = current.loading,
                 refreshing = current.refreshing,
                 manualBlockLoading = current.manualBlock.loading,
                 manualBlockError = current.manualBlock.error,
                 error = current.error,
                 onRefresh = viewModel::refreshPartnerProfile,
+                onRetryPartnerMessage = viewModel::retryPartnerProfileMessage,
                 onManualBlock = viewModel::blockCurrentMatchParticipant,
                 onClearManualBlockError = viewModel::clearManualBlockError,
                 onBackHome = viewModel::closePartnerProfile,

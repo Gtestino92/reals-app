@@ -200,4 +200,28 @@ class HomeCardsTest {
             item.homeNextStepBody(nowMillis, buenosAires, locale),
         )
     }
+
+    @Test
+    fun `elapsed read only second chat body is terminal`() {
+        val item = HomeNextStepItem.SecondChatReadOnly(
+            connectionId = "connection-1",
+            matchId = "match-1",
+            partnerDisplayName = "Alex",
+            chatId = "chat-1",
+            chatStatus = "EXPIRED",
+            availableAt = "2026-07-15T20:30:00-03:00",
+            expiresAt = "2026-07-15T22:30:00-03:00",
+            readOnlyUntil = "2026-07-17T22:30:00-03:00",
+            durationMinutes = 120,
+        )
+
+        assertEquals(
+            "El período de solo lectura terminó.",
+            item.homeNextStepBody(
+                Instant.parse("2026-07-18T02:00:00Z").toEpochMilli(),
+                buenosAires,
+                locale,
+            ),
+        )
+    }
 }
