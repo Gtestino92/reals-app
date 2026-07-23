@@ -33,11 +33,12 @@ Run dev/prod validation only after the required Firebase client config and HTTPS
 ./gradlew :app:assembleProdRelease
 ```
 
-`devDebug` requires `app/src/dev/google-services.json` with `com.reals.app.dev` and `REALS_DEV_BASE_URL` or
-`realsDevBaseUrl`. `devRelease` additionally requires suitable complete release signing inputs. `prodRelease` requires
-`app/src/prod/google-services.json` with `com.reals.app`, `REALS_PROD_BASE_URL` or `realsProdBaseUrl`, and complete
-production release signing inputs. These builds must not use placeholder, localhost, loopback, or cleartext backend
-URLs.
+`devDebug` requires `app/src/dev/google-services.json` with `com.reals.app.dev`, `REALS_DEV_BASE_URL` or
+`realsDevBaseUrl`, and a registered Firebase App Check debug token for the Firebase Android app with package
+`com.reals.app.dev`. `devRelease` additionally requires Play Integrity setup and suitable complete release signing
+inputs. `prodRelease` requires `app/src/prod/google-services.json` with `com.reals.app`, `REALS_PROD_BASE_URL` or
+`realsProdBaseUrl`, and complete production release signing inputs. These builds must not use placeholder, localhost,
+loopback, or cleartext backend URLs.
 
 `testLocalReleaseUnitTest` may be run when present for JVM regression coverage, but JVM tests do not prove R8 runtime
 compatibility. R8 compatibility requires building the optimized APK and running the manual smoke test described in

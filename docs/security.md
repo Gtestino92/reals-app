@@ -44,14 +44,16 @@ App Check limitations:
 If a local debug secret is exposed, revoke it in Firebase Console and register a new one. Do not weaken backend JWT
 verification for debug tokens; Firebase still issues normal App Check JWTs after a registered debug secret is accepted.
 
-Provider isolation is compile-time flavor-specific:
+Provider isolation is compile-time variant-specific:
 
-- `local` uses `DebugAppCheckProviderFactory` and installs as `com.reals.app.local`.
-- `dev` uses `PlayIntegrityAppCheckProviderFactory` and installs as `com.reals.app.dev`.
-- `prod` uses `PlayIntegrityAppCheckProviderFactory` and installs as `com.reals.app`.
+- `localDebug` and `localRelease` use `DebugAppCheckProviderFactory` and install as `com.reals.app.local`.
+- `devDebug` uses `DebugAppCheckProviderFactory` and installs as `com.reals.app.dev`.
+- `devRelease` uses `PlayIntegrityAppCheckProviderFactory` and installs as `com.reals.app.dev`.
+- `prodDebug` and `prodRelease` use `PlayIntegrityAppCheckProviderFactory` and install as `com.reals.app`.
 
 Backend allowlists must use Firebase App IDs from the matching Firebase Android App, not Android package names alone.
-The debug App Check dependency must remain local-only.
+Debug App Check tokens are developer-machine/device credentials. Never commit them, paste them into documentation, expose
+them in CI logs, embed them in Gradle properties or store them in `BuildConfig`.
 
 ## Android Network Boundaries
 

@@ -60,20 +60,26 @@ class FlavorBuildConfigTest {
     }
 
     @Test
-    fun `app check providers and dependencies are flavor scoped`() {
+    fun `app check providers and dependencies are variant scoped`() {
         val gradleFile = appFile("build.gradle.kts").readText()
         val localInstaller = appFile("src/local/java/com/reals/app/core/appcheck/AppCheckInstaller.kt").readText()
-        val devInstaller = appFile("src/dev/java/com/reals/app/core/appcheck/AppCheckInstaller.kt").readText()
+        val devDebugInstaller = appFile("src/devDebug/java/com/reals/app/core/appcheck/AppCheckInstaller.kt").readText()
+        val devReleaseInstaller = appFile("src/devRelease/java/com/reals/app/core/appcheck/AppCheckInstaller.kt").readText()
         val prodInstaller = appFile("src/prod/java/com/reals/app/core/appcheck/AppCheckInstaller.kt").readText()
 
         assertTrue(gradleFile.contains("""add("localImplementation", libs.firebase.appcheck.debug)"""))
-        assertTrue(gradleFile.contains("""add("devImplementation", libs.firebase.appcheck.playintegrity)"""))
+        assertTrue(gradleFile.contains("""add("devDebugImplementation", libs.firebase.appcheck.debug)"""))
+        assertTrue(gradleFile.contains("""add("devReleaseImplementation", libs.firebase.appcheck.playintegrity)"""))
         assertTrue(gradleFile.contains("""add("prodImplementation", libs.firebase.appcheck.playintegrity)"""))
         assertTrue(localInstaller.contains("DebugAppCheckProviderFactory"))
-        assertTrue(devInstaller.contains("PlayIntegrityAppCheckProviderFactory"))
+        assertTrue(devDebugInstaller.contains("DebugAppCheckProviderFactory"))
+        assertTrue(devReleaseInstaller.contains("PlayIntegrityAppCheckProviderFactory"))
         assertTrue(prodInstaller.contains("PlayIntegrityAppCheckProviderFactory"))
-        assertTrue(!devInstaller.contains("DebugAppCheckProviderFactory"))
+        assertTrue(!devDebugInstaller.contains("PlayIntegrityAppCheckProviderFactory"))
+        assertTrue(!devReleaseInstaller.contains("DebugAppCheckProviderFactory"))
         assertTrue(!prodInstaller.contains("DebugAppCheckProviderFactory"))
+        assertTrue(!File("app/src/dev/java/com/reals/app/core/appcheck/AppCheckInstaller.kt").exists())
+        assertTrue(!File("src/dev/java/com/reals/app/core/appcheck/AppCheckInstaller.kt").exists())
     }
 
     private fun appFile(path: String): File {
