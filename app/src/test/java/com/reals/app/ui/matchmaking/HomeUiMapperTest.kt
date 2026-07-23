@@ -10,7 +10,9 @@ import com.reals.app.domain.model.HomeNextStep
 import com.reals.app.domain.model.HomePassiveNotice
 import com.reals.app.domain.model.HomePendingAction
 import com.reals.app.domain.model.HomeState
+import com.reals.app.domain.model.ProfileStatus
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -222,18 +224,56 @@ class HomeUiMapperTest {
         assertEquals(true, model.activeInteractionsSummary?.hasPendingSchedulingConnection)
     }
 
+    @Test
+    fun `matchmaking remains disabled when backend reports canSearch false`() {
+        val model = mapper.toScreenModel(
+            home = homeState(
+                matchmaking = HomeMatchmaking(
+                    inQueue = false,
+                    canSearch = false,
+                    blockedReason = null,
+                ),
+            ),
+            localHidden = noHiddenInteractions(),
+            localMatchmakingBlockedReason = null,
+        )
+
+        assertFalse(model.matchmaking.canSearch)
+        assertEquals(null, model.matchmaking.blockedReason)
+    }
+
+    @Test
+    fun `draft warning presentation is derived from Home profile status`() {
+        val model = mapper.toScreenModel(
+            home = homeState(profileStatus = ProfileStatus.Draft),
+            localHidden = noHiddenInteractions(),
+            localMatchmakingBlockedReason = null,
+        )
+
+        val warning = model.draftProfileWarning
+        assertEquals("Tu perfil está en borrador", warning?.title)
+        assertEquals(
+            "Podés continuar tus conversaciones y coordinaciones actuales. " +
+                "Completá y reactivá tu perfil para buscar nuevas personas.",
+            warning?.message,
+        )
+        assertEquals("Completar perfil", warning?.actionLabel)
+    }
+
     private fun homeState(
+        profileStatus: ProfileStatus? = null,
+        matchmaking: HomeMatchmaking = HomeMatchmaking(
+            inQueue = false,
+            canSearch = true,
+            blockedReason = null,
+        ),
         activeInteractionsSummary: HomeActiveInteractionsSummary = summary(),
         pendingActions: List<HomePendingAction> = emptyList(),
         nextSteps: List<HomeNextStep> = emptyList(),
         passiveNotices: List<HomePassiveNotice> = emptyList(),
     ): HomeState = HomeState(
-        profileStatus = null,
-        matchmaking = HomeMatchmaking(
-            inQueue = false,
-            canSearch = true,
-            blockedReason = null,
-        ),
+        profileStatus = profileStatus,
+        matchmaking = matchmaking,
         activeInteractionsSummary = activeInteractionsSummary,
         pendingActions = pendingActions,
         nextSteps = nextSteps,

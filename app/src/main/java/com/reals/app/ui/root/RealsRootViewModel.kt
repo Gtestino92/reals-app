@@ -17,7 +17,6 @@ import com.reals.app.domain.model.CreateProfileInput
 import com.reals.app.domain.model.FirstChatGuidance
 import com.reals.app.domain.model.LegalDocumentAction
 import com.reals.app.domain.model.ProfileSnapshot
-import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.SearchLocationInput
 import com.reals.app.domain.model.UpdateMatchFiltersInput
@@ -53,7 +52,10 @@ class RealsRootViewModel(
         scope = viewModelScope,
         onTerminalAuthFailure = { sessionCoordinator.invalidateTerminalSession() },
     )
-    private val profileEntryCoordinator = ProfileEntryCoordinator(getProfilePhotosUseCase)
+    private val profileEntryCoordinator = ProfileEntryCoordinator(
+        getProfilePhotos = getProfilePhotosUseCase,
+        getHome = dependencies.home.getHome,
+    )
     private val firstChatCoordinator = FirstChatCoordinator(dependencies.firstChat)
     private val secondChatCoordinator = SecondChatCoordinator(dependencies.firstChat)
     private val visualApprovalCoordinator = VisualApprovalCoordinator(dependencies.visualApproval)
@@ -174,8 +176,7 @@ class RealsRootViewModel(
 
         when (current) {
             is RealsRootUiState.Ready -> {
-                val profile = (current.session.profileSnapshot as? ProfileSnapshot.Found)?.profile
-                if (current.editingActiveProfile && profile?.status == ProfileStatus.Active) {
+                if (current.editingActiveProfile) {
                     closeProfileManagement()
                 }
             }
@@ -277,8 +278,7 @@ class RealsRootViewModel(
     }
 
     private fun closeProfileManagement(current: RealsRootUiState.Ready) {
-        val profile = (current.session.profileSnapshot as? ProfileSnapshot.Found)?.profile ?: return
-        if (profile.status != ProfileStatus.Active) return
+        if (current.session.profileSnapshot !is ProfileSnapshot.Found) return
 
         viewModelScope.launch {
             homeCoordinator.loadHomeForReady(

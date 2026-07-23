@@ -144,7 +144,9 @@ fun RealsApp(
 
                 is ProfileSnapshot.Found -> {
                     val profile = (current.session.profileSnapshot).profile
-                    if (current.editingActiveProfile || profile.status != ProfileStatus.Active) {
+                    val homeAvailable = profile.status == ProfileStatus.Active ||
+                        current.homeState?.canRemainInHomeForProfileStatus() == true
+                    if (current.editingActiveProfile || !homeAvailable) {
                         ProfileStatusScreen(
                             session = current.session,
                             profileUpdateLoading = current.updatingProfile,
@@ -195,10 +197,7 @@ fun RealsApp(
                             accountDeleteLoading = current.deletingAccount,
                             accountDeleteError = current.accountDeleteError,
                             onDeleteAccount = viewModel::deleteAccount,
-                            onBackHome = if (
-                                current.editingActiveProfile &&
-                                profile.status == ProfileStatus.Active
-                            ) {
+                            onBackHome = if (current.editingActiveProfile) {
                                 viewModel::closeProfileManagement
                             } else {
                                 null

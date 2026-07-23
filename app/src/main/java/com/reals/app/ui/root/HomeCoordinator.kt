@@ -8,7 +8,6 @@ import com.reals.app.di.HomeFeatureDependencies
 import com.reals.app.domain.model.BackendUser
 import com.reals.app.domain.model.HomePendingAction
 import com.reals.app.domain.model.HomeState
-import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.SearchLocationInput
 import com.reals.app.ui.matchmaking.HomeRoute
@@ -445,9 +444,11 @@ internal class HomeCoordinator(
             home = home,
             localMatchmakingBlockedReason = ready.home.matchmakingBlockedReason,
         )
+        val session = ready.session.withProfileStatusFrom(home)
 
         routeFromHomeScreenModel(
             ready = ready.copy(
+                session = session,
                 home = ready.home.copy(
                     homeState = home,
                     homeStatusVersion = homeStatusVersion,
@@ -487,7 +488,7 @@ internal class HomeCoordinator(
             return
         }
 
-        if (home.profileStatus != ProfileStatus.Active) {
+        if (!home.canRemainInHomeForProfileStatus()) {
             onReloadActiveSession(ready.session.user)
             return
         }
@@ -533,4 +534,15 @@ internal class HomeCoordinator(
             else -> false
         }
     }
+}
+
+private fun ProvisionedSession.withProfileStatusFrom(home: HomeState): ProvisionedSession {
+    val status = home.profileStatus ?: return this
+    val snapshot = profileSnapshot as? com.reals.app.domain.model.ProfileSnapshot.Found ?: return this
+    if (snapshot.profile.status == status) return this
+    return copy(
+        profileSnapshot = com.reals.app.domain.model.ProfileSnapshot.Found(
+            snapshot.profile.copy(status = status),
+        ),
+    )
 }

@@ -190,7 +190,7 @@ fun ProfileStatusScreen(
         if (showDraftAfterEditNotice) {
             FeedbackCard(
                 title = "Tu perfil volvió a borrador",
-                message = "Como modificaste tus fotos, necesitamos que vuelvas a activar el perfil antes de volver al Home.",
+                message = "Como modificaste tus fotos, necesitás reactivar el perfil antes de buscar nuevas personas.",
                 tone = FeedbackTone.Warning,
             )
             Spacer(modifier = Modifier.height(12.dp))

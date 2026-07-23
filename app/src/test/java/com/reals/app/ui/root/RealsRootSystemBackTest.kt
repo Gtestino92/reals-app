@@ -56,7 +56,6 @@ class RealsRootSystemBackTest {
             RealsRootUiState.LoadingSession(email = "alex@example.com"),
             RealsRootUiState.MissingFirebase("missing"),
             RealsRootUiState.Ready(session = session),
-            RealsRootUiState.Ready(session = draftSession(), editingActiveProfile = true),
             RealsRootUiState.FirstChat(session = session, matchId = "match-1"),
         ).forEach { state ->
             assertFalse(state.canHandleSystemBack())
@@ -64,13 +63,19 @@ class RealsRootSystemBackTest {
     }
 
     @Test
-    fun `system back is handled for active profile management`() {
-        val state = RealsRootUiState.Ready(
-            session = TestDomain.session(),
-            editingActiveProfile = true,
-        )
-
-        assertTrue(state.canHandleSystemBack())
+    fun `system back is handled for profile management even after draft photo mutation`() {
+        listOf(
+            RealsRootUiState.Ready(
+                session = TestDomain.session(),
+                editingActiveProfile = true,
+            ),
+            RealsRootUiState.Ready(
+                session = draftSession(),
+                editingActiveProfile = true,
+            ),
+        ).forEach { state ->
+            assertTrue(state.canHandleSystemBack())
+        }
     }
 
     @Test
