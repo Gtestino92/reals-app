@@ -46,7 +46,7 @@ class RealsRootViewModelManualBlockTest {
 
         val state = viewModel.uiState.value as RealsRootUiState.Ready
         assertEquals(
-            "Bloqueaste a esta persona. Cerramos la interacción y no volverán a ser emparejados.",
+            "Bloqueaste a éstapersona. Cerramos la interacción y no volverán a ser emparejados.",
             state.homeMessage,
         )
         assertEquals(1, api.calls.count { it == "blockMatchParticipant" })

@@ -220,7 +220,7 @@ fun VisualApprovalScreen(
         } else if (lifecycle.showWarning) {
             FeedbackCard(
                 title = "Revisi\u00f3n por vencer",
-                message = "La revisi\u00f3n visual vence pronto. Complet\u00e1 tu decisi\u00f3n para no perder esta oportunidad.",
+                message = "La revisi\u00f3n visual vence pronto. Complet\u00e1 tu decisi\u00f3n para no perder éstaoportunidad.",
                 tone = FeedbackTone.Warning,
             )
             Spacer(modifier = Modifier.height(16.dp))

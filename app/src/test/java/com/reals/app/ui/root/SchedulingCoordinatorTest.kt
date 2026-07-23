@@ -142,7 +142,7 @@ class SchedulingCoordinatorTest {
         assertEquals(null, state.submittingLabel)
         assertEquals(BackendErrorCode.SchedulingProposalsAlreadySubmitted, error.backendErrorCode)
         assertEquals(
-            "Ya enviaste tus horarios para esta ronda.",
+            "Ya enviaste tus horarios para éstaronda.",
             error.toUserMessage(ErrorContext.Scheduling),
         )
         assertNull(state.message)

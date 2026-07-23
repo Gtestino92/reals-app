@@ -82,7 +82,7 @@ class ApiExecutorTest {
         val error = (result as ApiResult.Failure).error as ApiError.AppCheck
         assertEquals(AppCheckFailureReason.TOKEN_UNAVAILABLE, error.reason)
         assertEquals(
-            "No pudimos verificar esta instalación. Revisá tu conexión e intentá nuevamente.",
+            "No pudimos verificar éstainstalación. Revisá tu conexión e intentá nuevamente.",
             error.toUserMessage(),
         )
     }

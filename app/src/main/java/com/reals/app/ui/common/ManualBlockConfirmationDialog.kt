@@ -21,7 +21,7 @@ fun ManualBlockConfirmationDialog(
         onDismissRequest = {
             if (!loading) onDismiss()
         },
-        title = { Text("¿Bloquear a esta persona?") },
+        title = { Text("¿Bloquear a éstapersona?") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(

@@ -88,7 +88,7 @@ internal fun ProfilePhotoCropDialog(
                 }
             }
             .onFailure {
-                errorText = "No pudimos abrir esta imagen.\nElegí otra foto o volvé a intentarlo."
+                errorText = "No pudimos abrir éstaimagen.\nElegí otra foto o volvé a intentarlo."
             }
         loading = false
     }

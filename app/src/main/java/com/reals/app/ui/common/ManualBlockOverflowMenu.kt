@@ -38,7 +38,7 @@ fun ManualBlockOverflowMenu(
             onDismissRequest = { expanded = false },
         ) {
             DropdownMenuItem(
-                text = { Text("Bloquear a esta persona") },
+                text = { Text("Bloquear a éstapersona") },
                 onClick = {
                     expanded = false
                     onRequestBlock()

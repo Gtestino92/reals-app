@@ -706,7 +706,7 @@ class RealsRootViewModel(
                 is ManualBlockResult.Show -> _uiState.value = result.state
                 is ManualBlockResult.ReturnHome -> homeCoordinator.returnHome(
                     session = result.session,
-                    message = "Bloqueaste a esta persona. Cerramos la interacción y no volverán a ser emparejados.",
+                    message = "Bloqueaste a éstapersona. Cerramos la interacción y no volverán a ser emparejados.",
                 )
             }
         }

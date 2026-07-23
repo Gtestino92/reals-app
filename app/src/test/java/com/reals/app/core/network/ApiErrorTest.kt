@@ -155,16 +155,16 @@ class ApiErrorTest {
     @Test
     fun `chat backend codes map to deterministic chat messages`() {
         mapOf(
-            "CHAT_NOT_FOUND" to "No encontramos esta conversación. Actualizá el estado.",
+            "CHAT_NOT_FOUND" to "No encontramos éstaconversación. Actualizá el estado.",
             "CHAT_NOT_AVAILABLE" to "Esta conversación ya no está disponible. Actualizá el estado.",
             "CHAT_EXPIRED" to "La conversaci\u00f3n venci\u00f3.",
             "CHAT_ABANDONED" to "La conversaci\u00f3n se cerr\u00f3 por inactividad.",
             "CHAT_MESSAGE_INVALID" to
                 "Revisá el mensaje. No puede estar vacío ni superar el límite permitido.",
             "CHAT_DECISION_NOT_AVAILABLE" to
-                "La decisión sobre esta conversación ya no está disponible. Actualizá el estado.",
+                "La decisión sobre éstaconversación ya no está disponible. Actualizá el estado.",
             "CHAT_DECISION_ALREADY_SUBMITTED" to
-                "Ya enviaste tu decisión para esta conversación.",
+                "Ya enviaste tu decisión para éstaconversación.",
             "CHAT_MIN_MESSAGES_REQUIRED" to
                 "Antes de decidir, enviá al menos un poco más de conversación.",
             "CHAT_MUTUAL_CANCELLATION_PENDING" to
@@ -172,9 +172,9 @@ class ApiErrorTest {
             "FIRST_CHAT_GUIDANCE_PARTICIPATION_REQUIRED" to
                 "Particip\u00e1 un poco m\u00e1s antes de pedir otra pregunta.",
             "FIRST_CHAT_GUIDANCE_NEXT_ALREADY_REQUESTED" to
-                "Ya pediste cambiar esta pregunta.",
+                "Ya pediste cambiar éstapregunta.",
             "FIRST_CHAT_GUIDANCE_COMPLETED" to
-                "Ya completaron las preguntas de esta conversaci\u00f3n.",
+                "Ya completaron las preguntas de éstaconversaci\u00f3n.",
             "CHAT_EXIT_REQUEST_NOT_FOUND" to
                 "No encontramos esa solicitud de salida. Actualizá la conversación.",
             "CHAT_EXIT_REQUEST_NOT_AVAILABLE" to
@@ -218,7 +218,7 @@ class ApiErrorTest {
             "SCHEDULING_INVALID_PROPOSALS" to
                 "Revisá los horarios elegidos. Deben ser futuros, únicos y estar alineados cada media hora.",
             "SCHEDULING_PROPOSALS_ALREADY_SUBMITTED" to
-                "Ya enviaste tus horarios para esta ronda.",
+                "Ya enviaste tus horarios para éstaronda.",
             "SCHEDULING_ROUND_CHANGED" to
                 "La ronda cambió. Actualizamos las opciones; revisalas antes de continuar.",
             "SCHEDULING_PROPOSAL_NOT_AVAILABLE" to

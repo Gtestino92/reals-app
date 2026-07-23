@@ -490,7 +490,7 @@ internal class FirstChatCoordinator(
 
         return runExitAction(
             current = current,
-            successMessage = "Reporte enviado. Cerramos esta conversación por seguridad y no volveremos a cruzarte con esta persona.",
+            successMessage = "Reporte enviado. Cerramos éstaconversación por seguridad y no volveremos a cruzarte con éstapersona.",
             loadingLabel = "Enviando reporte...",
             onPending = onPending,
         ) { chatId ->
