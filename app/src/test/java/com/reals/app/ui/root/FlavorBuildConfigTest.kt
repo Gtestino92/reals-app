@@ -60,6 +60,15 @@ class FlavorBuildConfigTest {
     }
 
     @Test
+    fun `firebase app check build flag is disabled only for local`() {
+        val gradleFile = appFile("build.gradle.kts").readText()
+
+        assertTrue(flavorBlockHasAppCheckFlag(gradleFile, "local", "false"))
+        assertTrue(flavorBlockHasAppCheckFlag(gradleFile, "dev", "true"))
+        assertTrue(flavorBlockHasAppCheckFlag(gradleFile, "prod", "true"))
+    }
+
+    @Test
     fun `app check providers and dependencies are variant scoped`() {
         val gradleFile = appFile("build.gradle.kts").readText()
         val localInstaller = appFile("src/local/java/com/reals/app/core/appcheck/AppCheckInstaller.kt").readText()
@@ -67,11 +76,15 @@ class FlavorBuildConfigTest {
         val devReleaseInstaller = appFile("src/devRelease/java/com/reals/app/core/appcheck/AppCheckInstaller.kt").readText()
         val prodInstaller = appFile("src/prod/java/com/reals/app/core/appcheck/AppCheckInstaller.kt").readText()
 
-        assertTrue(gradleFile.contains("""add("localImplementation", libs.firebase.appcheck.debug)"""))
+        assertTrue(gradleFile.contains("""implementation(libs.firebase.appcheck)"""))
+        assertTrue(!gradleFile.contains("""add("localImplementation", libs.firebase.appcheck.debug)"""))
         assertTrue(gradleFile.contains("""add("devDebugImplementation", libs.firebase.appcheck.debug)"""))
         assertTrue(gradleFile.contains("""add("devReleaseImplementation", libs.firebase.appcheck.playintegrity)"""))
         assertTrue(gradleFile.contains("""add("prodImplementation", libs.firebase.appcheck.playintegrity)"""))
-        assertTrue(localInstaller.contains("DebugAppCheckProviderFactory"))
+        assertTrue(localInstaller.contains("fun install() = Unit"))
+        assertTrue(!localInstaller.contains("FirebaseAppCheck"))
+        assertTrue(!localInstaller.contains("DebugAppCheckProviderFactory"))
+        assertTrue(!localInstaller.contains("PlayIntegrityAppCheckProviderFactory"))
         assertTrue(devDebugInstaller.contains("DebugAppCheckProviderFactory"))
         assertTrue(devReleaseInstaller.contains("PlayIntegrityAppCheckProviderFactory"))
         assertTrue(prodInstaller.contains("PlayIntegrityAppCheckProviderFactory"))
@@ -93,6 +106,16 @@ class FlavorBuildConfigTest {
     ): Boolean {
         return Regex(
             """create\("$flavor"\)\s*\{[\s\S]*?buildConfigField\("boolean", "ENABLE_LOCAL_FIREBASE_EMAIL_AUTO_VERIFICATION", "$enabled"\)""",
+        ).containsMatchIn(gradleFile)
+    }
+
+    private fun flavorBlockHasAppCheckFlag(
+        gradleFile: String,
+        flavor: String,
+        enabled: String,
+    ): Boolean {
+        return Regex(
+            """create\("$flavor"\)\s*\{[\s\S]*?buildConfigField\("boolean", "ENABLE_FIREBASE_APP_CHECK", "$enabled"\)""",
         ).containsMatchIn(gradleFile)
     }
 

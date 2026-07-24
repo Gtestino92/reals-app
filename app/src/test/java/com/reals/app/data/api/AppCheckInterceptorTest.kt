@@ -135,6 +135,36 @@ class AppCheckInterceptorTest {
     }
 
     @Test
+    fun `client without app check provider does not request token or send header`() {
+        server.enqueue(jsonResponse(200, """{"status":"ok"}"""))
+
+        val response = RealsApiClient.createOkHttpClient(testJson, null)
+            .newCall(request("/api/ping"))
+            .execute()
+
+        assertEquals(200, response.code)
+        response.close()
+        val recorded = server.takeRequest()
+        assertEquals(null, recorded.getHeader(AppCheckInterceptor.APP_CHECK_HEADER))
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `client with app check provider preserves header injection`() {
+        server.enqueue(jsonResponse(200, """{"status":"ok"}"""))
+        val provider = FakeAppCheckTokenProvider(mutableListOf("cached-token"))
+
+        val response = RealsApiClient.createOkHttpClient(testJson, provider)
+            .newCall(request("/api/ping"))
+            .execute()
+
+        assertEquals(200, response.code)
+        response.close()
+        assertEquals("cached-token", server.takeRequest().getHeader(AppCheckInterceptor.APP_CHECK_HEADER))
+        assertEquals(listOf(false), provider.calls)
+    }
+
+    @Test
     fun `app check header remains redacted from network logging`() {
         val apiClientSource = File("src/main/java/com/reals/app/data/api/RealsApiClient.kt").readText()
 

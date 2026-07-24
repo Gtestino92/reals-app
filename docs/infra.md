@@ -156,23 +156,25 @@ App Check provider by flavor:
 
 | Flavor | Provider | Operational setup |
 | --- | --- | --- |
-| `local` | Debug provider | Register each developer/device debug secret in Firebase Console. Never commit the secret. |
-| `dev` | Play Integrity | Register the dev Firebase Android app for App Check and add the dev signing SHA-256. |
-| `prod` | Play Integrity | Register the production Firebase Android app for App Check and add the production signing SHA-256. |
+| `localDebug`, `localRelease` | Disabled | Do not register a debug secret; local backend requests omit `X-Firebase-AppCheck` while Firebase Auth and Messaging remain enabled. |
+| `devDebug` | Debug provider | Register each developer/device debug secret in Firebase Console for the dev Firebase Android app. Never commit the secret. |
+| `devRelease` | Play Integrity | Register the dev Firebase Android app for App Check and add the dev release signing SHA-256. |
+| `prodDebug`, `prodRelease` | Play Integrity | Register the production Firebase Android app for App Check and add the production signing SHA-256. |
 
 Deployment checklist:
 
 1. Add the correct flavor-specific `google-services.json` outside source control.
-2. Register the Android app for App Check in the matching Firebase project.
-3. Register SHA-256 signing certificates for `dev` and `prod`.
-4. Validate Android against the backend while backend App Check mode is `MONITOR`.
+2. Register the Android app for App Check in the matching Firebase project for enabled environments.
+3. Register SHA-256 signing certificates for `devRelease` and prod.
+4. Validate App Check-enabled Android builds against the backend while backend App Check mode is `MONITOR`.
 5. Distribute the App Check-enabled Android build to the target environment.
 6. Switch backend rollout from `DISABLED` to `MONITOR` to `ENFORCED` only after compatible clients are available.
-7. Revoke any exposed local debug token and register a replacement.
+7. Revoke any exposed enabled-environment debug token and register a replacement.
 
 Compatibility notes:
 
-- Older backends should ignore the additional `X-Firebase-AppCheck` header.
+- Local backend requests omit `X-Firebase-AppCheck`; enabled environments keep sending it.
+- Older backends should ignore the additional `X-Firebase-AppCheck` header when present.
 - Do not switch backend enforcement to `ENFORCED` before this Android version is available in the target environment.
 - Validate `dev` first while the backend is in `MONITOR`.
 - Production enforcement should occur only after the production Firebase Android app is registered and the distributed

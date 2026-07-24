@@ -90,7 +90,7 @@ internal fun chatLoadingPresentation(
     chatTitlePrefix: String,
     partnerName: String?,
 ): ChatLoadingPresentation {
-    val title = chatTitlePrefix.trim().ifBlank { "Chat" }
+    val title = chatTitlePrefix.trim().ifBlank { "Preparando chat" }
     val safePartnerName = partnerName
         ?.takeIf { it.isNotBlank() }
         ?.let { TextSafety.safeDisplay(it, maxLength = 100) }

@@ -29,29 +29,31 @@ Frontend validation is for immediate UX and risk reduction. Backend validation r
 
 ## Firebase App Check
 
-Android sends Firebase App Check tokens to the Reals backend with `X-Firebase-AppCheck`. This helps the backend reject
-requests that do not come from a registered app installation, but it is not a user-authentication or authorization
-mechanism.
+Android sends Firebase App Check tokens to the Reals backend with `X-Firebase-AppCheck` in App Check-enabled
+environments. This helps the backend reject requests that do not come from a registered app installation, but it is not a
+user-authentication or authorization mechanism. The Android `local` flavor disables App Check completely and relies on
+the backend `local-firebase` profile where App Check enforcement is disabled.
 
 App Check limitations:
 
 - It does not replace Firebase Authentication, backend authorization, rate limiting, TLS or request validation.
 - It does not prove that user content is safe or that a user is allowed to perform an action.
 - Replay protection and limited-use tokens are intentionally deferred for this MVP.
-- Debug provider secrets must never be committed, copied into docs, embedded in `BuildConfig`, stored in Gradle
-  properties or logged.
+- Debug provider secrets for enabled debug variants must never be committed, copied into docs, embedded in
+  `BuildConfig`, stored in Gradle properties or logged.
 
-If a local debug secret is exposed, revoke it in Firebase Console and register a new one. Do not weaken backend JWT
+If a debug secret is exposed, revoke it in Firebase Console and register a new one. Do not weaken backend JWT
 verification for debug tokens; Firebase still issues normal App Check JWTs after a registered debug secret is accepted.
 
 Provider isolation is compile-time variant-specific:
 
-- `localDebug` and `localRelease` use `DebugAppCheckProviderFactory` and install as `com.reals.app.local`.
+- `localDebug` and `localRelease` disable App Check and install no debug or Play Integrity provider.
 - `devDebug` uses `DebugAppCheckProviderFactory` and installs as `com.reals.app.dev`.
 - `devRelease` uses `PlayIntegrityAppCheckProviderFactory` and installs as `com.reals.app.dev`.
 - `prodDebug` and `prodRelease` use `PlayIntegrityAppCheckProviderFactory` and install as `com.reals.app`.
 
-Backend allowlists must use Firebase App IDs from the matching Firebase Android App, not Android package names alone.
+Backend allowlists for App Check-enabled environments must use Firebase App IDs from the matching Firebase Android App,
+not Android package names alone.
 Debug App Check tokens are developer-machine/device credentials. Never commit them, paste them into documentation, expose
 them in CI logs, embed them in Gradle properties or store them in `BuildConfig`.
 
