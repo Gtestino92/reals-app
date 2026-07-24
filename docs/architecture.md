@@ -43,6 +43,26 @@ The app does not use Navigation Compose. Navigation is represented by `RealsRoot
 - `ProfileOperationHandler`
 - `ChatMessageActionHandler`
 
+Home entry uses the backend Home response as the source of truth for profile status and operational interactions.
+`ACTIVE` profiles keep the normal Home behavior. A `DRAFT` profile with existing Home interactions can still enter or
+remain in Home so first chats, visual reviews, scheduling, second chats and exit actions remain reachable; a `DRAFT`
+profile with no Home interaction keeps the profile-completion flow. This distinction is based on Home fields such as
+`pendingActions`, `nextSteps`, `passiveNotices` and `activeInteractionsSummary`, not raw match or connection states.
+`INACTIVE` is not redefined by this draft-specific routing and continues through the existing profile-only handling.
+
+## Visual Review
+
+`VisualApprovalCoordinator` keeps the backend contract shape unchanged for visual-review partner messages.
+Android still maps `partnerPersonalMessageSubmitted`, `partnerPersonalMessageRead` and the legacy
+`decisionRequiresPartnerPersonalMessageRead` field, but the legacy field is not used as a client-side decision
+eligibility rule.
+
+Unread partner messages are derived from `partnerPersonalMessageSubmitted && !partnerPersonalMessageRead`.
+When unread, Android highlights the partner-message card with a `Mensaje nuevo` label and keeps `Leer mensaje`
+prominent. Reading is encouraged but optional: approval and rejection remain available while a partner message is
+unread, and a message-read failure keeps retry available without blocking the visual decision. Active conflicting
+requests, missing visual profile data and expired visual reviews still disable approval and rejection.
+
 ## Authentication And Session Validity
 
 The presence of a cached Firebase `currentUser` is not proof that the session is still usable. Authenticated
@@ -154,6 +174,12 @@ Profile-photo upload and replacement can fail with backend
 for normal presentation and also marks email verification as required so the
 existing remediation actions become visible. The failed upload is not retried
 automatically.
+
+Uploading, replacing or deleting a profile photo can make a previously `ACTIVE` profile `DRAFT`. Android must not
+cancel, hide or locally discard Home interactions because of that status change. Photo mutations remain allowed during
+visual review; Android does not snapshot visual-review photos and does not cancel or restart the visual review after a
+profile-photo mutation. `DRAFT` disables new matchmaking only through backend-provided Home matchmaking fields such as
+`canSearch` and `blockedReason`.
 
 ## Chat Safety Reporting
 

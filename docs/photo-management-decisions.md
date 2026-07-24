@@ -11,6 +11,11 @@
 - Adding a photo uses an empty grid slot. Replacing and deleting use the existing photo id.
 - Reordering is intentionally not implemented in MVP.
 - The MVP grid uses existing image URLs and Coil image loading. It does not generate real thumbnails.
+- Adding, replacing or deleting a profile photo can return the profile to `DRAFT`. Android preserves existing
+  backend Home interactions in that state and only prevents new matchmaking when Home reports `matchmaking.canSearch =
+  false`.
+- Photo mutations during visual review are allowed. Android does not block the mutation, snapshot visual-review photos,
+  or cancel/restart the visual review after the mutation.
 
 ## Android Upload Preprocessing
 

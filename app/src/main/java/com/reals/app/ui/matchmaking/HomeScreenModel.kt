@@ -9,6 +9,13 @@ data class HomeScreenModel(
     val activeInteractionsSummary: HomeActiveInteractionsSummary?,
     val passiveNotices: List<HomePassiveNoticeItem>,
     val matchmaking: HomeMatchmakingUiState,
+    val draftProfileWarning: DraftProfileHomeWarning? = null,
+)
+
+data class DraftProfileHomeWarning(
+    val title: String,
+    val message: String,
+    val actionLabel: String,
 )
 
 sealed interface HomeActionItem {

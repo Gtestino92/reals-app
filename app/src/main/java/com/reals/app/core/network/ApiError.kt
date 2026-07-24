@@ -210,7 +210,7 @@ fun ApiError.toUserTitle(context: ErrorContext = ErrorContext.General): String =
     ErrorContext.Scheduling -> "No pudimos coordinar el horario"
     ErrorContext.Account -> "No pudimos actualizar tu cuenta"
     ErrorContext.Legal -> "No pudimos actualizar los documentos"
-    ErrorContext.ManualBlock -> "No pudimos bloquear aésta persona"
+    ErrorContext.ManualBlock -> "No pudimos bloquear a ésta persona"
     ErrorContext.General -> "Algo salió mal"
 }
 
@@ -262,22 +262,23 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
         else -> "Esta acción no está disponible con el estado actual."
     }
     BackendErrorCode.PartnerPersonalMessageNotRead,
-    BackendErrorCode.VisualReviewPartnerMessageNotRead -> "Leé el mensaje personal de la otra persona antes de decidir."
+    BackendErrorCode.VisualReviewPartnerMessageNotRead ->
+        "No pudimos registrar la decisión visual. Actualizá el estado e intentá nuevamente."
     BackendErrorCode.VisualContentNotAvailable -> "El contenido visual ya no está disponible. Actualizá tu Home."
-    BackendErrorCode.ChatNotFound -> "No encontramos éstaconversación. Actualizá el estado."
+    BackendErrorCode.ChatNotFound -> "No encontramos ésta conversación. Actualizá el estado."
     BackendErrorCode.ChatNotAvailable -> "Esta conversación ya no está disponible. Actualizá el estado."
     BackendErrorCode.ChatExpired -> "La conversaci\u00f3n venci\u00f3."
     BackendErrorCode.ChatAbandoned -> "La conversaci\u00f3n se cerr\u00f3 por inactividad."
     BackendErrorCode.ChatMessageInvalid -> "Revisá el mensaje. No puede estar vacío ni superar el límite permitido."
-    BackendErrorCode.ChatDecisionNotAvailable -> "La decisión sobre éstaconversación ya no está disponible. Actualizá el estado."
-    BackendErrorCode.ChatDecisionAlreadySubmitted -> "Ya enviaste tu decisión para éstaconversación."
+    BackendErrorCode.ChatDecisionNotAvailable -> "La decisión sobre ésta conversación ya no está disponible. Actualizá el estado."
+    BackendErrorCode.ChatDecisionAlreadySubmitted -> "Ya enviaste tu decisión para ésta conversación."
     BackendErrorCode.ChatMinMessagesRequired -> "Antes de decidir, enviá al menos un poco más de conversación."
     BackendErrorCode.ChatMutualCancellationPending ->
         "La conversaci\u00f3n est\u00e1 pausada mientras se resuelve la solicitud."
     BackendErrorCode.FirstChatGuidanceParticipationRequired ->
         "Particip\u00e1 un poco m\u00e1s antes de pedir otra pregunta."
-    BackendErrorCode.FirstChatGuidanceNextAlreadyRequested -> "Ya pediste cambiar éstapregunta."
-    BackendErrorCode.FirstChatGuidanceCompleted -> "Ya completaron las preguntas de éstaconversaci\u00f3n."
+    BackendErrorCode.FirstChatGuidanceNextAlreadyRequested -> "Ya pediste cambiar ésta pregunta."
+    BackendErrorCode.FirstChatGuidanceCompleted -> "Ya completaron las preguntas de ésta conversaci\u00f3n."
     BackendErrorCode.ChatExitRequestNotFound -> "No encontramos esa solicitud de salida. Actualizá la conversación."
     BackendErrorCode.ChatExitRequestNotAvailable -> "Esa solicitud de salida ya no está disponible."
     BackendErrorCode.ChatExitRequestAlreadyPending -> "Ya hay una solicitud de salida pendiente."
@@ -288,7 +289,7 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.SchedulingExpired -> "La coordinación de horarios venció."
     BackendErrorCode.SchedulingNegotiationNotFound -> "No encontramos la coordinación de horarios. Actualizá el estado."
     BackendErrorCode.SchedulingInvalidProposals -> "Revisá los horarios elegidos. Deben ser futuros, únicos y estar alineados cada media hora."
-    BackendErrorCode.SchedulingProposalsAlreadySubmitted -> "Ya enviaste tus horarios para éstaronda."
+    BackendErrorCode.SchedulingProposalsAlreadySubmitted -> "Ya enviaste tus horarios para ésta ronda."
     BackendErrorCode.SchedulingRoundChanged -> "La ronda cambió. Actualizamos las opciones; revisalas antes de continuar."
     BackendErrorCode.SchedulingProposalNotAvailable -> "Ese horario ya no está disponible. Actualizamos las opciones."
     BackendErrorCode.SchedulingCannotAcceptOwnProposal -> "No podés aceptar un horario propuesto por vos."

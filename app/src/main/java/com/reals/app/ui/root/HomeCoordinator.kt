@@ -299,10 +299,28 @@ internal class HomeCoordinator(
         ready: RealsRootUiState.Ready,
         publishLoadingState: Boolean = true,
         autoNavigateEngagements: Boolean = false,
+        preloadedHome: HomeState? = null,
+        allowDraftHomeWithoutInteractions: Boolean = false,
     ) {
+        val allowDraftHome = allowDraftHomeWithoutInteractions || ready.home.allowDraftHomeWithoutInteractions
+        val readyForHome = ready.copy(
+            home = ready.home.copy(
+                allowDraftHomeWithoutInteractions = allowDraftHome,
+            ),
+        )
+        if (preloadedHome != null) {
+            publishHomeSuccess(
+                ready = readyForHome,
+                home = preloadedHome,
+                autoNavigateEngagements = autoNavigateEngagements,
+                homeStatusVersion = readyForHome.home.homeStatusVersion,
+            )
+            return
+        }
+
         if (publishLoadingState) {
-            uiState.value = ready.copy(
-                home = ready.home.copy(
+            uiState.value = readyForHome.copy(
+                home = readyForHome.home.copy(
                     homeLoading = true,
                     homeError = null,
                 ),
@@ -312,22 +330,67 @@ internal class HomeCoordinator(
         when (val homeResult = dependencies.getHome()) {
             is ApiResult.Success -> {
                 publishHomeSuccess(
-                    ready = ready,
+                    ready = readyForHome,
                     home = homeResult.value,
                     autoNavigateEngagements = autoNavigateEngagements,
-                    homeStatusVersion = ready.home.homeStatusVersion,
+                    homeStatusVersion = readyForHome.home.homeStatusVersion,
                 )
             }
 
             is ApiResult.Failure -> {
-                uiState.value = ready.copy(
-                    home = ready.home.copy(
+                uiState.value = readyForHome.copy(
+                    home = readyForHome.home.copy(
                         homeLoading = false,
                         homeError = homeResult.error,
                         homeMessage = null,
                         matchmakingSearchPhase = MatchmakingSearchUiPhase.Failed,
                     ),
                 )
+            }
+        }
+    }
+
+    fun closeProfileManagementWithHomeReload(current: RealsRootUiState.Ready) {
+        if (current.session.profileSnapshot !is com.reals.app.domain.model.ProfileSnapshot.Found) return
+
+        scope.launch {
+            val safeCurrent = current.withoutStaleHomeForKnownDraftProfile()
+            val loading = safeCurrent.copy(
+                home = safeCurrent.home.copy(
+                    homeLoading = true,
+                    homeError = null,
+                    homeMessage = null,
+                ),
+            )
+            uiState.value = loading
+
+            when (val homeResult = dependencies.getHome()) {
+                is ApiResult.Success -> {
+                    val refreshed = readyWithHomeSuccess(
+                        ready = loading.copy(editingActiveProfile = false),
+                        home = homeResult.value,
+                        homeStatusVersion = loading.home.homeStatusVersion,
+                    )
+                    if (homeResult.value.canRemainInHomeForProfileStatus()) {
+                        routeFromHomeScreenModel(
+                            ready = refreshed,
+                            autoNavigateEngagements = false,
+                        )
+                    } else {
+                        uiState.value = refreshed
+                    }
+                }
+
+                is ApiResult.Failure -> {
+                    uiState.value = loading.copy(
+                        home = loading.home.copy(
+                            homeLoading = false,
+                            homeError = homeResult.error,
+                            homeMessage = null,
+                            matchmakingSearchPhase = MatchmakingSearchUiPhase.Failed,
+                        ),
+                    )
+                }
             }
         }
     }
@@ -404,6 +467,7 @@ internal class HomeCoordinator(
             ),
             publishLoadingState = true,
             autoNavigateEngagements = false,
+            allowDraftHomeWithoutInteractions = true,
         )
     }
 
@@ -440,27 +504,41 @@ internal class HomeCoordinator(
         autoNavigateEngagements: Boolean,
         homeStatusVersion: Long?,
     ) {
+        routeFromHomeScreenModel(
+            ready = readyWithHomeSuccess(
+                ready = ready,
+                home = home,
+                homeStatusVersion = homeStatusVersion,
+            ),
+            autoNavigateEngagements = autoNavigateEngagements,
+        )
+    }
+
+    private fun readyWithHomeSuccess(
+        ready: RealsRootUiState.Ready,
+        home: HomeState,
+        homeStatusVersion: Long?,
+    ): RealsRootUiState.Ready {
         pruneLocalHiddenInteractions(home)
         val screenModel = buildHomeScreenModel(
             home = home,
             localMatchmakingBlockedReason = ready.home.matchmakingBlockedReason,
         )
+        val session = ready.session.withProfileStatusFrom(home)
 
-        routeFromHomeScreenModel(
-            ready = ready.copy(
-                home = ready.home.copy(
-                    homeState = home,
-                    homeStatusVersion = homeStatusVersion,
+        return ready.copy(
+            session = session,
+            home = ready.home.copy(
+                homeState = home,
+                homeStatusVersion = homeStatusVersion,
+                screenModel = screenModel,
+                homeLoading = false,
+                homeError = null,
+                matchmakingSearchPhase = searchPhaseAfterHomeLoad(
+                    ready = ready,
                     screenModel = screenModel,
-                    homeLoading = false,
-                    homeError = null,
-                    matchmakingSearchPhase = searchPhaseAfterHomeLoad(
-                        ready = ready,
-                        screenModel = screenModel,
-                    ),
                 ),
             ),
-            autoNavigateEngagements = autoNavigateEngagements,
         )
     }
 
@@ -487,7 +565,7 @@ internal class HomeCoordinator(
             return
         }
 
-        if (home.profileStatus != ProfileStatus.Active) {
+        if (!home.canRemainInHomeForProfileStatus() && !ready.home.allowDraftHomeWithoutInteractions) {
             onReloadActiveSession(ready.session.user)
             return
         }
@@ -533,4 +611,32 @@ internal class HomeCoordinator(
             else -> false
         }
     }
+}
+
+private fun ProvisionedSession.withProfileStatusFrom(home: HomeState): ProvisionedSession {
+    val status = home.profileStatus ?: return this
+    val snapshot = profileSnapshot as? com.reals.app.domain.model.ProfileSnapshot.Found ?: return this
+    if (snapshot.profile.status == status) return this
+    return copy(
+        profileSnapshot = com.reals.app.domain.model.ProfileSnapshot.Found(
+            snapshot.profile.copy(status = status),
+        ),
+    )
+}
+
+private fun RealsRootUiState.Ready.withoutStaleHomeForKnownDraftProfile(): RealsRootUiState.Ready {
+    val snapshot = session.profileSnapshot as? com.reals.app.domain.model.ProfileSnapshot.Found ?: return this
+    if (snapshot.profile.status != ProfileStatus.Draft) return this
+    if (home.homeState?.profileStatus != ProfileStatus.Active && home.screenModel?.matchmaking?.canSearch != true) {
+        return this
+    }
+
+    return copy(
+        home = home.copy(
+            homeState = null,
+            screenModel = null,
+            matchmakingBlockedReason = null,
+            matchmakingSearchPhase = MatchmakingSearchUiPhase.Idle,
+        ),
+    )
 }

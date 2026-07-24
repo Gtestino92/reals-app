@@ -7,6 +7,7 @@ import com.reals.app.domain.model.HomeNextStep
 import com.reals.app.domain.model.HomePassiveNotice
 import com.reals.app.domain.model.HomePendingAction
 import com.reals.app.domain.model.HomeState
+import com.reals.app.domain.model.ProfileStatus
 
 data class LocalHiddenInteractions(
     val hiddenFirstChatMatchIds: Set<String>,
@@ -33,6 +34,17 @@ class HomeUiMapper {
             activeInteractionsSummary = displayedSummary,
             passiveNotices = home.passiveNoticeItems(),
             matchmaking = home.matchmakingUiState(localMatchmakingBlockedReason),
+            draftProfileWarning = home.draftProfileWarning(),
+        )
+    }
+
+    private fun HomeState?.draftProfileWarning(): DraftProfileHomeWarning? {
+        if (this?.profileStatus != ProfileStatus.Draft) return null
+        return DraftProfileHomeWarning(
+            title = "Tu perfil está en borrador",
+            message = "Podés continuar tus conversaciones y coordinaciones actuales. " +
+                "Completá y reactivá tu perfil para buscar nuevas personas.",
+            actionLabel = "Completar perfil",
         )
     }
 

@@ -144,7 +144,8 @@ fun RealsApp(
 
                 is ProfileSnapshot.Found -> {
                     val profile = (current.session.profileSnapshot).profile
-                    if (current.editingActiveProfile || profile.status != ProfileStatus.Active) {
+                    val homeAvailable = current.shouldRenderHomeSurface()
+                    if (current.editingActiveProfile || !homeAvailable) {
                         ProfileStatusScreen(
                             session = current.session,
                             profileUpdateLoading = current.updatingProfile,
@@ -194,11 +195,15 @@ fun RealsApp(
                             onSignOut = viewModel::signOut,
                             accountDeleteLoading = current.deletingAccount,
                             accountDeleteError = current.accountDeleteError,
+                            homeLoading = current.homeLoading,
+                            homeError = current.homeError,
                             onDeleteAccount = viewModel::deleteAccount,
-                            onBackHome = if (
-                                current.editingActiveProfile &&
-                                profile.status == ProfileStatus.Active
-                            ) {
+                            onRetryHome = if (current.editingActiveProfile) {
+                                viewModel::closeProfileManagement
+                            } else {
+                                viewModel::refreshSession
+                            },
+                            onBackHome = if (current.editingActiveProfile) {
                                 viewModel::closeProfileManagement
                             } else {
                                 null
@@ -406,6 +411,24 @@ fun RealsApp(
             )
         }
     }
+}
+
+internal fun RealsRootUiState.Ready.shouldRenderHomeSurface(): Boolean {
+    val profile = (session.profileSnapshot as? ProfileSnapshot.Found)?.profile ?: return false
+    return when (profile.status) {
+        ProfileStatus.Active -> true
+        ProfileStatus.Draft -> home.hasRenderableDraftHomeSurface()
+        else -> false
+    }
+}
+
+private fun HomeUiState.hasRenderableDraftHomeSurface(): Boolean {
+    if (homeLoading && allowDraftHomeWithoutInteractions) return true
+    return homeState?.profileStatus == ProfileStatus.Draft &&
+        (
+            homeState?.canRemainInHomeForProfileStatus() == true ||
+                allowDraftHomeWithoutInteractions
+            )
 }
 
 @Composable

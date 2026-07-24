@@ -128,6 +128,8 @@ fun ProfileStatusScreen(
     checkEmailVerificationAvailableAtMillis: Long?,
     accountDeleteLoading: Boolean,
     accountDeleteError: ApiError?,
+    homeLoading: Boolean = false,
+    homeError: ApiError? = null,
     showDraftAfterEditNotice: Boolean = false,
     onUpdateProfile: (UpdateProfileInput) -> Unit,
     onLoadCountries: () -> Unit,
@@ -143,6 +145,7 @@ fun ProfileStatusScreen(
     onRefresh: () -> Unit,
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit,
+    onRetryHome: () -> Unit = onRefresh,
     onBackHome: (() -> Unit)? = null,
 ) {
     val busy = profileUpdateLoading ||
@@ -152,7 +155,8 @@ fun ProfileStatusScreen(
         activationLoading ||
         emailVerificationSending ||
         emailVerificationChecking ||
-        accountDeleteLoading
+        accountDeleteLoading ||
+        homeLoading
     val scrollState = rememberScrollState()
     var accountExpanded by rememberSaveable(session.user.id) { mutableStateOf(false) }
 
@@ -190,9 +194,21 @@ fun ProfileStatusScreen(
         if (showDraftAfterEditNotice) {
             FeedbackCard(
                 title = "Tu perfil volvió a borrador",
-                message = "Como modificaste tus fotos, necesitamos que vuelvas a activar el perfil antes de volver al Home.",
+                message = "Como modificaste tus fotos, necesitás reactivar el perfil antes de buscar nuevas personas.",
                 tone = FeedbackTone.Warning,
             )
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+        if (homeError != null) {
+            ApiErrorFeedbackCard(homeError, ErrorContext.Home)
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = onRetryHome,
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (homeLoading) "Actualizando Home..." else "Reintentar Home")
+            }
             Spacer(modifier = Modifier.height(12.dp))
         }
         when (val snapshot = session.profileSnapshot) {

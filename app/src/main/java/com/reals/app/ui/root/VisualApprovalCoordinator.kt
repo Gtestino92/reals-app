@@ -274,8 +274,7 @@ internal class VisualApprovalCoordinator(
         if (
             current.deciding ||
             current.writingMessage ||
-            current.readingPartnerMessage ||
-            current.profile?.decisionRequiresPartnerPersonalMessageRead == true
+            current.readingPartnerMessage
         ) {
             return VisualApprovalFlowResult.Ignore
         }
@@ -391,8 +390,7 @@ private fun VisualProfile.markPartnerPersonalMessageReadLocally(): VisualProfile
 private fun VisualProfile?.shouldLoadPartnerMessageAutomatically(): Boolean {
     if (this == null) return false
     return partnerPersonalMessageSubmitted &&
-        partnerPersonalMessageRead &&
-        !decisionRequiresPartnerPersonalMessageRead
+        partnerPersonalMessageRead
 }
 
 private fun partnerMessageForProfile(
@@ -400,7 +398,6 @@ private fun partnerMessageForProfile(
     loadingState: RealsRootUiState.VisualApproval,
 ): String? {
     if (profile?.partnerPersonalMessageSubmitted == false) return null
-    if (profile?.decisionRequiresPartnerPersonalMessageRead == true) return null
     return loadingState.partnerMessage
 }
 
@@ -409,7 +406,6 @@ private fun partnerMessageLoadedForProfile(
     loadingState: RealsRootUiState.VisualApproval,
 ): Boolean {
     if (profile?.partnerPersonalMessageSubmitted == false) return false
-    if (profile?.decisionRequiresPartnerPersonalMessageRead == true) return false
     return loadingState.partnerMessageLoaded
 }
 

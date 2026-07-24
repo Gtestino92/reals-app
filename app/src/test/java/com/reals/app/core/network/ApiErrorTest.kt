@@ -36,13 +36,13 @@ class ApiErrorTest {
     }
 
     @Test
-    fun `partner personal message unread codes map to visual review message`() {
+    fun `partner personal message unread codes map to non blocking visual review message`() {
         listOf(
             "PARTNER_PERSONAL_MESSAGE_NOT_READ",
             "VISUAL_REVIEW_PARTNER_MESSAGE_NOT_READ",
         ).forEach { code ->
             assertEquals(
-                "Leé el mensaje personal de la otra persona antes de decidir.",
+                "No pudimos registrar la decisi\u00f3n visual. Actualiz\u00e1 el estado e intent\u00e1 nuevamente.",
                 backendError(code).toUserMessage(ErrorContext.VisualReview),
             )
         }
@@ -155,16 +155,16 @@ class ApiErrorTest {
     @Test
     fun `chat backend codes map to deterministic chat messages`() {
         mapOf(
-            "CHAT_NOT_FOUND" to "No encontramos éstaconversación. Actualizá el estado.",
+            "CHAT_NOT_FOUND" to "No encontramos ésta conversación. Actualizá el estado.",
             "CHAT_NOT_AVAILABLE" to "Esta conversación ya no está disponible. Actualizá el estado.",
             "CHAT_EXPIRED" to "La conversaci\u00f3n venci\u00f3.",
             "CHAT_ABANDONED" to "La conversaci\u00f3n se cerr\u00f3 por inactividad.",
             "CHAT_MESSAGE_INVALID" to
                 "Revisá el mensaje. No puede estar vacío ni superar el límite permitido.",
             "CHAT_DECISION_NOT_AVAILABLE" to
-                "La decisión sobre éstaconversación ya no está disponible. Actualizá el estado.",
+                "La decisión sobre ésta conversación ya no está disponible. Actualizá el estado.",
             "CHAT_DECISION_ALREADY_SUBMITTED" to
-                "Ya enviaste tu decisión para éstaconversación.",
+                "Ya enviaste tu decisión para ésta conversación.",
             "CHAT_MIN_MESSAGES_REQUIRED" to
                 "Antes de decidir, enviá al menos un poco más de conversación.",
             "CHAT_MUTUAL_CANCELLATION_PENDING" to
@@ -172,9 +172,9 @@ class ApiErrorTest {
             "FIRST_CHAT_GUIDANCE_PARTICIPATION_REQUIRED" to
                 "Particip\u00e1 un poco m\u00e1s antes de pedir otra pregunta.",
             "FIRST_CHAT_GUIDANCE_NEXT_ALREADY_REQUESTED" to
-                "Ya pediste cambiar éstapregunta.",
+                "Ya pediste cambiar ésta pregunta.",
             "FIRST_CHAT_GUIDANCE_COMPLETED" to
-                "Ya completaron las preguntas de éstaconversaci\u00f3n.",
+                "Ya completaron las preguntas de ésta conversaci\u00f3n.",
             "CHAT_EXIT_REQUEST_NOT_FOUND" to
                 "No encontramos esa solicitud de salida. Actualizá la conversación.",
             "CHAT_EXIT_REQUEST_NOT_AVAILABLE" to
@@ -218,7 +218,7 @@ class ApiErrorTest {
             "SCHEDULING_INVALID_PROPOSALS" to
                 "Revisá los horarios elegidos. Deben ser futuros, únicos y estar alineados cada media hora.",
             "SCHEDULING_PROPOSALS_ALREADY_SUBMITTED" to
-                "Ya enviaste tus horarios para éstaronda.",
+                "Ya enviaste tus horarios para ésta ronda.",
             "SCHEDULING_ROUND_CHANGED" to
                 "La ronda cambió. Actualizamos las opciones; revisalas antes de continuar.",
             "SCHEDULING_PROPOSAL_NOT_AVAILABLE" to

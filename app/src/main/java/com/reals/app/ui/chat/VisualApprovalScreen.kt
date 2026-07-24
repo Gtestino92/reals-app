@@ -52,6 +52,15 @@ internal data class VisualApprovalPresentationState(
     val showPartnerMessageRetry: Boolean,
 )
 
+internal data class PartnerPersonalMessagePresentationState(
+    val hasUnreadPartnerMessage: Boolean,
+    val emphasized: Boolean,
+    val badgeLabel: String?,
+    val body: String,
+    val showReadAction: Boolean,
+    val readActionLabel: String?,
+)
+
 internal fun visualApprovalPresentationState(
     match: Match?,
     profile: VisualProfile?,
@@ -70,6 +79,54 @@ internal fun visualApprovalPresentationState(
         showRefreshingIndicator = refreshing && hasContent,
         showProfileRetry = !loading && profile == null && error != null,
         showPartnerMessageRetry = profile != null && partnerMessageError != null,
+    )
+}
+
+internal fun visualApprovalCanMakeDecision(
+    profile: VisualProfile?,
+    busy: Boolean,
+    lifecycle: VisualApprovalLifecycleUiState,
+): Boolean = !busy && profile != null && !lifecycle.expired
+
+internal fun partnerPersonalMessagePresentationState(
+    profile: VisualProfile?,
+    partnerMessage: String?,
+    partnerMessageLoaded: Boolean,
+    readingPartnerMessage: Boolean,
+    partnerMessageError: ApiError?,
+    refreshing: Boolean,
+): PartnerPersonalMessagePresentationState {
+    val submitted = profile?.partnerPersonalMessageSubmitted == true
+    val hasUnreadPartnerMessage = submitted && profile?.partnerPersonalMessageRead == false
+    val body = when {
+        profile == null -> "Cargando mensaje personal..."
+        !submitted -> "La otra persona todavía no dejó un mensaje personal."
+        readingPartnerMessage -> "Leyendo mensaje..."
+        partnerMessageError != null -> "No pudimos cargar el mensaje personal. Intentá nuevamente."
+        hasUnreadPartnerMessage -> "La otra persona dejó un mensaje personal para vos."
+        partnerMessageLoaded -> partnerMessage
+            ?.takeIf { it.isNotBlank() }
+            ?.let { TextSafety.safeDisplay(it, maxLength = 280) }
+            ?: "La otra persona todavía no dejó un mensaje personal."
+        !partnerMessageLoaded -> "Cargando mensaje personal..."
+        else -> "La otra persona todavía no dejó un mensaje personal."
+    }
+    val showReadAction = submitted && !partnerMessageLoaded
+    return PartnerPersonalMessagePresentationState(
+        hasUnreadPartnerMessage = hasUnreadPartnerMessage,
+        emphasized = hasUnreadPartnerMessage,
+        badgeLabel = if (hasUnreadPartnerMessage) "Mensaje nuevo" else null,
+        body = body,
+        showReadAction = showReadAction,
+        readActionLabel = if (showReadAction) {
+            when {
+                readingPartnerMessage -> "Leyendo mensaje..."
+                refreshing || partnerMessageError != null -> "Reintentar lectura"
+                else -> "Leer mensaje"
+            }
+        } else {
+            null
+        },
     )
 }
 
@@ -108,8 +165,6 @@ fun VisualApprovalScreen(
     val busy =
         loading || refreshing || readingPartnerMessage || writingMessage || deciding ||
             manualBlockLoading
-    val decisionBlockedByUnreadPartnerMessage =
-        profile?.decisionRequiresPartnerPersonalMessageRead == true
     val visualExpiresAt = profile?.visualExpiresAt ?: match?.visualExpiresAt
     val lifecycle = visualApprovalLifecycleUiState(visualExpiresAt, nowMillis)
     val visualDeadlineText = formatVisualReviewDetailDeadline(
@@ -125,10 +180,11 @@ fun VisualApprovalScreen(
         error = error,
         partnerMessageError = partnerMessageError,
     )
-    val canMakeVisualDecision = !busy &&
-        profile != null &&
-        !decisionBlockedByUnreadPartnerMessage &&
-        !lifecycle.expired
+    val canMakeVisualDecision = visualApprovalCanMakeDecision(
+        profile = profile,
+        busy = busy,
+        lifecycle = lifecycle,
+    )
 
     androidx.compose.runtime.LaunchedEffect(visualExpiresAt) {
         while (visualExpiresAt != null && !visualApprovalLifecycleUiState(visualExpiresAt).expired) {
@@ -220,7 +276,7 @@ fun VisualApprovalScreen(
         } else if (lifecycle.showWarning) {
             FeedbackCard(
                 title = "Revisi\u00f3n por vencer",
-                message = "La revisi\u00f3n visual vence pronto. Complet\u00e1 tu decisi\u00f3n para no perder éstaoportunidad.",
+                message = "La revisi\u00f3n visual vence pronto. Complet\u00e1 tu decisi\u00f3n para no perder ésta oportunidad.",
                 tone = FeedbackTone.Warning,
             )
             Spacer(modifier = Modifier.height(16.dp))
@@ -253,7 +309,6 @@ fun VisualApprovalScreen(
             partnerMessageLoaded = partnerMessageLoaded,
             readingPartnerMessage = readingPartnerMessage,
             partnerMessageError = partnerMessageError,
-            decisionRequiresPartnerPersonalMessageRead = decisionBlockedByUnreadPartnerMessage,
             busy = busy,
             refreshing = refreshing,
             onReadPartnerMessage = onReadPartnerMessage,
@@ -303,12 +358,6 @@ fun VisualApprovalScreen(
                     text = "Si aprobás y la otra persona también aprueba, se crea la conexión para la siguiente etapa.",
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
-                if (decisionBlockedByUnreadPartnerMessage) {
-                    Text(
-                        text = "Leé el mensaje personal de la otra persona antes de decidir.",
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    )
-                }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(
                         onClick = onApprove,
@@ -420,46 +469,52 @@ private fun PartnerMessageCard(
     partnerMessageLoaded: Boolean,
     readingPartnerMessage: Boolean,
     partnerMessageError: ApiError?,
-    decisionRequiresPartnerPersonalMessageRead: Boolean,
     busy: Boolean,
     refreshing: Boolean,
     onReadPartnerMessage: () -> Unit,
 ) {
+    val messageState = partnerPersonalMessagePresentationState(
+        profile = profile,
+        partnerMessage = partnerMessage,
+        partnerMessageLoaded = partnerMessageLoaded,
+        readingPartnerMessage = readingPartnerMessage,
+        partnerMessageError = partnerMessageError,
+        refreshing = refreshing,
+    )
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        colors = CardDefaults.cardColors(
+            containerColor = if (messageState.emphasized) {
+                MaterialTheme.colorScheme.tertiaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerHigh
+            },
+        ),
     ) {
         Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Mensaje personal de la otra persona", style = MaterialTheme.typography.titleMedium)
-            val partnerPersonalMessageSubmitted = profile?.partnerPersonalMessageSubmitted == true
-            val body = when {
-                profile == null -> "Cargando mensaje personal..."
-                !partnerPersonalMessageSubmitted -> "La otra persona todavía no dejó un mensaje personal."
-                readingPartnerMessage -> "Leyendo mensaje..."
-                partnerMessageError != null -> "No pudimos cargar el mensaje personal. Intentá nuevamente."
-                partnerMessageLoaded -> partnerMessage
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { TextSafety.safeDisplay(it, maxLength = 280) }
-                    ?: "La otra persona todavía no dejó un mensaje personal."
-                !partnerMessageLoaded && decisionRequiresPartnerPersonalMessageRead ->
-                    "La otra persona dejó un mensaje personal. Tenés que leerlo antes de decidir."
-                !partnerMessageLoaded -> "Cargando mensaje personal..."
-                else -> "La otra persona todavía no dejó un mensaje personal."
+            messageState.badgeLabel?.let {
+                Text(
+                    text = it,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    style = MaterialTheme.typography.labelLarge,
+                )
             }
-            Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (partnerPersonalMessageSubmitted && !partnerMessageLoaded) {
+            Text(
+                text = messageState.body,
+                color = if (messageState.emphasized) {
+                    MaterialTheme.colorScheme.onTertiaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+            if (messageState.showReadAction) {
                 OutlinedButton(
                     onClick = onReadPartnerMessage,
                     enabled = !busy,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(
-                        when {
-                            readingPartnerMessage -> "Leyendo mensaje..."
-                            refreshing || partnerMessageError != null -> "Reintentar lectura"
-                            else -> "Leer mensaje"
-                        }
-                    )
+                    Text(messageState.readActionLabel ?: "Leer mensaje")
                 }
             }
         }

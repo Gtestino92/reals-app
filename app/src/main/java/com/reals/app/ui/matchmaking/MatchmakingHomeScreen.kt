@@ -47,6 +47,8 @@ import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.SearchLocationInput
 import com.reals.app.ui.common.ApiErrorFeedbackCard
+import com.reals.app.ui.common.FeedbackCard
+import com.reals.app.ui.common.FeedbackTone
 import com.reals.app.ui.root.MatchmakingSearchUiPhase
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -436,11 +438,31 @@ private fun MatchmakingIdleScreen(
             color = MaterialTheme.colorScheme.primary,
         )
         Text(
-            text = "${profile.displayName}, tu perfil está activo.",
+            text = if (screenModel.draftProfileWarning == null) {
+                "${profile.displayName}, tu perfil está activo."
+            } else {
+                "${profile.displayName}, tu Home sigue disponible."
+            },
             modifier = Modifier.padding(top = 8.dp),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(modifier = Modifier.height(20.dp))
+        screenModel.draftProfileWarning?.let { warning ->
+            FeedbackCard(
+                title = warning.title,
+                message = warning.message,
+                tone = FeedbackTone.Warning,
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = onEditProfile,
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(warning.actionLabel)
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
         val initiallyExpandedSection = initiallyExpandedHomeSection(
             actions = screenModel.pendingActions,
             nextSteps = screenModel.nextSteps,
@@ -468,10 +490,12 @@ private fun MatchmakingIdleScreen(
         ) {
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Encontrar chat", style = MaterialTheme.typography.titleLarge)
-                Text(
-                    text = "Vamos a usar tu ubicación actual para encontrar personas compatibles cerca.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                if (screenModel.shouldShowMatchmakingLocationCopy()) {
+                    Text(
+                        text = "Vamos a usar tu ubicación actual para encontrar personas compatibles cerca.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 ActiveInteractionsSummary(
                     summary = screenModel.activeInteractionsSummary,
                     passiveNotices = screenModel.passiveNotices,

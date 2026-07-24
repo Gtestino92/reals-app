@@ -14,7 +14,6 @@ import com.reals.app.domain.model.Match
 import com.reals.app.domain.model.ProfileActivationResult
 import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.ProfileSnapshot
-import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.SchedulingNegotiation
 import com.reals.app.domain.model.SchedulingProposal
@@ -261,6 +260,7 @@ data class HomeUiState(
     val homeState: HomeState? = null,
     val homeStatusVersion: Long? = null,
     val screenModel: HomeScreenModel? = null,
+    val allowDraftHomeWithoutInteractions: Boolean = false,
     val homeLoading: Boolean = false,
     val homeError: ApiError? = null,
     val homeMessage: String? = null,
@@ -411,10 +411,10 @@ fun RealsRootUiState.clearLegalActionRequiredForResume(): RealsRootUiState = whe
 private fun ApiError?.isLegalActionRequired(): Boolean = this?.isLegalActionRequired() == true
 
 fun RealsRootUiState.canHandleSystemBack(): Boolean = when (this) {
-    is RealsRootUiState.Ready -> {
-        val profile = (session.profileSnapshot as? ProfileSnapshot.Found)?.profile
-        editingActiveProfile && profile?.status == ProfileStatus.Active && !photos.reorderingPhotos
-    }
+    is RealsRootUiState.Ready ->
+        editingActiveProfile &&
+            session.profileSnapshot is ProfileSnapshot.Found &&
+            !photos.reorderingPhotos
 
     is RealsRootUiState.SecondChat -> !sending && !actionLoading && !manualBlock.loading
     is RealsRootUiState.VisualApproval ->
