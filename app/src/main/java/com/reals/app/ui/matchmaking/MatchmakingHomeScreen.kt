@@ -490,10 +490,12 @@ private fun MatchmakingIdleScreen(
         ) {
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Encontrar chat", style = MaterialTheme.typography.titleLarge)
-                Text(
-                    text = "Vamos a usar tu ubicación actual para encontrar personas compatibles cerca.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                if (screenModel.shouldShowMatchmakingLocationCopy()) {
+                    Text(
+                        text = "Vamos a usar tu ubicación actual para encontrar personas compatibles cerca.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 ActiveInteractionsSummary(
                     summary = screenModel.activeInteractionsSummary,
                     passiveNotices = screenModel.passiveNotices,

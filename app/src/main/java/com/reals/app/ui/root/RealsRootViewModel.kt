@@ -280,18 +280,7 @@ class RealsRootViewModel(
     private fun closeProfileManagement(current: RealsRootUiState.Ready) {
         if (current.session.profileSnapshot !is ProfileSnapshot.Found) return
 
-        viewModelScope.launch {
-            homeCoordinator.loadHomeForReady(
-                current.copy(
-                    editingActiveProfile = false,
-                    home = current.home.copy(
-                        homeLoading = true,
-                        homeError = null,
-                        homeMessage = null,
-                    ),
-                )
-            )
-        }
+        homeCoordinator.closeProfileManagementWithHomeReload(current)
     }
 
     fun openFirstChat(matchId: String, chatId: String? = null) {
@@ -336,11 +325,9 @@ class RealsRootViewModel(
 
     fun closeFirstChat() {
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
-        _uiState.value = RealsRootUiState.Ready(
-            session = current.session,
-            home = HomeUiState(homeLoading = true),
-        )
-        refreshHomeState()
+        viewModelScope.launch {
+            homeCoordinator.returnHome(current.session)
+        }
     }
 
     fun openSecondChat(
@@ -785,11 +772,9 @@ class RealsRootViewModel(
 
     fun returnToHomeFromPendingEngagement() {
         val current = _uiState.value as? RealsRootUiState.PendingEngagement ?: return
-        _uiState.value = RealsRootUiState.Ready(
-            session = current.session,
-            home = HomeUiState(homeLoading = true),
-        )
-        refreshHomeState()
+        viewModelScope.launch {
+            homeCoordinator.returnHome(current.session)
+        }
     }
 
     fun sendFirstChatMessage(content: String): Boolean {
@@ -1052,6 +1037,7 @@ class RealsRootViewModel(
                         ),
                     ),
                     autoNavigateEngagements = result.autoNavigateEngagements,
+                    allowDraftHomeWithoutInteractions = true,
                 )
             }
         }
@@ -1085,6 +1071,7 @@ class RealsRootViewModel(
                     ),
                     publishLoadingState = true,
                     autoNavigateEngagements = result.autoNavigateEngagements,
+                    allowDraftHomeWithoutInteractions = true,
                 )
             }
         }
@@ -1177,6 +1164,7 @@ class RealsRootViewModel(
                 ready = result.ready,
                 publishLoadingState = result.publishLoadingState,
                 autoNavigateEngagements = result.autoNavigateEngagements,
+                preloadedHome = result.preloadedHome,
             )
 
             is ProfileEntryResult.ShowReady -> _uiState.value = result.state

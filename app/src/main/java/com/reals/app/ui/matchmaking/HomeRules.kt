@@ -25,7 +25,17 @@ internal fun ApiError?.matchmakingBlockedMessage(): String? {
     }
 
     return when (this) {
-        is ApiError.Backend -> message.takeIf { it.isNotBlank() }
+        is ApiError.Backend -> when (backendErrorCode) {
+            BackendErrorCode.ProfileRequired -> "Necesitás crear tu perfil antes de buscar chat."
+            BackendErrorCode.ProfileNotActive ->
+                "Tu perfil está en borrador. Reactivalo para buscar nuevas personas."
+            BackendErrorCode.ActivePenalty ->
+                "Por ahora no podés entrar a la búsqueda. Intentá nuevamente más adelante."
+            BackendErrorCode.ActiveMatchLimitReached,
+            BackendErrorCode.ActiveConnectionLimitReached ->
+                "Ya tenés conversaciones o experiencias activas. Terminá una antes de buscar otra."
+            else -> null
+        }
         else -> null
     }
 }
@@ -44,6 +54,9 @@ internal fun emptyHomeScreenModel(): HomeScreenModel = HomeScreenModel(
 
 internal fun HomeScreenModel.shouldPollHome(): Boolean =
     true
+
+internal fun HomeScreenModel.shouldShowMatchmakingLocationCopy(): Boolean =
+    draftProfileWarning == null
 
 internal fun HomeScreenModel.shouldPollSecondChatAvailability(
     nowMillis: Long = System.currentTimeMillis(),

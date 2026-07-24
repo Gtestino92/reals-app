@@ -262,7 +262,8 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
         else -> "Esta acción no está disponible con el estado actual."
     }
     BackendErrorCode.PartnerPersonalMessageNotRead,
-    BackendErrorCode.VisualReviewPartnerMessageNotRead -> "Leé el mensaje personal de la otra persona antes de decidir."
+    BackendErrorCode.VisualReviewPartnerMessageNotRead ->
+        "No pudimos registrar la decisión visual. Actualizá el estado e intentá nuevamente."
     BackendErrorCode.VisualContentNotAvailable -> "El contenido visual ya no está disponible. Actualizá tu Home."
     BackendErrorCode.ChatNotFound -> "No encontramos éstaconversación. Actualizá el estado."
     BackendErrorCode.ChatNotAvailable -> "Esta conversación ya no está disponible. Actualizá el estado."

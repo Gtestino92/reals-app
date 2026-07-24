@@ -7,10 +7,6 @@ This document describes the current backend flow. It separates implemented behav
 Local no-auth development can inject a fixed authenticated user through `DevAutoAuthFilter`. The default local Firebase profile and shared environments use Firebase-backed current-user resolution.
 
 A user creates one profile. The profile starts as `DRAFT`; only `ACTIVE` profiles can enter matchmaking. Activation validates configured photo requirements.
-If an existing `ACTIVE` profile later becomes `DRAFT`, for example after a profile-photo mutation, that prevents new
-matchmaking but does not make already-created interactions inaccessible. Clients should continue to render backend Home
-interactions from `pendingActions`, `nextSteps`, `passiveNotices` and `activeInteractionsSummary`; a `DRAFT` profile
-with no existing Home interaction can stay in the profile-completion flow.
 
 Before profile creation, authenticated clients can fetch
 `GET /api/reference/countries` to populate a country selector. The response is a
@@ -81,8 +77,6 @@ image without a comparable visible face is not solved by this skeleton.
 Uploading, replacing or deleting a profile photo invalidates previous
 authenticity verification to `STALE` and sets `authenticityVerified=false`.
 Reordering photos does not invalidate authenticity.
-Photo mutations are allowed during visual review. They do not snapshot, cancel or restart the visual review; Home
-remains authoritative for which existing interactions are still visible.
 
 Photo moderation has a small admin human-review loop. Automated/provider
 moderation can produce `APPROVED`, `REJECTED` or `NEEDS_REVIEW`.
@@ -229,12 +223,16 @@ Each user submits one `VisualDecision`.
 - When both users have decided, mutual `APPROVED` moves the match to `VISUAL_APPROVED` and creates a pending connection.
 - When both users have decided and at least one rejected, the match moves to `VISUAL_REJECTED` and remaining match locks are released.
 
-Personal messages are stored on `VisualReview`. Current behavior allows reading
-the partner message during visual review once it exists, and requires reading it
-before deciding if the partner already submitted one. A successful optional
-personal-message submission also records a small backend-internal reliability
-participation event when user reliability is enabled. The message remains
-optional, and reading the partner message does not create a reliability event.
+Personal messages are optional and stored on `VisualReview`. Current behavior
+allows reading the partner message during visual review once it exists. Reading
+is encouraged and unread messages are exposed to clients for visual emphasis,
+but reading is not required before submitting `APPROVED` or `REJECTED`. Opening
+an existing partner message persists the requester-specific read timestamp. A
+successful optional personal-message submission also records a small
+backend-internal reliability participation event when user reliability is
+enabled. Reading the partner message does not create a reliability event.
+`decisionRequiresPartnerPersonalMessageRead` is retained temporarily for
+client-compatible response shape and is always `false`.
 
 Match and visual-profile responses expose `visualExpiresAt` so clients can warn
 before the visual phase expires. Home `VISUAL_REVIEW` pending actions expose

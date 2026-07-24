@@ -227,8 +227,6 @@ Chats can end through approval/normal completion, timeout, inactivity abandonmen
 
 - A profile starts as `DRAFT`.
 - Only `ACTIVE` profiles can enter matchmaking.
-- A `DRAFT` profile cannot start new matchmaking, but existing backend Home interactions remain accessible when Home
-  returns them through `pendingActions`, `nextSteps`, `passiveNotices` or `activeInteractionsSummary`.
 - Activation validates photo requirements from `profile.photos.*`.
 - `authenticityVerificationStatus` is the richer persisted profile authenticity verification state and is the source of truth. `authenticityVerified` remains a compatibility boolean projected from that status with the invariant `authenticityVerified == (authenticityVerificationStatus == VERIFIED)`.
 - Default shared photo requirements are 9 photos, 3 person photos and 1 full-body photo. Production temporarily defaults minimum full-body photos to 0 until a real full-body detector exists.
@@ -241,8 +239,7 @@ Chats can end through approval/normal completion, timeout, inactivity abandonmen
 - Profile country input is trimmed, uppercased and validated against that catalog. Display names and guessed mappings are not accepted.
 - Dynamic matchmaking filters include preferred minimum age, preferred maximum age and maximum distance in kilometers. They are required profile values. Preferred ages are enforced in the basic matchmaking query. Maximum distance is enforced from the current search location sent when a user enters the matchmaking queue.
 - Photo positions are unique per profile.
-- Adding, replacing or removing a required photo can revert an active profile to `DRAFT`; this does not cancel,
-  snapshot or restart existing visual reviews.
+- Removing a required photo can revert an active profile to `DRAFT`.
 - File-backed profile photos store provider, bucket and object key. The database does not store renderable photo URLs; `storageKey` is the source of truth for retrieval. API responses still expose `PhotoResponse.url`, but that URL is generated at response time from the stored object key. Private storage may use presigned, time-limited URLs, so clients should refresh photo responses instead of treating URLs as permanent identifiers.
 - Profile photo technical validation is immediate and blocking. Invalid file type, size, decode or dimensions reject the upload before storage or persistence. Successful technical validation is not semantic person/full-body validation.
 - Outside `prod`, the temporary MVP photo shortcut returns `isPersonPhoto=true`, `isFullBody=true` and `validationStatus=VALIDATED` when provider `none` is used. In `prod`, provider `none` leaves technically valid photos as `validationStatus=PENDING`, `isPersonPhoto=false` and `isFullBody=false`.

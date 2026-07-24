@@ -260,6 +260,7 @@ data class HomeUiState(
     val homeState: HomeState? = null,
     val homeStatusVersion: Long? = null,
     val screenModel: HomeScreenModel? = null,
+    val allowDraftHomeWithoutInteractions: Boolean = false,
     val homeLoading: Boolean = false,
     val homeError: ApiError? = null,
     val homeMessage: String? = null,

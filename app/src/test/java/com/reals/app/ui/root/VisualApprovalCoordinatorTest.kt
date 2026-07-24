@@ -405,9 +405,70 @@ class VisualApprovalCoordinatorTest {
     }
 
     @Test
-    fun `submit visual decision is blocked when partner message read is required`() = runBlocking {
+    fun `submit approved visual decision is allowed while partner message is unread`() = runBlocking {
+        api.matchResponse = Response.success(TestDtos.match("VISUAL_APPROVED"))
+
         val result = coordinator.submitDecision(
             current = visualState(
+                profile = TestDtos.visualProfile(
+                    partnerPersonalMessageSubmitted = true,
+                    partnerPersonalMessageRead = false,
+                    decisionRequiresPartnerPersonalMessageRead = false,
+                ).toDomain(),
+            ),
+            decision = VisualDecision.Approved,
+            onPending = {},
+        )
+
+        assertTrue(result is VisualApprovalFlowResult.ReloadHome)
+        assertEquals(listOf("submitVisualDecision"), api.calls)
+    }
+
+    @Test
+    fun `submit rejected visual decision is allowed while partner message is unread`() = runBlocking {
+        api.matchResponse = Response.success(TestDtos.match("VISUAL_REJECTED"))
+
+        val result = coordinator.submitDecision(
+            current = visualState(
+                profile = TestDtos.visualProfile(
+                    partnerPersonalMessageSubmitted = true,
+                    partnerPersonalMessageRead = false,
+                    decisionRequiresPartnerPersonalMessageRead = false,
+                ).toDomain(),
+            ),
+            decision = VisualDecision.Rejected,
+            onPending = {},
+        )
+
+        assertTrue(result is VisualApprovalFlowResult.ReloadHome)
+        assertEquals(listOf("submitVisualDecision"), api.calls)
+    }
+
+    @Test
+    fun `legacy partner message read requirement does not block visual decision`() = runBlocking {
+        api.matchResponse = Response.success(TestDtos.match("VISUAL_APPROVED"))
+
+        val result = coordinator.submitDecision(
+            current = visualState(
+                profile = TestDtos.visualProfile(
+                    partnerPersonalMessageSubmitted = true,
+                    partnerPersonalMessageRead = false,
+                    decisionRequiresPartnerPersonalMessageRead = true,
+                ).toDomain(),
+            ),
+            decision = VisualDecision.Approved,
+            onPending = {},
+        )
+
+        assertTrue(result is VisualApprovalFlowResult.ReloadHome)
+        assertEquals(listOf("submitVisualDecision"), api.calls)
+    }
+
+    @Test
+    fun `submit visual decision is blocked while reading partner message`() = runBlocking {
+        val result = coordinator.submitDecision(
+            current = visualState(
+                readingPartnerMessage = true,
                 profile = TestDtos.visualProfile(
                     partnerPersonalMessageSubmitted = true,
                     partnerPersonalMessageRead = false,
@@ -499,6 +560,7 @@ class VisualApprovalCoordinatorTest {
         loading: Boolean = false,
         myPersonalMessageSubmitted: Boolean = false,
         partnerMessageLoaded: Boolean = false,
+        readingPartnerMessage: Boolean = false,
         profile: com.reals.app.domain.model.VisualProfile? = null,
     ): RealsRootUiState.VisualApproval = RealsRootUiState.VisualApproval(
         session = TestDomain.session(),
@@ -506,6 +568,7 @@ class VisualApprovalCoordinatorTest {
         profile = profile,
         myPersonalMessageSubmitted = myPersonalMessageSubmitted,
         partnerMessageLoaded = partnerMessageLoaded,
+        readingPartnerMessage = readingPartnerMessage,
         loading = loading,
     )
 

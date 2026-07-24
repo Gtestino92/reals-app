@@ -50,6 +50,19 @@ profile with no Home interaction keeps the profile-completion flow. This distinc
 `pendingActions`, `nextSteps`, `passiveNotices` and `activeInteractionsSummary`, not raw match or connection states.
 `INACTIVE` is not redefined by this draft-specific routing and continues through the existing profile-only handling.
 
+## Visual Review
+
+`VisualApprovalCoordinator` keeps the backend contract shape unchanged for visual-review partner messages.
+Android still maps `partnerPersonalMessageSubmitted`, `partnerPersonalMessageRead` and the legacy
+`decisionRequiresPartnerPersonalMessageRead` field, but the legacy field is not used as a client-side decision
+eligibility rule.
+
+Unread partner messages are derived from `partnerPersonalMessageSubmitted && !partnerPersonalMessageRead`.
+When unread, Android highlights the partner-message card with a `Mensaje nuevo` label and keeps `Leer mensaje`
+prominent. Reading is encouraged but optional: approval and rejection remain available while a partner message is
+unread, and a message-read failure keeps retry available without blocking the visual decision. Active conflicting
+requests, missing visual profile data and expired visual reviews still disable approval and rejection.
+
 ## Authentication And Session Validity
 
 The presence of a cached Firebase `currentUser` is not proof that the session is still usable. Authenticated

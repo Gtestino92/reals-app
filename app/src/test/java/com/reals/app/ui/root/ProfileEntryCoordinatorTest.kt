@@ -91,6 +91,7 @@ class ProfileEntryCoordinatorTest {
         assertFalse(state.photos.loadingPhotos)
         assertEquals(listOf(1, 2), state.photos.profilePhotos.map { it.position })
         assertEquals(null, state.photos.profilePhotosError)
+        assertEquals(listOf("getHome", "getMyProfilePhotos"), api.calls)
     }
 
     @Test
@@ -124,16 +125,17 @@ class ProfileEntryCoordinatorTest {
 
     @Test
     fun `draft profile with existing interaction returns LoadHome for session entry`() = runBlocking {
-        api.homeResponse = Response.success(
-            emptyDraftHome().copy(
-                pendingActions = listOf(
-                    HomePendingActionResponseDto(
-                        type = "FIRST_CHAT",
-                        matchId = "match-1",
-                        chatId = "chat-1",
-                    ),
+        val returnedHome = emptyDraftHome().copy(
+            pendingActions = listOf(
+                HomePendingActionResponseDto(
+                    type = "FIRST_CHAT",
+                    matchId = "match-1",
+                    chatId = "chat-1",
                 ),
-            )
+            ),
+        )
+        api.homeResponse = Response.success(
+            returnedHome
         )
 
         val result = coordinator.enter(
@@ -146,6 +148,7 @@ class ProfileEntryCoordinatorTest {
         assertTrue(result.ready.home.homeLoading)
         assertTrue(result.autoNavigateEngagements)
         assertEquals(listOf("getHome"), api.calls)
+        assertEquals(returnedHome.toDomain(), result.preloadedHome)
     }
 
     @Test
@@ -162,6 +165,37 @@ class ProfileEntryCoordinatorTest {
         )
 
         assertTrue(result is ProfileEntryResult.LoadHome)
+        assertEquals(listOf("getHome"), api.calls)
+    }
+
+    @Test
+    fun `draft profile Home failure returns recoverable ready state without loading photos`() = runBlocking {
+        api.homeResponse = backendErrorResponse(500, "SERVER_ERROR", "failed")
+
+        val result = coordinator.enter(
+            session = inactiveProfileSession(),
+            onPending = {},
+        )
+
+        assertTrue(result is ProfileEntryResult.ShowReady)
+        val state = (result as ProfileEntryResult.ShowReady).state
+        assertEquals(inactiveProfileSession(), state.session)
+        assertTrue(state.home.homeError is ApiError.Backend)
+        assertFalse(state.photos.loadingPhotos)
+        assertTrue(state.photos.profilePhotos.isEmpty())
+        assertEquals(listOf("getHome"), api.calls)
+    }
+
+    @Test
+    fun `account deleted Home failure returns account deletion result`() = runBlocking {
+        api.homeResponse = backendErrorResponse(410, "ACCOUNT_DELETED", "deleted")
+
+        val result = coordinator.enter(
+            session = inactiveProfileSession(),
+            onPending = {},
+        )
+
+        assertEquals(ProfileEntryResult.AccountDeletionPendingFromBackend, result)
         assertEquals(listOf("getHome"), api.calls)
     }
 

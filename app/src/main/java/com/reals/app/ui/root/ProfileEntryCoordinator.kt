@@ -2,6 +2,7 @@ package com.reals.app.ui.root
 
 import com.reals.app.core.network.ApiResult
 import com.reals.app.core.network.isAccountDeleted
+import com.reals.app.domain.model.HomeState
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.ProvisionedSession
@@ -40,6 +41,7 @@ internal class ProfileEntryCoordinator(
                                 ),
                                 publishLoadingState = false,
                                 autoNavigateEngagements = true,
+                                preloadedHome = home.value,
                             )
                         }
                     }
@@ -48,6 +50,16 @@ internal class ProfileEntryCoordinator(
                         if (home.error.isAccountDeleted()) {
                             return ProfileEntryResult.AccountDeletionPendingFromBackend
                         }
+                        return ProfileEntryResult.ShowReady(
+                            RealsRootUiState.Ready(
+                                session = session,
+                                home = HomeUiState(
+                                    homeLoading = false,
+                                    homeError = home.error,
+                                    matchmakingSearchPhase = MatchmakingSearchUiPhase.Failed,
+                                ),
+                            )
+                        )
                     }
                 }
             }
@@ -101,6 +113,7 @@ internal sealed interface ProfileEntryResult {
         val ready: RealsRootUiState.Ready,
         val publishLoadingState: Boolean = false,
         val autoNavigateEngagements: Boolean = true,
+        val preloadedHome: HomeState? = null,
     ) : ProfileEntryResult
 
     data class ShowReady(

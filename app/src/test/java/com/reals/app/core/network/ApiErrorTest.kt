@@ -36,13 +36,13 @@ class ApiErrorTest {
     }
 
     @Test
-    fun `partner personal message unread codes map to visual review message`() {
+    fun `partner personal message unread codes map to non blocking visual review message`() {
         listOf(
             "PARTNER_PERSONAL_MESSAGE_NOT_READ",
             "VISUAL_REVIEW_PARTNER_MESSAGE_NOT_READ",
         ).forEach { code ->
             assertEquals(
-                "Leé el mensaje personal de la otra persona antes de decidir.",
+                "No pudimos registrar la decisi\u00f3n visual. Actualiz\u00e1 el estado e intent\u00e1 nuevamente.",
                 backendError(code).toUserMessage(ErrorContext.VisualReview),
             )
         }

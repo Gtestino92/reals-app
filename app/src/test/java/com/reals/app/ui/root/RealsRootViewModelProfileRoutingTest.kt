@@ -4,15 +4,20 @@ import com.reals.app.data.dto.HomeActiveInteractionsSummaryResponseDto
 import com.reals.app.data.dto.HomeMatchmakingResponseDto
 import com.reals.app.data.dto.HomePendingActionResponseDto
 import com.reals.app.data.mapper.toDomain
+import com.reals.app.domain.model.ChatContinueDecision
 import com.reals.app.domain.model.LegalDocumentAction
 import com.reals.app.domain.model.LegalDocumentType
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProfileStatus
+import com.reals.app.domain.model.VisualDecision
 import com.reals.app.testutil.FakeRealsApi
 import com.reals.app.testutil.TestDomain
 import com.reals.app.testutil.TestDtos
+import com.reals.app.testutil.backendErrorResponse
+import com.reals.app.ui.matchmaking.HomeUiMapper
+import com.reals.app.ui.matchmaking.LocalHiddenInteractions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -64,7 +69,40 @@ class RealsRootViewModelProfileRoutingTest {
         assertEquals(ProfileStatus.Draft, ready.currentProfile().status)
         assertEquals(ProfileStatus.Draft, ready.home.homeState?.profileStatus)
         assertTrue(ready.home.screenModel?.pendingActions?.isNotEmpty() == true)
+        assertTrue(ready.home.screenModel?.draftProfileWarning?.title?.contains("borrador") == true)
+        assertFalse(ready.home.screenModel?.matchmaking?.canSearch == true)
     }
+
+    @Test
+    fun `after photo add marks draft failed close keeps profile management and clears stale active Home`() =
+        runTest(dispatcher) {
+            val api = FakeRealsApi().apply {
+                homeResponse = backendErrorResponse(500, "SERVER_ERROR", "failed")
+            }
+            val viewModel = viewModel(api)
+            val edited = photoAddedState(
+                previous = editingReady(
+                    profile = activeProfile(photoCount = 1),
+                    photos = listOf(testPhoto("photo-1", 1)),
+                    home = cachedActiveHome(),
+                ),
+                addedPhoto = testPhoto("photo-2", 2),
+                successMessage = "Foto subida correctamente.",
+            )
+            viewModel.setState(edited)
+
+            viewModel.closeProfileManagement()
+            advanceUntilIdle()
+
+            val ready = viewModel.uiState.value as RealsRootUiState.Ready
+            assertTrue(ready.editingActiveProfile)
+            assertEquals(ProfileStatus.Draft, ready.currentProfile().status)
+            assertEquals(listOf("photo-1", "photo-2"), ready.profilePhotos.map { it.id })
+            assertTrue(ready.home.homeError != null)
+            assertEquals(null, ready.home.homeState)
+            assertEquals(null, ready.home.screenModel)
+            assertFalse(ready.home.screenModel?.matchmaking?.canSearch == true)
+        }
 
     @Test
     fun `after photo replacement marks draft closing profile management can return to Home`() = runTest(dispatcher) {
@@ -134,9 +172,162 @@ class RealsRootViewModelProfileRoutingTest {
         val ready = viewModel.uiState.value as RealsRootUiState.Ready
         assertEquals(ProfileStatus.Draft, ready.currentProfile().status)
         assertTrue(ready.home.screenModel?.pendingActions?.isNotEmpty() == true)
-        assertEquals("Tu perfil está en borrador", ready.home.screenModel?.draftProfileWarning?.title)
-        assertEquals(2, api.calls.count { it == "getHome" })
+        assertTrue(ready.home.screenModel?.draftProfileWarning?.title?.contains("borrador") == true)
+        assertEquals(1, api.calls.count { it == "getHome" })
+        assertEquals(0, api.calls.count { it == "getMyProfilePhotos" })
     }
+
+    @Test
+    fun `post session re-entry for draft profile with first chat reuses preloaded Home for auto route`() =
+        runTest(dispatcher) {
+            val api = FakeRealsApi().apply {
+                homeResponse = Response.success(draftHomeWithFirstChat())
+            }
+            val viewModel = viewModel(api)
+            viewModel.setState(
+                RealsRootUiState.LegalRequirements(
+                    session = draftSession(),
+                    resumeContext = LegalResumeContext.PostSession,
+                    documents = listOf(legalRequirement()),
+                )
+            )
+
+            viewModel.deferLegalRequirements()
+            advanceUntilIdle()
+
+            val firstChat = viewModel.uiState.value as RealsRootUiState.FirstChat
+            assertEquals("match-1", firstChat.matchId)
+            assertEquals("chat-1", firstChat.chatId)
+            assertEquals(ProfileStatus.Draft, (firstChat.session.profileSnapshot as ProfileSnapshot.Found).profile.status)
+            assertEquals(1, api.calls.count { it == "getHome" })
+        }
+
+    @Test
+    fun `post session re-entry for draft profile Home failure remains recoverable without photos`() =
+        runTest(dispatcher) {
+            val api = FakeRealsApi().apply {
+                homeResponse = backendErrorResponse(500, "SERVER_ERROR", "failed")
+            }
+            val viewModel = viewModel(api)
+            viewModel.setState(
+                RealsRootUiState.LegalRequirements(
+                    session = draftSession(),
+                    resumeContext = LegalResumeContext.PostSession,
+                    documents = listOf(legalRequirement()),
+                )
+            )
+
+            viewModel.deferLegalRequirements()
+            advanceUntilIdle()
+
+            val ready = viewModel.uiState.value as RealsRootUiState.Ready
+            assertEquals(ProfileStatus.Draft, ready.currentProfile().status)
+            assertTrue(ready.home.homeError != null)
+            assertEquals(null, ready.home.homeState)
+            assertEquals(null, ready.home.screenModel)
+            assertTrue(ready.profilePhotos.isEmpty())
+            assertEquals(1, api.calls.count { it == "getHome" })
+            assertEquals(0, api.calls.count { it == "getMyProfilePhotos" })
+        }
+
+    @Test
+    fun `visual review rejection returns draft profile to Home even when no interactions remain`() =
+        runTest(dispatcher) {
+            val api = FakeRealsApi().apply {
+                matchResponse = Response.success(TestDtos.match(state = "VISUAL_REJECTED"))
+                homeResponse = Response.success(emptyDraftHome())
+            }
+            val viewModel = viewModel(api)
+            viewModel.setState(
+                RealsRootUiState.VisualApproval(
+                    session = draftSession(),
+                    matchId = "match-visual",
+                )
+            )
+
+            viewModel.submitVisualDecision(VisualDecision.Rejected)
+            advanceUntilIdle()
+
+            val ready = viewModel.uiState.value as RealsRootUiState.Ready
+            assertEquals(ProfileStatus.Draft, ready.currentProfile().status)
+            assertEquals(ProfileStatus.Draft, ready.home.homeState?.profileStatus)
+            assertTrue(ready.home.allowDraftHomeWithoutInteractions)
+            assertTrue(ready.home.screenModel?.pendingActions?.isEmpty() == true)
+            assertEquals(false, ready.home.screenModel?.matchmaking?.canSearch)
+            assertTrue(ready.home.screenModel?.draftProfileWarning?.title?.contains("borrador") == true)
+            assertEquals(1, api.calls.count { it == "submitVisualDecision" })
+            assertEquals(1, api.calls.count { it == "getHome" })
+        }
+
+    @Test
+    fun `first chat decision reload returns draft profile to Home even when no interactions remain`() =
+        runTest(dispatcher) {
+            val api = FakeRealsApi().apply {
+                matchResponse = Response.success(TestDtos.match(state = "CHAT_ACTIVE"))
+                homeResponse = Response.success(emptyDraftHome())
+            }
+            val viewModel = viewModel(api)
+            viewModel.setState(firstChatState())
+
+            viewModel.submitFirstChatDecision(ChatContinueDecision.Approved)
+            advanceUntilIdle()
+
+            val ready = viewModel.uiState.value as RealsRootUiState.Ready
+            assertEquals(ProfileStatus.Draft, ready.currentProfile().status)
+            assertEquals(ProfileStatus.Draft, ready.home.homeState?.profileStatus)
+            assertTrue(ready.home.allowDraftHomeWithoutInteractions)
+            assertTrue(ready.home.screenModel?.pendingActions?.isEmpty() == true)
+            assertEquals(false, ready.home.screenModel?.matchmaking?.canSearch)
+            assertTrue(ready.home.screenModel?.draftProfileWarning?.title?.contains("borrador") == true)
+            assertEquals(1, api.calls.count { it == "submitChatDecision" })
+            assertEquals(1, api.calls.count { it == "getHome" })
+        }
+
+    @Test
+    fun `closing first chat returns draft profile to Home even when no interactions remain`() =
+        runTest(dispatcher) {
+            val api = FakeRealsApi().apply {
+                homeResponse = Response.success(emptyDraftHome())
+            }
+            val viewModel = viewModel(api)
+            viewModel.setState(firstChatState())
+
+            viewModel.closeFirstChat()
+            advanceUntilIdle()
+
+            val ready = viewModel.uiState.value as RealsRootUiState.Ready
+            assertEquals(ProfileStatus.Draft, ready.currentProfile().status)
+            assertEquals(ProfileStatus.Draft, ready.home.homeState?.profileStatus)
+            assertTrue(ready.home.allowDraftHomeWithoutInteractions)
+            assertEquals(false, ready.home.screenModel?.matchmaking?.canSearch)
+            assertEquals(1, api.calls.count { it == "getHome" })
+        }
+
+    @Test
+    fun `pending engagement return keeps draft profile in Home even when no interactions remain`() =
+        runTest(dispatcher) {
+            val api = FakeRealsApi().apply {
+                homeResponse = Response.success(emptyDraftHome())
+            }
+            val viewModel = viewModel(api)
+            viewModel.setState(
+                RealsRootUiState.PendingEngagement(
+                    session = draftSession(),
+                    title = "Pendiente",
+                    body = "Tenés una acción pendiente.",
+                )
+            )
+
+            viewModel.returnToHomeFromPendingEngagement()
+            advanceUntilIdle()
+
+            val ready = viewModel.uiState.value as RealsRootUiState.Ready
+            assertEquals(ProfileStatus.Draft, ready.currentProfile().status)
+            assertEquals(ProfileStatus.Draft, ready.home.homeState?.profileStatus)
+            assertTrue(ready.home.allowDraftHomeWithoutInteractions)
+            assertEquals(false, ready.home.screenModel?.matchmaking?.canSearch)
+            assertEquals(1, api.calls.count { it == "getHome" })
+        }
 
     private fun viewModel(api: FakeRealsApi): RealsRootViewModel =
         RealsRootViewModel(rootViewModelTestDependencies(api), autoRefreshSession = false)
@@ -152,6 +343,7 @@ class RealsRootViewModelProfileRoutingTest {
     private fun editingReady(
         profile: Profile,
         photos: List<ProfilePhoto>,
+        home: HomeUiState = HomeUiState(),
     ): RealsRootUiState.Ready =
         RealsRootUiState.Ready(
             session = TestDomain.session().copy(profileSnapshot = ProfileSnapshot.Found(profile)),
@@ -159,6 +351,7 @@ class RealsRootViewModelProfileRoutingTest {
                 profilePhotos = photos,
                 addingPhoto = true,
             ),
+            home = home,
             editingActiveProfile = true,
         )
 
@@ -168,6 +361,14 @@ class RealsRootViewModelProfileRoutingTest {
     private fun draftSession() = TestDomain.session().copy(
         profileSnapshot = ProfileSnapshot.Found(TestDtos.profile(status = "DRAFT").toDomain()),
     )
+
+    private fun firstChatState(): RealsRootUiState.FirstChat =
+        RealsRootUiState.FirstChat(
+            session = draftSession(),
+            matchId = "match-1",
+            chatId = "chat-1",
+            chat = TestDtos.chat(status = "ACTIVE").toDomain(),
+        )
 
     private fun testPhoto(
         id: String,
@@ -214,6 +415,31 @@ class RealsRootViewModelProfileRoutingTest {
         nextSteps = emptyList(),
         passiveNotices = emptyList(),
     )
+
+    private fun cachedActiveHome(): HomeUiState {
+        val home = TestDtos.home().copy(
+            profileStatus = "ACTIVE",
+            matchmaking = HomeMatchmakingResponseDto(
+                inQueue = false,
+                canSearch = true,
+                blockedReason = null,
+            ),
+            pendingActions = emptyList(),
+            nextSteps = emptyList(),
+            passiveNotices = emptyList(),
+        ).toDomain()
+        return HomeUiState(
+            homeState = home,
+            screenModel = HomeUiMapper().toScreenModel(
+                home = home,
+                localHidden = LocalHiddenInteractions(
+                    hiddenFirstChatMatchIds = emptySet(),
+                    hiddenVisualMatchIds = emptySet(),
+                ),
+                localMatchmakingBlockedReason = null,
+            ),
+        )
+    }
 
     private fun legalRequirement(): LegalRequirementUiItem = LegalRequirementUiItem(
         type = LegalDocumentType.TermsOfUse,

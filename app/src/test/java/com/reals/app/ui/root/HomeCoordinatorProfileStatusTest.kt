@@ -141,6 +141,52 @@ class HomeCoordinatorProfileStatusTest {
         assertEquals(1, reloadCalls)
     }
 
+    @Test
+    fun `draft profile with no existing interaction can stay in Home for operational return`() = runBlocking {
+        val api = FakeRealsApi().apply {
+            homeResponse = Response.success(emptyHome(profileStatus = "DRAFT"))
+        }
+        val state = MutableStateFlow<RealsRootUiState>(ready())
+        var reloadCalls = 0
+
+        coordinator(api, state, this, onReload = { reloadCalls += 1 })
+            .loadHomeForReady(
+                ready = state.value as RealsRootUiState.Ready,
+                allowDraftHomeWithoutInteractions = true,
+            )
+        yield()
+
+        assertEquals(0, reloadCalls)
+        val ready = state.value as RealsRootUiState.Ready
+        assertEquals(ProfileStatus.Draft, ready.currentProfileStatus())
+        assertEquals(ProfileStatus.Draft, ready.home.homeState?.profileStatus)
+        assertEquals(true, ready.home.allowDraftHomeWithoutInteractions)
+        assertEquals(false, ready.home.screenModel?.matchmaking?.canSearch)
+        assertEquals("Tu perfil está en borrador", ready.home.screenModel?.draftProfileWarning?.title)
+    }
+
+    @Test
+    fun `draft operational Home permission survives explicit refresh`() = runBlocking {
+        val api = FakeRealsApi().apply {
+            homeResponse = Response.success(emptyHome(profileStatus = "DRAFT"))
+        }
+        val state = MutableStateFlow<RealsRootUiState>(
+            ready().copy(home = HomeUiState(allowDraftHomeWithoutInteractions = true))
+        )
+        var reloadCalls = 0
+
+        coordinator(api, state, this, onReload = { reloadCalls += 1 })
+            .refreshHomeState()
+        yield()
+
+        assertEquals(0, reloadCalls)
+        val ready = state.value as RealsRootUiState.Ready
+        assertEquals(ProfileStatus.Draft, ready.home.homeState?.profileStatus)
+        assertEquals(true, ready.home.allowDraftHomeWithoutInteractions)
+        assertEquals(false, ready.home.screenModel?.matchmaking?.canSearch)
+        assertTrue(ready.home.screenModel?.draftProfileWarning?.title?.contains("borrador") == true)
+    }
+
     private fun coordinator(
         api: FakeRealsApi,
         state: MutableStateFlow<RealsRootUiState>,
