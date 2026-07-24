@@ -32,7 +32,7 @@ Implemented or substantially implemented:
 Remaining production work:
 - Broaden notification coverage across all intended product events.
 - Verify production Play Integrity, Google Play distribution, remote HTTPS deployment, and production-device delivery
-  conditions; the local App Check debug-provider smoke is not evidence for Play Integrity.
+  conditions; the local App Check-disabled smoke is not evidence for Play Integrity.
 - Add notification delivery/open observability without logging tokens, private payloads, or sensitive identifiers.
 - Harden stale registration-token lifecycle handling in coordination with backend cleanup/disable semantics.
 - Make foreground/background notification presentation consistent.
@@ -272,14 +272,14 @@ Acceptance criteria:
 ## 10. Production environment and release management
 
 Implemented:
-- Android environment isolation now gives `local`, `dev`, and `prod` distinct application IDs, labels, Firebase
-  config locations, App Check providers, and cleartext policies.
+- Android environment isolation now gives `local`, `dev`, and `prod` distinct application IDs, labels, Firebase config
+  locations, App Check behavior, and cleartext policies.
 - Build-time validation rejects dev/prod cleartext, local-only hosts, and placeholder backend URLs.
 - Release builds enable R8 code shrinking, optimization, obfuscation, and resource shrinking.
 - CI builds and inspects optimized `localRelease`, uploads its APK and exact mapping file, and skips dev/prod release
   validation unless real Firebase, URL, and signing prerequisites are present.
 - The July 21, 2026 manually installed, signed, optimized `localRelease` APK smoke passed for exercised MVP runtime
-  paths using the local App Check debug provider.
+  paths; current local builds disable App Check.
 
 Future work:
 - Configure real production API URL.

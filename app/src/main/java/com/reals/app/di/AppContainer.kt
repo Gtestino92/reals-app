@@ -77,7 +77,11 @@ class AppContainer(context: Context) {
     }
     private val apiExecutor = ApiExecutor(json)
     private val tokenProvider = FirebaseAuthTokenProvider(appContext)
-    private val appCheckTokenProvider = FirebaseAppCheckTokenProvider(appContext)
+    private val appCheckTokenProvider = if (BuildConfig.ENABLE_FIREBASE_APP_CHECK) {
+        FirebaseAppCheckTokenProvider(appContext)
+    } else {
+        null
+    }
     private val api = RealsApiClient.create(BuildConfig.REALS_BASE_URL, json, appCheckTokenProvider)
 
     val authRepository = FirebaseAuthRepository(appContext)

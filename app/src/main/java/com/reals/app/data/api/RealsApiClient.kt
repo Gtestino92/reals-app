@@ -14,7 +14,16 @@ import retrofit2.Retrofit
 
 object RealsApiClient {
     @OptIn(ExperimentalSerializationApi::class)
-    fun create(baseUrl: String, json: Json, appCheckTokenProvider: AppCheckTokenProvider): RealsApi {
+    fun create(baseUrl: String, json: Json, appCheckTokenProvider: AppCheckTokenProvider?): RealsApi {
+        return Retrofit.Builder()
+            .baseUrl(baseUrl)
+            .client(createOkHttpClient(json, appCheckTokenProvider))
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+            .create(RealsApi::class.java)
+    }
+
+    internal fun createOkHttpClient(json: Json, appCheckTokenProvider: AppCheckTokenProvider?): OkHttpClient {
         val shouldLogNetwork = BuildConfig.DEBUG && BuildConfig.REALS_ENVIRONMENT != "prod"
         val logging = HttpLoggingInterceptor().apply {
             redactHeader("Authorization")
@@ -27,19 +36,16 @@ object RealsApiClient {
                 HttpLoggingInterceptor.Level.NONE
             }
         }
-        val okHttp = OkHttpClient.Builder()
+        return OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
-            .addInterceptor(AppCheckInterceptor(appCheckTokenProvider, json))
+            .apply {
+                if (appCheckTokenProvider != null) {
+                    addInterceptor(AppCheckInterceptor(appCheckTokenProvider, json))
+                }
+            }
             .addInterceptor(logging)
             .build()
-
-        return Retrofit.Builder()
-            .baseUrl(baseUrl)
-            .client(okHttp)
-            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
-            .build()
-            .create(RealsApi::class.java)
     }
 }

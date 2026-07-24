@@ -56,9 +56,9 @@ docker compose up -d
 Then select and run `localDebug` from Android Studio.
 
 `localDebug` installs as `com.reals.app.local` with the visible name `Reals Local`. This is a distinct app from
-`dev` and `prod`, so it has separate app data, Firebase Auth state, FCM registration, and App Check debug-token
-lifecycle. Register the debug token printed by this new local app under the Firebase Android App for
-`com.reals.app.local`.
+`dev` and `prod`, so it has separate app data, Firebase Auth state, and FCM registration. App Check is disabled for
+`localDebug` and `localRelease`, so the local app does not print or require an App Check debug token and local backend
+requests omit `X-Firebase-AppCheck`.
 
 ## Verify ADB Mappings
 

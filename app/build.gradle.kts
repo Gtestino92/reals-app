@@ -183,6 +183,7 @@ android {
             manifestPlaceholders["usesCleartextTraffic"] = "true"
             buildConfigField("String", "REALS_ENVIRONMENT", quoted("local"))
             buildConfigField("String", "REALS_BASE_URL", quoted(localBaseUrl))
+            buildConfigField("boolean", "ENABLE_FIREBASE_APP_CHECK", "false")
             buildConfigField("boolean", "ENABLE_LOCAL_FIREBASE_EMAIL_AUTO_VERIFICATION", "true")
             buildConfigField("boolean", "SHOW_MANUAL_LOCATION_FALLBACK", "true")
             buildConfigField("boolean", "SHOW_EXPLICIT_REFRESH_BUTTONS", "true")
@@ -193,6 +194,7 @@ android {
             manifestPlaceholders["usesCleartextTraffic"] = "false"
             buildConfigField("String", "REALS_ENVIRONMENT", quoted("dev"))
             buildConfigField("String", "REALS_BASE_URL", quoted(devBaseUrl))
+            buildConfigField("boolean", "ENABLE_FIREBASE_APP_CHECK", "true")
             buildConfigField("boolean", "ENABLE_LOCAL_FIREBASE_EMAIL_AUTO_VERIFICATION", "false")
             buildConfigField("boolean", "SHOW_MANUAL_LOCATION_FALLBACK", "true")
             buildConfigField("boolean", "SHOW_EXPLICIT_REFRESH_BUTTONS", "true")
@@ -202,6 +204,7 @@ android {
             manifestPlaceholders["usesCleartextTraffic"] = "false"
             buildConfigField("String", "REALS_ENVIRONMENT", quoted("prod"))
             buildConfigField("String", "REALS_BASE_URL", quoted(prodBaseUrl))
+            buildConfigField("boolean", "ENABLE_FIREBASE_APP_CHECK", "true")
             buildConfigField("boolean", "ENABLE_LOCAL_FIREBASE_EMAIL_AUTO_VERIFICATION", "false")
             buildConfigField("boolean", "SHOW_MANUAL_LOCATION_FALLBACK", "false")
             buildConfigField("boolean", "SHOW_EXPLICIT_REFRESH_BUTTONS", "false")
@@ -435,26 +438,30 @@ tasks.register("verifyAppCheckDependencyIsolation") {
 
         data class AppCheckProviderExpectation(
             val configurationName: String,
-            val requiredModule: String,
+            val requiredModule: String?,
             val forbiddenModule: String,
-            val requiredProviderName: String,
+            val secondForbiddenModule: String? = null,
+            val requiredProviderName: String? = null,
             val forbiddenProviderName: String,
+            val secondForbiddenProviderName: String? = null,
         )
 
         listOf(
             AppCheckProviderExpectation(
                 configurationName = "localDebugRuntimeClasspath",
-                requiredModule = debugModule,
+                requiredModule = null,
                 forbiddenModule = playIntegrityModule,
-                requiredProviderName = "debug",
+                secondForbiddenModule = debugModule,
                 forbiddenProviderName = "Play Integrity",
+                secondForbiddenProviderName = "debug",
             ),
             AppCheckProviderExpectation(
                 configurationName = "localReleaseRuntimeClasspath",
-                requiredModule = debugModule,
+                requiredModule = null,
                 forbiddenModule = playIntegrityModule,
-                requiredProviderName = "debug",
+                secondForbiddenModule = debugModule,
                 forbiddenProviderName = "Play Integrity",
+                secondForbiddenProviderName = "debug",
             ),
             AppCheckProviderExpectation(
                 configurationName = "devDebugRuntimeClasspath",
@@ -487,7 +494,7 @@ tasks.register("verifyAppCheckDependencyIsolation") {
         ).forEach { expectation ->
             val modules = moduleIds(expectation.configurationName)
             val variantName = expectation.configurationName.removeSuffix("RuntimeClasspath")
-            if (expectation.requiredModule !in modules) {
+            if (expectation.requiredModule != null && expectation.requiredModule !in modules) {
                 throw GradleException(
                     "$variantName must include Firebase App Check ${expectation.requiredProviderName} provider.",
                 )
@@ -495,6 +502,11 @@ tasks.register("verifyAppCheckDependencyIsolation") {
             if (expectation.forbiddenModule in modules) {
                 throw GradleException(
                     "$variantName must not include Firebase App Check ${expectation.forbiddenProviderName} provider.",
+                )
+            }
+            if (expectation.secondForbiddenModule != null && expectation.secondForbiddenModule in modules) {
+                throw GradleException(
+                    "$variantName must not include Firebase App Check ${expectation.secondForbiddenProviderName} provider.",
                 )
             }
         }
@@ -634,8 +646,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.firebase.auth)
+    implementation(libs.firebase.appcheck)
     implementation(libs.firebase.messaging)
-    add("localImplementation", libs.firebase.appcheck.debug)
     add("devDebugImplementation", libs.firebase.appcheck.debug)
     add("devReleaseImplementation", libs.firebase.appcheck.playintegrity)
     add("prodImplementation", libs.firebase.appcheck.playintegrity)

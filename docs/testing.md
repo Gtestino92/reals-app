@@ -40,6 +40,10 @@ inputs. `prodRelease` requires `app/src/prod/google-services.json` with `com.rea
 `realsProdBaseUrl`, and complete production release signing inputs. These builds must not use placeholder, localhost,
 loopback, or cleartext backend URLs.
 
+`localDebug` and `localRelease` keep Firebase Auth, Messaging and local Firebase email auto-verification enabled, but
+disable App Check completely. Local backend requests should not acquire an App Check token and should omit
+`X-Firebase-AppCheck`.
+
 `testLocalReleaseUnitTest` may be run when present for JVM regression coverage, but JVM tests do not prove R8 runtime
 compatibility. R8 compatibility requires building the optimized APK and running the manual smoke test described in
 `docs/local-development.md`.
