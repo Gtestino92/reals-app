@@ -375,6 +375,22 @@ class RealsRootViewModelLegalRoutingTest {
                 cancelChat = CancelChatUseCase(chatRepository),
                 safetyCancelChat = SafetyCancelChatUseCase(chatRepository),
             ),
+            secondChat = com.reals.app.di.SecondChatFeatureDependencies(
+                getStatus = com.reals.app.domain.usecase.GetSecondChatStatusUseCase(chatRepository),
+                join = com.reals.app.domain.usecase.JoinSecondChatUseCase(chatRepository),
+                createNoShowClaim = com.reals.app.domain.usecase.CreateSecondChatNoShowClaimUseCase(chatRepository),
+                getChat = GetChatUseCase(chatRepository),
+                getSecondChatForConnection = GetSecondChatForConnectionUseCase(chatRepository),
+                getChatMessages = GetChatMessagesUseCase(chatRepository),
+                sendChatMessage = SendChatMessageUseCase(chatRepository),
+                safetyCancelChat = SafetyCancelChatUseCase(chatRepository),
+                createCompletionRequest =
+                    com.reals.app.domain.usecase.CreateSecondChatCompletionRequestUseCase(chatRepository),
+                decideCompletionRequest =
+                    com.reals.app.domain.usecase.DecideSecondChatCompletionRequestUseCase(chatRepository),
+                createInactivityClaim =
+                    com.reals.app.domain.usecase.CreateSecondChatInactivityClaimUseCase(chatRepository),
+            ),
             visualApproval = VisualApprovalFeatureDependencies(
                 getMatch = GetMatchUseCase(matchRepository),
                 getVisualProfile = GetVisualProfileUseCase(matchRepository),

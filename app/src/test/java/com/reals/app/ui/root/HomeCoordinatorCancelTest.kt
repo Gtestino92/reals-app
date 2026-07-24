@@ -300,6 +300,7 @@ class HomeCoordinatorCancelTest {
             ),
             scope = scope,
             onOpenFirstChat = { _, _, _ -> },
+            onOpenSecondChat = { _, _, _, _ -> },
             onReloadActiveSession = { _ -> },
         )
     }

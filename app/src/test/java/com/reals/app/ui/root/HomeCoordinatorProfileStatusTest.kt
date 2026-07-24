@@ -210,6 +210,7 @@ class HomeCoordinatorProfileStatusTest {
             ),
             scope = scope,
             onOpenFirstChat = { _, _, _ -> },
+            onOpenSecondChat = { _, _, _, _ -> },
             onReloadActiveSession = { onReload() },
         )
     }

@@ -6,6 +6,7 @@ import com.reals.app.domain.model.BackendUser
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.CountryReference
 import com.reals.app.domain.model.HomeState
 import com.reals.app.domain.model.LegalDocumentAction
@@ -17,6 +18,7 @@ import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.SchedulingNegotiation
 import com.reals.app.domain.model.SchedulingProposal
+import com.reals.app.domain.model.SecondChatStatus
 import com.reals.app.domain.model.VisualProfile
 import com.reals.app.ui.matchmaking.HomeScreenModel
 
@@ -140,6 +142,7 @@ sealed interface RealsRootUiState {
         val messages: List<ChatMessage> = emptyList(),
         val optimisticMessages: List<OptimisticOutgoingMessage> = emptyList(),
         val exitRequests: List<ChatExitRequest> = emptyList(),
+        val lifecycle: SecondChatLifecycleUiState = SecondChatLifecycleUiState(),
         val loading: Boolean = false,
         val refreshing: Boolean = false,
         val sending: Boolean = false,
@@ -213,6 +216,13 @@ sealed interface RealsRootUiState {
 
     data class Failure(val error: ApiError) : RealsRootUiState
 }
+
+data class SecondChatLifecycleUiState(
+    val status: SecondChatStatus? = null,
+    val joining: Boolean = false,
+    val claimingNoShow: Boolean = false,
+    val joinCompletedInThisSession: Boolean = false,
+)
 
 data class ManualBlockUiState(
     val loading: Boolean = false,
@@ -416,7 +426,8 @@ fun RealsRootUiState.canHandleSystemBack(): Boolean = when (this) {
             session.profileSnapshot is ProfileSnapshot.Found &&
             !photos.reorderingPhotos
 
-    is RealsRootUiState.SecondChat -> !sending && !actionLoading && !manualBlock.loading
+    is RealsRootUiState.SecondChat -> !isJoinedActiveSecondChat() &&
+        !sending && !actionLoading && !manualBlock.loading
     is RealsRootUiState.VisualApproval ->
         !deciding && !writingMessage && !readingPartnerMessage && !manualBlock.loading
     is RealsRootUiState.Scheduling -> !submitting && !manualBlock.loading
@@ -434,3 +445,14 @@ fun RealsRootUiState.canHandleSystemBack(): Boolean = when (this) {
     is RealsRootUiState.FirstChat,
     is RealsRootUiState.Failure -> false
 }
+
+fun RealsRootUiState.SecondChat.isJoinedActiveSecondChat(): Boolean =
+    lifecycle.status?.isJoinedActiveSecondChat() == true
+
+fun SecondChatStatus.isJoinedActiveSecondChat(): Boolean =
+    chatStatus == ChatStatus.Active &&
+        chatId?.isNotBlank() == true &&
+        (
+            myAttendanceStatus == com.reals.app.domain.model.SecondChatAttendanceStatus.OnTime ||
+                myAttendanceStatus == com.reals.app.domain.model.SecondChatAttendanceStatus.Late
+            )

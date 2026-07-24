@@ -18,6 +18,7 @@ data class ChatResponseDto(
     val partner: ChatPartnerResponseDto? = null,
     val myDecision: String? = null,
     val partnerDecision: String? = null,
+    val endedReason: String? = null,
     val endedAt: String? = null,
     val readOnlyUntil: String? = null,
     val lastMessageAt: String? = null,
@@ -95,4 +96,54 @@ data class ChatExitOutcomeResponseDto(
     val exitRequest: ChatExitRequestResponseDto,
     val penaltyApplied: Boolean = false,
     val penalizedUserId: String? = null,
+)
+
+@Serializable
+data class SecondChatResolutionRequestResponseDto(
+    val id: String,
+    val type: String,
+    val requesterUserId: String,
+    val responderUserId: String,
+    val referenceMessageId: String? = null,
+    val status: String,
+    val createdAt: String,
+    val expiresAt: String,
+)
+
+@Serializable
+data class SecondChatAttendanceResponseDto(
+    val connectionId: String,
+    val chatId: String? = null,
+    val scheduledAt: String,
+    val onTimeUntil: String,
+    val entryClosesAt: String,
+    val absoluteExpiresAt: String,
+    val conversationStartedAt: String? = null,
+    val serverTime: String,
+    val myAttendanceStatus: String,
+    val myJoinedAt: String? = null,
+    val partnerAttendanceStatus: String,
+    val partnerJoinedAt: String? = null,
+    val canJoin: Boolean,
+    val canClaimPartnerNoShow: Boolean,
+    val activeNoShowClaim: SecondChatResolutionRequestResponseDto? = null,
+    val activeResolutionRequest: SecondChatResolutionRequestResponseDto? = null,
+    val chatStatus: String? = null,
+    val endedReason: String? = null,
+    val endedAt: String? = null,
+    val readOnlyUntil: String? = null,
+    val mutualCompletionEligibleAt: String? = null,
+    val canRequestMutualCompletion: Boolean = false,
+    val mutualCompletionCooldownUntil: String? = null,
+    val inactivityClaimableAt: String? = null,
+    val inactivityClosesAt: String? = null,
+    val canClaimPartnerInactivity: Boolean = false,
+    val mustRespondToPartner: Boolean = false,
+    val lastMessageAt: String? = null,
+    val lastMessageSenderId: String? = null,
+)
+
+@Serializable
+data class SecondChatCompletionDecisionRequestDto(
+    val decision: String,
 )

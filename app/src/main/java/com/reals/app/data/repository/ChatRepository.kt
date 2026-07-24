@@ -8,14 +8,17 @@ import com.reals.app.data.api.RealsApi
 import com.reals.app.data.dto.ChatExitRequestCreateRequestDto
 import com.reals.app.data.dto.ChatMessageResponseDto
 import com.reals.app.data.dto.ChatMessagesResponseDto
+import com.reals.app.data.dto.SecondChatCompletionDecisionRequestDto
 import com.reals.app.data.dto.SendMessageRequestDto
 import com.reals.app.data.mapper.toDomain
 import com.reals.app.domain.model.Chat
+import com.reals.app.domain.model.SecondChatCompletionDecision
 import com.reals.app.domain.model.ChatExitOutcome
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.FirstChatGuidance
+import com.reals.app.domain.model.SecondChatStatus
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -37,6 +40,40 @@ class ChatRepository(
 
     suspend fun getSecondChatForConnection(connectionId: String): ApiResult<Chat> =
         authorizedCall { authorization -> api.getSecondChatForConnection(authorization, connectionId) }
+            .map { it.toDomain() }
+
+    suspend fun getSecondChatStatus(connectionId: String): ApiResult<SecondChatStatus> =
+        authorizedCall { authorization -> api.getSecondChatStatus(authorization, connectionId) }
+            .map { it.toDomain() }
+
+    suspend fun joinSecondChat(connectionId: String): ApiResult<SecondChatStatus> =
+        authorizedCall { authorization -> api.joinSecondChat(authorization, connectionId) }
+            .map { it.toDomain() }
+
+    suspend fun createSecondChatNoShowClaim(connectionId: String): ApiResult<SecondChatStatus> =
+        authorizedCall { authorization -> api.createSecondChatNoShowClaim(authorization, connectionId) }
+            .map { it.toDomain() }
+
+    suspend fun createSecondChatCompletionRequest(connectionId: String): ApiResult<SecondChatStatus> =
+        authorizedCall { authorization -> api.createSecondChatCompletionRequest(authorization, connectionId) }
+            .map { it.toDomain() }
+
+    suspend fun decideSecondChatCompletionRequest(
+        connectionId: String,
+        requestId: String,
+        decision: SecondChatCompletionDecision,
+    ): ApiResult<SecondChatStatus> =
+        authorizedCall { authorization ->
+            api.decideSecondChatCompletionRequest(
+                authorization = authorization,
+                connectionId = connectionId,
+                requestId = requestId,
+                body = SecondChatCompletionDecisionRequestDto(decision.rawValue),
+            )
+        }.map { it.toDomain() }
+
+    suspend fun createSecondChatInactivityClaim(connectionId: String): ApiResult<SecondChatStatus> =
+        authorizedCall { authorization -> api.createSecondChatInactivityClaim(authorization, connectionId) }
             .map { it.toDomain() }
 
     suspend fun dismissSecondChatForConnection(connectionId: String): ApiResult<Boolean> =

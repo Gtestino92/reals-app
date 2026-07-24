@@ -7,6 +7,8 @@ import com.reals.app.data.dto.ChatPartnerResponseDto
 import com.reals.app.data.dto.ChatResponseDto
 import com.reals.app.data.dto.FirstChatGuidanceQuestionResponseDto
 import com.reals.app.data.dto.FirstChatGuidanceResponseDto
+import com.reals.app.data.dto.SecondChatAttendanceResponseDto
+import com.reals.app.data.dto.SecondChatResolutionRequestResponseDto
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatDecisionState
 import com.reals.app.domain.model.ChatExitOutcome
@@ -20,6 +22,12 @@ import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.ChatType
 import com.reals.app.domain.model.FirstChatGuidance
 import com.reals.app.domain.model.FirstChatGuidanceQuestion
+import com.reals.app.domain.model.SecondChatAttendanceStatus
+import com.reals.app.domain.model.SecondChatEndedReason
+import com.reals.app.domain.model.SecondChatResolutionRequest
+import com.reals.app.domain.model.SecondChatResolutionRequestStatus
+import com.reals.app.domain.model.SecondChatResolutionRequestType
+import com.reals.app.domain.model.SecondChatStatus
 
 fun ChatResponseDto.toDomain(): Chat = Chat(
     id = id,
@@ -36,11 +44,56 @@ fun ChatResponseDto.toDomain(): Chat = Chat(
     partner = partner?.toDomain(),
     myDecision = ChatDecisionState.fromBackend(myDecision),
     partnerDecision = ChatDecisionState.fromBackend(partnerDecision),
+    endedReason = SecondChatEndedReason.fromBackend(endedReason),
     endedAt = endedAt,
     readOnlyUntil = readOnlyUntil,
     lastMessageAt = lastMessageAt,
     guidance = guidance?.toDomain(),
 )
+
+fun SecondChatAttendanceResponseDto.toDomain(): SecondChatStatus = SecondChatStatus(
+    connectionId = connectionId,
+    chatId = chatId,
+    scheduledAt = scheduledAt,
+    onTimeUntil = onTimeUntil,
+    entryClosesAt = entryClosesAt,
+    absoluteExpiresAt = absoluteExpiresAt,
+    conversationStartedAt = conversationStartedAt,
+    serverTime = serverTime,
+    myAttendanceStatus = SecondChatAttendanceStatus.fromBackend(myAttendanceStatus),
+    myJoinedAt = myJoinedAt,
+    partnerAttendanceStatus = SecondChatAttendanceStatus.fromBackend(partnerAttendanceStatus),
+    partnerJoinedAt = partnerJoinedAt,
+    canJoin = canJoin,
+    canClaimPartnerNoShow = canClaimPartnerNoShow,
+    activeNoShowClaim = activeNoShowClaim?.toDomain(),
+    activeResolutionRequest = activeResolutionRequest?.toDomain(),
+    chatStatus = chatStatus?.let { ChatStatus.fromBackend(it) },
+    endedReason = SecondChatEndedReason.fromBackend(endedReason),
+    endedAt = endedAt,
+    readOnlyUntil = readOnlyUntil,
+    mutualCompletionEligibleAt = mutualCompletionEligibleAt,
+    canRequestMutualCompletion = canRequestMutualCompletion,
+    mutualCompletionCooldownUntil = mutualCompletionCooldownUntil,
+    inactivityClaimableAt = inactivityClaimableAt,
+    inactivityClosesAt = inactivityClosesAt,
+    canClaimPartnerInactivity = canClaimPartnerInactivity,
+    mustRespondToPartner = mustRespondToPartner,
+    lastMessageAt = lastMessageAt,
+    lastMessageSenderId = lastMessageSenderId,
+)
+
+fun SecondChatResolutionRequestResponseDto.toDomain(): SecondChatResolutionRequest =
+    SecondChatResolutionRequest(
+        id = id,
+        type = SecondChatResolutionRequestType.fromBackend(type),
+        requesterUserId = requesterUserId,
+        responderUserId = responderUserId,
+        referenceMessageId = referenceMessageId,
+        status = SecondChatResolutionRequestStatus.fromBackend(status),
+        createdAt = createdAt,
+        expiresAt = expiresAt,
+    )
 
 fun ChatPartnerResponseDto.toDomain(): ChatPartner = ChatPartner(
     userId = userId,

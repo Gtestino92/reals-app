@@ -57,7 +57,7 @@ class RealsRootViewModel(
         getHome = dependencies.home.getHome,
     )
     private val firstChatCoordinator = FirstChatCoordinator(dependencies.firstChat)
-    private val secondChatCoordinator = SecondChatCoordinator(dependencies.firstChat)
+    private val secondChatCoordinator = SecondChatCoordinator(dependencies.secondChat)
     private val visualApprovalCoordinator = VisualApprovalCoordinator(dependencies.visualApproval)
     private val partnerProfileCoordinator = PartnerProfileCoordinator(
         dependencies.visualApproval.getVisualProfile,
@@ -82,6 +82,9 @@ class RealsRootViewModel(
         dependencies = dependencies.home,
         scope = viewModelScope,
         onOpenFirstChat = { session, matchId, chatId -> openFirstChat(session, matchId, chatId) },
+        onOpenSecondChat = { session, connectionId, matchId, partnerName ->
+            openSecondChat(session, connectionId, matchId, partnerName, joinIfAllowed = false)
+        },
         onReloadActiveSession = { user -> sessionCoordinator.loadBackendSessionForActiveUser(user) },
     )
     val uiState: StateFlow<RealsRootUiState> = _uiState.asStateFlow()
@@ -221,7 +224,13 @@ class RealsRootViewModel(
         when (val current = _uiState.value) {
             is RealsRootUiState.Ready -> refreshHomeState()
             is RealsRootUiState.FirstChat -> returnHomeFromExternalNotification(current.session)
-            is RealsRootUiState.SecondChat -> returnHomeFromExternalNotification(current.session)
+            is RealsRootUiState.SecondChat -> {
+                if (current.isJoinedActiveSecondChat()) {
+                    refreshSecondChat(silent = true)
+                } else {
+                    returnHomeFromExternalNotification(current.session)
+                }
+            }
             is RealsRootUiState.VisualApproval -> returnHomeFromExternalNotification(current.session)
             is RealsRootUiState.Scheduling -> returnHomeFromExternalNotification(current.session)
             is RealsRootUiState.PartnerProfile -> returnHomeFromExternalNotification(current.session)
@@ -344,6 +353,16 @@ class RealsRootViewModel(
         val cleanMatchId = matchId.trim()
         if (cleanConnectionId.isBlank() || cleanMatchId.isBlank()) return
 
+        openSecondChat(session, cleanConnectionId, cleanMatchId, partnerName, joinIfAllowed = true)
+    }
+
+    private fun openSecondChat(
+        session: ProvisionedSession,
+        cleanConnectionId: String,
+        cleanMatchId: String,
+        partnerName: String? = null,
+        joinIfAllowed: Boolean,
+    ) {
         viewModelScope.launch {
             _uiState.value = RealsRootUiState.SecondChat(
                 session = session,
@@ -358,6 +377,7 @@ class RealsRootViewModel(
                     connectionId = cleanConnectionId,
                     matchId = cleanMatchId,
                     partnerName = partnerName,
+                    joinIfAllowed = joinIfAllowed,
                 )
             )
         }
@@ -444,8 +464,21 @@ class RealsRootViewModel(
 
     fun closeSecondChat() {
         val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        if (current.isJoinedActiveSecondChat()) return
         viewModelScope.launch {
             homeCoordinator.returnHome(current.session)
+        }
+    }
+
+    fun createSecondChatNoShowClaim() {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        viewModelScope.launch {
+            applySecondChatLoadResult(
+                secondChatCoordinator.createNoShowClaim(
+                    current = current,
+                    onPending = { _uiState.value = it },
+                )
+            )
         }
     }
 

@@ -33,6 +33,8 @@ import com.reals.app.data.dto.PingResponseDto
 import com.reals.app.data.dto.ProfileResponseDto
 import com.reals.app.data.dto.QueueStatusResponseDto
 import com.reals.app.data.dto.ScheduleProposalResponseDto
+import com.reals.app.data.dto.SecondChatAttendanceResponseDto
+import com.reals.app.data.dto.SecondChatResolutionRequestResponseDto
 import com.reals.app.data.dto.UserResponseDto
 import com.reals.app.data.dto.UserBlockResponseDto
 import com.reals.app.data.dto.VisualProfileResponseDto
@@ -190,6 +192,7 @@ object TestDtos {
         partner = partner(),
         myDecision = myDecision,
         partnerDecision = partnerDecision,
+        endedReason = null,
         endedAt = null,
         lastMessageAt = now,
         guidance = guidance,
@@ -255,6 +258,63 @@ object TestDtos {
         exitRequest = exitRequest(status = "ACCEPTED"),
         penaltyApplied = false,
         penalizedUserId = null,
+    )
+
+    fun secondChatResolutionRequest(
+        type: String = "PARTNER_NO_SHOW",
+        status: String = "PENDING",
+    ) = SecondChatResolutionRequestResponseDto(
+        id = "request-1",
+        type = type,
+        requesterUserId = "user-1",
+        responderUserId = "user-2",
+        referenceMessageId = null,
+        status = status,
+        createdAt = now,
+        expiresAt = "2026-06-18T21:01:00Z",
+    )
+
+    fun secondChatStatus(
+        chatId: String? = "chat-1",
+        myAttendanceStatus: String = "ON_TIME",
+        partnerAttendanceStatus: String = "ON_TIME",
+        canJoin: Boolean = false,
+        canClaimPartnerNoShow: Boolean = false,
+        activeNoShowClaim: SecondChatResolutionRequestResponseDto? = null,
+        activeResolutionRequest: SecondChatResolutionRequestResponseDto? = activeNoShowClaim,
+        chatStatus: String? = "ACTIVE",
+        endedReason: String? = null,
+        readOnlyUntil: String? = null,
+    ) = SecondChatAttendanceResponseDto(
+        connectionId = "connection-1",
+        chatId = chatId,
+        scheduledAt = "2026-06-18T21:00:00Z",
+        onTimeUntil = "2026-06-18T21:10:00Z",
+        entryClosesAt = "2026-06-18T21:20:00Z",
+        absoluteExpiresAt = "2026-06-18T23:00:00Z",
+        conversationStartedAt = if (partnerAttendanceStatus == "PENDING") null else now,
+        serverTime = now,
+        myAttendanceStatus = myAttendanceStatus,
+        myJoinedAt = if (myAttendanceStatus == "PENDING") null else now,
+        partnerAttendanceStatus = partnerAttendanceStatus,
+        partnerJoinedAt = if (partnerAttendanceStatus == "PENDING") null else now,
+        canJoin = canJoin,
+        canClaimPartnerNoShow = canClaimPartnerNoShow,
+        activeNoShowClaim = activeNoShowClaim,
+        activeResolutionRequest = activeResolutionRequest,
+        chatStatus = chatStatus,
+        endedReason = endedReason,
+        endedAt = endedReason?.let { now },
+        readOnlyUntil = readOnlyUntil,
+        mutualCompletionEligibleAt = "2026-06-18T21:10:00Z",
+        canRequestMutualCompletion = false,
+        mutualCompletionCooldownUntil = null,
+        inactivityClaimableAt = "2026-06-18T21:05:00Z",
+        inactivityClosesAt = "2026-06-18T21:10:00Z",
+        canClaimPartnerInactivity = false,
+        mustRespondToPartner = false,
+        lastMessageAt = now,
+        lastMessageSenderId = "user-1",
     )
 
     fun visualProfile(

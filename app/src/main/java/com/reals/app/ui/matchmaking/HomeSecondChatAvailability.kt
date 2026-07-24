@@ -46,8 +46,7 @@ private fun HomeNextStepItem.activeSecondChatPresentation(
     val state = when {
         expiresAt != null && !now.isBefore(expiresAt) -> SecondChatHomeState.Expired
         availableAt == null || now.isBefore(availableAt) -> SecondChatHomeState.Waiting
-        hasOpenSecondChatReference() -> SecondChatHomeState.Open
-        else -> SecondChatHomeState.Preparing
+        else -> SecondChatHomeState.Open
     }
     return HomeSecondChatPresentation(
         state = state,
@@ -59,7 +58,7 @@ private fun HomeNextStepItem.activeSecondChatPresentation(
             SecondChatHomeState.Waiting -> secondChatAvailableAt()
                 ?.let { "Disponible a las ${formatBackendTime(it)}" }
                 ?: "Segundo chat pendiente"
-            SecondChatHomeState.Preparing -> "Preparando segundo chat..."
+            SecondChatHomeState.Preparing -> "Entrar al segundo chat"
             SecondChatHomeState.Open -> "Entrar al segundo chat"
             SecondChatHomeState.Expired -> "Segundo chat vencido"
             SecondChatHomeState.ReadOnly,
@@ -150,7 +149,7 @@ internal fun HomeNextStepItem.connectionIdForSecondChat(): String = when (this) 
 }
 
 private fun HomeNextStepItem.SecondChatReadOnly.hasReadOnlySecondChatReference(): Boolean =
-    chatId?.isNotBlank() == true && chatStatus == "EXPIRED"
+    chatId?.isNotBlank() == true && chatStatus in listOf("EXPIRED", "FINISHED", "ABANDONED")
 
 private fun HomeNextStepItem.SecondChatReadOnly.isReadOnlyWindowOpen(nowMillis: Long): Boolean {
     val readOnlyUntilInstant = readOnlyUntil.toInstantOrNull() ?: return false
