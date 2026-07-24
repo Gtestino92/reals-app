@@ -253,7 +253,7 @@ class HomeUiMapperTest {
         val warning = model.draftProfileWarning
         assertEquals("Tu perfil está en borrador", warning?.title)
         assertEquals(
-            "Podés continuar tus conversaciones y coordinaciones actuales. " +
+            "Podés continuar tus interacciones actuales. " +
                 "Completá y reactivá tu perfil para buscar nuevas personas.",
             warning?.message,
         )

@@ -60,6 +60,15 @@ class FlavorBuildConfigTest {
     }
 
     @Test
+    fun `manual location fallback build flag is local only`() {
+        val gradleFile = appFile("build.gradle.kts").readText()
+
+        assertTrue(flavorBlockHasManualLocationFallbackFlag(gradleFile, "local", "true"))
+        assertTrue(flavorBlockHasManualLocationFallbackFlag(gradleFile, "dev", "false"))
+        assertTrue(flavorBlockHasManualLocationFallbackFlag(gradleFile, "prod", "false"))
+    }
+
+    @Test
     fun `firebase app check build flag is disabled only for local`() {
         val gradleFile = appFile("build.gradle.kts").readText()
 
@@ -106,6 +115,16 @@ class FlavorBuildConfigTest {
     ): Boolean {
         return Regex(
             """create\("$flavor"\)\s*\{[\s\S]*?buildConfigField\("boolean", "ENABLE_LOCAL_FIREBASE_EMAIL_AUTO_VERIFICATION", "$enabled"\)""",
+        ).containsMatchIn(gradleFile)
+    }
+
+    private fun flavorBlockHasManualLocationFallbackFlag(
+        gradleFile: String,
+        flavor: String,
+        enabled: String,
+    ): Boolean {
+        return Regex(
+            """create\("$flavor"\)\s*\{[\s\S]*?buildConfigField\("boolean", "SHOW_MANUAL_LOCATION_FALLBACK", "$enabled"\)""",
         ).containsMatchIn(gradleFile)
     }
 

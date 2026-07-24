@@ -42,7 +42,7 @@ class HomeUiMapper {
         if (this?.profileStatus != ProfileStatus.Draft) return null
         return DraftProfileHomeWarning(
             title = "Tu perfil está en borrador",
-            message = "Podés continuar tus conversaciones y coordinaciones actuales. " +
+            message = "Podés continuar tus interacciones actuales. " +
                 "Completá y reactivá tu perfil para buscar nuevas personas.",
             actionLabel = "Completar perfil",
         )

@@ -196,7 +196,7 @@ android {
             buildConfigField("String", "REALS_BASE_URL", quoted(devBaseUrl))
             buildConfigField("boolean", "ENABLE_FIREBASE_APP_CHECK", "true")
             buildConfigField("boolean", "ENABLE_LOCAL_FIREBASE_EMAIL_AUTO_VERIFICATION", "false")
-            buildConfigField("boolean", "SHOW_MANUAL_LOCATION_FALLBACK", "true")
+            buildConfigField("boolean", "SHOW_MANUAL_LOCATION_FALLBACK", "false")
             buildConfigField("boolean", "SHOW_EXPLICIT_REFRESH_BUTTONS", "true")
         }
         create("prod") {
