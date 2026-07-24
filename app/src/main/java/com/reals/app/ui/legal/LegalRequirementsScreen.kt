@@ -236,7 +236,7 @@ private fun LegalDocumentCard(
                         }
 
                         is LegalDocumentAction.Unknown -> Text(
-                            text = "Esta versión de la app no puede completar éstaacción. Actualizá la app para continuar.",
+                            text = "Esta versión de la app no puede completar ésta acción. Actualizá la app para continuar.",
                             color = MaterialTheme.colorScheme.error,
                             style = MaterialTheme.typography.bodyMedium,
                         )

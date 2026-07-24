@@ -568,7 +568,7 @@ private fun ChatOverflowMenu(
             )
 
             DropdownMenuItem(
-                text = { Text("Bloquear a éstapersona") },
+                text = { Text("Bloquear a ésta persona") },
                 enabled = canManualBlock,
                 onClick = onShowManualBlock,
             )

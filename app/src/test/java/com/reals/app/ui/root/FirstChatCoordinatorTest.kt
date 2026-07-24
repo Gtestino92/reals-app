@@ -849,7 +849,7 @@ class FirstChatCoordinatorTest {
         result as FirstChatActionResult.ReturnHome
         assertEquals("match-1", result.hideFirstChatMatchId)
         assertEquals(
-            "Reporte enviado. Cerramos éstaconversación por seguridad y no volveremos a cruzarte con éstapersona.",
+            "Reporte enviado. Cerramos ésta conversación por seguridad y no volveremos a cruzarte con ésta persona.",
             result.message,
         )
         assertEquals(listOf("safetyCancelChat"), api.calls)
@@ -889,7 +889,7 @@ class FirstChatCoordinatorTest {
         assertTrue(result is SecondChatActionResult.ReturnHome)
         result as SecondChatActionResult.ReturnHome
         assertEquals(
-            "Reporte enviado. Cerramos éstaconversación por seguridad y no volveremos a cruzarte con éstapersona.",
+            "Reporte enviado. Cerramos ésta conversación por seguridad y no volveremos a cruzarte con ésta persona.",
             result.message,
         )
         assertEquals(listOf("safetyCancelChat"), api.calls)
