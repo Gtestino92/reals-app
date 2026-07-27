@@ -8,6 +8,8 @@ import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.FirstChatGuidance
+import com.reals.app.domain.model.SecondChatCompletionDecision
+import com.reals.app.domain.model.SecondChatStatus
 
 class GetChatUseCase(
     private val chatRepository: ChatRepository,
@@ -21,6 +23,52 @@ class GetSecondChatForConnectionUseCase(
 ) {
     suspend operator fun invoke(connectionId: String): ApiResult<Chat> =
         chatRepository.getSecondChatForConnection(connectionId)
+}
+
+class GetSecondChatStatusUseCase(
+    private val chatRepository: ChatRepository,
+) {
+    suspend operator fun invoke(connectionId: String): ApiResult<SecondChatStatus> =
+        chatRepository.getSecondChatStatus(connectionId)
+}
+
+class JoinSecondChatUseCase(
+    private val chatRepository: ChatRepository,
+) {
+    suspend operator fun invoke(connectionId: String): ApiResult<SecondChatStatus> =
+        chatRepository.joinSecondChat(connectionId)
+}
+
+class CreateSecondChatNoShowClaimUseCase(
+    private val chatRepository: ChatRepository,
+) {
+    suspend operator fun invoke(connectionId: String): ApiResult<SecondChatStatus> =
+        chatRepository.createSecondChatNoShowClaim(connectionId)
+}
+
+class CreateSecondChatCompletionRequestUseCase(
+    private val chatRepository: ChatRepository,
+) {
+    suspend operator fun invoke(connectionId: String): ApiResult<SecondChatStatus> =
+        chatRepository.createSecondChatCompletionRequest(connectionId)
+}
+
+class DecideSecondChatCompletionRequestUseCase(
+    private val chatRepository: ChatRepository,
+) {
+    suspend operator fun invoke(
+        connectionId: String,
+        requestId: String,
+        decision: SecondChatCompletionDecision,
+    ): ApiResult<SecondChatStatus> =
+        chatRepository.decideSecondChatCompletionRequest(connectionId, requestId, decision)
+}
+
+class CreateSecondChatInactivityClaimUseCase(
+    private val chatRepository: ChatRepository,
+) {
+    suspend operator fun invoke(connectionId: String): ApiResult<SecondChatStatus> =
+        chatRepository.createSecondChatInactivityClaim(connectionId)
 }
 
 class DismissSecondChatForConnectionUseCase(

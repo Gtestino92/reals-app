@@ -9,18 +9,25 @@ import com.reals.app.data.dto.FirstChatGuidanceResponseDto
 import com.reals.app.data.repository.ChatRepository
 import com.reals.app.data.repository.MatchRepository
 import com.reals.app.di.FirstChatFeatureDependencies
+import com.reals.app.di.SecondChatFeatureDependencies
 import com.reals.app.domain.model.ChatContinueDecision
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.usecase.AcceptChatExitRequestUseCase
 import com.reals.app.domain.usecase.CancelChatUseCase
+import com.reals.app.domain.usecase.CreateSecondChatCompletionRequestUseCase
+import com.reals.app.domain.usecase.CreateSecondChatInactivityClaimUseCase
+import com.reals.app.domain.usecase.CreateSecondChatNoShowClaimUseCase
+import com.reals.app.domain.usecase.DecideSecondChatCompletionRequestUseCase
 import com.reals.app.domain.usecase.GetChatExitRequestsUseCase
 import com.reals.app.domain.usecase.GetChatMessagesUseCase
 import com.reals.app.domain.usecase.GetChatUseCase
 import com.reals.app.domain.usecase.GetFirstChatForMatchUseCase
 import com.reals.app.domain.usecase.GetMatchUseCase
 import com.reals.app.domain.usecase.GetSecondChatForConnectionUseCase
+import com.reals.app.domain.usecase.GetSecondChatStatusUseCase
+import com.reals.app.domain.usecase.JoinSecondChatUseCase
 import com.reals.app.domain.usecase.RejectChatExitRequestUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
 import com.reals.app.domain.usecase.RequestNextFirstChatGuidanceQuestionUseCase
@@ -841,7 +848,7 @@ class FirstChatCoordinatorTest {
         val result = coordinator.safetyCancel(
             current = current,
             reason = ChatExitReason.ChildSafetyConcern,
-            details = "detalle válido",
+            details = "detalle vÃ¡lido",
             onPending = {},
         )
 
@@ -858,7 +865,7 @@ class FirstChatCoordinatorTest {
 
     @Test
     fun `second chat safety cancel rejects invalid details without backend call`() = runBlocking {
-        val secondCoordinator = SecondChatCoordinator(firstChatDependencies(api))
+        val secondCoordinator = SecondChatCoordinator(secondChatDependencies(api))
         val current = secondChatState()
 
         val result = secondCoordinator.safetyCancel(
@@ -876,20 +883,20 @@ class FirstChatCoordinatorTest {
 
     @Test
     fun `second chat safety cancel success returns home with report message`() = runBlocking {
-        val secondCoordinator = SecondChatCoordinator(firstChatDependencies(api))
+        val secondCoordinator = SecondChatCoordinator(secondChatDependencies(api))
         val current = secondChatState()
 
         val result = secondCoordinator.safetyCancel(
             current = current,
             reason = ChatExitReason.ChildSafetyConcern,
-            details = "detalle válido",
+            details = "detalle vÃ¡lido",
             onPending = {},
         )
 
         assertTrue(result is SecondChatActionResult.ReturnHome)
         result as SecondChatActionResult.ReturnHome
         assertEquals(
-            "Reporte enviado. Cerramos ésta conversación por seguridad y no volveremos a cruzarte con ésta persona.",
+            "Reporte enviado. Cerramos esta conversación por seguridad y no volveremos a cruzarte con esta persona.",
             result.message,
         )
         assertEquals(listOf("safetyCancelChat"), api.calls)
@@ -955,6 +962,24 @@ class FirstChatCoordinatorTest {
             timeoutChatExitRequest = TimeoutChatExitRequestUseCase(chatRepository),
             cancelChat = CancelChatUseCase(chatRepository),
             safetyCancelChat = SafetyCancelChatUseCase(chatRepository),
+        )
+    }
+
+    private fun secondChatDependencies(api: FakeRealsApi): SecondChatFeatureDependencies {
+        val tokenProvider = FakeAuthTokenProvider()
+        val chatRepository = ChatRepository(api, testJson, tokenProvider, testApiExecutor())
+        return SecondChatFeatureDependencies(
+            getStatus = GetSecondChatStatusUseCase(chatRepository),
+            join = JoinSecondChatUseCase(chatRepository),
+            createNoShowClaim = CreateSecondChatNoShowClaimUseCase(chatRepository),
+            getChat = GetChatUseCase(chatRepository),
+            getSecondChatForConnection = GetSecondChatForConnectionUseCase(chatRepository),
+            getChatMessages = GetChatMessagesUseCase(chatRepository),
+            sendChatMessage = SendChatMessageUseCase(chatRepository),
+            safetyCancelChat = SafetyCancelChatUseCase(chatRepository),
+            createCompletionRequest = CreateSecondChatCompletionRequestUseCase(chatRepository),
+            decideCompletionRequest = DecideSecondChatCompletionRequestUseCase(chatRepository),
+            createInactivityClaim = CreateSecondChatInactivityClaimUseCase(chatRepository),
         )
     }
 }

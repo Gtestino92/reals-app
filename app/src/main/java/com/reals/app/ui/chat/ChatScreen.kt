@@ -64,6 +64,9 @@ import com.reals.app.domain.model.ChatType
 import com.reals.app.domain.model.FirstChatGuidance
 import com.reals.app.domain.model.Match
 import com.reals.app.domain.model.MatchState
+import com.reals.app.domain.model.SecondChatAttendanceStatus
+import com.reals.app.domain.model.SecondChatCompletionDecision
+import com.reals.app.domain.model.SecondChatResolutionRequestType
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
@@ -73,6 +76,14 @@ import com.reals.app.ui.common.formatBackendDateTime
 import com.reals.app.ui.common.formatBackendTime
 import com.reals.app.ui.root.OptimisticOutgoingMessage
 import com.reals.app.ui.root.OutgoingMessageDeliveryState
+import com.reals.app.ui.root.SecondChatLifecycleUiState
+import com.reals.app.ui.root.SecondChatResolutionPresentation
+import com.reals.app.ui.root.hasPendingNoShowClaim
+import com.reals.app.ui.root.isWaitingForPartner
+import com.reals.app.ui.root.remainingMillisFromServerSnapshot
+import com.reals.app.ui.root.resolutionPresentation
+import com.reals.app.ui.root.secondChatResultCopy
+import com.reals.app.ui.root.timingPresentation
 import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -119,6 +130,7 @@ fun ChatScreen(
     actionLoadingLabel: String?,
     guidance: FirstChatGuidance? = null,
     guidanceActionLoading: Boolean = false,
+    secondChatLifecycle: SecondChatLifecycleUiState? = null,
     manualBlockLoading: Boolean,
     manualBlockError: ApiError?,
     error: ApiError?,
@@ -133,7 +145,12 @@ fun ChatScreen(
     onRefresh: () -> Unit,
     onFirstChatLocalExpiry: (inactivity: Boolean) -> Unit = {},
     onSecondChatUnavailable: () -> Unit = {},
+    onSecondChatLocalAbsoluteExpiry: () -> Unit = {},
     onRequestNextGuidanceQuestion: (() -> Unit)? = null,
+    onClaimSecondChatNoShow: () -> Unit = {},
+    onRequestSecondChatCompletion: () -> Unit = {},
+    onDecideSecondChatCompletion: (String, SecondChatCompletionDecision) -> Unit = { _, _ -> },
+    onClaimSecondChatInactivity: () -> Unit = {},
     onSendMessage: (String) -> Boolean,
     onRetryOptimisticMessage: (localId: String, content: String) -> Unit,
     onApprove: () -> Unit,
@@ -154,14 +171,24 @@ fun ChatScreen(
     var showingSafetyDialog by rememberSaveable(chat?.id) { mutableStateOf(false) }
     var actionsMenuExpanded by rememberSaveable(chat?.id) { mutableStateOf(false) }
     var showingManualBlockDialog by rememberSaveable(chat?.id) { mutableStateOf(false) }
+    var showingSecondChatCompletionDialog by rememberSaveable(chat?.id) { mutableStateOf(false) }
+    var showingSecondChatInactivityDialog by rememberSaveable(chat?.id) { mutableStateOf(false) }
+    var secondChatResolutionRefreshHandledKey by rememberSaveable(chat?.id) { mutableStateOf<String?>(null) }
     var nowMillis by rememberSaveable(chat?.id) { mutableStateOf(System.currentTimeMillis()) }
     var firstChatExpiryHandled by rememberSaveable(chat?.id) { mutableStateOf(false) }
     var secondChatUnavailableHandled by rememberSaveable(chat?.id) { mutableStateOf(false) }
     val firstChatLifecycle = firstChatLifecycleUiState(chat, nowMillis)
     val firstChatLocallyExpired = firstChatLifecycle?.expired == true
+    val secondChatTiming = secondChatLifecycle?.timingPresentation(nowMillis)
+    val secondChatLocallyExpired = secondChatTiming?.locallyExpired == true
     val readOnlyUntilInstant = backendInstantOrNull(chat?.readOnlyUntil)
+    val secondChatTerminalReadable = chat?.status in listOf(
+        ChatStatus.Expired,
+        ChatStatus.Finished,
+        ChatStatus.Abandoned,
+    )
     val secondChatReadOnlyFuture = chat?.chatType == ChatType.SecondChat &&
-            chat.status == ChatStatus.Expired &&
+            secondChatTerminalReadable &&
             readOnlyUntilInstant != null &&
             java.time.Instant.ofEpochMilli(nowMillis).isBefore(readOnlyUntilInstant)
     val secondChatUnavailable = chat?.chatType == ChatType.SecondChat &&
@@ -169,12 +196,11 @@ fun ChatScreen(
                     chat.status in listOf(
                         ChatStatus.Closed,
                         ChatStatus.Cancelled,
-                        ChatStatus.Abandoned,
-                        ChatStatus.Finished,
                     ) ||
-                            (chat.status == ChatStatus.Expired && !secondChatReadOnlyFuture)
+                            (secondChatTerminalReadable && !secondChatReadOnlyFuture)
                     )
     val canChat = !firstChatLocallyExpired &&
+            !secondChatLocallyExpired &&
             !secondChatReadOnlyFuture &&
             !secondChatUnavailable &&
             (chat?.status == ChatStatus.Active ||
@@ -182,8 +208,14 @@ fun ChatScreen(
                     )
     val sendingMessage = sending
     val loadingChatAction = actionLoading || manualBlockLoading
+    val secondChatResolution = secondChatLifecycle?.resolutionPresentation(
+        currentUserId = currentUserId,
+        nowMillis = nowMillis,
+        actionLoading = loadingChatAction,
+    )
     val canUseChatActions = canChat && !loadingChatAction
-    val canUseNavigationActions = !loadingChatAction
+    val canUseNavigationActions = !loadingChatAction &&
+            secondChatTiming?.genuinelyActive != true
     val pendingExitRequest = exitRequests
         .filter { it.status == ChatExitRequestStatus.Pending }
         .maxByOrNull { it.createdAt }
@@ -194,7 +226,9 @@ fun ChatScreen(
         canRequestNextWhileChatOpen = canSendMessages,
     )
     val canUseExistingChatActions =
-        canUseChatActions && (!showMutualExitActions || !exitFlowLocked)
+        canUseChatActions &&
+            (secondChatLifecycle == null || secondChatTiming?.genuinelyActive == true) &&
+            (!showMutualExitActions || !exitFlowLocked)
     val manualBlockBusy =
         loading || refreshing || sending || actionLoading || guidanceActionLoading ||
             manualBlockLoading
@@ -240,7 +274,10 @@ fun ChatScreen(
     }
 
     LaunchedEffect(chat?.id, firstChatLifecycle?.deadline) {
-        while (firstChatLifecycleUiState(chat)?.expired == false) {
+        while (
+            firstChatLifecycleUiState(chat)?.expired == false ||
+            secondChatLifecycle?.timingPresentation(nowMillis)?.genuinelyActive == true
+        ) {
             delay(1_000.milliseconds)
             nowMillis = System.currentTimeMillis()
         }
@@ -259,6 +296,23 @@ fun ChatScreen(
         if (secondChatUnavailable && !secondChatUnavailableHandled) {
             secondChatUnavailableHandled = true
             onSecondChatUnavailable()
+        }
+    }
+
+    LaunchedEffect(chat?.id, secondChatLocallyExpired) {
+        if (shouldDispatchSecondChatLocalAbsoluteExpiry(secondChatLocallyExpired)) {
+            onSecondChatLocalAbsoluteExpiry()
+        }
+    }
+
+    val secondChatResolutionRefreshKey = secondChatResolution?.activeRequest?.refreshKey
+        ?: secondChatResolution?.completionCooldown?.refreshKey
+    LaunchedEffect(chat?.id, secondChatResolutionRefreshKey) {
+        if (secondChatResolutionRefreshKey == null) {
+            secondChatResolutionRefreshHandledKey = null
+        } else if (secondChatResolutionRefreshHandledKey != secondChatResolutionRefreshKey) {
+            secondChatResolutionRefreshHandledKey = secondChatResolutionRefreshKey
+            onRefresh()
         }
     }
 
@@ -325,6 +379,33 @@ fun ChatScreen(
                     tone = FeedbackTone.Warning,
                 )
             }
+            if (secondChatTiming?.showAbsoluteExpiryWarning == true) {
+                FeedbackCard(
+                    title = "Tiempo restante",
+                    message = "El segundo chat vence pronto. Al finalizar volverás a Home.",
+                    tone = FeedbackTone.Warning,
+                )
+            }
+            SecondChatLifecyclePanel(
+                lifecycle = secondChatLifecycle,
+                partnerName = partnerDisplayName,
+                actionLoading = loadingChatAction,
+                onClaimNoShow = onClaimSecondChatNoShow,
+                onRefresh = onRefresh,
+            )
+            SecondChatResolutionPanel(
+                presentation = secondChatResolution,
+                actionLoading = loadingChatAction,
+                actionLoadingLabel = actionLoadingLabel,
+                onRequestCompletion = { showingSecondChatCompletionDialog = true },
+                onAcceptCompletion = { requestId ->
+                    onDecideSecondChatCompletion(requestId, SecondChatCompletionDecision.Accepted)
+                },
+                onRejectCompletion = { requestId ->
+                    onDecideSecondChatCompletion(requestId, SecondChatCompletionDecision.Rejected)
+                },
+                onRequestInactivityClaim = { showingSecondChatInactivityDialog = true },
+            )
             ChatActionsPanel(
                 currentUserId = currentUserId,
                 activeExitRequest = if (showExitActions) pendingExitRequest else null,
@@ -383,7 +464,7 @@ fun ChatScreen(
         }
     }
 
-    if (showingSafetyDialog && showExitActions) {
+    if (showingSafetyDialog && showExitActions && canUseExistingChatActions) {
         SafetyReportDialog(
             details = safetyDetails,
             selectedReason = safetyReportReasonFromRawValue(safetyReasonRawValue),
@@ -418,6 +499,68 @@ fun ChatScreen(
             },
         )
     }
+
+    secondChatResolution?.createCompletion?.let { create ->
+        if (showingSecondChatCompletionDialog) {
+            AlertDialog(
+                onDismissRequest = {
+                    if (!loadingChatAction) showingSecondChatCompletionDialog = false
+                },
+                title = { Text(create.confirmationTitle) },
+                text = { Text(create.confirmationBody) },
+                confirmButton = {
+                    TextButton(
+                        enabled = create.enabled && !loadingChatAction,
+                        onClick = {
+                            showingSecondChatCompletionDialog = false
+                            onRequestSecondChatCompletion()
+                        },
+                    ) {
+                        Text("Enviar solicitud")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        enabled = !loadingChatAction,
+                        onClick = { showingSecondChatCompletionDialog = false },
+                    ) {
+                        Text("Cancelar")
+                    }
+                },
+            )
+        }
+    }
+
+    secondChatResolution?.createInactivityClaim?.let { create ->
+        if (showingSecondChatInactivityDialog) {
+            AlertDialog(
+                onDismissRequest = {
+                    if (!loadingChatAction) showingSecondChatInactivityDialog = false
+                },
+                title = { Text(create.confirmationTitle) },
+                text = { Text(create.confirmationBody) },
+                confirmButton = {
+                    TextButton(
+                        enabled = create.enabled && !loadingChatAction,
+                        onClick = {
+                            showingSecondChatInactivityDialog = false
+                            onClaimSecondChatInactivity()
+                        },
+                    ) {
+                        Text("Enviar reclamo")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        enabled = !loadingChatAction,
+                        onClick = { showingSecondChatInactivityDialog = false },
+                    ) {
+                        Text("Cancelar")
+                    }
+                },
+            )
+        }
+    }
 }
 
 @Composable
@@ -447,6 +590,216 @@ private fun LoadingChatScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
+    }
+}
+
+@Composable
+private fun SecondChatLifecyclePanel(
+    lifecycle: SecondChatLifecycleUiState?,
+    partnerName: String?,
+    actionLoading: Boolean,
+    onClaimNoShow: () -> Unit,
+    onRefresh: () -> Unit,
+) {
+    val status = lifecycle?.status ?: return
+    val safePartnerName = partnerName?.takeIf { it.isNotBlank() } ?: "la otra persona"
+    var nowMillis by rememberSaveable(status.serverTime, status.activeNoShowClaim?.expiresAt) {
+        mutableStateOf(System.currentTimeMillis())
+    }
+
+    LaunchedEffect(status.serverTime, status.activeNoShowClaim?.expiresAt) {
+        while (status.hasPendingNoShowClaim()) {
+            delay(1_000.milliseconds)
+            nowMillis = System.currentTimeMillis()
+            val expiresAt = status.activeNoShowClaim?.expiresAt ?: break
+            if (
+                lifecycle.statusReceivedAtMillis?.let { receivedAtMillis ->
+                    status.remainingMillisFromServerSnapshot(
+                        targetTime = expiresAt,
+                        statusReceivedAtMillis = receivedAtMillis,
+                        nowMillis = nowMillis,
+                    )
+                }?.let { it <= 0 } == true
+            ) {
+                onRefresh()
+                break
+            }
+        }
+    }
+
+    when {
+        status.chatStatus in listOf(ChatStatus.Finished, ChatStatus.Abandoned, ChatStatus.Expired) -> {
+            FeedbackCard(
+                title = "Cita finalizada",
+                message = status.endedReason.secondChatResultCopy(),
+                tone = FeedbackTone.Info,
+            )
+        }
+        status.myAttendanceStatus == SecondChatAttendanceStatus.Pending && !status.canJoin -> {
+            FeedbackCard(
+                title = "Todavía no está disponible",
+                message = "El segundo chat abre a las ${formatBackendTime(status.scheduledAt)}.",
+                tone = FeedbackTone.Info,
+            )
+        }
+        status.hasPendingNoShowClaim() -> {
+            val seconds = ((
+                lifecycle.statusReceivedAtMillis?.let { receivedAtMillis ->
+                    status.remainingMillisFromServerSnapshot(
+                        targetTime = status.activeNoShowClaim?.expiresAt.orEmpty(),
+                        statusReceivedAtMillis = receivedAtMillis,
+                        nowMillis = nowMillis,
+                    )
+                } ?: 0
+                ) + 999) / 1000
+            FeedbackCard(
+                title = "Esperando a la otra persona",
+                message = "Puede entrar durante los próximos ${seconds.coerceAtLeast(0)} segundos.",
+                tone = FeedbackTone.Warning,
+            )
+        }
+        status.isWaitingForPartner() -> {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("Ya estás en la cita", style = MaterialTheme.typography.titleMedium)
+                    Text("Estamos esperando a $safePartnerName.")
+                    Text(
+                        when (status.myAttendanceStatus) {
+                            SecondChatAttendanceStatus.OnTime -> "Llegaste a horario"
+                            SecondChatAttendanceStatus.Late -> "Llegaste tarde"
+                            else -> "Tu asistencia está registrada"
+                        },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        "Podés mandar mensajes mientras esperás. Eso no significa que la otra persona haya llegado.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (status.canClaimPartnerNoShow) {
+                        Button(
+                            onClick = onClaimNoShow,
+                            enabled = !actionLoading && lifecycle.claimingNoShow.not(),
+                        ) {
+                            Text("La otra persona no llegó")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SecondChatResolutionPanel(
+    presentation: SecondChatResolutionPresentation?,
+    actionLoading: Boolean,
+    actionLoadingLabel: String?,
+    onRequestCompletion: () -> Unit,
+    onAcceptCompletion: (String) -> Unit,
+    onRejectCompletion: (String) -> Unit,
+    onRequestInactivityClaim: () -> Unit,
+) {
+    val state = presentation ?: return
+    if (
+        state.createCompletion == null &&
+        state.completionCooldown == null &&
+        state.createInactivityClaim == null &&
+        state.activeRequest == null
+    ) {
+        return
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            state.activeRequest?.let { request ->
+                Text(request.title, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = request.message,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+                request.remainingMillis?.let { remainingMillis ->
+                    Text(
+                        text = if (request.locallyExpired) {
+                            "La solicitud venci\u00f3. Actualizando estado..."
+                        } else {
+                            "Quedan ${((remainingMillis + 999) / 1000).coerceAtLeast(0)}s."
+                        },
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                if (request.type == SecondChatResolutionRequestType.MutualCompletion) {
+                    Text(
+                        text = "Pueden seguir conversando; un nuevo mensaje cancela esta solicitud.",
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                if (request.showAcceptRejectControls) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Button(
+                            onClick = { onAcceptCompletion(request.requestId) },
+                            enabled = request.controlsEnabled,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(
+                                if (actionLoading) actionLoadingLabel
+                                    ?: "Procesando..." else "Finalizar el chat"
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = { onRejectCompletion(request.requestId) },
+                            enabled = request.controlsEnabled,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(
+                                if (actionLoading) actionLoadingLabel
+                                    ?: "Procesando..." else "Seguir conversando"
+                            )
+                        }
+                    }
+                }
+            }
+
+            state.completionCooldown?.let { cooldown ->
+                Text(
+                    text = cooldown.message,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
+
+            state.createCompletion?.let { create ->
+                OutlinedButton(
+                    onClick = onRequestCompletion,
+                    enabled = create.enabled,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(create.label)
+                }
+            }
+
+            state.createInactivityClaim?.let { create ->
+                OutlinedButton(
+                    onClick = onRequestInactivityClaim,
+                    enabled = create.enabled,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(create.label)
+                }
+            }
+        }
     }
 }
 
@@ -1198,6 +1551,9 @@ internal fun messageComposerUiState(
 }
 
 internal fun chatPollingEnabled(canChat: Boolean): Boolean = canChat
+
+internal fun shouldDispatchSecondChatLocalAbsoluteExpiry(secondChatLocallyExpired: Boolean): Boolean =
+    secondChatLocallyExpired
 
 private fun chatDecisionSummary(
     myDecision: ChatDecisionState?,

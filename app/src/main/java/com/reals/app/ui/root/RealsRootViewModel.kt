@@ -13,12 +13,14 @@ import com.reals.app.di.RealsRootDependencies
 import com.reals.app.domain.model.ChatContinueDecision
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatExitReason
+import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.CreateProfileInput
 import com.reals.app.domain.model.FirstChatGuidance
 import com.reals.app.domain.model.LegalDocumentAction
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.SearchLocationInput
+import com.reals.app.domain.model.SecondChatCompletionDecision
 import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.UpdateProfileInput
 import com.reals.app.domain.model.VisualDecision
@@ -57,7 +59,7 @@ class RealsRootViewModel(
         getHome = dependencies.home.getHome,
     )
     private val firstChatCoordinator = FirstChatCoordinator(dependencies.firstChat)
-    private val secondChatCoordinator = SecondChatCoordinator(dependencies.firstChat)
+    private val secondChatCoordinator = SecondChatCoordinator(dependencies.secondChat)
     private val visualApprovalCoordinator = VisualApprovalCoordinator(dependencies.visualApproval)
     private val partnerProfileCoordinator = PartnerProfileCoordinator(
         dependencies.visualApproval.getVisualProfile,
@@ -77,11 +79,16 @@ class RealsRootViewModel(
     private var pairBlockedRerouteJob: Job? = null
     private var sessionInvalidationJob: Job? = null
     private var manualBlockJob: Job? = null
+    private var pendingSecondChatLocalExpiryKey: SecondChatExpiryKey? = null
+    private var completedSecondChatLocalExpiryKey: SecondChatExpiryKey? = null
     private val homeCoordinator = HomeCoordinator(
         uiState = _uiState,
         dependencies = dependencies.home,
         scope = viewModelScope,
         onOpenFirstChat = { session, matchId, chatId -> openFirstChat(session, matchId, chatId) },
+        onOpenSecondChat = { session, connectionId, matchId, partnerName ->
+            openSecondChat(session, connectionId, matchId, partnerName, joinIfAllowed = false)
+        },
         onReloadActiveSession = { user -> sessionCoordinator.loadBackendSessionForActiveUser(user) },
     )
     val uiState: StateFlow<RealsRootUiState> = _uiState.asStateFlow()
@@ -221,7 +228,13 @@ class RealsRootViewModel(
         when (val current = _uiState.value) {
             is RealsRootUiState.Ready -> refreshHomeState()
             is RealsRootUiState.FirstChat -> returnHomeFromExternalNotification(current.session)
-            is RealsRootUiState.SecondChat -> returnHomeFromExternalNotification(current.session)
+            is RealsRootUiState.SecondChat -> {
+                if (current.isJoinedActiveSecondChat()) {
+                    refreshSecondChat(silent = true)
+                } else {
+                    returnHomeFromExternalNotification(current.session)
+                }
+            }
             is RealsRootUiState.VisualApproval -> returnHomeFromExternalNotification(current.session)
             is RealsRootUiState.Scheduling -> returnHomeFromExternalNotification(current.session)
             is RealsRootUiState.PartnerProfile -> returnHomeFromExternalNotification(current.session)
@@ -344,6 +357,18 @@ class RealsRootViewModel(
         val cleanMatchId = matchId.trim()
         if (cleanConnectionId.isBlank() || cleanMatchId.isBlank()) return
 
+        openSecondChat(session, cleanConnectionId, cleanMatchId, partnerName, joinIfAllowed = true)
+    }
+
+    private fun openSecondChat(
+        session: ProvisionedSession,
+        cleanConnectionId: String,
+        cleanMatchId: String,
+        partnerName: String? = null,
+        joinIfAllowed: Boolean,
+    ) {
+        pendingSecondChatLocalExpiryKey = null
+        completedSecondChatLocalExpiryKey = null
         viewModelScope.launch {
             _uiState.value = RealsRootUiState.SecondChat(
                 session = session,
@@ -358,6 +383,7 @@ class RealsRootViewModel(
                     connectionId = cleanConnectionId,
                     matchId = cleanMatchId,
                     partnerName = partnerName,
+                    joinIfAllowed = joinIfAllowed,
                 )
             )
         }
@@ -402,13 +428,18 @@ class RealsRootViewModel(
         val current = _uiState.value as? RealsRootUiState.SecondChat ?: return false
         return when (val preparation = ChatMessageActionHandler.prepareSecondChatSend(current, content)) {
             is ChatMessageSendPreparation.Accepted -> {
+                val instanceKey = preparation.pendingState.expiryKey()
                 _uiState.value = preparation.pendingState
                 viewModelScope.launch {
-                    _uiState.value = secondChatCoordinator.sendMessage(
+                    val result = secondChatCoordinator.sendMessage(
                         preparation.pendingState,
                         preparation.cleanContent,
                         preparation.localId,
                     )
+                    val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return@launch
+                    if (latest.matches(instanceKey)) {
+                        _uiState.value = result
+                    }
                 }
                 true
             }
@@ -444,8 +475,99 @@ class RealsRootViewModel(
 
     fun closeSecondChat() {
         val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        if (current.isJoinedActiveSecondChat()) return
         viewModelScope.launch {
             homeCoordinator.returnHome(current.session)
+        }
+    }
+
+    fun handleSecondChatLocalAbsoluteExpiry() {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        if (!current.lifecycle.timingPresentation().locallyExpired) return
+        val expiryKey = current.expiryKey()
+        if (
+            completedSecondChatLocalExpiryKey == expiryKey ||
+            pendingSecondChatLocalExpiryKey == expiryKey
+        ) {
+            return
+        }
+        pendingSecondChatLocalExpiryKey = expiryKey
+        viewModelScope.launch {
+            val latest = _uiState.value as? RealsRootUiState.SecondChat
+            if (latest == null || !latest.matches(expiryKey)) {
+                clearPendingSecondChatLocalExpiry(expiryKey)
+                return@launch
+            }
+            val timing = latest.lifecycle.timingPresentation()
+            if (!timing.locallyExpired && !latest.hasTerminalSecondChatStatus()) {
+                clearPendingSecondChatLocalExpiry(expiryKey)
+                return@launch
+            }
+            completedSecondChatLocalExpiryKey = expiryKey
+            clearPendingSecondChatLocalExpiry(expiryKey)
+            homeCoordinator.returnHome(
+                session = latest.session,
+                message = "El segundo chat venció.",
+            )
+        }
+    }
+
+    private fun clearPendingSecondChatLocalExpiry(expiryKey: SecondChatExpiryKey) {
+        if (pendingSecondChatLocalExpiryKey == expiryKey) {
+            pendingSecondChatLocalExpiryKey = null
+        }
+    }
+
+    fun createSecondChatNoShowClaim() {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        viewModelScope.launch {
+            applySecondChatLoadResult(
+                secondChatCoordinator.createNoShowClaim(
+                    current = current,
+                    onPending = { _uiState.value = it },
+                )
+            )
+        }
+    }
+
+    fun requestSecondChatCompletion() {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        val instanceKey = current.expiryKey()
+        viewModelScope.launch {
+            val result = secondChatCoordinator.createCompletionRequest(
+                current = current,
+                onPending = { setSecondChatPendingIfCurrent(it, instanceKey) },
+            )
+            applySecondChatLoadResultIfCurrent(result, instanceKey)
+        }
+    }
+
+    fun decideSecondChatCompletion(
+        requestId: String,
+        decision: SecondChatCompletionDecision,
+    ) {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        val instanceKey = current.expiryKey()
+        viewModelScope.launch {
+            val result = secondChatCoordinator.decideCompletionRequest(
+                current = current,
+                requestId = requestId,
+                decision = decision,
+                onPending = { setSecondChatPendingIfCurrent(it, instanceKey) },
+            )
+            applySecondChatLoadResultIfCurrent(result, instanceKey)
+        }
+    }
+
+    fun claimSecondChatInactivity() {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        val instanceKey = current.expiryKey()
+        viewModelScope.launch {
+            val result = secondChatCoordinator.createInactivityClaim(
+                current = current,
+                onPending = { setSecondChatPendingIfCurrent(it, instanceKey) },
+            )
+            applySecondChatLoadResultIfCurrent(result, instanceKey)
         }
     }
 
@@ -1137,6 +1259,25 @@ class RealsRootViewModel(
         }
     }
 
+    private suspend fun applySecondChatLoadResultIfCurrent(
+        result: SecondChatLoadResult,
+        instanceKey: SecondChatExpiryKey,
+    ) {
+        val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        if (!latest.matches(instanceKey)) return
+        applySecondChatLoadResult(result)
+    }
+
+    private fun setSecondChatPendingIfCurrent(
+        pending: RealsRootUiState.SecondChat,
+        instanceKey: SecondChatExpiryKey,
+    ) {
+        val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        if (latest.matches(instanceKey)) {
+            _uiState.value = pending
+        }
+    }
+
     private suspend fun showReadySession(session: ProvisionedSession) {
         enterLegalRequirements(
             session = session,
@@ -1411,3 +1552,25 @@ class RealsRootViewModelFactory(
         throw IllegalArgumentException("Unknown ViewModel class ${modelClass.name}")
     }
 }
+
+private data class SecondChatExpiryKey(
+    val connectionId: String,
+    val chatId: String?,
+)
+
+private fun RealsRootUiState.SecondChat.expiryKey(): SecondChatExpiryKey =
+    SecondChatExpiryKey(
+        connectionId = connectionId,
+        chatId = chatId ?: lifecycle.status?.chatId,
+    )
+
+private fun RealsRootUiState.SecondChat.matches(key: SecondChatExpiryKey): Boolean =
+    connectionId == key.connectionId &&
+        (key.chatId == null || expiryKey().chatId == key.chatId)
+
+private fun RealsRootUiState.SecondChat.hasTerminalSecondChatStatus(): Boolean =
+    lifecycle.status?.chatStatus in setOf(
+        ChatStatus.Expired,
+        ChatStatus.Finished,
+        ChatStatus.Abandoned,
+    )

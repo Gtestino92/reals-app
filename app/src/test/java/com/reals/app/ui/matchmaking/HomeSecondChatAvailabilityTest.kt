@@ -30,7 +30,7 @@ class HomeSecondChatAvailabilityTest {
     }
 
     @Test
-    fun `available second chat waits for usable chat reference inside active window`() {
+    fun `available second chat can open without materialized chat inside active window`() {
         val item = HomeNextStepItem.SecondChatAvailable(
             connectionId = "connection-second",
             matchId = "match-second",
@@ -44,9 +44,9 @@ class HomeSecondChatAvailabilityTest {
 
         val presentation = item.secondChatHomePresentation(millis("2026-06-20T18:30:00-03:00"))
 
-        assertFalse(item.canOpenSecondChatNow(millis("2026-06-20T18:30:00-03:00")))
-        assertEquals(SecondChatHomeState.Preparing, presentation?.state)
-        assertEquals("Preparando segundo chat...", presentation?.primaryCtaLabel)
+        assertTrue(item.canOpenSecondChatNow(millis("2026-06-20T18:30:00-03:00")))
+        assertEquals(SecondChatHomeState.Open, presentation?.state)
+        assertEquals("Entrar al segundo chat", presentation?.primaryCtaLabel)
         assertTrue(presentation?.canOpenPartnerProfile == true)
     }
 
@@ -64,7 +64,7 @@ class HomeSecondChatAvailabilityTest {
         val presentation = scheduledSecondChat()
             .secondChatHomePresentation(millis("2026-06-20T18:00:00-03:00"))
 
-        assertEquals(SecondChatHomeState.Preparing, presentation?.state)
+        assertEquals(SecondChatHomeState.Open, presentation?.state)
         assertTrue(presentation?.canOpenPartnerProfile == true)
     }
 
@@ -73,7 +73,7 @@ class HomeSecondChatAvailabilityTest {
         val presentation = scheduledSecondChat()
             .secondChatHomePresentation(millis("2026-06-20T18:30:00-03:00"))
 
-        assertEquals(SecondChatHomeState.Preparing, presentation?.state)
+        assertEquals(SecondChatHomeState.Open, presentation?.state)
         assertTrue(presentation?.canOpenPartnerProfile == true)
     }
 

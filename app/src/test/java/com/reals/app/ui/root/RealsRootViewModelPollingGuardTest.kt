@@ -21,6 +21,7 @@ import com.reals.app.di.ManualBlockFeatureDependencies
 import com.reals.app.di.ProfileFeatureDependencies
 import com.reals.app.di.RealsRootDependencies
 import com.reals.app.di.SchedulingFeatureDependencies
+import com.reals.app.di.SecondChatFeatureDependencies
 import com.reals.app.di.SessionFeatureDependencies
 import com.reals.app.di.VisualApprovalFeatureDependencies
 import com.reals.app.domain.model.NegotiationStatus
@@ -31,8 +32,12 @@ import com.reals.app.domain.usecase.AddProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.CancelChatUseCase
 import com.reals.app.domain.usecase.BlockMatchParticipantUseCase
 import com.reals.app.domain.usecase.CreateProfileUseCase
+import com.reals.app.domain.usecase.CreateSecondChatCompletionRequestUseCase
+import com.reals.app.domain.usecase.CreateSecondChatInactivityClaimUseCase
+import com.reals.app.domain.usecase.CreateSecondChatNoShowClaimUseCase
 import com.reals.app.domain.usecase.DeleteAccountUseCase
 import com.reals.app.domain.usecase.DeleteProfilePhotoUseCase
+import com.reals.app.domain.usecase.DecideSecondChatCompletionRequestUseCase
 import com.reals.app.domain.usecase.DismissSecondChatForConnectionUseCase
 import com.reals.app.domain.usecase.EnqueueMatchmakingUseCase
 import com.reals.app.domain.usecase.GetChatExitRequestsUseCase
@@ -52,7 +57,9 @@ import com.reals.app.domain.usecase.GetProfilePhotosUseCase
 import com.reals.app.domain.usecase.GetSchedulingNegotiationUseCase
 import com.reals.app.domain.usecase.GetSchedulingProposalsUseCase
 import com.reals.app.domain.usecase.GetSecondChatForConnectionUseCase
+import com.reals.app.domain.usecase.GetSecondChatStatusUseCase
 import com.reals.app.domain.usecase.GetVisualProfileUseCase
+import com.reals.app.domain.usecase.JoinSecondChatUseCase
 import com.reals.app.domain.usecase.LeaveQueueUseCase
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
 import com.reals.app.domain.usecase.PutMyPersonalMessageUseCase
@@ -818,6 +825,19 @@ internal fun rootViewModelTestDependencies(api: FakeRealsApi): RealsRootDependen
                 timeoutChatExitRequest = TimeoutChatExitRequestUseCase(chatRepository),
                 cancelChat = CancelChatUseCase(chatRepository),
                 safetyCancelChat = SafetyCancelChatUseCase(chatRepository),
+            ),
+            secondChat = SecondChatFeatureDependencies(
+                getStatus = GetSecondChatStatusUseCase(chatRepository),
+                join = JoinSecondChatUseCase(chatRepository),
+                createNoShowClaim = CreateSecondChatNoShowClaimUseCase(chatRepository),
+                getChat = GetChatUseCase(chatRepository),
+                getSecondChatForConnection = GetSecondChatForConnectionUseCase(chatRepository),
+                getChatMessages = GetChatMessagesUseCase(chatRepository),
+                sendChatMessage = SendChatMessageUseCase(chatRepository),
+                safetyCancelChat = SafetyCancelChatUseCase(chatRepository),
+                createCompletionRequest = CreateSecondChatCompletionRequestUseCase(chatRepository),
+                decideCompletionRequest = DecideSecondChatCompletionRequestUseCase(chatRepository),
+                createInactivityClaim = CreateSecondChatInactivityClaimUseCase(chatRepository),
             ),
             visualApproval = VisualApprovalFeatureDependencies(
                 getMatch = GetMatchUseCase(matchRepository),

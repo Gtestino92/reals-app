@@ -251,7 +251,9 @@ private fun HomeCollapsibleSection(
     content: @Composable () -> Unit,
 ) {
     if (!visible) return
-    var expanded by rememberSaveable(title, count, initiallyExpanded) { mutableStateOf(initiallyExpanded) }
+    var expanded by rememberSaveable(homeCollapsibleSectionStateKey(title)) {
+        mutableStateOf(initiallyExpanded)
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         TextButton(
@@ -281,6 +283,9 @@ private fun HomeCollapsibleSection(
         }
     }
 }
+
+internal fun homeCollapsibleSectionStateKey(title: String): String =
+    "home-section:$title"
 
 @Composable
 private fun HomeSectionChevron(expanded: Boolean) {

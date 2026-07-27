@@ -34,6 +34,8 @@ import com.reals.app.data.dto.RecordLegalDocumentActionRequestDto
 import com.reals.app.data.dto.ReorderProfilePhotosRequestDto
 import com.reals.app.data.dto.RejectPartnerProposalsRequestDto
 import com.reals.app.data.dto.ScheduleProposalResponseDto
+import com.reals.app.data.dto.SecondChatAttendanceResponseDto
+import com.reals.app.data.dto.SecondChatCompletionDecisionRequestDto
 import com.reals.app.data.dto.SendMessageRequestDto
 import com.reals.app.data.dto.UpdateMatchFiltersRequestDto
 import com.reals.app.data.dto.UpdateProfileRequestDto
@@ -102,6 +104,8 @@ class FakeRealsApi : RealsApi {
         private set
     var rejectPartnerProposalsBody: RejectPartnerProposalsRequestDto? = null
         private set
+    var completionDecisionBody: SecondChatCompletionDecisionRequestDto? = null
+        private set
     var createProfileBody: CreateProfileRequestDto? = null
         private set
     var updateProfileBody: UpdateProfileRequestDto? = null
@@ -124,6 +128,7 @@ class FakeRealsApi : RealsApi {
     var beforeGetChatResponse: suspend () -> Unit = {}
     var beforeGetChatMessagesResponse: suspend () -> Unit = {}
     var beforeGetChatExitRequestsResponse: suspend () -> Unit = {}
+    var beforeGetSecondChatStatusResponse: suspend () -> Unit = {}
     var beforeGetConnectionNegotiationResponse: suspend () -> Unit = {}
     var beforeSubmitConnectionProposalsResponse: suspend () -> Unit = {}
     var beforeAcceptConnectionProposalResponse: suspend () -> Unit = {}
@@ -158,6 +163,9 @@ class FakeRealsApi : RealsApi {
     var userBlockResponse: Response<UserBlockResponseDto> = Response.success(TestDtos.userBlock())
     var chatResponse: Response<ChatResponseDto> = Response.success(TestDtos.chat())
     var chatResponseQueue: MutableList<Response<ChatResponseDto>> = mutableListOf()
+    var secondChatStatusResponse: Response<SecondChatAttendanceResponseDto> =
+        Response.success(TestDtos.secondChatStatus())
+    var secondChatStatusResponseQueue: MutableList<Response<SecondChatAttendanceResponseDto>> = mutableListOf()
     var visualProfileResponse: Response<VisualProfileResponseDto> = Response.success(TestDtos.visualProfile())
     var unitResponse: Response<Unit> = Response.success(Unit)
     var partnerMessageResponse: Response<PartnerPersonalMessageResponseDto> =
@@ -493,6 +501,49 @@ class FakeRealsApi : RealsApi {
     ): Response<ChatResponseDto> =
         record("getSecondChatForConnection", authorization, connectionId) { nextChatResponse() }
 
+    override suspend fun getSecondChatStatus(
+        authorization: String,
+        connectionId: String,
+    ): Response<SecondChatAttendanceResponseDto> =
+        record("getSecondChatStatus", authorization, connectionId, beforeResponse = beforeGetSecondChatStatusResponse) {
+            nextSecondChatStatusResponse()
+        }
+
+    override suspend fun joinSecondChat(
+        authorization: String,
+        connectionId: String,
+    ): Response<SecondChatAttendanceResponseDto> =
+        record("joinSecondChat", authorization, connectionId) { nextSecondChatStatusResponse() }
+
+    override suspend fun createSecondChatNoShowClaim(
+        authorization: String,
+        connectionId: String,
+    ): Response<SecondChatAttendanceResponseDto> =
+        record("createSecondChatNoShowClaim", authorization, connectionId) { nextSecondChatStatusResponse() }
+
+    override suspend fun createSecondChatCompletionRequest(
+        authorization: String,
+        connectionId: String,
+    ): Response<SecondChatAttendanceResponseDto> =
+        record("createSecondChatCompletionRequest", authorization, connectionId) { nextSecondChatStatusResponse() }
+
+    override suspend fun decideSecondChatCompletionRequest(
+        authorization: String,
+        connectionId: String,
+        requestId: String,
+        body: SecondChatCompletionDecisionRequestDto,
+    ): Response<SecondChatAttendanceResponseDto> =
+        record("decideSecondChatCompletionRequest", authorization, "$connectionId/$requestId") {
+            completionDecisionBody = body
+            nextSecondChatStatusResponse()
+        }
+
+    override suspend fun createSecondChatInactivityClaim(
+        authorization: String,
+        connectionId: String,
+    ): Response<SecondChatAttendanceResponseDto> =
+        record("createSecondChatInactivityClaim", authorization, connectionId) { nextSecondChatStatusResponse() }
+
     override suspend fun dismissSecondChatForConnection(
         authorization: String,
         connectionId: String,
@@ -569,4 +620,11 @@ class FakeRealsApi : RealsApi {
 
     private fun nextChatResponse(): Response<ChatResponseDto> =
         if (chatResponseQueue.isNotEmpty()) chatResponseQueue.removeAt(0) else chatResponse
+
+    private fun nextSecondChatStatusResponse(): Response<SecondChatAttendanceResponseDto> =
+        if (secondChatStatusResponseQueue.isNotEmpty()) {
+            secondChatStatusResponseQueue.removeAt(0)
+        } else {
+            secondChatStatusResponse
+        }
 }

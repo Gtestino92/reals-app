@@ -44,6 +44,9 @@ internal object ChatMessageActionHandler {
         if (current.loading || current.refreshing || current.sending || current.actionLoading) {
             return ChatMessageSendPreparation.Ignored
         }
+        if (current.lifecycle.status != null && !current.lifecycle.timingPresentation().genuinelyActive) {
+            return ChatMessageSendPreparation.Ignored
+        }
         val chat = current.chat ?: return ChatMessageSendPreparation.Ignored
         return prepareSend(
             content = content,

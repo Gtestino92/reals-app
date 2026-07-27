@@ -99,8 +99,22 @@ enum class BackendErrorCode(val raw: String) {
     ChatExitRequestNotAvailable("CHAT_EXIT_REQUEST_NOT_AVAILABLE"),
     ChatExitRequestAlreadyPending("CHAT_EXIT_REQUEST_ALREADY_PENDING"),
     SecondChatNotAvailable("SECOND_CHAT_NOT_AVAILABLE"),
+    SecondChatJoinRequired("SECOND_CHAT_JOIN_REQUIRED"),
     SecondChatNotAvailableYet("SECOND_CHAT_NOT_AVAILABLE_YET"),
+    SecondChatEntryClosed("SECOND_CHAT_ENTRY_CLOSED"),
+    SecondChatAlreadyResolved("SECOND_CHAT_ALREADY_RESOLVED"),
     SecondChatExpired("SECOND_CHAT_EXPIRED"),
+    SecondChatNoShowClaimNotAvailable("SECOND_CHAT_NO_SHOW_CLAIM_NOT_AVAILABLE"),
+    SecondChatNoShowClaimAlreadyPending("SECOND_CHAT_NO_SHOW_CLAIM_ALREADY_PENDING"),
+    SecondChatCompletionNotAvailable("SECOND_CHAT_COMPLETION_NOT_AVAILABLE"),
+    SecondChatCompletionRequestAlreadyPending("SECOND_CHAT_COMPLETION_REQUEST_ALREADY_PENDING"),
+    SecondChatCompletionRequestNotFound("SECOND_CHAT_COMPLETION_REQUEST_NOT_FOUND"),
+    SecondChatCompletionRequestNotActionable("SECOND_CHAT_COMPLETION_REQUEST_NOT_ACTIONABLE"),
+    SecondChatCompletionRequestCooldown("SECOND_CHAT_COMPLETION_REQUEST_COOLDOWN"),
+    SecondChatInactivityClaimNotAvailable("SECOND_CHAT_INACTIVITY_CLAIM_NOT_AVAILABLE"),
+    SecondChatInactivityClaimAlreadyPending("SECOND_CHAT_INACTIVITY_CLAIM_ALREADY_PENDING"),
+    SecondChatConversationAlreadyResolved("SECOND_CHAT_CONVERSATION_ALREADY_RESOLVED"),
+    SecondChatOrdinaryCancellationNotAllowed("SECOND_CHAT_ORDINARY_CANCELLATION_NOT_ALLOWED"),
     SchedulingNotAvailable("SCHEDULING_NOT_AVAILABLE"),
     SchedulingExpired("SCHEDULING_EXPIRED"),
     SchedulingNegotiationNotFound("SCHEDULING_NEGOTIATION_NOT_FOUND"),
@@ -283,8 +297,30 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.ChatExitRequestNotAvailable -> "Esa solicitud de salida ya no está disponible."
     BackendErrorCode.ChatExitRequestAlreadyPending -> "Ya hay una solicitud de salida pendiente."
     BackendErrorCode.SecondChatNotAvailable -> "El segundo chat todavía no está disponible o ya no se puede abrir."
+    BackendErrorCode.SecondChatJoinRequired -> "Entrá al segundo chat para continuar."
     BackendErrorCode.SecondChatNotAvailableYet -> "El segundo chat todavía no está disponible."
+    BackendErrorCode.SecondChatEntryClosed -> "La ventana para entrar al segundo chat ya cerró."
+    BackendErrorCode.SecondChatAlreadyResolved,
+    BackendErrorCode.SecondChatConversationAlreadyResolved -> "El segundo chat ya terminó. Actualizamos el estado."
     BackendErrorCode.SecondChatExpired -> "El segundo chat ya venció."
+    BackendErrorCode.SecondChatNoShowClaimNotAvailable -> "Todavía no podés marcar que la otra persona no llegó."
+    BackendErrorCode.SecondChatNoShowClaimAlreadyPending -> "Ya hay una solicitud de no-show pendiente."
+    BackendErrorCode.SecondChatCompletionNotAvailable ->
+        "Todav\u00eda no pod\u00e9s proponer finalizar este segundo chat."
+    BackendErrorCode.SecondChatCompletionRequestAlreadyPending ->
+        "Ya hay una propuesta de cierre pendiente."
+    BackendErrorCode.SecondChatCompletionRequestNotFound ->
+        "Esa propuesta ya no est\u00e1 disponible. Actualizamos el estado."
+    BackendErrorCode.SecondChatCompletionRequestNotActionable ->
+        "Esa propuesta ya no se puede responder."
+    BackendErrorCode.SecondChatCompletionRequestCooldown ->
+        "Podr\u00e1s volver a proponer el cierre en unos segundos."
+    BackendErrorCode.SecondChatInactivityClaimNotAvailable ->
+        "Todav\u00eda no pod\u00e9s reclamar falta de respuesta."
+    BackendErrorCode.SecondChatInactivityClaimAlreadyPending ->
+        "Ya hay un reclamo por falta de respuesta pendiente."
+    BackendErrorCode.SecondChatOrdinaryCancellationNotAllowed ->
+        "El segundo chat no permite cancelar por esta vía. Podés reportar por seguridad o bloquear a la persona."
     BackendErrorCode.SchedulingNotAvailable -> "La coordinación de horarios ya no está disponible. Actualizá el estado e intentá nuevamente."
     BackendErrorCode.SchedulingExpired -> "La coordinación de horarios venció."
     BackendErrorCode.SchedulingNegotiationNotFound -> "No encontramos la coordinación de horarios. Actualizá el estado."

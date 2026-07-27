@@ -153,6 +153,25 @@ class ChatMessageActionHandlerTest {
     }
 
     @Test
+    fun `second chat send remains enabled while resolution request is pending`() {
+        val result = ChatMessageActionHandler.prepareSecondChatSend(
+            current = secondChatState(
+                lifecycle = SecondChatLifecycleUiState(
+                    status = TestDtos.secondChatStatus(
+                        activeResolutionRequest = TestDtos.secondChatResolutionRequest(
+                            type = "PARTNER_INACTIVITY",
+                        ),
+                    ).toDomain(),
+                    statusReceivedAtMillis = System.currentTimeMillis(),
+                )
+            ),
+            content = "respondo",
+        )
+
+        assertTrue(result is ChatMessageSendPreparation.Accepted<*>)
+    }
+
+    @Test
     fun `second chat retry removes failed optimistic message`() {
         val failed = failedOptimisticMessage(localId = "local-failed")
         val kept = failedOptimisticMessage(localId = "local-kept")
@@ -181,6 +200,7 @@ class ChatMessageActionHandlerTest {
 
     private fun secondChatState(
         optimisticMessages: List<OptimisticOutgoingMessage> = emptyList(),
+        lifecycle: SecondChatLifecycleUiState = SecondChatLifecycleUiState(),
         error: ApiError? = null,
         message: String? = null,
     ): RealsRootUiState.SecondChat = RealsRootUiState.SecondChat(
@@ -190,6 +210,7 @@ class ChatMessageActionHandlerTest {
         chatId = "chat-1",
         chat = TestDtos.chat().copy(chatType = "SECOND_CHAT").toDomain(),
         optimisticMessages = optimisticMessages,
+        lifecycle = lifecycle,
         error = error,
         message = message,
     )

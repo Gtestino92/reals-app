@@ -17,6 +17,7 @@ import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.SchedulingNegotiation
 import com.reals.app.domain.model.SchedulingProposal
+import com.reals.app.domain.model.SecondChatStatus
 import com.reals.app.domain.model.VisualProfile
 import com.reals.app.ui.matchmaking.HomeScreenModel
 
@@ -140,6 +141,7 @@ sealed interface RealsRootUiState {
         val messages: List<ChatMessage> = emptyList(),
         val optimisticMessages: List<OptimisticOutgoingMessage> = emptyList(),
         val exitRequests: List<ChatExitRequest> = emptyList(),
+        val lifecycle: SecondChatLifecycleUiState = SecondChatLifecycleUiState(),
         val loading: Boolean = false,
         val refreshing: Boolean = false,
         val sending: Boolean = false,
@@ -213,6 +215,14 @@ sealed interface RealsRootUiState {
 
     data class Failure(val error: ApiError) : RealsRootUiState
 }
+
+data class SecondChatLifecycleUiState(
+    val status: SecondChatStatus? = null,
+    val statusReceivedAtMillis: Long? = null,
+    val joining: Boolean = false,
+    val claimingNoShow: Boolean = false,
+    val joinCompletedInThisSession: Boolean = false,
+)
 
 data class ManualBlockUiState(
     val loading: Boolean = false,
@@ -416,7 +426,8 @@ fun RealsRootUiState.canHandleSystemBack(): Boolean = when (this) {
             session.profileSnapshot is ProfileSnapshot.Found &&
             !photos.reorderingPhotos
 
-    is RealsRootUiState.SecondChat -> !sending && !actionLoading && !manualBlock.loading
+    is RealsRootUiState.SecondChat -> !isJoinedActiveSecondChat() &&
+        !sending && !actionLoading && !manualBlock.loading
     is RealsRootUiState.VisualApproval ->
         !deciding && !writingMessage && !readingPartnerMessage && !manualBlock.loading
     is RealsRootUiState.Scheduling -> !submitting && !manualBlock.loading
@@ -434,3 +445,6 @@ fun RealsRootUiState.canHandleSystemBack(): Boolean = when (this) {
     is RealsRootUiState.FirstChat,
     is RealsRootUiState.Failure -> false
 }
+
+fun RealsRootUiState.SecondChat.isJoinedActiveSecondChat(): Boolean =
+    lifecycle.timingPresentation().genuinelyActive

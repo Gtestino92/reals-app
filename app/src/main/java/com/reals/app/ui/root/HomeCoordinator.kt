@@ -37,6 +37,12 @@ internal class HomeCoordinator(
         matchId: String,
         chatId: String?,
     ) -> Unit,
+    private val onOpenSecondChat: (
+        session: ProvisionedSession,
+        connectionId: String,
+        matchId: String,
+        partnerName: String?,
+    ) -> Unit,
     private val onReloadActiveSession: suspend (user: BackendUser) -> Unit,
 ) {
     private val homeUiMapper = HomeUiMapper()
@@ -584,6 +590,12 @@ internal class HomeCoordinator(
                 ready.session,
                 route.matchId,
                 route.chatId,
+            )
+            is HomeRoute.OpenSecondChat -> onOpenSecondChat(
+                ready.session,
+                route.connectionId,
+                route.matchId,
+                route.partnerName,
             )
         }
     }

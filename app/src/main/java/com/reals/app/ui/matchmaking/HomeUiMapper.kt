@@ -207,7 +207,5 @@ class HomeUiMapper {
 
     private fun ChatStatus?.isDismissedSecondChatStatus(): Boolean =
         this == ChatStatus.Cancelled ||
-            this == ChatStatus.Abandoned ||
-            this == ChatStatus.Closed ||
-            this == ChatStatus.Finished
+            this == ChatStatus.Closed
 }

@@ -21,8 +21,12 @@ import com.reals.app.domain.usecase.AddProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.CancelChatUseCase
 import com.reals.app.domain.usecase.BlockMatchParticipantUseCase
 import com.reals.app.domain.usecase.CreateProfileUseCase
+import com.reals.app.domain.usecase.CreateSecondChatCompletionRequestUseCase
+import com.reals.app.domain.usecase.CreateSecondChatInactivityClaimUseCase
+import com.reals.app.domain.usecase.CreateSecondChatNoShowClaimUseCase
 import com.reals.app.domain.usecase.DeleteAccountUseCase
 import com.reals.app.domain.usecase.DeleteProfilePhotoUseCase
+import com.reals.app.domain.usecase.DecideSecondChatCompletionRequestUseCase
 import com.reals.app.domain.usecase.DismissSecondChatForConnectionUseCase
 import com.reals.app.domain.usecase.EnqueueMatchmakingUseCase
 import com.reals.app.domain.usecase.GetChatExitRequestsUseCase
@@ -43,8 +47,10 @@ import com.reals.app.domain.usecase.GetQueueStatusUseCase
 import com.reals.app.domain.usecase.GetSchedulingNegotiationUseCase
 import com.reals.app.domain.usecase.GetSchedulingProposalsUseCase
 import com.reals.app.domain.usecase.GetSecondChatForConnectionUseCase
+import com.reals.app.domain.usecase.GetSecondChatStatusUseCase
 import com.reals.app.domain.usecase.GetVisualProfileUseCase
 import com.reals.app.domain.usecase.LeaveQueueUseCase
+import com.reals.app.domain.usecase.JoinSecondChatUseCase
 import com.reals.app.domain.usecase.MarkLocalFirebaseEmailVerifiedUseCase
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
 import com.reals.app.domain.usecase.PutMyPersonalMessageUseCase
@@ -136,6 +142,12 @@ class AppContainer(context: Context) {
     val getPartnerPersonalMessageUseCase = GetPartnerPersonalMessageUseCase(matchRepository)
     val getChatUseCase = GetChatUseCase(chatRepository)
     val getSecondChatForConnectionUseCase = GetSecondChatForConnectionUseCase(chatRepository)
+    val getSecondChatStatusUseCase = GetSecondChatStatusUseCase(chatRepository)
+    val joinSecondChatUseCase = JoinSecondChatUseCase(chatRepository)
+    val createSecondChatNoShowClaimUseCase = CreateSecondChatNoShowClaimUseCase(chatRepository)
+    val createSecondChatCompletionRequestUseCase = CreateSecondChatCompletionRequestUseCase(chatRepository)
+    val decideSecondChatCompletionRequestUseCase = DecideSecondChatCompletionRequestUseCase(chatRepository)
+    val createSecondChatInactivityClaimUseCase = CreateSecondChatInactivityClaimUseCase(chatRepository)
     val dismissSecondChatForConnectionUseCase = DismissSecondChatForConnectionUseCase(chatRepository)
     val getChatMessagesUseCase = GetChatMessagesUseCase(chatRepository)
     val sendChatMessageUseCase = SendChatMessageUseCase(chatRepository)
@@ -212,6 +224,19 @@ class AppContainer(context: Context) {
             timeoutChatExitRequest = timeoutChatExitRequestUseCase,
             cancelChat = cancelChatUseCase,
             safetyCancelChat = safetyCancelChatUseCase,
+        ),
+        secondChat = SecondChatFeatureDependencies(
+            getStatus = getSecondChatStatusUseCase,
+            join = joinSecondChatUseCase,
+            createNoShowClaim = createSecondChatNoShowClaimUseCase,
+            getChat = getChatUseCase,
+            getSecondChatForConnection = getSecondChatForConnectionUseCase,
+            getChatMessages = getChatMessagesUseCase,
+            sendChatMessage = sendChatMessageUseCase,
+            safetyCancelChat = safetyCancelChatUseCase,
+            createCompletionRequest = createSecondChatCompletionRequestUseCase,
+            decideCompletionRequest = decideSecondChatCompletionRequestUseCase,
+            createInactivityClaim = createSecondChatInactivityClaimUseCase,
         ),
         visualApproval = VisualApprovalFeatureDependencies(
             getMatch = getMatchUseCase,

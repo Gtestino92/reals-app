@@ -8,8 +8,12 @@ import com.reals.app.domain.usecase.AddProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.CancelChatUseCase
 import com.reals.app.domain.usecase.BlockMatchParticipantUseCase
 import com.reals.app.domain.usecase.CreateProfileUseCase
+import com.reals.app.domain.usecase.CreateSecondChatCompletionRequestUseCase
+import com.reals.app.domain.usecase.CreateSecondChatInactivityClaimUseCase
+import com.reals.app.domain.usecase.CreateSecondChatNoShowClaimUseCase
 import com.reals.app.domain.usecase.DeleteAccountUseCase
 import com.reals.app.domain.usecase.DeleteProfilePhotoUseCase
+import com.reals.app.domain.usecase.DecideSecondChatCompletionRequestUseCase
 import com.reals.app.domain.usecase.DismissSecondChatForConnectionUseCase
 import com.reals.app.domain.usecase.EnqueueMatchmakingUseCase
 import com.reals.app.domain.usecase.GetChatExitRequestsUseCase
@@ -29,7 +33,9 @@ import com.reals.app.domain.usecase.GetProfilePhotosUseCase
 import com.reals.app.domain.usecase.GetSchedulingNegotiationUseCase
 import com.reals.app.domain.usecase.GetSchedulingProposalsUseCase
 import com.reals.app.domain.usecase.GetSecondChatForConnectionUseCase
+import com.reals.app.domain.usecase.GetSecondChatStatusUseCase
 import com.reals.app.domain.usecase.GetVisualProfileUseCase
+import com.reals.app.domain.usecase.JoinSecondChatUseCase
 import com.reals.app.domain.usecase.LeaveQueueUseCase
 import com.reals.app.domain.usecase.MarkLocalFirebaseEmailVerified
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
@@ -61,6 +67,7 @@ data class RealsRootDependencies(
     val home: HomeFeatureDependencies,
     val manualBlock: ManualBlockFeatureDependencies,
     val firstChat: FirstChatFeatureDependencies,
+    val secondChat: SecondChatFeatureDependencies,
     val visualApproval: VisualApprovalFeatureDependencies,
     val scheduling: SchedulingFeatureDependencies,
 )
@@ -134,6 +141,20 @@ data class FirstChatFeatureDependencies(
     val timeoutChatExitRequest: TimeoutChatExitRequestUseCase,
     val cancelChat: CancelChatUseCase,
     val safetyCancelChat: SafetyCancelChatUseCase,
+)
+
+data class SecondChatFeatureDependencies(
+    val getStatus: GetSecondChatStatusUseCase,
+    val join: JoinSecondChatUseCase,
+    val createNoShowClaim: CreateSecondChatNoShowClaimUseCase,
+    val getChat: GetChatUseCase,
+    val getSecondChatForConnection: GetSecondChatForConnectionUseCase,
+    val getChatMessages: GetChatMessagesUseCase,
+    val sendChatMessage: SendChatMessageUseCase,
+    val safetyCancelChat: SafetyCancelChatUseCase,
+    val createCompletionRequest: CreateSecondChatCompletionRequestUseCase,
+    val decideCompletionRequest: DecideSecondChatCompletionRequestUseCase,
+    val createInactivityClaim: CreateSecondChatInactivityClaimUseCase,
 )
 
 data class VisualApprovalFeatureDependencies(

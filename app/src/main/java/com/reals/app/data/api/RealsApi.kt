@@ -34,6 +34,8 @@ import com.reals.app.data.dto.ReorderProfilePhotosRequestDto
 import com.reals.app.data.dto.RejectPartnerProposalsRequestDto
 import com.reals.app.data.dto.ScheduleProposalResponseDto
 import com.reals.app.data.dto.SendMessageRequestDto
+import com.reals.app.data.dto.SecondChatAttendanceResponseDto
+import com.reals.app.data.dto.SecondChatCompletionDecisionRequestDto
 import com.reals.app.data.dto.UpdateMatchFiltersRequestDto
 import com.reals.app.data.dto.UpdateProfileRequestDto
 import com.reals.app.data.dto.UserResponseDto
@@ -340,6 +342,44 @@ interface RealsApi {
         @Header("Authorization") authorization: String,
         @Path("connectionId") connectionId: String,
     ): Response<ChatResponseDto>
+
+    @GET("api/connections/{connectionId}/second-chat/status")
+    suspend fun getSecondChatStatus(
+        @Header("Authorization") authorization: String,
+        @Path("connectionId") connectionId: String,
+    ): Response<SecondChatAttendanceResponseDto>
+
+    @POST("api/connections/{connectionId}/second-chat/join")
+    suspend fun joinSecondChat(
+        @Header("Authorization") authorization: String,
+        @Path("connectionId") connectionId: String,
+    ): Response<SecondChatAttendanceResponseDto>
+
+    @POST("api/connections/{connectionId}/second-chat/no-show-claims")
+    suspend fun createSecondChatNoShowClaim(
+        @Header("Authorization") authorization: String,
+        @Path("connectionId") connectionId: String,
+    ): Response<SecondChatAttendanceResponseDto>
+
+    @POST("api/connections/{connectionId}/second-chat/completion-requests")
+    suspend fun createSecondChatCompletionRequest(
+        @Header("Authorization") authorization: String,
+        @Path("connectionId") connectionId: String,
+    ): Response<SecondChatAttendanceResponseDto>
+
+    @POST("api/connections/{connectionId}/second-chat/completion-requests/{requestId}/decision")
+    suspend fun decideSecondChatCompletionRequest(
+        @Header("Authorization") authorization: String,
+        @Path("connectionId") connectionId: String,
+        @Path("requestId") requestId: String,
+        @Body body: SecondChatCompletionDecisionRequestDto,
+    ): Response<SecondChatAttendanceResponseDto>
+
+    @POST("api/connections/{connectionId}/second-chat/inactivity-claims")
+    suspend fun createSecondChatInactivityClaim(
+        @Header("Authorization") authorization: String,
+        @Path("connectionId") connectionId: String,
+    ): Response<SecondChatAttendanceResponseDto>
 
     @POST("api/connections/{connectionId}/second-chat-dismissal")
     suspend fun dismissSecondChatForConnection(

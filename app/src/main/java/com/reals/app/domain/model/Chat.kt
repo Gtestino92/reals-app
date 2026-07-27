@@ -15,6 +15,7 @@ data class Chat(
     val partner: ChatPartner?,
     val myDecision: ChatDecisionState,
     val partnerDecision: ChatDecisionState,
+    val endedReason: SecondChatEndedReason?,
     val endedAt: String?,
     val readOnlyUntil: String?,
     val lastMessageAt: String?,
@@ -53,6 +54,49 @@ data class ChatExitOutcome(
     val exitRequest: ChatExitRequest,
     val penaltyApplied: Boolean,
     val penalizedUserId: String?,
+)
+
+data class SecondChatStatus(
+    val connectionId: String,
+    val chatId: String?,
+    val scheduledAt: String,
+    val onTimeUntil: String,
+    val entryClosesAt: String,
+    val absoluteExpiresAt: String,
+    val conversationStartedAt: String?,
+    val serverTime: String,
+    val myAttendanceStatus: SecondChatAttendanceStatus,
+    val myJoinedAt: String?,
+    val partnerAttendanceStatus: SecondChatAttendanceStatus,
+    val partnerJoinedAt: String?,
+    val canJoin: Boolean,
+    val canClaimPartnerNoShow: Boolean,
+    val activeNoShowClaim: SecondChatResolutionRequest?,
+    val activeResolutionRequest: SecondChatResolutionRequest?,
+    val chatStatus: ChatStatus?,
+    val endedReason: SecondChatEndedReason?,
+    val endedAt: String?,
+    val readOnlyUntil: String?,
+    val mutualCompletionEligibleAt: String?,
+    val canRequestMutualCompletion: Boolean,
+    val mutualCompletionCooldownUntil: String?,
+    val inactivityClaimableAt: String?,
+    val inactivityClosesAt: String?,
+    val canClaimPartnerInactivity: Boolean,
+    val mustRespondToPartner: Boolean,
+    val lastMessageAt: String?,
+    val lastMessageSenderId: String?,
+)
+
+data class SecondChatResolutionRequest(
+    val id: String,
+    val type: SecondChatResolutionRequestType,
+    val requesterUserId: String,
+    val responderUserId: String,
+    val referenceMessageId: String?,
+    val status: SecondChatResolutionRequestStatus,
+    val createdAt: String,
+    val expiresAt: String,
 )
 
 data class FirstChatGuidanceQuestion(
@@ -168,6 +212,100 @@ sealed interface ChatStatus {
             Abandoned.rawValue -> Abandoned
             Closed.rawValue -> Closed
             Finished.rawValue -> Finished
+            else -> Unknown(value)
+        }
+    }
+}
+
+sealed interface SecondChatAttendanceStatus {
+    val rawValue: String
+
+    data object Pending : SecondChatAttendanceStatus { override val rawValue = "PENDING" }
+    data object OnTime : SecondChatAttendanceStatus { override val rawValue = "ON_TIME" }
+    data object Late : SecondChatAttendanceStatus { override val rawValue = "LATE" }
+    data object NoShow : SecondChatAttendanceStatus { override val rawValue = "NO_SHOW" }
+    data class Unknown(override val rawValue: String) : SecondChatAttendanceStatus
+
+    companion object {
+        fun fromBackend(value: String): SecondChatAttendanceStatus = when (value.uppercase()) {
+            Pending.rawValue -> Pending
+            OnTime.rawValue -> OnTime
+            Late.rawValue -> Late
+            NoShow.rawValue -> NoShow
+            else -> Unknown(value)
+        }
+    }
+}
+
+sealed interface SecondChatResolutionRequestType {
+    val rawValue: String
+
+    data object PartnerNoShow : SecondChatResolutionRequestType { override val rawValue = "PARTNER_NO_SHOW" }
+    data object MutualCompletion : SecondChatResolutionRequestType { override val rawValue = "MUTUAL_COMPLETION" }
+    data object PartnerInactivity : SecondChatResolutionRequestType { override val rawValue = "PARTNER_INACTIVITY" }
+    data class Unknown(override val rawValue: String) : SecondChatResolutionRequestType
+
+    companion object {
+        fun fromBackend(value: String): SecondChatResolutionRequestType = when (value.uppercase()) {
+            PartnerNoShow.rawValue -> PartnerNoShow
+            MutualCompletion.rawValue -> MutualCompletion
+            PartnerInactivity.rawValue -> PartnerInactivity
+            else -> Unknown(value)
+        }
+    }
+}
+
+sealed interface SecondChatResolutionRequestStatus {
+    val rawValue: String
+
+    data object Pending : SecondChatResolutionRequestStatus { override val rawValue = "PENDING" }
+    data object Cancelled : SecondChatResolutionRequestStatus { override val rawValue = "CANCELLED" }
+    data object Completed : SecondChatResolutionRequestStatus { override val rawValue = "COMPLETED" }
+    data object Accepted : SecondChatResolutionRequestStatus { override val rawValue = "ACCEPTED" }
+    data object Rejected : SecondChatResolutionRequestStatus { override val rawValue = "REJECTED" }
+    data object TimedOut : SecondChatResolutionRequestStatus { override val rawValue = "TIMED_OUT" }
+    data class Unknown(override val rawValue: String) : SecondChatResolutionRequestStatus
+
+    companion object {
+        fun fromBackend(value: String): SecondChatResolutionRequestStatus = when (value.uppercase()) {
+            Pending.rawValue -> Pending
+            Cancelled.rawValue -> Cancelled
+            Completed.rawValue -> Completed
+            Accepted.rawValue -> Accepted
+            Rejected.rawValue -> Rejected
+            TimedOut.rawValue -> TimedOut
+            else -> Unknown(value)
+        }
+    }
+}
+
+sealed interface SecondChatCompletionDecision {
+    val rawValue: String
+
+    data object Accepted : SecondChatCompletionDecision { override val rawValue = "ACCEPTED" }
+    data object Rejected : SecondChatCompletionDecision { override val rawValue = "REJECTED" }
+}
+
+sealed interface SecondChatEndedReason {
+    val rawValue: String
+
+    data object NoShow : SecondChatEndedReason { override val rawValue = "SECOND_CHAT_NO_SHOW" }
+    data object MutualCompletion : SecondChatEndedReason { override val rawValue = "SECOND_CHAT_MUTUAL_COMPLETION" }
+    data object PartnerInactivity : SecondChatEndedReason { override val rawValue = "SECOND_CHAT_PARTNER_INACTIVITY" }
+    data object NoConversationStarted : SecondChatEndedReason {
+        override val rawValue = "SECOND_CHAT_NO_CONVERSATION_STARTED"
+    }
+    data object AbsoluteTimeout : SecondChatEndedReason { override val rawValue = "ABSOLUTE_TIMEOUT" }
+    data class Unknown(override val rawValue: String) : SecondChatEndedReason
+
+    companion object {
+        fun fromBackend(value: String?): SecondChatEndedReason? = when (value?.uppercase()) {
+            null, "" -> null
+            NoShow.rawValue -> NoShow
+            MutualCompletion.rawValue -> MutualCompletion
+            PartnerInactivity.rawValue -> PartnerInactivity
+            NoConversationStarted.rawValue -> NoConversationStarted
+            AbsoluteTimeout.rawValue -> AbsoluteTimeout
             else -> Unknown(value)
         }
     }
