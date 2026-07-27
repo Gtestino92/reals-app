@@ -219,6 +219,7 @@ sealed interface RealsRootUiState {
 
 data class SecondChatLifecycleUiState(
     val status: SecondChatStatus? = null,
+    val statusReceivedAtMillis: Long? = null,
     val joining: Boolean = false,
     val claimingNoShow: Boolean = false,
     val joinCompletedInThisSession: Boolean = false,
@@ -447,12 +448,9 @@ fun RealsRootUiState.canHandleSystemBack(): Boolean = when (this) {
 }
 
 fun RealsRootUiState.SecondChat.isJoinedActiveSecondChat(): Boolean =
-    lifecycle.status?.isJoinedActiveSecondChat() == true
+    lifecycle.timingPresentation().genuinelyActive
 
 fun SecondChatStatus.isJoinedActiveSecondChat(): Boolean =
-    chatStatus == ChatStatus.Active &&
-        chatId?.isNotBlank() == true &&
-        (
-            myAttendanceStatus == com.reals.app.domain.model.SecondChatAttendanceStatus.OnTime ||
-                myAttendanceStatus == com.reals.app.domain.model.SecondChatAttendanceStatus.Late
-            )
+    secondChatTimingPresentation(
+        statusReceivedAtMillis = null,
+    ).genuinelyActive

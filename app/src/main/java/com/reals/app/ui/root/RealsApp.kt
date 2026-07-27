@@ -305,6 +305,7 @@ fun RealsApp(
                 onBackHome = if (current.isJoinedActiveSecondChat()) null else viewModel::closeSecondChat,
                 onRefresh = { viewModel.refreshSecondChat(silent = true) },
                 onSecondChatUnavailable = viewModel::handleSecondChatUnavailable,
+                onSecondChatLocalAbsoluteExpiry = viewModel::handleSecondChatLocalAbsoluteExpiry,
                 onClaimSecondChatNoShow = viewModel::createSecondChatNoShowClaim,
                 onSendMessage = viewModel::sendSecondChatMessage,
                 onRetryOptimisticMessage = viewModel::retrySecondChatMessage,

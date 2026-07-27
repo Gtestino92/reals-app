@@ -77,6 +77,7 @@ class RealsRootViewModel(
     private var pairBlockedRerouteJob: Job? = null
     private var sessionInvalidationJob: Job? = null
     private var manualBlockJob: Job? = null
+    private var handledSecondChatLocalExpiryKey: String? = null
     private val homeCoordinator = HomeCoordinator(
         uiState = _uiState,
         dependencies = dependencies.home,
@@ -363,6 +364,7 @@ class RealsRootViewModel(
         partnerName: String? = null,
         joinIfAllowed: Boolean,
     ) {
+        handledSecondChatLocalExpiryKey = null
         viewModelScope.launch {
             _uiState.value = RealsRootUiState.SecondChat(
                 session = session,
@@ -467,6 +469,27 @@ class RealsRootViewModel(
         if (current.isJoinedActiveSecondChat()) return
         viewModelScope.launch {
             homeCoordinator.returnHome(current.session)
+        }
+    }
+
+    fun handleSecondChatLocalAbsoluteExpiry() {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        if (!current.lifecycle.timingPresentation().locallyExpired) return
+        val expiryKey = "${current.connectionId}:${current.chatId.orEmpty()}"
+        if (handledSecondChatLocalExpiryKey == expiryKey) return
+        handledSecondChatLocalExpiryKey = expiryKey
+        viewModelScope.launch {
+            val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return@launch
+            if (
+                latest.connectionId != current.connectionId ||
+                !latest.lifecycle.timingPresentation().locallyExpired
+            ) {
+                return@launch
+            }
+            homeCoordinator.returnHome(
+                session = latest.session,
+                message = "El segundo chat venció.",
+            )
         }
     }
 

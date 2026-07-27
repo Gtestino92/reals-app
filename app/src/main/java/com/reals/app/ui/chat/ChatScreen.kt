@@ -77,8 +77,9 @@ import com.reals.app.ui.root.OutgoingMessageDeliveryState
 import com.reals.app.ui.root.SecondChatLifecycleUiState
 import com.reals.app.ui.root.hasPendingNoShowClaim
 import com.reals.app.ui.root.isWaitingForPartner
-import com.reals.app.ui.root.remainingMillisFromServer
+import com.reals.app.ui.root.remainingMillisFromServerSnapshot
 import com.reals.app.ui.root.secondChatResultCopy
+import com.reals.app.ui.root.timingPresentation
 import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -140,6 +141,7 @@ fun ChatScreen(
     onRefresh: () -> Unit,
     onFirstChatLocalExpiry: (inactivity: Boolean) -> Unit = {},
     onSecondChatUnavailable: () -> Unit = {},
+    onSecondChatLocalAbsoluteExpiry: () -> Unit = {},
     onRequestNextGuidanceQuestion: (() -> Unit)? = null,
     onClaimSecondChatNoShow: () -> Unit = {},
     onSendMessage: (String) -> Boolean,
@@ -164,9 +166,12 @@ fun ChatScreen(
     var showingManualBlockDialog by rememberSaveable(chat?.id) { mutableStateOf(false) }
     var nowMillis by rememberSaveable(chat?.id) { mutableStateOf(System.currentTimeMillis()) }
     var firstChatExpiryHandled by rememberSaveable(chat?.id) { mutableStateOf(false) }
+    var secondChatLocalExpiryHandled by rememberSaveable(chat?.id) { mutableStateOf(false) }
     var secondChatUnavailableHandled by rememberSaveable(chat?.id) { mutableStateOf(false) }
     val firstChatLifecycle = firstChatLifecycleUiState(chat, nowMillis)
     val firstChatLocallyExpired = firstChatLifecycle?.expired == true
+    val secondChatTiming = secondChatLifecycle?.timingPresentation(nowMillis)
+    val secondChatLocallyExpired = secondChatTiming?.locallyExpired == true
     val readOnlyUntilInstant = backendInstantOrNull(chat?.readOnlyUntil)
     val secondChatTerminalReadable = chat?.status in listOf(
         ChatStatus.Expired,
@@ -186,6 +191,7 @@ fun ChatScreen(
                             (secondChatTerminalReadable && !secondChatReadOnlyFuture)
                     )
     val canChat = !firstChatLocallyExpired &&
+            !secondChatLocallyExpired &&
             !secondChatReadOnlyFuture &&
             !secondChatUnavailable &&
             (chat?.status == ChatStatus.Active ||
@@ -194,7 +200,8 @@ fun ChatScreen(
     val sendingMessage = sending
     val loadingChatAction = actionLoading || manualBlockLoading
     val canUseChatActions = canChat && !loadingChatAction
-    val canUseNavigationActions = !loadingChatAction && secondChatLifecycle?.status?.chatStatus != ChatStatus.Active
+    val canUseNavigationActions = !loadingChatAction &&
+            secondChatTiming?.genuinelyActive != true
     val pendingExitRequest = exitRequests
         .filter { it.status == ChatExitRequestStatus.Pending }
         .maxByOrNull { it.createdAt }
@@ -205,7 +212,9 @@ fun ChatScreen(
         canRequestNextWhileChatOpen = canSendMessages,
     )
     val canUseExistingChatActions =
-        canUseChatActions && (!showMutualExitActions || !exitFlowLocked)
+        canUseChatActions &&
+            (secondChatLifecycle == null || secondChatTiming?.genuinelyActive == true) &&
+            (!showMutualExitActions || !exitFlowLocked)
     val manualBlockBusy =
         loading || refreshing || sending || actionLoading || guidanceActionLoading ||
             manualBlockLoading
@@ -251,7 +260,10 @@ fun ChatScreen(
     }
 
     LaunchedEffect(chat?.id, firstChatLifecycle?.deadline) {
-        while (firstChatLifecycleUiState(chat)?.expired == false) {
+        while (
+            firstChatLifecycleUiState(chat)?.expired == false ||
+            secondChatLifecycle?.timingPresentation(nowMillis)?.genuinelyActive == true
+        ) {
             delay(1_000.milliseconds)
             nowMillis = System.currentTimeMillis()
         }
@@ -270,6 +282,13 @@ fun ChatScreen(
         if (secondChatUnavailable && !secondChatUnavailableHandled) {
             secondChatUnavailableHandled = true
             onSecondChatUnavailable()
+        }
+    }
+
+    LaunchedEffect(chat?.id, secondChatLocallyExpired) {
+        if (secondChatLocallyExpired && !secondChatLocalExpiryHandled) {
+            secondChatLocalExpiryHandled = true
+            onSecondChatLocalAbsoluteExpiry()
         }
     }
 
@@ -333,6 +352,13 @@ fun ChatScreen(
                 FeedbackCard(
                     title = if (lifecycle.expired) "Estado" else "Tiempo restante",
                     message = if (lifecycle.expired) lifecycle.expiredCopy() else lifecycle.warningCopy(),
+                    tone = FeedbackTone.Warning,
+                )
+            }
+            if (secondChatTiming?.showAbsoluteExpiryWarning == true) {
+                FeedbackCard(
+                    title = "Tiempo restante",
+                    message = "El segundo chat vence pronto. Al finalizar volverás a Home.",
                     tone = FeedbackTone.Warning,
                 )
             }
@@ -401,7 +427,7 @@ fun ChatScreen(
         }
     }
 
-    if (showingSafetyDialog && showExitActions) {
+    if (showingSafetyDialog && showExitActions && canUseExistingChatActions) {
         SafetyReportDialog(
             details = safetyDetails,
             selectedReason = safetyReportReasonFromRawValue(safetyReasonRawValue),
@@ -487,7 +513,13 @@ private fun SecondChatLifecyclePanel(
             delay(1_000.milliseconds)
             nowMillis = System.currentTimeMillis()
             val expiresAt = status.activeNoShowClaim?.expiresAt ?: break
-            if (status.remainingMillisFromServer(expiresAt, nowMillis) <= 0) {
+            if (
+                status.remainingMillisFromServerSnapshot(
+                    targetTime = expiresAt,
+                    statusReceivedAtMillis = lifecycle.statusReceivedAtMillis,
+                    nowMillis = nowMillis,
+                )?.let { it <= 0 } == true
+            ) {
                 onRefresh()
                 break
             }
@@ -510,13 +542,16 @@ private fun SecondChatLifecyclePanel(
             )
         }
         status.hasPendingNoShowClaim() -> {
-            val seconds = ((status.remainingMillisFromServer(
-                status.activeNoShowClaim?.expiresAt.orEmpty(),
-                nowMillis,
-            ) + 999) / 1000).coerceAtLeast(0)
+            val seconds = ((
+                status.remainingMillisFromServerSnapshot(
+                    targetTime = status.activeNoShowClaim?.expiresAt.orEmpty(),
+                    statusReceivedAtMillis = lifecycle.statusReceivedAtMillis,
+                    nowMillis = nowMillis,
+                ) ?: 0
+                ) + 999) / 1000
             FeedbackCard(
                 title = "Esperando a la otra persona",
-                message = "Puede entrar durante los próximos $seconds segundos.",
+                message = "Puede entrar durante los próximos ${seconds.coerceAtLeast(0)} segundos.",
                 tone = FeedbackTone.Warning,
             )
         }

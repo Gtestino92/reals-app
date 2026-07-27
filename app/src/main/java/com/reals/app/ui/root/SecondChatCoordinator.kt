@@ -13,7 +13,6 @@ import com.reals.app.domain.model.SecondChatEndedReason
 import com.reals.app.domain.model.SecondChatResolutionRequestStatus
 import com.reals.app.domain.model.SecondChatResolutionRequestType
 import com.reals.app.domain.model.SecondChatStatus
-import java.time.Instant
 
 internal class SecondChatCoordinator(
     private val dependencies: SecondChatFeatureDependencies,
@@ -172,6 +171,9 @@ internal class SecondChatCoordinator(
         if (current.loading || current.refreshing || current.sending || current.actionLoading) {
             return SecondChatActionResult.Ignore
         }
+        if (current.lifecycle.status != null && !current.lifecycle.timingPresentation().genuinelyActive) {
+            return SecondChatActionResult.Ignore
+        }
         val chat = current.chat ?: return SecondChatActionResult.Ignore
 
         val cleanDetails = normalizeSafetyReportDetails(details) ?: return SecondChatActionResult.Show(
@@ -236,6 +238,7 @@ internal class SecondChatCoordinator(
 
         val lifecycle = current.lifecycle.copy(
             status = authoritativeStatus,
+            statusReceivedAtMillis = System.currentTimeMillis(),
             joining = false,
             joinCompletedInThisSession = current.lifecycle.joinCompletedInThisSession ||
                 (joinIfAllowed && status.canJoin),
@@ -312,14 +315,11 @@ internal fun SecondChatStatus.hasPendingNoShowClaim(): Boolean =
 internal fun SecondChatStatus.remainingMillisFromServer(
     targetTime: String,
     nowMillis: Long = System.currentTimeMillis(),
-): Long {
-    val server = backendInstantOrNull(serverTime) ?: return 0
-    val target = backendInstantOrNull(targetTime) ?: return 0
-    val receivedAt = Instant.ofEpochMilli(nowMillis)
-    val serverOffsetMillis = server.toEpochMilli() - receivedAt.toEpochMilli()
-    val synchronizedNow = nowMillis + serverOffsetMillis
-    return target.toEpochMilli() - synchronizedNow
-}
+): Long = remainingMillisFromServerSnapshot(
+    targetTime = targetTime,
+    statusReceivedAtMillis = nowMillis,
+    nowMillis = nowMillis,
+) ?: 0
 
 internal fun SecondChatEndedReason?.secondChatResultCopy(): String = when (this) {
     SecondChatEndedReason.NoShow -> "La cita terminó porque una de las personas no llegó."
