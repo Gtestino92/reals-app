@@ -50,6 +50,7 @@ import com.reals.app.domain.usecase.GetMatchUseCase
 import com.reals.app.domain.usecase.GetMeUseCase
 import com.reals.app.domain.usecase.GetPartnerPersonalMessageUseCase
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
+import com.reals.app.domain.usecase.GetSchedulingAvailabilityUseCase
 import com.reals.app.domain.usecase.GetSchedulingNegotiationUseCase
 import com.reals.app.domain.usecase.GetSchedulingProposalsUseCase
 import com.reals.app.domain.usecase.GetSecondChatForConnectionUseCase
@@ -401,6 +402,7 @@ class RealsRootViewModelLegalRoutingTest {
             scheduling = SchedulingFeatureDependencies(
                 getNegotiation = GetSchedulingNegotiationUseCase(schedulingRepository),
                 getProposals = GetSchedulingProposalsUseCase(schedulingRepository),
+                getAvailability = GetSchedulingAvailabilityUseCase(schedulingRepository),
                 submitProposals = SubmitSchedulingProposalsUseCase(schedulingRepository),
                 acceptProposal = AcceptSchedulingProposalUseCase(schedulingRepository),
                 rejectPartnerProposals = RejectPartnerSchedulingProposalsUseCase(schedulingRepository),

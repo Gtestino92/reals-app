@@ -1,5 +1,6 @@
 package com.reals.app.ui.scheduling
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,6 +47,7 @@ import com.reals.app.core.network.ErrorContext
 import com.reals.app.core.network.backendErrorCode
 import com.reals.app.core.security.TextSafety
 import com.reals.app.domain.model.NegotiationStatus
+import com.reals.app.domain.model.SchedulingAvailability
 import com.reals.app.domain.model.SchedulingNegotiation
 import com.reals.app.domain.model.SchedulingProposal
 import com.reals.app.ui.common.ApiErrorFeedbackCard
@@ -75,6 +77,7 @@ fun SchedulingScreen(
     manualBlockError: ApiError?,
     negotiation: SchedulingNegotiation?,
     proposals: List<SchedulingProposal>,
+    availability: SchedulingAvailability?,
     currentUserId: String,
     error: ApiError?,
     message: String?,
@@ -228,6 +231,7 @@ fun SchedulingScreen(
                     submittingLabel = submittingLabel,
                     proposalError = errorPlacement.proposalError,
                     nowMillis = nowMillis,
+                    availability = availability,
                     selected = selectedProposalDraft,
                     onSelectedChange = { selectedProposalDraft = it },
                     onSubmitProposals = onSubmitProposals,
@@ -246,6 +250,7 @@ fun SchedulingScreen(
                         submittingLabel = submittingLabel,
                         reviewError = errorPlacement.reviewError,
                         nowMillis = nowMillis,
+                        availability = availability,
                         onAcceptProposal = onAcceptProposal,
                         onRejectPartnerProposals = onRejectPartnerProposals,
                     )
@@ -330,6 +335,7 @@ private fun ProposalSelectorCard(
     submittingLabel: String?,
     proposalError: ApiError?,
     nowMillis: Long,
+    availability: SchedulingAvailability?,
     selected: List<String>,
     onSelectedChange: (List<String>) -> Unit,
     onSubmitProposals: (List<String>) -> Unit,
@@ -340,7 +346,7 @@ private fun ProposalSelectorCard(
         .atZone(zoneId)
         .toOffsetDateTime()
     val dayOptions = schedulingDayOptions(now)
-    val initialSelection = firstAvailableSchedulingSelection(now, zoneId)
+    val initialSelection = firstAvailableSchedulingSelection(now, zoneId, availability)
     var selectedDate by rememberSaveable {
         mutableStateOf(initialSelection?.date?.toString() ?: now.toLocalDate().toString())
     }
@@ -352,6 +358,7 @@ private fun ProposalSelectorCard(
         selectedDate,
         selectedHour,
         selectedMinute,
+        availability,
     ) {
         val corrected = correctedSchedulingPickerSelection(
             selectedDate = selectedDate,
@@ -359,6 +366,7 @@ private fun ProposalSelectorCard(
             selectedMinute = selectedMinute,
             now = now,
             zoneId = zoneId,
+            availability = availability,
         )
         if (selectedDate != corrected.date.toString() ||
             selectedHour != corrected.hour ||
@@ -372,13 +380,21 @@ private fun ProposalSelectorCard(
     }
     val selectedLocalDate = runCatching { java.time.LocalDate.parse(selectedDate) }
         .getOrDefault(now.toLocalDate())
-    val availableHours = availableSchedulingHours(selectedLocalDate, now, zoneId)
-    val effectiveHour = if (selectedHour in availableHours) {
+    val visibleHours = visibleSchedulingHours(selectedLocalDate, now, zoneId)
+    val availableHours = availableSchedulingHours(selectedLocalDate, now, zoneId, availability)
+    val effectiveHour = if (selectedHour in visibleHours) {
         selectedHour
     } else {
-        availableHours.firstOrNull() ?: selectedHour
+        visibleHours.firstOrNull() ?: selectedHour
     }
-    val availableMinutes = availableSchedulingMinutes(selectedLocalDate, effectiveHour, now, zoneId)
+    val minuteOptions = schedulingMinuteOptions(selectedLocalDate, effectiveHour, now, zoneId, availability)
+    val availableMinutes = minuteOptions
+        .filter { it.selectable }
+        .map { it.minute }
+    val conflictingMinutes = minuteOptions
+        .filter { it.conflicting }
+        .map { it.minute }
+        .toSet()
     val effectiveMinute = if (selectedMinute in availableMinutes) {
         selectedMinute
     } else {
@@ -396,7 +412,7 @@ private fun ProposalSelectorCard(
     val candidateValue = candidateSelection?.let { buildSchedulingSlot(it, zoneId).toString() }
     val selectedLabels = selected
     val currentSelectedValidation = selected.takeIf { it.isNotEmpty() }
-        ?.let { validateCurrentSelectedSlots(it, now) }
+        ?.let { validateCurrentSelectedSlots(it, now, availability) }
     val visibleValidationError = validationError ?: currentSelectedValidation
 
     Card(
@@ -416,20 +432,25 @@ private fun ProposalSelectorCard(
                 selected = dayOptions.firstOrNull { it.date == selectedLocalDate },
                 enabled = !submitting && !actionsDisabled,
                 optionLabel = { it.label },
-                isOptionEnabled = { day -> availableSchedulingHours(day.date, now, zoneId).isNotEmpty() },
+                isOptionEnabled = { day ->
+                    availableSchedulingHours(day.date, now, zoneId, availability).isNotEmpty()
+                },
                 onSelected = { day ->
                     val currentHour = effectiveHour
                     val currentMinute = effectiveMinute
                     selectedDate = day.date.toString()
-                    val nextHours = availableSchedulingHours(day.date, now, zoneId)
-                    val nextHour = currentHour.takeIf { it in nextHours }
-                        ?: nextHours.firstOrNull()
+                    val nextVisibleHours = visibleSchedulingHours(day.date, now, zoneId)
+                    val nextAvailableHours = availableSchedulingHours(day.date, now, zoneId, availability)
+                    val nextHour = currentHour.takeIf { it in nextAvailableHours }
+                        ?: nextAvailableHours.firstOrNull()
                     if (nextHour != null) {
                         selectedHour = nextHour
-                        val nextMinutes = availableSchedulingMinutes(day.date, nextHour, now, zoneId)
+                        val nextMinutes = availableSchedulingMinutes(day.date, nextHour, now, zoneId, availability)
                         selectedMinute = currentMinute.takeIf { it in nextMinutes }
                             ?: nextMinutes.firstOrNull()
                             ?: selectedMinute
+                    } else {
+                        selectedHour = nextVisibleHours.firstOrNull() ?: selectedHour
                     }
                     validationError = null
                 },
@@ -444,10 +465,11 @@ private fun ProposalSelectorCard(
             ) {
                 WheelPickerColumn(
                     title = "Hora",
-                    options = availableHours,
-                    selected = selectedHour.takeIf { it in availableHours },
+                    options = visibleHours,
+                    selected = selectedHour.takeIf { it in visibleHours },
                     enabled = !submitting && !actionsDisabled,
                     optionLabel = { it.toString().padStart(2, '0') },
+                    isOptionEnabled = { hour -> hour in availableHours },
                     onSelected = { hour ->
                         selectedHour = hour
                         val nextMinutes = availableSchedulingMinutes(
@@ -455,6 +477,7 @@ private fun ProposalSelectorCard(
                             hour,
                             now,
                             zoneId,
+                            availability,
                         )
                         selectedMinute = selectedMinute.takeIf { it in nextMinutes }
                             ?: nextMinutes.firstOrNull()
@@ -468,6 +491,7 @@ private fun ProposalSelectorCard(
                     selected = selectedMinute.takeIf { it in availableMinutes },
                     enabled = !submitting && !actionsDisabled,
                     enabledMinutes = availableMinutes,
+                    conflictingMinutes = conflictingMinutes,
                     onSelected = { minute ->
                         selectedMinute = minute
                         validationError = null
@@ -479,7 +503,7 @@ private fun ProposalSelectorCard(
             Button(
                 onClick = {
                     val value = candidateValue
-                    val validation = value?.let { validateSelectedSlots(selected + it, now) }
+                    val validation = value?.let { validateSelectedSlots(selected + it, now, availability) }
                     when {
                         value == null -> validationError = "Seleccioná un horario válido."
                         value in selected -> validationError = "Ese horario ya está en la lista."
@@ -505,15 +529,29 @@ private fun ProposalSelectorCard(
                 )
             } else {
                 selectedLabels.forEachIndexed { index, value ->
+                    val conflicting = schedulingSlotConflictPolicy(value, availability)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            text = "${index + 1}. ${formatBackendContextualDateTime(value, nowMillis)}",
-                            modifier = Modifier.weight(1f),
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "${index + 1}. ${formatBackendContextualDateTime(value, nowMillis)}",
+                                color = if (conflicting) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
+                            )
+                            if (conflicting) {
+                                Text(
+                                    text = CONFLICTING_SLOT_MESSAGE,
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
                         OutlinedButton(
                             onClick = {
                                 onSelectedChange(selected.filterNot { it == value })
@@ -535,14 +573,14 @@ private fun ProposalSelectorCard(
             }
             Button(
                 onClick = {
-                    val validation = validateCurrentSelectedSlots(selected, now)
+                    val validation = validateCurrentSelectedSlots(selected, now, availability)
                     if (validation == null) {
                         onSubmitProposals(selected)
                     } else {
                         validationError = validation
                     }
                 },
-                enabled = !submitting && !actionsDisabled && canSubmitSelectedSlots(selected, now),
+                enabled = !submitting && !actionsDisabled && canSubmitSelectedSlots(selected, now, availability),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 if (submitting) {
@@ -593,6 +631,7 @@ private fun ApiError.isProposalSubmissionError(): Boolean =
         backendErrorCode in setOf(
             BackendErrorCode.SchedulingInvalidProposals,
             BackendErrorCode.SchedulingProposalsAlreadySubmitted,
+            BackendErrorCode.SchedulingSlotConflict,
         )
 
 private fun ApiError.isReceivedProposalReviewError(): Boolean =
@@ -601,6 +640,7 @@ private fun ApiError.isReceivedProposalReviewError(): Boolean =
             BackendErrorCode.SchedulingRoundChanged,
             BackendErrorCode.SchedulingPartnerProposalsNotAvailable,
             BackendErrorCode.SchedulingProposalNotAvailable,
+            BackendErrorCode.SchedulingSlotConflict,
         )
 
 internal data class SchedulingProposalDraftScope(
@@ -634,12 +674,16 @@ private fun <T> WheelPickerColumn(
         selectedIndex = selectedIndex,
         optionCount = options.size,
     )
-    val previousOption = options
-        .take(selectedIndex.coerceAtLeast(0))
-        .lastOrNull(isOptionEnabled)
-    val nextOption = options
-        .drop((selectedIndex + 1).coerceAtLeast(0))
-        .firstOrNull(isOptionEnabled)
+    val previousOption = previousEnabledOptionIndex(
+        selectedIndex = selectedIndex,
+        optionCount = options.size,
+        isOptionEnabled = { index -> isOptionEnabled(options[index]) },
+    )?.let(options::get)
+    val nextOption = nextEnabledOptionIndex(
+        selectedIndex = selectedIndex,
+        optionCount = options.size,
+        isOptionEnabled = { index -> isOptionEnabled(options[index]) },
+    )?.let(options::get)
 
     Column(
         modifier = modifier,
@@ -725,6 +769,7 @@ private fun MinutePickerColumn(
     selected: Int?,
     enabled: Boolean,
     enabledMinutes: List<Int>,
+    conflictingMinutes: Set<Int>,
     onSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -741,6 +786,7 @@ private fun MinutePickerColumn(
         ) {
             minutes.forEach { minute ->
                 val optionEnabled = enabled && minute in enabledMinutes
+                val conflicting = minute in conflictingMinutes
                 val label = minute.toString().padStart(2, '0')
                 if (minute == selected && optionEnabled) {
                     Button(
@@ -754,11 +800,30 @@ private fun MinutePickerColumn(
                     OutlinedButton(
                         onClick = { onSelected(minute) },
                         enabled = optionEnabled,
+                        border = if (conflicting) {
+                            BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                        } else {
+                            null
+                        },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text(label)
+                        Text(
+                            text = label,
+                            color = if (conflicting) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                        )
                     }
                 }
+            }
+            if (conflictingMinutes.isNotEmpty()) {
+                Text(
+                    text = "No disponible",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
         }
         Spacer(modifier = Modifier.height(PickerControlSlotHeight))
@@ -801,10 +866,11 @@ private fun ReviewProposalsCard(
     submittingLabel: String?,
     reviewError: ApiError?,
     nowMillis: Long,
+    availability: SchedulingAvailability?,
     onAcceptProposal: (String) -> Unit,
     onRejectPartnerProposals: () -> Unit,
 ) {
-    val reviewState = schedulingReceivedProposalReviewState(partnerPendingProposals, nowMillis)
+    val reviewState = schedulingReceivedProposalReviewState(partnerPendingProposals, nowMillis, availability)
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Revisá las opciones recibidas", style = MaterialTheme.typography.titleMedium)
@@ -891,7 +957,11 @@ private fun ReceivedProposalList(
                     Text(
                         text = "${numberedItem.number}. ${
                             if (item.unavailable) {
-                                "Horario no disponible"
+                                if (item.conflicting) {
+                                    formatBackendContextualDateTime(proposal.proposedDateTime, nowMillis)
+                                } else {
+                                    "Horario no disponible"
+                                }
                             } else {
                                 formatBackendContextualDateTime(proposal.proposedDateTime, nowMillis)
                             }
@@ -913,8 +983,12 @@ private fun ReceivedProposalList(
                         )
 
                         item.unavailable -> Text(
-                            text = "No disponible",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            text = if (item.conflicting) "Se superpone" else "No disponible",
+                            color = if (item.conflicting) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
                             style = MaterialTheme.typography.labelMedium,
                             maxLines = 1,
                             softWrap = false,

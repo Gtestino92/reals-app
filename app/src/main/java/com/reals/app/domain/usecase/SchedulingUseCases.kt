@@ -2,6 +2,7 @@ package com.reals.app.domain.usecase
 
 import com.reals.app.core.network.ApiResult
 import com.reals.app.data.repository.SchedulingRepository
+import com.reals.app.domain.model.SchedulingAvailability
 import com.reals.app.domain.model.SchedulingNegotiation
 import com.reals.app.domain.model.SchedulingProposal
 
@@ -17,6 +18,13 @@ class GetSchedulingProposalsUseCase(
 ) {
     suspend operator fun invoke(connectionId: String): ApiResult<List<SchedulingProposal>> =
         schedulingRepository.getProposals(connectionId)
+}
+
+class GetSchedulingAvailabilityUseCase(
+    private val schedulingRepository: SchedulingRepository,
+) {
+    suspend operator fun invoke(connectionId: String): ApiResult<SchedulingAvailability> =
+        schedulingRepository.getAvailability(connectionId)
 }
 
 class SubmitSchedulingProposalsUseCase(

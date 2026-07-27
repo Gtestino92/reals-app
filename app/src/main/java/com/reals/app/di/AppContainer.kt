@@ -44,6 +44,7 @@ import com.reals.app.domain.usecase.GetMeUseCase
 import com.reals.app.domain.usecase.GetPartnerPersonalMessageUseCase
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
 import com.reals.app.domain.usecase.GetQueueStatusUseCase
+import com.reals.app.domain.usecase.GetSchedulingAvailabilityUseCase
 import com.reals.app.domain.usecase.GetSchedulingNegotiationUseCase
 import com.reals.app.domain.usecase.GetSchedulingProposalsUseCase
 import com.reals.app.domain.usecase.GetSecondChatForConnectionUseCase
@@ -161,6 +162,7 @@ class AppContainer(context: Context) {
     val safetyCancelChatUseCase = SafetyCancelChatUseCase(chatRepository)
     val getSchedulingNegotiationUseCase = GetSchedulingNegotiationUseCase(schedulingRepository)
     val getSchedulingProposalsUseCase = GetSchedulingProposalsUseCase(schedulingRepository)
+    val getSchedulingAvailabilityUseCase = GetSchedulingAvailabilityUseCase(schedulingRepository)
     val submitSchedulingProposalsUseCase = SubmitSchedulingProposalsUseCase(schedulingRepository)
     val acceptSchedulingProposalUseCase = AcceptSchedulingProposalUseCase(schedulingRepository)
     val rejectPartnerSchedulingProposalsUseCase = RejectPartnerSchedulingProposalsUseCase(schedulingRepository)
@@ -248,6 +250,7 @@ class AppContainer(context: Context) {
         scheduling = SchedulingFeatureDependencies(
             getNegotiation = getSchedulingNegotiationUseCase,
             getProposals = getSchedulingProposalsUseCase,
+            getAvailability = getSchedulingAvailabilityUseCase,
             submitProposals = submitSchedulingProposalsUseCase,
             acceptProposal = acceptSchedulingProposalUseCase,
             rejectPartnerProposals = rejectPartnerSchedulingProposalsUseCase,

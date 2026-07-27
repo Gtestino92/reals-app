@@ -121,6 +121,7 @@ enum class BackendErrorCode(val raw: String) {
     SchedulingInvalidProposals("SCHEDULING_INVALID_PROPOSALS"),
     SchedulingProposalsAlreadySubmitted("SCHEDULING_PROPOSALS_ALREADY_SUBMITTED"),
     SchedulingRoundChanged("SCHEDULING_ROUND_CHANGED"),
+    SchedulingSlotConflict("SCHEDULING_SLOT_CONFLICT"),
     SchedulingProposalNotAvailable("SCHEDULING_PROPOSAL_NOT_AVAILABLE"),
     SchedulingCannotAcceptOwnProposal("SCHEDULING_CANNOT_ACCEPT_OWN_PROPOSAL"),
     SchedulingPartnerProposalsNotAvailable("SCHEDULING_PARTNER_PROPOSALS_NOT_AVAILABLE"),
@@ -327,6 +328,7 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.SchedulingInvalidProposals -> "Revisá los horarios elegidos. Deben ser futuros, únicos y estar alineados cada media hora."
     BackendErrorCode.SchedulingProposalsAlreadySubmitted -> "Ya enviaste tus horarios para ésta ronda."
     BackendErrorCode.SchedulingRoundChanged -> "La ronda cambió. Actualizamos las opciones; revisalas antes de continuar."
+    BackendErrorCode.SchedulingSlotConflict -> "Ese horario ya no está disponible porque se superpone con otra cita confirmada."
     BackendErrorCode.SchedulingProposalNotAvailable -> "Ese horario ya no está disponible. Actualizamos las opciones."
     BackendErrorCode.SchedulingCannotAcceptOwnProposal -> "No podés aceptar un horario propuesto por vos."
     BackendErrorCode.SchedulingPartnerProposalsNotAvailable -> "Esas opciones ya no están disponibles. Actualizamos el estado de la coordinación."

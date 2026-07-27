@@ -362,6 +362,7 @@ fun RealsApp(
                 manualBlockError = current.manualBlock.error,
                 negotiation = current.negotiation,
                 proposals = current.proposals,
+                availability = current.availability,
                 currentUserId = current.session.user.id,
                 error = current.error,
                 message = current.message,

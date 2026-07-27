@@ -54,6 +54,7 @@ import com.reals.app.domain.usecase.GetMatchUseCase
 import com.reals.app.domain.usecase.GetMeUseCase
 import com.reals.app.domain.usecase.GetPartnerPersonalMessageUseCase
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
+import com.reals.app.domain.usecase.GetSchedulingAvailabilityUseCase
 import com.reals.app.domain.usecase.GetSchedulingNegotiationUseCase
 import com.reals.app.domain.usecase.GetSchedulingProposalsUseCase
 import com.reals.app.domain.usecase.GetSecondChatForConnectionUseCase
@@ -182,7 +183,7 @@ class RealsRootViewModelPollingGuardTest {
     }
 
     @Test
-    fun `silent scheduling refresh ignores overlapping call while non silent still starts`() = runTest(dispatcher) {
+    fun `scheduling refresh ignores overlapping calls and allows later refresh`() = runTest(dispatcher) {
         val gate = CompletableDeferred<Unit>()
         val firstCallStarted = CompletableDeferred<Unit>()
         val api = FakeRealsApi().apply {
@@ -206,10 +207,15 @@ class RealsRootViewModelPollingGuardTest {
         viewModel.refreshScheduling(silent = false)
         runCurrent()
 
-        assertEquals(2, api.calls.count { it == "getConnectionNegotiation" })
+        assertEquals(1, api.calls.count { it == "getConnectionNegotiation" })
 
         gate.complete(Unit)
         advanceUntilIdle()
+
+        viewModel.refreshScheduling(silent = false)
+        advanceUntilIdle()
+
+        assertEquals(2, api.calls.count { it == "getConnectionNegotiation" })
     }
 
     @Test
@@ -567,6 +573,7 @@ class RealsRootViewModelPollingGuardTest {
         assertEquals("connection-1", loaded.connectionId)
         assertEquals(NegotiationStatus.Pending, loaded.negotiation?.status)
         assertEquals(1, loaded.proposals.size)
+        assertEquals(60L, loaded.availability?.conflictWindowMinutes)
     }
 
     @Test
@@ -849,6 +856,7 @@ internal fun rootViewModelTestDependencies(api: FakeRealsApi): RealsRootDependen
             scheduling = SchedulingFeatureDependencies(
                 getNegotiation = GetSchedulingNegotiationUseCase(schedulingRepository),
                 getProposals = GetSchedulingProposalsUseCase(schedulingRepository),
+                getAvailability = GetSchedulingAvailabilityUseCase(schedulingRepository),
                 submitProposals = SubmitSchedulingProposalsUseCase(schedulingRepository),
                 acceptProposal = AcceptSchedulingProposalUseCase(schedulingRepository),
                 rejectPartnerProposals = RejectPartnerSchedulingProposalsUseCase(schedulingRepository),

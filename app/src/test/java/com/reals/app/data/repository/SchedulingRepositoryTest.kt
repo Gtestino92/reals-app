@@ -54,13 +54,27 @@ class SchedulingRepositoryTest {
     fun `get scheduling maps negotiation and proposals`() = runBlocking {
         api.negotiationResponse = Response.success(TestDtos.negotiation("PENDING"))
         api.proposalsResponse = Response.success(listOf(TestDtos.proposal("PENDING")))
+        api.schedulingAvailabilityResponse = Response.success(
+            TestDtos.schedulingAvailability(
+                unavailableWindows = listOf(TestDtos.unavailableWindow()),
+            ),
+        )
 
         val negotiation = repository.getNegotiation("connection-1").successValue()
         val proposals = repository.getProposals("connection-1").successValue()
+        val availability = repository.getAvailability("connection-1").successValue()
 
         assertEquals(NegotiationStatus.Pending, negotiation.status)
         assertEquals(ProposalStatus.Pending, proposals.single().status)
-        assertEquals(listOf("getConnectionNegotiation", "getConnectionProposals"), api.calls)
+        assertEquals(1, availability.unavailableWindows.size)
+        assertEquals(
+            listOf(
+                "getConnectionNegotiation",
+                "getConnectionProposals",
+                "getConnectionSchedulingAvailability",
+            ),
+            api.calls,
+        )
     }
 
     @Test
@@ -96,6 +110,27 @@ class SchedulingRepositoryTest {
         assertEquals(BackendErrorCode.SchedulingInvalidProposals, error.backendErrorCode)
         assertEquals(
             "Revisá los horarios elegidos. Deben ser futuros, únicos y estar alineados cada media hora.",
+            error.toUserMessage(ErrorContext.Scheduling),
+        )
+    }
+
+    @Test
+    fun `slot conflict backend error maps to scheduling user message`() = runBlocking {
+        api.proposalsResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "SCHEDULING_SLOT_CONFLICT",
+            message = "raw backend message",
+        )
+
+        val error = repository.submitProposals(
+            connectionId = "connection-1",
+            expectedRoundNumber = 1,
+            proposedDateTimes = listOf("2026-06-18T21:00:00Z"),
+        ).failureError() as ApiError.Backend
+
+        assertEquals(BackendErrorCode.SchedulingSlotConflict, error.backendErrorCode)
+        assertEquals(
+            "Ese horario ya no está disponible porque se superpone con otra cita confirmada.",
             error.toUserMessage(ErrorContext.Scheduling),
         )
     }

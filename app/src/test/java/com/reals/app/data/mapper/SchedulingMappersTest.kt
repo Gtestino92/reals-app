@@ -46,6 +46,26 @@ class SchedulingMappersTest {
     }
 
     @Test
+    fun `SchedulingAvailabilityResponseDto maps conflict window and raw unavailable windows`() {
+        val availability = TestDtos.schedulingAvailability(
+            conflictWindowMinutes = 90,
+            unavailableWindows = listOf(
+                TestDtos.unavailableWindow(
+                    startsAt = "2026-07-30T19:00:00-03:00",
+                    endsAt = "2026-07-30T21:00:00-03:00",
+                ),
+                TestDtos.unavailableWindow(startsAt = null, endsAt = "not-a-date"),
+            ),
+            serverTime = "2026-07-27T18:00:00-03:00",
+        ).toDomain()
+
+        assertEquals(90, availability.conflictWindowMinutes)
+        assertEquals("2026-07-30T19:00:00-03:00", availability.unavailableWindows.first().startsAt)
+        assertEquals(null, availability.unavailableWindows[1].startsAt)
+        assertEquals("2026-07-27T18:00:00-03:00", availability.serverTime)
+    }
+
+    @Test
     fun `scheduling mappers preserve unknown statuses`() {
         assertTrue(TestDtos.connection("NEW").toDomain().state is ConnectionState.Unknown)
         assertTrue(TestDtos.negotiation("WAITING").toDomain().status is NegotiationStatus.Unknown)

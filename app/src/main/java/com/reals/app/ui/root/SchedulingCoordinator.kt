@@ -30,16 +30,33 @@ internal class SchedulingCoordinator(
         }
 
         val proposalsResult = dependencies.getProposals(current.connectionId)
+        val availabilityResult = dependencies.getAvailability(current.connectionId)
+        val negotiation = (negotiationResult as ApiResult.Success).value
+        val proposals = when (proposalsResult) {
+            is ApiResult.Success -> proposalsResult.value
+            is ApiResult.Failure -> if (current.negotiation?.roundNumber == negotiation.roundNumber) {
+                pending.proposals
+            } else {
+                emptyList()
+            }
+        }
+        val availability = when (availabilityResult) {
+            is ApiResult.Success -> availabilityResult.value
+            is ApiResult.Failure -> pending.availability
+        }
+        val error = when {
+            silent -> pending.error
+            proposalsResult is ApiResult.Failure -> proposalsResult.error
+            availabilityResult is ApiResult.Failure -> availabilityResult.error
+            else -> null
+        }
         return pending.copy(
-            negotiation = (negotiationResult as ApiResult.Success).value,
-            proposals = (proposalsResult as? ApiResult.Success)?.value ?: pending.proposals,
+            negotiation = negotiation,
+            proposals = proposals,
+            availability = availability,
             loading = false,
             refreshing = false,
-            error = if (silent) {
-                pending.error
-            } else {
-                (proposalsResult as? ApiResult.Failure)?.error
-            },
+            error = error,
         )
     }
 

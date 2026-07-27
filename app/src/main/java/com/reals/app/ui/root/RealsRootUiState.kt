@@ -17,6 +17,7 @@ import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.SchedulingNegotiation
 import com.reals.app.domain.model.SchedulingProposal
+import com.reals.app.domain.model.SchedulingAvailability
 import com.reals.app.domain.model.SecondChatStatus
 import com.reals.app.domain.model.VisualProfile
 import com.reals.app.ui.matchmaking.HomeScreenModel
@@ -184,6 +185,7 @@ sealed interface RealsRootUiState {
         val manualBlock: ManualBlockUiState = ManualBlockUiState(),
         val negotiation: SchedulingNegotiation? = null,
         val proposals: List<SchedulingProposal> = emptyList(),
+        val availability: SchedulingAvailability? = null,
         val error: ApiError? = null,
         val message: String? = null,
     ) : RealsRootUiState

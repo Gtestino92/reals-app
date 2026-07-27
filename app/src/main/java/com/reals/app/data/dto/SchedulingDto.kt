@@ -14,6 +14,19 @@ data class RejectPartnerProposalsRequestDto(
 )
 
 @Serializable
+data class SchedulingAvailabilityResponseDto(
+    val conflictWindowMinutes: Long = 0L,
+    val unavailableWindows: List<SchedulingUnavailableWindowResponseDto> = emptyList(),
+    val serverTime: String? = null,
+)
+
+@Serializable
+data class SchedulingUnavailableWindowResponseDto(
+    val startsAt: String? = null,
+    val endsAt: String? = null,
+)
+
+@Serializable
 data class ConnectionResponseDto(
     val id: String,
     val matchId: String,

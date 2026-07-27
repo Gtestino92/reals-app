@@ -33,6 +33,7 @@ import com.reals.app.data.dto.RecordLegalDocumentActionRequestDto
 import com.reals.app.data.dto.ReorderProfilePhotosRequestDto
 import com.reals.app.data.dto.RejectPartnerProposalsRequestDto
 import com.reals.app.data.dto.ScheduleProposalResponseDto
+import com.reals.app.data.dto.SchedulingAvailabilityResponseDto
 import com.reals.app.data.dto.SendMessageRequestDto
 import com.reals.app.data.dto.SecondChatAttendanceResponseDto
 import com.reals.app.data.dto.SecondChatCompletionDecisionRequestDto
@@ -398,6 +399,12 @@ interface RealsApi {
         @Header("Authorization") authorization: String,
         @Path("connectionId") connectionId: String,
     ): Response<List<ScheduleProposalResponseDto>>
+
+    @GET("api/connections/{connectionId}/scheduling-availability")
+    suspend fun getConnectionSchedulingAvailability(
+        @Header("Authorization") authorization: String,
+        @Path("connectionId") connectionId: String,
+    ): Response<SchedulingAvailabilityResponseDto>
 
     @POST("api/connections/{connectionId}/proposals")
     suspend fun submitConnectionProposals(
