@@ -1,4 +1,4 @@
-﻿package com.reals.app.ui.root
+package com.reals.app.ui.root
 
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.BackendErrorCode
@@ -280,7 +280,7 @@ class FirstChatCoordinatorTest {
         val result = coordinator.refresh(current, silent = false)
 
         assertEquals(
-            FirstChatRefreshResult.ExitResolved("La solicitud de salida venciÃ³."),
+            FirstChatRefreshResult.ExitResolved("La solicitud de salida venció."),
             result,
         )
     }
@@ -295,7 +295,7 @@ class FirstChatCoordinatorTest {
         val result = coordinator.refresh(current, silent = false)
 
         assertEquals(
-            FirstChatRefreshResult.ExitResolved("La otra persona aceptÃ³ la salida consensuada."),
+            FirstChatRefreshResult.ExitResolved("La otra persona aceptó la salida consensuada."),
             result,
         )
     }
@@ -341,7 +341,7 @@ class FirstChatCoordinatorTest {
         assertEquals(false, state.sending)
         assertEquals(BackendErrorCode.ChatMessageInvalid, error.backendErrorCode)
         assertEquals(
-            "RevisÃ¡ el mensaje. No puede estar vacÃ­o ni superar el lÃ­mite permitido.",
+            "Revisá el mensaje. No puede estar vacío ni superar el límite permitido.",
             error.toUserMessage(ErrorContext.Chat),
         )
     }
@@ -413,7 +413,7 @@ class FirstChatCoordinatorTest {
         assertTrue(result is FirstChatActionResult.ReloadHome)
         result as FirstChatActionResult.ReloadHome
         assertEquals("match-1", result.hideFirstChatMatchId)
-        assertEquals("Aprobaste el chat. Te avisaremos si la otra persona tambiÃ©n aprueba.", result.message)
+        assertEquals("Aprobaste el chat. Te avisaremos si la otra persona también aprueba.", result.message)
         assertFalse(result.autoNavigateEngagements)
         assertEquals(listOf("submitChatDecision"), api.calls)
     }
@@ -477,7 +477,7 @@ class FirstChatCoordinatorTest {
         assertTrue(result is FirstChatActionResult.ReturnHome)
         result as FirstChatActionResult.ReturnHome
         assertEquals("match-1", result.hideFirstChatMatchId)
-        assertEquals("El chat pasÃ³ a revisiÃ³n visual. Actualizamos tu lista.", result.message)
+        assertEquals("El chat pasó a revisión visual. Actualizamos tu lista.", result.message)
     }
 
     @Test
