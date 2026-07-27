@@ -144,6 +144,18 @@ class HomeCardsTest {
     }
 
     @Test
+    fun `collapsible section state key is stable across count changes`() {
+        assertEquals(
+            "home-section:Segundos chats",
+            homeCollapsibleSectionStateKey("Segundos chats"),
+        )
+        assertEquals(
+            homeCollapsibleSectionStateKey("Segundos chats"),
+            homeCollapsibleSectionStateKey("Segundos chats"),
+        )
+    }
+
+    @Test
     fun `scheduled second chat body uses contextual tomorrow date`() {
         val item = HomeNextStepItem.SecondChatScheduled(
             connectionId = "connection-1",
