@@ -6,7 +6,6 @@ import com.reals.app.domain.model.BackendUser
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatMessage
-import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.CountryReference
 import com.reals.app.domain.model.HomeState
 import com.reals.app.domain.model.LegalDocumentAction
@@ -449,8 +448,3 @@ fun RealsRootUiState.canHandleSystemBack(): Boolean = when (this) {
 
 fun RealsRootUiState.SecondChat.isJoinedActiveSecondChat(): Boolean =
     lifecycle.timingPresentation().genuinelyActive
-
-fun SecondChatStatus.isJoinedActiveSecondChat(): Boolean =
-    secondChatTimingPresentation(
-        statusReceivedAtMillis = null,
-    ).genuinelyActive

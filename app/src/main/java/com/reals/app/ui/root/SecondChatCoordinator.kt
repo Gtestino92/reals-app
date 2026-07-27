@@ -1,7 +1,6 @@
 package com.reals.app.ui.root
 
 import com.reals.app.core.network.ApiResult
-import com.reals.app.core.time.backendInstantOrNull
 import com.reals.app.di.SecondChatFeatureDependencies
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatExitReason
@@ -16,6 +15,7 @@ import com.reals.app.domain.model.SecondChatStatus
 
 internal class SecondChatCoordinator(
     private val dependencies: SecondChatFeatureDependencies,
+    private val nowMillis: () -> Long = { System.currentTimeMillis() },
 ) {
     suspend fun load(
         session: ProvisionedSession,
@@ -40,7 +40,7 @@ internal class SecondChatCoordinator(
             )
             is ApiResult.Success -> openFromStatus(
                 current = initial,
-                status = statusResult.value,
+                statusSnapshot = statusResult.value.receivedNow(),
                 joinIfAllowed = joinIfAllowed,
                 loading = false,
             )
@@ -65,7 +65,7 @@ internal class SecondChatCoordinator(
             )
             is ApiResult.Success -> openFromStatus(
                 current = pending,
-                status = statusResult.value,
+                statusSnapshot = statusResult.value.receivedNow(),
                 joinIfAllowed = false,
                 loading = false,
             )
@@ -95,7 +95,7 @@ internal class SecondChatCoordinator(
                     actionLoading = false,
                     actionLoadingLabel = null,
                 ),
-                status = result.value,
+                statusSnapshot = result.value.receivedNow(),
                 joinIfAllowed = false,
                 loading = false,
             )
@@ -125,12 +125,12 @@ internal class SecondChatCoordinator(
         return when (val result = dependencies.sendChatMessage(chat.id, cleanContent)) {
             is ApiResult.Success -> {
                 val statusResult = dependencies.getStatus(current.connectionId)
+                val statusSnapshot = (statusResult as? ApiResult.Success)?.value?.receivedNow()
                 val messagesResult = dependencies.getChatMessages(chat.id, cursorBeforeSend)
                 val chatResult = dependencies.getChat(chat.id)
                 current.copy(
-                    lifecycle = current.lifecycle.copy(
-                        status = (statusResult as? ApiResult.Success)?.value ?: current.lifecycle.status,
-                    ),
+                    lifecycle = statusSnapshot?.let(current.lifecycle::withStatusSnapshot)
+                        ?: current.lifecycle,
                     chat = (chatResult as? ApiResult.Success)?.value ?: current.chat,
                     messages = current.messages.appendUnique(
                         (messagesResult as? ApiResult.Success)?.value.orEmpty() + result.value
@@ -213,17 +213,18 @@ internal class SecondChatCoordinator(
 
     private suspend fun openFromStatus(
         current: RealsRootUiState.SecondChat,
-        status: SecondChatStatus,
+        statusSnapshot: ReceivedSecondChatStatus,
         joinIfAllowed: Boolean,
         loading: Boolean,
     ): SecondChatLoadResult {
-        val authoritativeStatus = if (joinIfAllowed && status.canJoin) {
+        val status = statusSnapshot.status
+        val authoritativeSnapshot = if (joinIfAllowed && status.canJoin) {
             val joining = current.copy(
-                lifecycle = current.lifecycle.copy(status = status, joining = true),
+                lifecycle = current.lifecycle.withStatusSnapshot(statusSnapshot).copy(joining = true),
                 loading = loading,
             )
             when (val join = dependencies.join(current.connectionId)) {
-                is ApiResult.Success -> join.value
+                is ApiResult.Success -> join.value.receivedNow()
                 is ApiResult.Failure -> return SecondChatLoadResult.Show(
                     joining.copy(
                         lifecycle = joining.lifecycle.copy(joining = false),
@@ -233,12 +234,11 @@ internal class SecondChatCoordinator(
                 )
             }
         } else {
-            status
+            statusSnapshot
         }
+        val authoritativeStatus = authoritativeSnapshot.status
 
-        val lifecycle = current.lifecycle.copy(
-            status = authoritativeStatus,
-            statusReceivedAtMillis = System.currentTimeMillis(),
+        val lifecycle = current.lifecycle.withStatusSnapshot(authoritativeSnapshot).copy(
             joining = false,
             joinCompletedInThisSession = current.lifecycle.joinCompletedInThisSession ||
                 (joinIfAllowed && status.canJoin),
@@ -250,7 +250,7 @@ internal class SecondChatCoordinator(
             refreshing = false,
         )
 
-        if (!authoritativeStatus.isReadableNow()) {
+        if (!authoritativeSnapshot.isReadableAtReceipt()) {
             return SecondChatLoadResult.Show(
                 withLifecycle.copy(
                     chat = null,
@@ -265,6 +265,12 @@ internal class SecondChatCoordinator(
         )
         return loadChatAndMessages(withLifecycle, chatId)
     }
+
+    private fun SecondChatStatus.receivedNow(): ReceivedSecondChatStatus =
+        ReceivedSecondChatStatus(
+            status = this,
+            receivedAtMillis = nowMillis(),
+        )
 
     private suspend fun loadChatAndMessages(
         current: RealsRootUiState.SecondChat,
@@ -289,19 +295,16 @@ internal class SecondChatCoordinator(
     }
 }
 
-internal fun SecondChatStatus.isReadableNow(nowMillis: Long = System.currentTimeMillis()): Boolean =
-    chatId?.isNotBlank() == true &&
+internal fun ReceivedSecondChatStatus.isReadableAtReceipt(): Boolean =
+    status.chatId?.isNotBlank() == true &&
         (
-            chatStatus == ChatStatus.Active ||
+            status.chatStatus == ChatStatus.Active ||
                 (
-                    chatStatus in terminalReadableSecondChatStatuses &&
-                        readOnlyUntil != null &&
-                        remainingMillisFromServer(readOnlyUntil, nowMillis) > 0
+                    status.chatStatus in terminalReadableSecondChatStatuses &&
+                        status.readOnlyUntil != null &&
+                        remainingMillisAtReceipt(status.readOnlyUntil)?.let { it > 0 } == true
                     )
             )
-
-internal fun SecondChatStatus.isTerminalNoLongerReadable(nowMillis: Long = System.currentTimeMillis()): Boolean =
-    chatStatus in terminalReadableSecondChatStatuses && !isReadableNow(nowMillis)
 
 internal fun SecondChatStatus.isWaitingForPartner(): Boolean =
     chatStatus == ChatStatus.Active &&
@@ -311,15 +314,6 @@ internal fun SecondChatStatus.isWaitingForPartner(): Boolean =
 internal fun SecondChatStatus.hasPendingNoShowClaim(): Boolean =
     activeNoShowClaim?.type == SecondChatResolutionRequestType.PartnerNoShow &&
         activeNoShowClaim.status == SecondChatResolutionRequestStatus.Pending
-
-internal fun SecondChatStatus.remainingMillisFromServer(
-    targetTime: String,
-    nowMillis: Long = System.currentTimeMillis(),
-): Long = remainingMillisFromServerSnapshot(
-    targetTime = targetTime,
-    statusReceivedAtMillis = nowMillis,
-    nowMillis = nowMillis,
-) ?: 0
 
 internal fun SecondChatEndedReason?.secondChatResultCopy(): String = when (this) {
     SecondChatEndedReason.NoShow -> "La cita terminó porque una de las personas no llegó."

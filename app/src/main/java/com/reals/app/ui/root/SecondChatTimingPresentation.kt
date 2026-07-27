@@ -7,6 +7,11 @@ import com.reals.app.domain.model.SecondChatStatus
 
 internal const val SECOND_CHAT_ABSOLUTE_EXPIRY_WARNING_MILLIS = 10 * 60 * 1000L
 
+internal data class ReceivedSecondChatStatus(
+    val status: SecondChatStatus,
+    val receivedAtMillis: Long,
+)
+
 internal data class SecondChatTimingPresentation(
     val joined: Boolean,
     val lifecycleActive: Boolean,
@@ -18,20 +23,25 @@ internal data class SecondChatTimingPresentation(
 
 internal fun SecondChatLifecycleUiState.timingPresentation(
     nowMillis: Long = System.currentTimeMillis(),
-): SecondChatTimingPresentation =
-    status.secondChatTimingPresentation(
-        statusReceivedAtMillis = statusReceivedAtMillis,
+): SecondChatTimingPresentation {
+    val currentStatus = status ?: return emptySecondChatTimingPresentation()
+    val receivedAtMillis = statusReceivedAtMillis ?: return emptySecondChatTimingPresentation(
+        joined = currentStatus.isJoinedSecondChat(),
+        lifecycleActive = currentStatus.chatStatus == ChatStatus.Active,
+    )
+    return currentStatus.secondChatTimingPresentation(
+        statusReceivedAtMillis = receivedAtMillis,
         nowMillis = nowMillis,
     )
+}
 
-internal fun SecondChatStatus?.secondChatTimingPresentation(
-    statusReceivedAtMillis: Long?,
+internal fun SecondChatStatus.secondChatTimingPresentation(
+    statusReceivedAtMillis: Long,
     nowMillis: Long = System.currentTimeMillis(),
 ): SecondChatTimingPresentation {
-    val status = this
-    val joined = status?.isJoinedSecondChat() == true
-    val lifecycleActive = status?.chatStatus == ChatStatus.Active
-    val remainingMillis = status?.remainingAbsoluteMillis(
+    val joined = isJoinedSecondChat()
+    val lifecycleActive = chatStatus == ChatStatus.Active
+    val remainingMillis = remainingAbsoluteMillis(
         statusReceivedAtMillis = statusReceivedAtMillis,
         nowMillis = nowMillis,
     )
@@ -48,20 +58,33 @@ internal fun SecondChatStatus?.secondChatTimingPresentation(
     )
 }
 
+internal fun SecondChatLifecycleUiState.withStatusSnapshot(
+    snapshot: ReceivedSecondChatStatus,
+): SecondChatLifecycleUiState = copy(
+    status = snapshot.status,
+    statusReceivedAtMillis = snapshot.receivedAtMillis,
+)
+
 internal fun SecondChatStatus.remainingMillisFromServerSnapshot(
     targetTime: String,
-    statusReceivedAtMillis: Long?,
+    statusReceivedAtMillis: Long,
     nowMillis: Long = System.currentTimeMillis(),
 ): Long? {
     val server = backendInstantOrNull(serverTime) ?: return null
     val target = backendInstantOrNull(targetTime) ?: return null
-    val localReceipt = statusReceivedAtMillis ?: nowMillis
-    val synchronizedNow = server.toEpochMilli() + (nowMillis - localReceipt)
+    val synchronizedNow = server.toEpochMilli() + (nowMillis - statusReceivedAtMillis)
     return target.toEpochMilli() - synchronizedNow
 }
 
+internal fun ReceivedSecondChatStatus.remainingMillisAtReceipt(targetTime: String): Long? =
+    status.remainingMillisFromServerSnapshot(
+        targetTime = targetTime,
+        statusReceivedAtMillis = receivedAtMillis,
+        nowMillis = receivedAtMillis,
+    )
+
 private fun SecondChatStatus.remainingAbsoluteMillis(
-    statusReceivedAtMillis: Long?,
+    statusReceivedAtMillis: Long,
     nowMillis: Long,
 ): Long? = remainingMillisFromServerSnapshot(
     targetTime = absoluteExpiresAt,
@@ -75,3 +98,15 @@ private fun SecondChatStatus.isJoinedSecondChat(): Boolean =
             myAttendanceStatus == SecondChatAttendanceStatus.OnTime ||
                 myAttendanceStatus == SecondChatAttendanceStatus.Late
             )
+
+private fun emptySecondChatTimingPresentation(
+    joined: Boolean = false,
+    lifecycleActive: Boolean = false,
+): SecondChatTimingPresentation = SecondChatTimingPresentation(
+    joined = joined,
+    lifecycleActive = lifecycleActive,
+    remainingMillis = null,
+    genuinelyActive = false,
+    locallyExpired = false,
+    showAbsoluteExpiryWarning = false,
+)

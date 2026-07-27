@@ -13,6 +13,7 @@ import com.reals.app.di.RealsRootDependencies
 import com.reals.app.domain.model.ChatContinueDecision
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatExitReason
+import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.CreateProfileInput
 import com.reals.app.domain.model.FirstChatGuidance
 import com.reals.app.domain.model.LegalDocumentAction
@@ -77,7 +78,8 @@ class RealsRootViewModel(
     private var pairBlockedRerouteJob: Job? = null
     private var sessionInvalidationJob: Job? = null
     private var manualBlockJob: Job? = null
-    private var handledSecondChatLocalExpiryKey: String? = null
+    private var pendingSecondChatLocalExpiryKey: SecondChatExpiryKey? = null
+    private var completedSecondChatLocalExpiryKey: SecondChatExpiryKey? = null
     private val homeCoordinator = HomeCoordinator(
         uiState = _uiState,
         dependencies = dependencies.home,
@@ -364,7 +366,8 @@ class RealsRootViewModel(
         partnerName: String? = null,
         joinIfAllowed: Boolean,
     ) {
-        handledSecondChatLocalExpiryKey = null
+        pendingSecondChatLocalExpiryKey = null
+        completedSecondChatLocalExpiryKey = null
         viewModelScope.launch {
             _uiState.value = RealsRootUiState.SecondChat(
                 session = session,
@@ -475,21 +478,37 @@ class RealsRootViewModel(
     fun handleSecondChatLocalAbsoluteExpiry() {
         val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
         if (!current.lifecycle.timingPresentation().locallyExpired) return
-        val expiryKey = "${current.connectionId}:${current.chatId.orEmpty()}"
-        if (handledSecondChatLocalExpiryKey == expiryKey) return
-        handledSecondChatLocalExpiryKey = expiryKey
+        val expiryKey = current.expiryKey()
+        if (
+            completedSecondChatLocalExpiryKey == expiryKey ||
+            pendingSecondChatLocalExpiryKey == expiryKey
+        ) {
+            return
+        }
+        pendingSecondChatLocalExpiryKey = expiryKey
         viewModelScope.launch {
-            val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return@launch
-            if (
-                latest.connectionId != current.connectionId ||
-                !latest.lifecycle.timingPresentation().locallyExpired
-            ) {
+            val latest = _uiState.value as? RealsRootUiState.SecondChat
+            if (latest == null || !latest.matches(expiryKey)) {
+                clearPendingSecondChatLocalExpiry(expiryKey)
                 return@launch
             }
+            val timing = latest.lifecycle.timingPresentation()
+            if (!timing.locallyExpired && !latest.hasTerminalSecondChatStatus()) {
+                clearPendingSecondChatLocalExpiry(expiryKey)
+                return@launch
+            }
+            completedSecondChatLocalExpiryKey = expiryKey
+            clearPendingSecondChatLocalExpiry(expiryKey)
             homeCoordinator.returnHome(
                 session = latest.session,
                 message = "El segundo chat venció.",
             )
+        }
+    }
+
+    private fun clearPendingSecondChatLocalExpiry(expiryKey: SecondChatExpiryKey) {
+        if (pendingSecondChatLocalExpiryKey == expiryKey) {
+            pendingSecondChatLocalExpiryKey = null
         }
     }
 
@@ -1467,3 +1486,25 @@ class RealsRootViewModelFactory(
         throw IllegalArgumentException("Unknown ViewModel class ${modelClass.name}")
     }
 }
+
+private data class SecondChatExpiryKey(
+    val connectionId: String,
+    val chatId: String?,
+)
+
+private fun RealsRootUiState.SecondChat.expiryKey(): SecondChatExpiryKey =
+    SecondChatExpiryKey(
+        connectionId = connectionId,
+        chatId = chatId ?: lifecycle.status?.chatId,
+    )
+
+private fun RealsRootUiState.SecondChat.matches(key: SecondChatExpiryKey): Boolean =
+    connectionId == key.connectionId &&
+        (key.chatId == null || expiryKey().chatId == key.chatId)
+
+private fun RealsRootUiState.SecondChat.hasTerminalSecondChatStatus(): Boolean =
+    lifecycle.status?.chatStatus in setOf(
+        ChatStatus.Expired,
+        ChatStatus.Finished,
+        ChatStatus.Abandoned,
+    )

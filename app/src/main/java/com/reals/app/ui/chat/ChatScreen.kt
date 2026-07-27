@@ -514,11 +514,13 @@ private fun SecondChatLifecyclePanel(
             nowMillis = System.currentTimeMillis()
             val expiresAt = status.activeNoShowClaim?.expiresAt ?: break
             if (
-                status.remainingMillisFromServerSnapshot(
-                    targetTime = expiresAt,
-                    statusReceivedAtMillis = lifecycle.statusReceivedAtMillis,
-                    nowMillis = nowMillis,
-                )?.let { it <= 0 } == true
+                lifecycle.statusReceivedAtMillis?.let { receivedAtMillis ->
+                    status.remainingMillisFromServerSnapshot(
+                        targetTime = expiresAt,
+                        statusReceivedAtMillis = receivedAtMillis,
+                        nowMillis = nowMillis,
+                    )
+                }?.let { it <= 0 } == true
             ) {
                 onRefresh()
                 break
@@ -543,11 +545,13 @@ private fun SecondChatLifecyclePanel(
         }
         status.hasPendingNoShowClaim() -> {
             val seconds = ((
-                status.remainingMillisFromServerSnapshot(
-                    targetTime = status.activeNoShowClaim?.expiresAt.orEmpty(),
-                    statusReceivedAtMillis = lifecycle.statusReceivedAtMillis,
-                    nowMillis = nowMillis,
-                ) ?: 0
+                lifecycle.statusReceivedAtMillis?.let { receivedAtMillis ->
+                    status.remainingMillisFromServerSnapshot(
+                        targetTime = status.activeNoShowClaim?.expiresAt.orEmpty(),
+                        statusReceivedAtMillis = receivedAtMillis,
+                        nowMillis = nowMillis,
+                    )
+                } ?: 0
                 ) + 999) / 1000
             FeedbackCard(
                 title = "Esperando a la otra persona",
