@@ -1,6 +1,7 @@
 package com.reals.app.ui.root
 
 import com.reals.app.core.network.ApiResult
+import com.reals.app.core.network.ApiError
 import com.reals.app.di.SecondChatFeatureDependencies
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatExitReason
@@ -8,6 +9,7 @@ import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.SecondChatAttendanceStatus
+import com.reals.app.domain.model.SecondChatCompletionDecision
 import com.reals.app.domain.model.SecondChatEndedReason
 import com.reals.app.domain.model.SecondChatResolutionRequestStatus
 import com.reals.app.domain.model.SecondChatResolutionRequestType
@@ -111,6 +113,97 @@ internal class SecondChatCoordinator(
                 )
                 refreshed
             }
+        }
+    }
+
+    suspend fun createCompletionRequest(
+        current: RealsRootUiState.SecondChat,
+        onPending: (RealsRootUiState.SecondChat) -> Unit,
+    ): SecondChatLoadResult {
+        val status = current.lifecycle.status ?: return SecondChatLoadResult.Show(current)
+        if (!canRunSecondChatResolutionAction(current) ||
+            !status.canRequestMutualCompletion ||
+            status.hasPendingCompletionOrInactivityRequest()
+        ) {
+            return SecondChatLoadResult.Show(current)
+        }
+        val pending = current.pendingSecondChatAction("Enviando solicitud...")
+        onPending(pending)
+        return when (val result = dependencies.createCompletionRequest(current.connectionId)) {
+            is ApiResult.Success -> openFromStatus(
+                current = pending.withoutSecondChatActionLoading(),
+                statusSnapshot = result.value.receivedNow(),
+                joinIfAllowed = false,
+                loading = false,
+            )
+            is ApiResult.Failure -> refreshAfterSecondChatActionFailure(pending, result.error)
+        }
+    }
+
+    suspend fun decideCompletionRequest(
+        current: RealsRootUiState.SecondChat,
+        requestId: String,
+        decision: SecondChatCompletionDecision,
+        onPending: (RealsRootUiState.SecondChat) -> Unit,
+    ): SecondChatLoadResult {
+        val activeRequest = current.lifecycle
+            .resolutionPresentation(
+                currentUserId = current.session.user.id,
+                nowMillis = nowMillis(),
+            )
+            .activeRequest
+        if (
+            !canRunSecondChatResolutionAction(current) ||
+            activeRequest?.requestId != requestId ||
+            activeRequest.type != SecondChatResolutionRequestType.MutualCompletion ||
+            !activeRequest.showAcceptRejectControls ||
+            !activeRequest.controlsEnabled
+        ) {
+            return SecondChatLoadResult.Show(current)
+        }
+        val pending = current.pendingSecondChatAction(
+            when (decision) {
+                SecondChatCompletionDecision.Accepted -> "Finalizando chat..."
+                SecondChatCompletionDecision.Rejected -> "Continuando chat..."
+            }
+        )
+        onPending(pending)
+        return when (val result = dependencies.decideCompletionRequest(
+            current.connectionId,
+            requestId,
+            decision,
+        )) {
+            is ApiResult.Success -> openFromStatus(
+                current = pending.withoutSecondChatActionLoading(),
+                statusSnapshot = result.value.receivedNow(),
+                joinIfAllowed = false,
+                loading = false,
+            )
+            is ApiResult.Failure -> refreshAfterSecondChatActionFailure(pending, result.error)
+        }
+    }
+
+    suspend fun createInactivityClaim(
+        current: RealsRootUiState.SecondChat,
+        onPending: (RealsRootUiState.SecondChat) -> Unit,
+    ): SecondChatLoadResult {
+        val status = current.lifecycle.status ?: return SecondChatLoadResult.Show(current)
+        if (!canRunSecondChatResolutionAction(current) ||
+            !status.canClaimPartnerInactivity ||
+            status.hasPendingCompletionOrInactivityRequest()
+        ) {
+            return SecondChatLoadResult.Show(current)
+        }
+        val pending = current.pendingSecondChatAction("Enviando reclamo...")
+        onPending(pending)
+        return when (val result = dependencies.createInactivityClaim(current.connectionId)) {
+            is ApiResult.Success -> openFromStatus(
+                current = pending.withoutSecondChatActionLoading(),
+                statusSnapshot = result.value.receivedNow(),
+                joinIfAllowed = false,
+                loading = false,
+            )
+            is ApiResult.Failure -> refreshAfterSecondChatActionFailure(pending, result.error)
         }
     }
 
@@ -272,6 +365,22 @@ internal class SecondChatCoordinator(
             receivedAtMillis = nowMillis(),
         )
 
+    private fun canRunSecondChatResolutionAction(current: RealsRootUiState.SecondChat): Boolean =
+        !current.loading &&
+            !current.refreshing &&
+            !current.sending &&
+            !current.actionLoading &&
+            !current.manualBlock.loading &&
+            current.lifecycle.timingPresentation(nowMillis()).genuinelyActive
+
+    private suspend fun refreshAfterSecondChatActionFailure(
+        pending: RealsRootUiState.SecondChat,
+        error: ApiError,
+    ): SecondChatLoadResult = refresh(
+        pending.withoutSecondChatActionLoading().copy(error = error),
+        silent = true,
+    )
+
     private suspend fun loadChatAndMessages(
         current: RealsRootUiState.SecondChat,
         chatId: String,
@@ -295,6 +404,21 @@ internal class SecondChatCoordinator(
     }
 }
 
+private fun RealsRootUiState.SecondChat.pendingSecondChatAction(
+    label: String,
+): RealsRootUiState.SecondChat = copy(
+    actionLoading = true,
+    actionLoadingLabel = label,
+    error = null,
+    message = null,
+)
+
+private fun RealsRootUiState.SecondChat.withoutSecondChatActionLoading(): RealsRootUiState.SecondChat =
+    copy(
+        actionLoading = false,
+        actionLoadingLabel = null,
+    )
+
 internal fun ReceivedSecondChatStatus.isReadableAtReceipt(): Boolean =
     status.chatId?.isNotBlank() == true &&
         (
@@ -314,6 +438,13 @@ internal fun SecondChatStatus.isWaitingForPartner(): Boolean =
 internal fun SecondChatStatus.hasPendingNoShowClaim(): Boolean =
     activeNoShowClaim?.type == SecondChatResolutionRequestType.PartnerNoShow &&
         activeNoShowClaim.status == SecondChatResolutionRequestStatus.Pending
+
+internal fun SecondChatStatus.hasPendingCompletionOrInactivityRequest(): Boolean =
+    activeResolutionRequest?.status == SecondChatResolutionRequestStatus.Pending &&
+        (
+            activeResolutionRequest.type == SecondChatResolutionRequestType.MutualCompletion ||
+                activeResolutionRequest.type == SecondChatResolutionRequestType.PartnerInactivity
+            )
 
 internal fun SecondChatEndedReason?.secondChatResultCopy(): String = when (this) {
     SecondChatEndedReason.NoShow -> "La cita terminó porque una de las personas no llegó."

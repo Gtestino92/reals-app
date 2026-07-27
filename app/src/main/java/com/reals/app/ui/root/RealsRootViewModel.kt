@@ -20,6 +20,7 @@ import com.reals.app.domain.model.LegalDocumentAction
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.SearchLocationInput
+import com.reals.app.domain.model.SecondChatCompletionDecision
 import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.UpdateProfileInput
 import com.reals.app.domain.model.VisualDecision
@@ -427,13 +428,18 @@ class RealsRootViewModel(
         val current = _uiState.value as? RealsRootUiState.SecondChat ?: return false
         return when (val preparation = ChatMessageActionHandler.prepareSecondChatSend(current, content)) {
             is ChatMessageSendPreparation.Accepted -> {
+                val instanceKey = preparation.pendingState.expiryKey()
                 _uiState.value = preparation.pendingState
                 viewModelScope.launch {
-                    _uiState.value = secondChatCoordinator.sendMessage(
+                    val result = secondChatCoordinator.sendMessage(
                         preparation.pendingState,
                         preparation.cleanContent,
                         preparation.localId,
                     )
+                    val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return@launch
+                    if (latest.matches(instanceKey)) {
+                        _uiState.value = result
+                    }
                 }
                 true
             }
@@ -521,6 +527,47 @@ class RealsRootViewModel(
                     onPending = { _uiState.value = it },
                 )
             )
+        }
+    }
+
+    fun requestSecondChatCompletion() {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        val instanceKey = current.expiryKey()
+        viewModelScope.launch {
+            val result = secondChatCoordinator.createCompletionRequest(
+                current = current,
+                onPending = { setSecondChatPendingIfCurrent(it, instanceKey) },
+            )
+            applySecondChatLoadResultIfCurrent(result, instanceKey)
+        }
+    }
+
+    fun decideSecondChatCompletion(
+        requestId: String,
+        decision: SecondChatCompletionDecision,
+    ) {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        val instanceKey = current.expiryKey()
+        viewModelScope.launch {
+            val result = secondChatCoordinator.decideCompletionRequest(
+                current = current,
+                requestId = requestId,
+                decision = decision,
+                onPending = { setSecondChatPendingIfCurrent(it, instanceKey) },
+            )
+            applySecondChatLoadResultIfCurrent(result, instanceKey)
+        }
+    }
+
+    fun claimSecondChatInactivity() {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        val instanceKey = current.expiryKey()
+        viewModelScope.launch {
+            val result = secondChatCoordinator.createInactivityClaim(
+                current = current,
+                onPending = { setSecondChatPendingIfCurrent(it, instanceKey) },
+            )
+            applySecondChatLoadResultIfCurrent(result, instanceKey)
         }
     }
 
@@ -1209,6 +1256,25 @@ class RealsRootViewModel(
                 session = result.session,
                 message = result.message,
             )
+        }
+    }
+
+    private suspend fun applySecondChatLoadResultIfCurrent(
+        result: SecondChatLoadResult,
+        instanceKey: SecondChatExpiryKey,
+    ) {
+        val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        if (!latest.matches(instanceKey)) return
+        applySecondChatLoadResult(result)
+    }
+
+    private fun setSecondChatPendingIfCurrent(
+        pending: RealsRootUiState.SecondChat,
+        instanceKey: SecondChatExpiryKey,
+    ) {
+        val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        if (latest.matches(instanceKey)) {
+            _uiState.value = pending
         }
     }
 

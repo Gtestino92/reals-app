@@ -305,13 +305,20 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.SecondChatExpired -> "El segundo chat ya venció."
     BackendErrorCode.SecondChatNoShowClaimNotAvailable -> "Todavía no podés marcar que la otra persona no llegó."
     BackendErrorCode.SecondChatNoShowClaimAlreadyPending -> "Ya hay una solicitud de no-show pendiente."
-    BackendErrorCode.SecondChatCompletionNotAvailable,
-    BackendErrorCode.SecondChatCompletionRequestAlreadyPending,
-    BackendErrorCode.SecondChatCompletionRequestNotFound,
-    BackendErrorCode.SecondChatCompletionRequestNotActionable,
-    BackendErrorCode.SecondChatCompletionRequestCooldown,
-    BackendErrorCode.SecondChatInactivityClaimNotAvailable,
-    BackendErrorCode.SecondChatInactivityClaimAlreadyPending -> "La acción del segundo chat no está disponible con el estado actual."
+    BackendErrorCode.SecondChatCompletionNotAvailable ->
+        "Todav\u00eda no pod\u00e9s proponer finalizar este segundo chat."
+    BackendErrorCode.SecondChatCompletionRequestAlreadyPending ->
+        "Ya hay una propuesta de cierre pendiente."
+    BackendErrorCode.SecondChatCompletionRequestNotFound ->
+        "Esa propuesta ya no est\u00e1 disponible. Actualizamos el estado."
+    BackendErrorCode.SecondChatCompletionRequestNotActionable ->
+        "Esa propuesta ya no se puede responder."
+    BackendErrorCode.SecondChatCompletionRequestCooldown ->
+        "Podr\u00e1s volver a proponer el cierre en unos segundos."
+    BackendErrorCode.SecondChatInactivityClaimNotAvailable ->
+        "Todav\u00eda no pod\u00e9s reclamar falta de respuesta."
+    BackendErrorCode.SecondChatInactivityClaimAlreadyPending ->
+        "Ya hay un reclamo por falta de respuesta pendiente."
     BackendErrorCode.SecondChatOrdinaryCancellationNotAllowed ->
         "El segundo chat no permite cancelar por esta vía. Podés reportar por seguridad o bloquear a la persona."
     BackendErrorCode.SchedulingNotAvailable -> "La coordinación de horarios ya no está disponible. Actualizá el estado e intentá nuevamente."

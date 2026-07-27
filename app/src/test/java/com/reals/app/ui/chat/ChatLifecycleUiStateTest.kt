@@ -163,6 +163,14 @@ class ChatLifecycleUiStateTest {
         assertEquals("Válido hasta formatted-2026-06-18T21:10:00Z", text)
     }
 
+    @Test
+    fun `second chat local expiry dispatch can fire again after corrected active state`() {
+        val dispatches = listOf(true, false, true)
+            .count(::shouldDispatchSecondChatLocalAbsoluteExpiry)
+
+        assertEquals(2, dispatches)
+    }
+
     private fun millis(value: String): Long =
         OffsetDateTime.parse(value).toInstant().toEpochMilli()
 }
