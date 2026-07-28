@@ -72,4 +72,11 @@ class ChatAudioComposerUiStateTest {
         assertFalse(state.startEnabled)
         assertEquals("Ya enviaste el audio disponible en este chat.", state.disabledCopy)
     }
+
+    @Test
+    fun `audio duration formats positive subsecond as one second`() {
+        assertEquals("0:00", formatAudioDuration(0))
+        assertEquals("0:01", formatAudioDuration(838))
+        assertEquals("0:07", formatAudioDuration(7_059))
+    }
 }

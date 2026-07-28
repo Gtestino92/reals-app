@@ -2,7 +2,7 @@ package com.reals.app.ui.chat
 
 import android.Manifest
 import android.content.pm.PackageManager
-import java.io.File
+import android.os.SystemClock
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -91,6 +91,7 @@ import com.reals.app.ui.common.formatBackendDateTime
 import com.reals.app.ui.common.formatBackendTime
 import com.reals.app.ui.root.OptimisticOutgoingMessage
 import com.reals.app.ui.root.OutgoingMessageDeliveryState
+import com.reals.app.ui.root.ChatAudioDraftUiState
 import com.reals.app.ui.root.ChatAudioUploadUiState
 import com.reals.app.ui.root.SecondChatLifecycleUiState
 import com.reals.app.ui.root.SecondChatResolutionPresentation
@@ -144,6 +145,7 @@ fun ChatScreen(
     refreshing: Boolean,
     sending: Boolean,
     audioUpload: ChatAudioUploadUiState = ChatAudioUploadUiState(),
+    audioDraft: ChatAudioDraftUiState? = null,
     actionLoading: Boolean,
     actionLoadingLabel: String?,
     guidance: FirstChatGuidance? = null,
@@ -172,6 +174,8 @@ fun ChatScreen(
     onSendMessage: (String) -> Boolean,
     onSendAudioMessage: (filePath: String, clientMessageId: String) -> Boolean = { _, _ -> false },
     onClearAudioUploadState: () -> Unit = {},
+    onAudioDraftReady: (ChatAudioDraftUiState) -> Unit = {},
+    onDeleteAudioDraft: () -> Unit = {},
     onRefreshAudioUrl: suspend (messageId: String) -> String? = { null },
     onRetryOptimisticMessage: (localId: String, content: String) -> Unit,
     onApprove: () -> Unit,
@@ -198,8 +202,8 @@ fun ChatScreen(
     var nowMillis by rememberSaveable(chat?.id) { mutableStateOf(System.currentTimeMillis()) }
     var firstChatExpiryHandled by rememberSaveable(chat?.id) { mutableStateOf(false) }
     var secondChatUnavailableHandled by rememberSaveable(chat?.id) { mutableStateOf(false) }
-    var recordingStartedAtMillis by rememberSaveable(chat?.id) { mutableStateOf<Long?>(null) }
-    var audioDraft by remember(chat?.id) { mutableStateOf<LocalChatAudioDraft?>(null) }
+    var recordingStartedAtMillis by remember(chat?.id) { mutableStateOf<Long?>(null) }
+    var recordingOperationInFlight by remember(chat?.id) { mutableStateOf(false) }
     var localAudioError by rememberSaveable(chat?.id) { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -237,13 +241,14 @@ fun ChatScreen(
                     )
     val sendingMessage = sending
     val loadingChatAction = actionLoading || manualBlockLoading
+    val audioInteractionBusy = recordingOperationInFlight || recordingStartedAtMillis != null || audioUpload.uploading
     val secondChatResolution = secondChatLifecycle?.resolutionPresentation(
         currentUserId = currentUserId,
         nowMillis = nowMillis,
-        actionLoading = loadingChatAction,
+        actionLoading = loadingChatAction || audioInteractionBusy,
     )
-    val canUseChatActions = canChat && !loadingChatAction
-    val canUseNavigationActions = !loadingChatAction &&
+    val canUseChatActions = canChat && !loadingChatAction && !audioInteractionBusy
+    val canUseNavigationActions = !loadingChatAction && !audioInteractionBusy &&
             secondChatTiming?.genuinelyActive != true
     val pendingExitRequest = exitRequests
         .filter { it.status == ChatExitRequestStatus.Pending }
@@ -255,7 +260,7 @@ fun ChatScreen(
         canSendMessages = canSendMessages,
         sendingMessage = sendingMessage,
         audioUploading = audioUpload.uploading,
-        recordingActive = recordingStartedAtMillis != null,
+        recordingActive = recordingStartedAtMillis != null || recordingOperationInFlight,
         loadingChatAction = loadingChatAction || guidanceActionLoading,
     )
     val guidancePanelState = firstChatGuidancePanelState(
@@ -267,7 +272,7 @@ fun ChatScreen(
             (secondChatLifecycle == null || secondChatTiming?.genuinelyActive == true) &&
             (!showMutualExitActions || !exitFlowLocked)
     val manualBlockBusy =
-        loading || refreshing || sending || audioUpload.uploading || actionLoading || guidanceActionLoading ||
+        loading || refreshing || sending || audioInteractionBusy || actionLoading || guidanceActionLoading ||
             manualBlockLoading
     val canManualBlock = !manualBlockBusy
     val canOpenOverflowActions =
@@ -278,7 +283,8 @@ fun ChatScreen(
             chat?.status == ChatStatus.Active &&
             chat.myDecision == ChatDecisionState.Pending &&
             !exitFlowLocked &&
-            !firstChatLocallyExpired
+            !firstChatLocallyExpired &&
+            !audioInteractionBusy
     val partnerDisplayName = chat?.partner?.displayName
         ?.takeIf { it.isNotBlank() }
         ?: partnerNameFallback?.takeIf { it.isNotBlank() }
@@ -289,19 +295,13 @@ fun ChatScreen(
         canChat = canChat,
         canSendMessages = canSendMessages,
         sendingMessage = sendingMessage,
-        loadingChatAction = loadingChatAction || audioUpload.uploading || recordingStartedAtMillis != null,
+        loadingChatAction = loadingChatAction || audioInteractionBusy,
         draft = draft,
     )
-    fun stopRecordingToPreview() {
-        val result = recorderController.stop(
-            maxDurationMillis = chat?.audioPolicy?.maxDurationMillis ?: DEFAULT_CHAT_AUDIO_MAX_DURATION_MILLIS,
-            maxFileSizeBytes = chat?.audioPolicy?.maxFileSizeBytes ?: DEFAULT_CHAT_AUDIO_MAX_FILE_SIZE_BYTES,
-        )
-        recordingStartedAtMillis = null
+    fun publishRecorderResult(result: ChatAudioRecorderResult) {
         when (result) {
             is ChatAudioRecorderResult.Ready -> {
-                audioDraft?.filePath?.let { File(it).delete() }
-                audioDraft = result.draft
+                onAudioDraftReady(result.draft.toUiState())
                 localAudioError = null
                 onClearAudioUploadState()
             }
@@ -312,25 +312,44 @@ fun ChatScreen(
         }
     }
 
-    fun startRecording() {
-        playbackController.release()
-        audioDraft?.filePath?.let { File(it).delete() }
-        audioDraft = null
-        onClearAudioUploadState()
-        val result = recorderController.start(
-            maxDurationMillis = chat?.audioPolicy?.maxDurationMillis ?: DEFAULT_CHAT_AUDIO_MAX_DURATION_MILLIS,
-            maxFileSizeBytes = chat?.audioPolicy?.maxFileSizeBytes ?: DEFAULT_CHAT_AUDIO_MAX_FILE_SIZE_BYTES,
-            onLimitReached = { coroutineScope.launch { stopRecordingToPreview() } },
-        )
-        when (result) {
-            ChatAudioRecorderResult.Started -> {
-                recordingStartedAtMillis = System.currentTimeMillis()
-                localAudioError = null
-            }
+    fun stopRecordingToPreview(source: ChatAudioStopSource = ChatAudioStopSource.Manual) {
+        if (recordingOperationInFlight) return
+        recordingOperationInFlight = true
+        coroutineScope.launch {
+            val result = recorderController.stop(
+                maxDurationMillis = chat?.audioPolicy?.maxDurationMillis ?: DEFAULT_CHAT_AUDIO_MAX_DURATION_MILLIS,
+                maxFileSizeBytes = chat?.audioPolicy?.maxFileSizeBytes ?: DEFAULT_CHAT_AUDIO_MAX_FILE_SIZE_BYTES,
+                source = source,
+            )
+            recordingStartedAtMillis = null
+            recordingOperationInFlight = false
+            publishRecorderResult(result)
+        }
+    }
 
-            is ChatAudioRecorderResult.Failed -> localAudioError = result.message
-            ChatAudioRecorderResult.Cancelled,
-            is ChatAudioRecorderResult.Ready -> Unit
+    fun startRecording() {
+        if (recordingOperationInFlight || recordingStartedAtMillis != null) return
+        playbackController.release()
+        onDeleteAudioDraft()
+        onClearAudioUploadState()
+        recordingOperationInFlight = true
+        coroutineScope.launch {
+            val result = recorderController.start(
+                maxDurationMillis = chat?.audioPolicy?.maxDurationMillis ?: DEFAULT_CHAT_AUDIO_MAX_DURATION_MILLIS,
+                maxFileSizeBytes = chat?.audioPolicy?.maxFileSizeBytes ?: DEFAULT_CHAT_AUDIO_MAX_FILE_SIZE_BYTES,
+                onLimitReached = { stopSource -> coroutineScope.launch { stopRecordingToPreview(stopSource) } },
+            )
+            recordingOperationInFlight = false
+            when (result) {
+                ChatAudioRecorderResult.Started -> {
+                    recordingStartedAtMillis = SystemClock.elapsedRealtime()
+                    localAudioError = null
+                }
+
+                is ChatAudioRecorderResult.Failed -> localAudioError = result.message
+                ChatAudioRecorderResult.Cancelled,
+                is ChatAudioRecorderResult.Ready -> publishRecorderResult(result)
+            }
         }
     }
 
@@ -346,9 +365,8 @@ fun ChatScreen(
 
     DisposableEffect(chat?.id) {
         onDispose {
-            recorderController.release(deleteOutput = true)
+            coroutineScope.launch { recorderController.release(deleteOutput = true) }
             playbackController.release()
-            audioDraft?.filePath?.let { File(it).delete() }
         }
     }
 
@@ -356,11 +374,11 @@ fun ChatScreen(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
                 if (recordingStartedAtMillis != null) {
-                    recorderController.cancel()
+                    coroutineScope.launch { recorderController.cancel(ChatAudioStopSource.Lifecycle) }
                     recordingStartedAtMillis = null
                     localAudioError = "Se canceló la grabación al salir de la app."
                 }
-                playbackController.pause()
+                playbackController.onStoppedInBackground()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -369,20 +387,22 @@ fun ChatScreen(
 
     LaunchedEffect(chat?.id, audioUpload.completedClientMessageId) {
         val completedClientMessageId = audioUpload.completedClientMessageId ?: return@LaunchedEffect
-        val draftToClear = audioDraft?.takeIf { it.clientMessageId == completedClientMessageId } ?: return@LaunchedEffect
+        audioDraft?.takeIf { it.clientMessageId == completedClientMessageId } ?: return@LaunchedEffect
         playbackController.release()
-        File(draftToClear.filePath).delete()
-        audioDraft = null
         localAudioError = null
         onClearAudioUploadState()
     }
 
     LaunchedEffect(chat?.id, canSendMessages, audioComposerState.visible) {
         if ((!canSendMessages || !audioComposerState.visible) && recordingStartedAtMillis != null) {
-            recorderController.cancel()
+            coroutineScope.launch { recorderController.cancel(ChatAudioStopSource.Lifecycle) }
             recordingStartedAtMillis = null
             localAudioError = "La grabación se canceló porque el chat ya no admite mensajes."
         }
+    }
+
+    LaunchedEffect(chat?.id, audioDraft?.filePath) {
+        recorderController.cleanStaleDraftFiles(setOfNotNull(audioDraft?.filePath))
     }
 
     LaunchedEffect(playbackController.state.phase, playbackController.state.key) {
@@ -401,7 +421,7 @@ fun ChatScreen(
         return
     }
 
-    val pollChat = chatPollingEnabled(canChat)
+    val pollChat = chatPollingEnabled(canChat && !audioInteractionBusy)
     LaunchedEffect(chat?.id, pollChat) {
         while (pollChat) {
             delay(2000.milliseconds)
@@ -525,13 +545,13 @@ fun ChatScreen(
             SecondChatLifecyclePanel(
                 lifecycle = secondChatLifecycle,
                 partnerName = partnerDisplayName,
-                actionLoading = loadingChatAction,
+                actionLoading = loadingChatAction || audioInteractionBusy,
                 onClaimNoShow = onClaimSecondChatNoShow,
                 onRefresh = onRefresh,
             )
             SecondChatResolutionPanel(
                 presentation = secondChatResolution,
-                actionLoading = loadingChatAction,
+                actionLoading = loadingChatAction || audioInteractionBusy,
                 actionLoadingLabel = actionLoadingLabel,
                 onRequestCompletion = { showingSecondChatCompletionDialog = true },
                 onAcceptCompletion = { requestId ->
@@ -545,7 +565,7 @@ fun ChatScreen(
             ChatActionsPanel(
                 currentUserId = currentUserId,
                 activeExitRequest = if (showExitActions) pendingExitRequest else null,
-                loadingChatAction = loadingChatAction,
+                loadingChatAction = loadingChatAction || audioInteractionBusy,
                 actionLoadingLabel = actionLoadingLabel,
                 canDecide = canDecide,
                 canUseNavigationActions = canUseNavigationActions,
@@ -558,7 +578,7 @@ fun ChatScreen(
             )
             FirstChatGuidancePanel(
                 state = guidancePanelState,
-                actionLoading = guidanceActionLoading,
+                actionLoading = guidanceActionLoading || audioInteractionBusy,
                 onRequestNext = onRequestNextGuidanceQuestion,
             )
             MessageList(
@@ -621,7 +641,7 @@ fun ChatScreen(
                     },
                     onStopRecording = { stopRecordingToPreview() },
                     onCancelRecording = {
-                        recorderController.cancel()
+                        coroutineScope.launch { recorderController.cancel(ChatAudioStopSource.Cancel) }
                         recordingStartedAtMillis = null
                         localAudioError = null
                     },
@@ -636,8 +656,7 @@ fun ChatScreen(
                     onPauseAudio = playbackController::pause,
                     onDeleteDraft = {
                         playbackController.release()
-                        audioDraft?.filePath?.let { File(it).delete() }
-                        audioDraft = null
+                        onDeleteAudioDraft()
                         localAudioError = null
                         onClearAudioUploadState()
                     },
@@ -1370,7 +1389,7 @@ private fun MessageComposer(
     draft: String,
     state: MessageComposerUiState,
     audioState: ChatAudioComposerUiState,
-    audioDraft: LocalChatAudioDraft?,
+    audioDraft: ChatAudioDraftUiState?,
     uploadState: ChatAudioUploadUiState,
     localAudioError: String?,
     recordingStartedAtMillis: Long?,
@@ -1380,18 +1399,18 @@ private fun MessageComposer(
     onStartRecording: () -> Unit,
     onStopRecording: () -> Unit,
     onCancelRecording: () -> Unit,
-    onPlayDraft: (LocalChatAudioDraft) -> Unit,
+    onPlayDraft: (ChatAudioDraftUiState) -> Unit,
     onPauseAudio: () -> Unit,
     onDeleteDraft: () -> Unit,
-    onSendAudio: (LocalChatAudioDraft) -> Boolean,
+    onSendAudio: (ChatAudioDraftUiState) -> Boolean,
 ) {
     var recordingNowMillis by rememberSaveable(recordingStartedAtMillis) {
-        mutableStateOf(System.currentTimeMillis())
+        mutableStateOf(SystemClock.elapsedRealtime())
     }
     LaunchedEffect(recordingStartedAtMillis) {
         while (recordingStartedAtMillis != null) {
             delay(250.milliseconds)
-            recordingNowMillis = System.currentTimeMillis()
+            recordingNowMillis = SystemClock.elapsedRealtime()
         }
     }
     Card(
@@ -1516,7 +1535,7 @@ private fun RecordingComposer(
 
 @Composable
 private fun AudioDraftComposer(
-    draft: LocalChatAudioDraft,
+    draft: ChatAudioDraftUiState,
     uploadState: ChatAudioUploadUiState,
     playbackState: ChatAudioPlaybackUiState,
     onPlay: () -> Unit,
@@ -1771,12 +1790,24 @@ private fun AudioPlaybackRow(
     }
 }
 
-private fun formatAudioDuration(durationMillis: Long): String {
-    val totalSeconds = (durationMillis / 1_000L).coerceAtLeast(0L)
+internal fun formatAudioDuration(durationMillis: Long): String {
+    val totalSeconds = when {
+        durationMillis <= 0L -> 0L
+        durationMillis < 1_000L -> 1L
+        else -> durationMillis / 1_000L
+    }
     val minutes = totalSeconds / 60L
     val seconds = totalSeconds % 60L
     return "$minutes:${seconds.toString().padStart(2, '0')}"
 }
+
+private fun LocalChatAudioDraft.toUiState(): ChatAudioDraftUiState =
+    ChatAudioDraftUiState(
+        filePath = filePath,
+        clientMessageId = clientMessageId,
+        durationMillis = durationMillis,
+        sizeBytes = sizeBytes,
+    )
 
 @Composable
 private fun OptimisticMessageBubble(

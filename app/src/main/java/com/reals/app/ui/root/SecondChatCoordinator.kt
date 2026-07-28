@@ -97,12 +97,19 @@ internal class SecondChatCoordinator(
         )
     }
 
+    suspend fun loadFullMessagesForAudioPlayback(
+        current: RealsRootUiState.SecondChat,
+    ): ApiResult<List<ChatMessage>> {
+        val chat = current.chat ?: return ApiResult.Success(current.messages)
+        return dependencies.getChatMessages(chat.id, afterMessageId = null)
+    }
+
     suspend fun createNoShowClaim(
         current: RealsRootUiState.SecondChat,
         onPending: (RealsRootUiState.SecondChat) -> Unit,
     ): SecondChatLoadResult {
         val status = current.lifecycle.status ?: return SecondChatLoadResult.Show(current)
-        if (!status.canClaimPartnerNoShow || current.lifecycle.claimingNoShow) {
+        if (!status.canClaimPartnerNoShow || current.lifecycle.claimingNoShow || current.audioUpload.uploading) {
             return SecondChatLoadResult.Show(current)
         }
         val pending = current.copy(
@@ -327,7 +334,7 @@ internal class SecondChatCoordinator(
         details: String,
         onPending: (RealsRootUiState.SecondChat) -> Unit,
     ): SecondChatActionResult {
-        if (current.loading || current.refreshing || current.sending || current.actionLoading) {
+        if (current.loading || current.refreshing || current.sending || current.audioUpload.uploading || current.actionLoading) {
             return SecondChatActionResult.Ignore
         }
         if (current.lifecycle.status != null && !current.lifecycle.timingPresentation().genuinelyActive) {
@@ -435,6 +442,7 @@ internal class SecondChatCoordinator(
         !current.loading &&
             !current.refreshing &&
             !current.sending &&
+            !current.audioUpload.uploading &&
             !current.actionLoading &&
             !current.manualBlock.loading &&
             current.lifecycle.timingPresentation(nowMillis()).genuinelyActive

@@ -266,6 +266,11 @@ internal class FirstChatCoordinator(
             }
 
             is ApiResult.Failure -> result.error.firstChatSendExpiryRoute(current)
+                ?: refreshAudioAfterPendingMutualCancellation(
+                    error = result.error,
+                    current = current,
+                    chatId = chat.id,
+                )
                 ?: FirstChatSendResult.Show(
                     current.copy(
                         chat = refreshChatAfterAudioConflict(current, result.error),
@@ -279,6 +284,28 @@ internal class FirstChatCoordinator(
                 )
         }
     }
+
+    private suspend fun refreshAudioAfterPendingMutualCancellation(
+        error: ApiError,
+        current: RealsRootUiState.FirstChat,
+        chatId: String,
+    ): FirstChatSendResult.Show? =
+        refreshLockedExitStateAfterPendingMutualCancellation(
+            error = error,
+            current = current,
+            chatId = chatId,
+        )?.let { refreshed ->
+            FirstChatSendResult.Show(
+                refreshed.copy(
+                    audioUpload = ChatAudioUploadUiState(
+                        uploading = false,
+                        error = error,
+                        nonRetryable = false,
+                    ),
+                    error = null,
+                )
+            )
+        }
 
     private suspend fun refreshChatAfterAudioConflict(
         current: RealsRootUiState.FirstChat,
@@ -379,7 +406,7 @@ internal class FirstChatCoordinator(
         decision: ChatContinueDecision,
         onPending: (RealsRootUiState.FirstChat) -> Unit,
     ): FirstChatActionResult {
-        if (current.loading || current.refreshing || current.sending || current.actionLoading) {
+        if (current.loading || current.refreshing || current.sending || current.audioUpload.uploading || current.actionLoading) {
             return FirstChatActionResult.Ignore
         }
         if (current.hasPendingExitRequest()) {
@@ -483,7 +510,14 @@ internal class FirstChatCoordinator(
         current: RealsRootUiState.FirstChat,
         onPending: (RealsRootUiState.FirstChat) -> Unit,
     ): FirstChatActionResult {
-        if (current.loading || current.refreshing || current.actionLoading || current.guidanceActionLoading) {
+        if (
+            current.loading ||
+            current.refreshing ||
+            current.sending ||
+            current.audioUpload.uploading ||
+            current.actionLoading ||
+            current.guidanceActionLoading
+        ) {
             return FirstChatActionResult.Ignore
         }
         if (current.hasPendingExitRequest()) {
@@ -556,7 +590,7 @@ internal class FirstChatCoordinator(
         details: String,
         onPending: (RealsRootUiState.FirstChat) -> Unit,
     ): FirstChatActionResult {
-        if (current.loading || current.refreshing || current.sending || current.actionLoading) {
+        if (current.loading || current.refreshing || current.sending || current.audioUpload.uploading || current.actionLoading) {
             return FirstChatActionResult.Ignore
         }
         if (current.chat == null) return FirstChatActionResult.Ignore
@@ -628,7 +662,7 @@ internal class FirstChatCoordinator(
         onPending: (RealsRootUiState.FirstChat) -> Unit,
         action: suspend (chatId: String) -> ApiResult<*>,
     ): FirstChatActionResult {
-        if (current.loading || current.refreshing || current.sending || current.actionLoading) {
+        if (current.loading || current.refreshing || current.sending || current.audioUpload.uploading || current.actionLoading) {
             return FirstChatActionResult.Ignore
         }
         val chat = current.chat ?: return FirstChatActionResult.Ignore
@@ -687,6 +721,13 @@ internal class FirstChatCoordinator(
 
     private fun RealsRootUiState.FirstChat.hasPendingExitRequest(): Boolean =
         exitRequests.any { it.status == ChatExitRequestStatus.Pending }
+
+    suspend fun loadFullMessagesForAudioPlayback(
+        current: RealsRootUiState.FirstChat,
+    ): ApiResult<List<com.reals.app.domain.model.ChatMessage>> {
+        val chat = current.chat ?: return ApiResult.Success(current.messages)
+        return dependencies.getChatMessages(chat.id, afterMessageId = null)
+    }
 }
 
 internal sealed interface FirstChatLoadResult {

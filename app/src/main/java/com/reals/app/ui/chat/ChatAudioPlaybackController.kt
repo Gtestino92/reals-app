@@ -2,9 +2,11 @@ package com.reals.app.ui.chat
 
 import android.media.AudioAttributes
 import android.media.MediaPlayer
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -24,12 +26,64 @@ internal data class ChatAudioPlaybackUiState(
     val error: String? = null,
 )
 
-internal class ChatAudioPlaybackController {
+internal interface ChatAudioPlayer {
+    val currentPosition: Int
+    fun configureForSpeech()
+    fun setDataSource(source: String)
+    fun setOnPreparedListener(listener: (ChatAudioPlayer) -> Unit)
+    fun setOnCompletionListener(listener: (ChatAudioPlayer) -> Unit)
+    fun setOnErrorListener(listener: (ChatAudioPlayer, Int, Int) -> Boolean)
+    fun prepareAsync()
+    fun start()
+    fun pause()
+    fun seekTo(positionMillis: Int)
+    fun release()
+}
+
+internal fun interface ChatAudioPlayerFactory {
+    fun create(): ChatAudioPlayer
+}
+
+internal class MediaPlayerChatAudioPlayer(
+    private val delegate: MediaPlayer = MediaPlayer(),
+) : ChatAudioPlayer {
+    override val currentPosition: Int get() = delegate.currentPosition
+
+    override fun configureForSpeech() {
+        delegate.setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build()
+        )
+    }
+    override fun setDataSource(source: String) = delegate.setDataSource(source)
+    override fun setOnPreparedListener(listener: (ChatAudioPlayer) -> Unit) {
+        delegate.setOnPreparedListener { listener(this) }
+    }
+    override fun setOnCompletionListener(listener: (ChatAudioPlayer) -> Unit) {
+        delegate.setOnCompletionListener { listener(this) }
+    }
+    override fun setOnErrorListener(listener: (ChatAudioPlayer, Int, Int) -> Boolean) {
+        delegate.setOnErrorListener { _, what, extra -> listener(this, what, extra) }
+    }
+    override fun prepareAsync() = delegate.prepareAsync()
+    override fun start() = delegate.start()
+    override fun pause() = delegate.pause()
+    override fun seekTo(positionMillis: Int) = delegate.seekTo(positionMillis)
+    override fun release() = delegate.release()
+}
+
+internal class ChatAudioPlaybackController(
+    private val playerFactory: ChatAudioPlayerFactory = ChatAudioPlayerFactory { MediaPlayerChatAudioPlayer() },
+) {
     var state by mutableStateOf(ChatAudioPlaybackUiState())
         private set
 
-    private var mediaPlayer: MediaPlayer? = null
+    private var mediaPlayer: ChatAudioPlayer? = null
     private var retainedPositionMillis: Int = 0
+    private var activeGeneration: Long = 0L
+    private var refreshJob: Job? = null
 
     fun playLocal(
         key: String,
@@ -63,32 +117,52 @@ internal class ChatAudioPlaybackController {
     }
 
     fun pause() {
+        if (state.phase == ChatAudioPlaybackPhase.Preparing) {
+            invalidateAndRelease(resetState = true)
+            return
+        }
         val player = mediaPlayer ?: return
+        val generation = activeGeneration
+        val key = state.key
         runCatching {
             retainedPositionMillis = player.currentPosition
             player.pause()
-            state = state.copy(
-                phase = ChatAudioPlaybackPhase.Paused,
-                positionMillis = retainedPositionMillis,
-                error = null,
-            )
+            if (owns(generation, player, key)) {
+                state = state.copy(
+                    phase = ChatAudioPlaybackPhase.Paused,
+                    positionMillis = retainedPositionMillis,
+                    error = null,
+                )
+            }
         }.onFailure {
             failCurrent()
         }
     }
 
     fun release() {
-        runCatching { mediaPlayer?.release() }
-        mediaPlayer = null
-        retainedPositionMillis = 0
-        state = ChatAudioPlaybackUiState()
+        invalidateAndRelease(resetState = true)
+    }
+
+    fun onStoppedInBackground() {
+        when (state.phase) {
+            ChatAudioPlaybackPhase.Playing -> pause()
+            ChatAudioPlaybackPhase.Preparing -> invalidateAndRelease(resetState = true)
+            ChatAudioPlaybackPhase.Paused,
+            ChatAudioPlaybackPhase.Failed,
+            ChatAudioPlaybackPhase.Idle -> Unit
+        }
     }
 
     fun tick() {
         val player = mediaPlayer ?: return
+        val generation = activeGeneration
+        val key = state.key
         if (state.phase != ChatAudioPlaybackPhase.Playing) return
         runCatching {
-            state = state.copy(positionMillis = player.currentPosition)
+            val position = player.currentPosition
+            if (owns(generation, player, key)) {
+                state = state.copy(positionMillis = position)
+            }
         }
     }
 
@@ -115,10 +189,14 @@ internal class ChatAudioPlaybackController {
 
     private fun resume() {
         val player = mediaPlayer ?: return
+        val generation = activeGeneration
+        val key = state.key
         runCatching {
             player.seekTo(retainedPositionMillis)
             player.start()
-            state = state.copy(phase = ChatAudioPlaybackPhase.Playing, error = null)
+            if (owns(generation, player, key)) {
+                state = state.copy(phase = ChatAudioPlaybackPhase.Playing, error = null)
+            }
         }.onFailure {
             failCurrent()
         }
@@ -132,33 +210,45 @@ internal class ChatAudioPlaybackController {
         refreshSource: (suspend () -> String?)?,
         retriedAfterRefresh: Boolean,
     ) {
-        runCatching { mediaPlayer?.release() }
-        mediaPlayer = null
+        val generation = nextGeneration()
         retainedPositionMillis = 0
         state = ChatAudioPlaybackUiState(
             key = key,
             phase = ChatAudioPlaybackPhase.Preparing,
             durationMillis = durationMillis,
         )
-        val player = MediaPlayer()
+        val player = playerFactory.create()
         mediaPlayer = player
         runCatching {
-            player.setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .build()
-            )
+            player.configureForSpeech()
             player.setDataSource(source)
-            player.setOnPreparedListener {
+            player.setOnPreparedListener { callbackPlayer ->
+                if (!owns(generation, callbackPlayer, key)) {
+                    safeReleaseObsolete(callbackPlayer)
+                    return@setOnPreparedListener
+                }
                 runCatching {
-                    it.start()
-                    state = state.copy(phase = ChatAudioPlaybackPhase.Playing, error = null)
+                    callbackPlayer.start()
+                    if (owns(generation, callbackPlayer, key)) {
+                        state = state.copy(phase = ChatAudioPlaybackPhase.Playing, error = null)
+                    }
                 }.onFailure {
-                    handlePlaybackFailure(key, source, durationMillis, scope, refreshSource, retriedAfterRefresh)
+                    handlePlaybackFailure(
+                        generation,
+                        callbackPlayer,
+                        key,
+                        source,
+                        durationMillis,
+                        scope,
+                        refreshSource,
+                        retriedAfterRefresh,
+                        what = null,
+                        extra = null,
+                    )
                 }
             }
-            player.setOnCompletionListener {
+            player.setOnCompletionListener { callbackPlayer ->
+                if (!owns(generation, callbackPlayer, key)) return@setOnCompletionListener
                 retainedPositionMillis = 0
                 state = state.copy(
                     phase = ChatAudioPlaybackPhase.Idle,
@@ -166,34 +256,83 @@ internal class ChatAudioPlaybackController {
                     error = null,
                 )
             }
-            player.setOnErrorListener { _, _, _ ->
-                handlePlaybackFailure(key, source, durationMillis, scope, refreshSource, retriedAfterRefresh)
+            player.setOnErrorListener { callbackPlayer, what, extra ->
+                handlePlaybackFailure(
+                    generation,
+                    callbackPlayer,
+                    key,
+                    source,
+                    durationMillis,
+                    scope,
+                    refreshSource,
+                    retriedAfterRefresh,
+                    what,
+                    extra,
+                )
                 true
             }
             player.prepareAsync()
         }.onFailure {
-            handlePlaybackFailure(key, source, durationMillis, scope, refreshSource, retriedAfterRefresh)
+            handlePlaybackFailure(
+                generation,
+                player,
+                key,
+                source,
+                durationMillis,
+                scope,
+                refreshSource,
+                retriedAfterRefresh,
+                what = null,
+                extra = null,
+            )
         }
     }
 
     private fun handlePlaybackFailure(
+        generation: Long,
+        player: ChatAudioPlayer,
         key: String,
         source: String,
         durationMillis: Long,
         scope: CoroutineScope,
         refreshSource: (suspend () -> String?)?,
         retriedAfterRefresh: Boolean,
+        what: Int?,
+        extra: Int?,
     ) {
-        runCatching { mediaPlayer?.release() }
-        mediaPlayer = null
+        if (!owns(generation, player, key)) {
+            safeReleaseObsolete(player)
+            return
+        }
+        debugPlayback(
+            key = key,
+            phase = state.phase,
+            what = what,
+            extra = extra,
+            refreshAttempted = refreshSource != null,
+            refreshedUrlChanged = null,
+        )
+        runCatching { player.release() }
+        if (mediaPlayer === player) mediaPlayer = null
         retainedPositionMillis = 0
         if (refreshSource == null || retriedAfterRefresh) {
             failCurrent(key, durationMillis)
             return
         }
-        scope.launch {
+        refreshJob?.cancel()
+        refreshJob = scope.launch {
             val refreshed = runCatching { refreshSource() }.getOrNull()
-            if (!refreshed.isNullOrBlank() && refreshed != source) {
+            if (!owns(generation, player = null, expectedKey = key)) return@launch
+            val changed = !refreshed.isNullOrBlank() && refreshed != source
+            debugPlayback(
+                key = key,
+                phase = state.phase,
+                what = what,
+                extra = extra,
+                refreshAttempted = true,
+                refreshedUrlChanged = changed,
+            )
+            if (changed) {
                 startPreparing(
                     key = key,
                     source = refreshed,
@@ -208,6 +347,40 @@ internal class ChatAudioPlaybackController {
         }
     }
 
+    private fun nextGeneration(): Long {
+        refreshJob?.cancel()
+        refreshJob = null
+        runCatching { mediaPlayer?.release() }
+        mediaPlayer = null
+        activeGeneration += 1
+        return activeGeneration
+    }
+
+    private fun invalidateAndRelease(resetState: Boolean) {
+        activeGeneration += 1
+        refreshJob?.cancel()
+        refreshJob = null
+        runCatching { mediaPlayer?.release() }
+        mediaPlayer = null
+        retainedPositionMillis = 0
+        if (resetState) state = ChatAudioPlaybackUiState()
+    }
+
+    private fun owns(
+        generation: Long,
+        player: ChatAudioPlayer?,
+        expectedKey: String?,
+    ): Boolean =
+        generation == activeGeneration &&
+            (player == null || mediaPlayer === player) &&
+            state.key == expectedKey
+
+    private fun safeReleaseObsolete(player: ChatAudioPlayer) {
+        if (mediaPlayer !== player) {
+            runCatching { player.release() }
+        }
+    }
+
     private fun failCurrent(
         key: String? = state.key,
         durationMillis: Long = state.durationMillis,
@@ -218,5 +391,28 @@ internal class ChatAudioPlaybackController {
             durationMillis = durationMillis,
             error = "No pudimos reproducir este audio.",
         )
+    }
+
+    private fun debugPlayback(
+        key: String,
+        phase: ChatAudioPlaybackPhase,
+        what: Int?,
+        extra: Int?,
+        refreshAttempted: Boolean,
+        refreshedUrlChanged: Boolean?,
+    ) {
+        if (!isDebugLoggable()) return
+        Log.d(
+            TAG,
+            "playback key=$key phase=$phase what=$what extra=$extra " +
+                "refreshAttempted=$refreshAttempted refreshedUrlChanged=$refreshedUrlChanged"
+        )
+    }
+
+    private companion object {
+        private const val TAG = "ChatAudioPlayback"
+
+        private fun isDebugLoggable(): Boolean =
+            runCatching { Log.isLoggable(TAG, Log.DEBUG) }.getOrDefault(false)
     }
 }

@@ -125,6 +125,7 @@ sealed interface RealsRootUiState {
         val refreshing: Boolean = false,
         val sending: Boolean = false,
         val audioUpload: ChatAudioUploadUiState = ChatAudioUploadUiState(),
+        val audioDraft: ChatAudioDraftUiState? = null,
         val actionLoading: Boolean = false,
         val actionLoadingLabel: String? = null,
         val guidanceActionLoading: Boolean = false,
@@ -148,6 +149,7 @@ sealed interface RealsRootUiState {
         val refreshing: Boolean = false,
         val sending: Boolean = false,
         val audioUpload: ChatAudioUploadUiState = ChatAudioUploadUiState(),
+        val audioDraft: ChatAudioDraftUiState? = null,
         val actionLoading: Boolean = false,
         val actionLoadingLabel: String? = null,
         val manualBlock: ManualBlockUiState = ManualBlockUiState(),
@@ -238,6 +240,13 @@ data class ChatAudioUploadUiState(
     val error: ApiError? = null,
     val completedClientMessageId: String? = null,
     val nonRetryable: Boolean = false,
+)
+
+data class ChatAudioDraftUiState(
+    val filePath: String,
+    val clientMessageId: String,
+    val durationMillis: Long,
+    val sizeBytes: Long,
 )
 
 data class ProfileManagementState(

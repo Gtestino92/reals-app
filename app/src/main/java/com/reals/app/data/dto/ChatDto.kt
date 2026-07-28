@@ -163,7 +163,6 @@ data class SecondChatAttendanceResponseDto(
     val mustRespondToPartner: Boolean = false,
     val lastMessageAt: String? = null,
     val lastMessageSenderId: String? = null,
-    val audioPolicy: ChatAudioPolicyResponseDto? = null,
 )
 
 @Serializable

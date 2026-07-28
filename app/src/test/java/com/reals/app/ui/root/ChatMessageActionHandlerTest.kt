@@ -5,6 +5,7 @@ import com.reals.app.data.mapper.toDomain
 import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.testutil.TestDomain
 import com.reals.app.testutil.TestDtos
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -182,6 +183,57 @@ class ChatMessageActionHandlerTest {
         assertEquals(listOf("local-kept"), state.optimisticMessages.map { it.localId })
     }
 
+    @Test
+    fun `audio send rejects subsecond draft before upload`() {
+        val file = createTempFile()
+        val state = firstChatState().copy(
+            chat = TestDtos.chat(audioPolicy = TestDtos.audioPolicy(enabled = true)).toDomain(),
+            audioDraft = ChatAudioDraftUiState(
+                filePath = file.absolutePath,
+                clientMessageId = "client-1",
+                durationMillis = 838,
+                sizeBytes = file.length(),
+            ),
+        )
+
+        val result = ChatMessageActionHandler.prepareFirstChatAudioSend(
+            current = state,
+            filePath = file.absolutePath,
+            clientMessageId = "client-1",
+        )
+
+        assertTrue(result is ChatAudioSendPreparation.Rejected<*>)
+        val error = (result as ChatAudioSendPreparation.Rejected<RealsRootUiState.FirstChat>)
+            .state.audioUpload.error as ApiError.Unexpected
+        assertEquals("La grabación quedó demasiado corta. Intentá nuevamente.", error.message)
+    }
+
+    @Test
+    fun `audio send keeps same file and UUID when accepted`() {
+        val file = createTempFile()
+        val state = firstChatState().copy(
+            chat = TestDtos.chat(audioPolicy = TestDtos.audioPolicy(enabled = true)).toDomain(),
+            audioDraft = ChatAudioDraftUiState(
+                filePath = file.absolutePath,
+                clientMessageId = "client-1",
+                durationMillis = 1_000,
+                sizeBytes = file.length(),
+            ),
+        )
+
+        val result = ChatMessageActionHandler.prepareFirstChatAudioSend(
+            current = state,
+            filePath = file.absolutePath,
+            clientMessageId = "client-1",
+        )
+
+        assertTrue(result is ChatAudioSendPreparation.Accepted<*>)
+        result as ChatAudioSendPreparation.Accepted<RealsRootUiState.FirstChat>
+        assertEquals(file.absolutePath, result.file.absolutePath)
+        assertEquals("client-1", result.clientMessageId)
+        assertTrue(result.pendingState.audioUpload.uploading)
+    }
+
     private fun firstChatState(
         optimisticMessages: List<OptimisticOutgoingMessage> = emptyList(),
         exitRequests: List<ChatExitRequest> = emptyList(),
@@ -223,4 +275,10 @@ class ChatMessageActionHandlerTest {
             localId = localId,
             createdAtMillis = 123L,
         ).copy(deliveryState = OutgoingMessageDeliveryState.Failed)
+
+    private fun createTempFile(): File =
+        kotlin.io.path.createTempFile(suffix = ".m4a").toFile().apply {
+            writeBytes(byteArrayOf(1, 2, 3))
+            deleteOnExit()
+        }
 }

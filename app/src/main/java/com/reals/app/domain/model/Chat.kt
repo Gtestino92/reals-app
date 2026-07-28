@@ -182,7 +182,6 @@ data class SecondChatStatus(
     val mustRespondToPartner: Boolean,
     val lastMessageAt: String?,
     val lastMessageSenderId: String?,
-    val audioPolicy: ChatAudioPolicy? = null,
 )
 
 data class SecondChatResolutionRequest(
