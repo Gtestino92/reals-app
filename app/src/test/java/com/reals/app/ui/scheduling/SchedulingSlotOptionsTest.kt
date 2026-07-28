@@ -310,6 +310,20 @@ class SchedulingSlotOptionsTest {
 
         assertFalse(schedulingSlotConflictPolicy("2026-07-30T20:00:00-03:00", availability))
         assertFalse(schedulingSlotConflictPolicy("not-a-date", availability))
+        assertFalse(schedulingAvailabilityHasValidUnavailableWindows(availability))
+    }
+
+    @Test
+    fun `availability notice eligibility requires at least one valid unavailable window`() {
+        assertFalse(schedulingAvailabilityHasValidUnavailableWindows(availability()))
+        assertTrue(
+            schedulingAvailabilityHasValidUnavailableWindows(
+                availability(
+                    window("not-a-date", "2026-07-30T21:00:00-03:00"),
+                    window("2026-07-30T19:00:00-03:00", "2026-07-30T21:00:00-03:00"),
+                ),
+            ),
+        )
     }
 
     @Test

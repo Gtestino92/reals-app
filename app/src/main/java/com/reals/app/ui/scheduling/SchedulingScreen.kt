@@ -346,6 +346,7 @@ private fun ProposalSelectorCard(
         .atZone(zoneId)
         .toOffsetDateTime()
     val dayOptions = schedulingDayOptions(now)
+    val hasUnavailableWindows = schedulingAvailabilityHasValidUnavailableWindows(availability)
     val initialSelection = firstAvailableSchedulingSelection(now, zoneId, availability)
     var selectedDate by rememberSaveable {
         mutableStateOf(initialSelection?.date?.toString() ?: now.toLocalDate().toString())
@@ -382,6 +383,9 @@ private fun ProposalSelectorCard(
         .getOrDefault(now.toLocalDate())
     val visibleHours = visibleSchedulingHours(selectedLocalDate, now, zoneId)
     val availableHours = availableSchedulingHours(selectedLocalDate, now, zoneId, availability)
+    val conflictBlockedHours = visibleHours
+        .filterNot { it in availableHours }
+        .toSet()
     val effectiveHour = if (selectedHour in visibleHours) {
         selectedHour
     } else {
@@ -426,6 +430,10 @@ private fun ProposalSelectorCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
+            if (hasUnavailableWindows) {
+                SchedulingAvailabilityNotice(availability)
+            }
+
             WheelPickerColumn(
                 title = "Dia",
                 options = dayOptions,
@@ -434,6 +442,10 @@ private fun ProposalSelectorCard(
                 optionLabel = { it.label },
                 isOptionEnabled = { day ->
                     availableSchedulingHours(day.date, now, zoneId, availability).isNotEmpty()
+                },
+                isOptionBlocked = { day ->
+                    visibleSchedulingHours(day.date, now, zoneId).isNotEmpty() &&
+                        availableSchedulingHours(day.date, now, zoneId, availability).isEmpty()
                 },
                 onSelected = { day ->
                     val currentHour = effectiveHour
@@ -470,6 +482,7 @@ private fun ProposalSelectorCard(
                     enabled = !submitting && !actionsDisabled,
                     optionLabel = { it.toString().padStart(2, '0') },
                     isOptionEnabled = { hour -> hour in availableHours },
+                    isOptionBlocked = { hour -> hour in conflictBlockedHours },
                     onSelected = { hour ->
                         selectedHour = hour
                         val nextMinutes = availableSchedulingMinutes(
@@ -600,6 +613,20 @@ private fun ProposalSelectorCard(
     }
 }
 
+@Composable
+private fun SchedulingAvailabilityNotice(
+    availability: SchedulingAvailability?,
+) {
+    val conflictWindowMinutes = availability?.conflictWindowMinutes
+        ?.takeIf { it > 0 }
+    val marginText = conflictWindowMinutes?.let { "±$it min" } ?: "el margen configurado"
+    FeedbackCard(
+        title = "Horarios no disponibles",
+        message = "Los horarios marcados se superponen con otro segundo chat coordinado o caen dentro de $marginText para esa cita.",
+        tone = FeedbackTone.Warning,
+    )
+}
+
 internal data class SchedulingErrorPlacement(
     val topLevelError: ApiError?,
     val proposalError: ApiError?,
@@ -668,6 +695,7 @@ private fun <T> WheelPickerColumn(
     modifier: Modifier = Modifier,
     pickerHeight: Dp = PickerOptionSlotHeight,
     isOptionEnabled: (T) -> Boolean = { true },
+    isOptionBlocked: (T) -> Boolean = { false },
 ) {
     val selectedIndex = options.indexOf(selected)
     val targetFirstVisibleIndex = centeredWheelFirstVisibleIndex(
@@ -722,6 +750,7 @@ private fun <T> WheelPickerColumn(
             ) {
                 itemsIndexed(options) { _, option ->
                     val optionEnabled = enabled && isOptionEnabled(option)
+                    val optionBlocked = isOptionBlocked(option)
                     val isSelected = option == selected
                     if (isSelected) {
                         Button(
@@ -735,9 +764,21 @@ private fun <T> WheelPickerColumn(
                         OutlinedButton(
                             onClick = { onSelected(option) },
                             enabled = optionEnabled,
+                            border = if (optionBlocked) {
+                                BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                            } else {
+                                null
+                            },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text(optionLabel(option))
+                            Text(
+                                text = optionLabel(option),
+                                color = if (optionBlocked) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
+                            )
                         }
                     }
                 }

@@ -90,6 +90,15 @@ internal fun schedulingSlotConflictPolicy(
     availability: SchedulingAvailability?,
 ): Boolean = schedulingSlotConflictPolicy(candidate.toInstant(), availability)
 
+internal fun schedulingAvailabilityHasValidUnavailableWindows(
+    availability: SchedulingAvailability?,
+): Boolean {
+    if (availability == null) return false
+    return availability.unavailableWindows.any { window ->
+        window.validWindowInstants() != null
+    }
+}
+
 private fun schedulingSlotConflictPolicy(
     candidateInstant: Instant,
     availability: SchedulingAvailability?,
@@ -101,12 +110,17 @@ private fun schedulingSlotConflictPolicy(
 }
 
 private fun SchedulingUnavailableWindow.contains(candidateInstant: Instant): Boolean {
-    val start = startsAt?.let { runCatching { OffsetDateTime.parse(it).toInstant() }.getOrNull() }
-        ?: return false
-    val end = endsAt?.let { runCatching { OffsetDateTime.parse(it).toInstant() }.getOrNull() }
-        ?: return false
-    if (start.isAfter(end)) return false
+    val (start, end) = validWindowInstants() ?: return false
     return !candidateInstant.isBefore(start) && !candidateInstant.isAfter(end)
+}
+
+private fun SchedulingUnavailableWindow.validWindowInstants(): Pair<Instant, Instant>? {
+    val start = startsAt?.let { runCatching { OffsetDateTime.parse(it).toInstant() }.getOrNull() }
+        ?: return null
+    val end = endsAt?.let { runCatching { OffsetDateTime.parse(it).toInstant() }.getOrNull() }
+        ?: return null
+    if (start.isAfter(end)) return null
+    return start to end
 }
 
 internal fun schedulingProposalTimeAvailability(
