@@ -2609,10 +2609,6 @@ components:
           format: date-time
           nullable: true
           description: First-chat inactivity deadline. Null for chat types where inactivity timeout does not apply.
-        audioPolicy:
-          allOf:
-            - $ref: '#/components/schemas/ChatAudioPolicyResponse'
-          nullable: true
     FirstChatResponse:
       allOf:
         - $ref: '#/components/schemas/ChatResponse'
