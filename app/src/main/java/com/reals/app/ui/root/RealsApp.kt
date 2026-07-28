@@ -277,6 +277,11 @@ fun RealsApp(
                 onAcceptExitRequest = viewModel::acceptChatExitRequest,
                 onRejectExitRequest = viewModel::rejectChatExitRequest,
                 onExitRequestTimeout = viewModel::timeoutChatExitRequest,
+                onBackHome = if (current.canRecoverFirstChatToHome()) {
+                    viewModel::closeFirstChat
+                } else {
+                    null
+                },
             )
 
             is RealsRootUiState.SecondChat -> ChatScreen(

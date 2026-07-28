@@ -436,6 +436,7 @@ fun RealsRootUiState.canHandleSystemBack(): Boolean = when (this) {
     is RealsRootUiState.PartnerProfile -> !manualBlock.loading
     is RealsRootUiState.PendingEngagement -> true
     is RealsRootUiState.ActivationComplete -> true
+    is RealsRootUiState.FirstChat -> canRecoverFirstChatToHome()
 
     RealsRootUiState.Checking,
     is RealsRootUiState.MissingFirebase,
@@ -444,9 +445,17 @@ fun RealsRootUiState.canHandleSystemBack(): Boolean = when (this) {
     is RealsRootUiState.AccountDeletionScheduled,
     is RealsRootUiState.AccountDeletionPending,
     is RealsRootUiState.LegalRequirements,
-    is RealsRootUiState.FirstChat,
     is RealsRootUiState.Failure -> false
 }
+
+fun RealsRootUiState.FirstChat.canRecoverFirstChatToHome(): Boolean =
+    !loading &&
+        chat == null &&
+        !refreshing &&
+        !sending &&
+        !actionLoading &&
+        !guidanceActionLoading &&
+        !manualBlock.loading
 
 fun RealsRootUiState.SecondChat.isJoinedActiveSecondChat(): Boolean =
     lifecycle.timingPresentation().genuinelyActive

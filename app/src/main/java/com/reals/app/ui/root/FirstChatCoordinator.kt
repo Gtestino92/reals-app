@@ -51,6 +51,9 @@ internal class FirstChatCoordinator(
         }
 
         if (chatResult is ApiResult.Failure) {
+            chatResult.error.firstChatExpiryErrorMessage()?.let { message ->
+                return FirstChatLoadResult.RouteHome(message)
+            }
             return FirstChatLoadResult.Show(
                 RealsRootUiState.FirstChat(
                     session = session,
@@ -108,6 +111,15 @@ internal class FirstChatCoordinator(
             message = if (silent) current.message else null,
         )
         val chatResult = dependencies.getFirstChatForMatch(current.matchId)
+        if (chatResult is ApiResult.Failure) {
+            val terminalStatus = chatResult.error.firstChatTerminalStatus()
+            if (terminalStatus != null) {
+                return FirstChatRefreshResult.Closed(
+                    matchState = pending.match?.state,
+                    chatStatus = terminalStatus,
+                )
+            }
+        }
         val matchResult = dependencies.getMatch(current.matchId)
         val messagesResult = dependencies.getChatMessages(chat.id, pending.messages.lastMessageCursor())
         val exitsResult = dependencies.getChatExitRequests(chat.id)
@@ -674,11 +686,14 @@ private fun ApiError.firstChatSendExpiryRoute(
     )
 }
 
-private fun ApiError.firstChatExpiryErrorMessage(): String? {
+private fun ApiError.firstChatExpiryErrorMessage(): String? =
+    firstChatTerminalStatus()?.firstChatClosedMessage()
+
+private fun ApiError.firstChatTerminalStatus(): ChatStatus? {
     if (this !is ApiError.Backend) return null
     return when (backendErrorCode) {
-        BackendErrorCode.ChatExpired -> "El chat venci\u00f3."
-        BackendErrorCode.ChatAbandoned -> "La conversaci\u00f3n se cerr\u00f3 por inactividad."
+        BackendErrorCode.ChatExpired -> ChatStatus.Expired
+        BackendErrorCode.ChatAbandoned -> ChatStatus.Abandoned
         else -> null
     }
 }

@@ -190,6 +190,7 @@ class RealsRootViewModel(
             }
 
             is RealsRootUiState.SecondChat -> closeSecondChat()
+            is RealsRootUiState.FirstChat -> closeFirstChat()
             is RealsRootUiState.VisualApproval -> closeVisualApproval()
             is RealsRootUiState.Scheduling -> closeScheduling()
             is RealsRootUiState.PartnerProfile -> closePartnerProfile()
@@ -200,7 +201,6 @@ class RealsRootViewModel(
             is RealsRootUiState.AccountDeletionScheduled,
             RealsRootUiState.Checking,
             is RealsRootUiState.Failure,
-            is RealsRootUiState.FirstChat,
             is RealsRootUiState.LegalRequirements,
             is RealsRootUiState.LoadingSession,
             is RealsRootUiState.Login,
@@ -329,10 +329,13 @@ class RealsRootViewModel(
 
             when (val result = firstChatCoordinator.load(session, cleanMatchId, chatId)) {
                 is FirstChatLoadResult.Show -> _uiState.value = result.state
-                is FirstChatLoadResult.RouteHome -> homeCoordinator.returnHome(
-                    session = session,
-                    message = result.message,
-                )
+                is FirstChatLoadResult.RouteHome -> {
+                    homeCoordinator.hideFirstChatLocally(cleanMatchId)
+                    homeCoordinator.returnHome(
+                        session = session,
+                        message = result.message,
+                    )
+                }
             }
         }
     }

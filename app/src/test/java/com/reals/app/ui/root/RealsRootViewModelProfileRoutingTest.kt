@@ -304,6 +304,53 @@ class RealsRootViewModelProfileRoutingTest {
         }
 
     @Test
+    fun `terminal first chat open hides stale pending action before returning Home`() =
+        runTest(dispatcher) {
+            val api = FakeRealsApi().apply {
+                chatResponse = backendErrorResponse(
+                    statusCode = 409,
+                    code = "CHAT_ABANDONED",
+                )
+                homeResponse = Response.success(draftHomeWithFirstChat())
+            }
+            val viewModel = viewModel(api)
+            viewModel.setState(RealsRootUiState.Ready(session = draftSession()))
+
+            viewModel.openFirstChat("match-1", "chat-1")
+            advanceUntilIdle()
+
+            val ready = viewModel.uiState.value as RealsRootUiState.Ready
+            assertEquals("La conversación se cerró por inactividad.", ready.home.homeMessage)
+            assertTrue(ready.home.allowDraftHomeWithoutInteractions)
+            assertTrue(ready.home.screenModel?.pendingActions?.isEmpty() == true)
+            assertEquals(1, api.calls.count { it == "getFirstChatForMatch" })
+            assertEquals(1, api.calls.count { it == "getHome" })
+        }
+
+    @Test
+    fun `terminal first chat refresh returns Home with terminal message`() =
+        runTest(dispatcher) {
+            val api = FakeRealsApi().apply {
+                chatResponse = backendErrorResponse(
+                    statusCode = 409,
+                    code = "CHAT_EXPIRED",
+                )
+                homeResponse = Response.success(emptyDraftHome())
+            }
+            val viewModel = viewModel(api)
+            viewModel.setState(firstChatState())
+
+            viewModel.refreshFirstChat(silent = false)
+            advanceUntilIdle()
+
+            val ready = viewModel.uiState.value as RealsRootUiState.Ready
+            assertEquals("El chat venció.", ready.home.homeMessage)
+            assertTrue(ready.home.allowDraftHomeWithoutInteractions)
+            assertEquals(1, api.calls.count { it == "getFirstChatForMatch" })
+            assertEquals(1, api.calls.count { it == "getHome" })
+        }
+
+    @Test
     fun `pending engagement return keeps draft profile in Home even when no interactions remain`() =
         runTest(dispatcher) {
             val api = FakeRealsApi().apply {

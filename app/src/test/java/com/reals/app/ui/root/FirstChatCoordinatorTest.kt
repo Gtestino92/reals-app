@@ -43,6 +43,7 @@ import com.reals.app.testutil.TestDtos
 import com.reals.app.testutil.backendErrorResponse
 import com.reals.app.testutil.testApiExecutor
 import com.reals.app.testutil.testJson
+import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -137,6 +138,86 @@ class FirstChatCoordinatorTest {
         assertEquals("match-1", state.match?.id)
         assertEquals(null, state.chat)
         assertEquals(BackendErrorCode.ChatNotFound, error.backendErrorCode)
+    }
+
+    @Test
+    fun `load chat abandoned returns route home and not show`() = runBlocking {
+        api.chatResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "CHAT_ABANDONED",
+        )
+
+        val result = coordinator.load(
+            session = TestDomain.session(),
+            matchId = "match-1",
+            chatId = null,
+        )
+
+        assertEquals(
+            FirstChatLoadResult.RouteHome("La conversación se cerró por inactividad."),
+            result,
+        )
+        assertFalse(result is FirstChatLoadResult.Show)
+    }
+
+    @Test
+    fun `load chat expired returns route home and not show`() = runBlocking {
+        api.chatResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "CHAT_EXPIRED",
+        )
+
+        val result = coordinator.load(
+            session = TestDomain.session(),
+            matchId = "match-1",
+            chatId = null,
+        )
+
+        assertEquals(
+            FirstChatLoadResult.RouteHome("El chat venció."),
+            result,
+        )
+        assertFalse(result is FirstChatLoadResult.Show)
+    }
+
+    @Test
+    fun `load network chat failure remains recoverable partial state`() = runBlocking {
+        api.beforeGetFirstChatForMatchResponse = {
+            throw IOException("offline")
+        }
+
+        val result = coordinator.load(
+            session = TestDomain.session(),
+            matchId = "match-1",
+            chatId = null,
+        )
+
+        assertTrue(result is FirstChatLoadResult.Show)
+        val state = (result as FirstChatLoadResult.Show).state
+        assertEquals("match-1", state.match?.id)
+        assertEquals(null, state.chat)
+        assertTrue(state.error is ApiError.Network)
+    }
+
+    @Test
+    fun `load generic backend chat failure remains recoverable partial state`() = runBlocking {
+        api.chatResponse = backendErrorResponse(
+            statusCode = 500,
+            code = "SERVER_ERROR",
+        )
+
+        val result = coordinator.load(
+            session = TestDomain.session(),
+            matchId = "match-1",
+            chatId = null,
+        )
+
+        assertTrue(result is FirstChatLoadResult.Show)
+        val state = (result as FirstChatLoadResult.Show).state
+        val error = state.error as ApiError.Backend
+        assertEquals("match-1", state.match?.id)
+        assertEquals(null, state.chat)
+        assertEquals(BackendErrorCode.Unknown, error.backendErrorCode)
     }
 
     @Test
@@ -270,6 +351,63 @@ class FirstChatCoordinatorTest {
         val result = coordinator.refresh(current, silent = false)
 
         assertTrue(result is FirstChatRefreshResult.Closed)
+    }
+
+    @Test
+    fun `refresh chat abandoned returns Closed without stale chat`() = runBlocking {
+        api.chatResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "CHAT_ABANDONED",
+        )
+        val current = firstChatState(chatStatus = ChatStatus.Active)
+
+        val result = coordinator.refresh(current, silent = false)
+
+        assertEquals(
+            FirstChatRefreshResult.Closed(
+                matchState = current.match?.state,
+                chatStatus = ChatStatus.Abandoned,
+            ),
+            result,
+        )
+        assertFalse(result is FirstChatRefreshResult.Show)
+    }
+
+    @Test
+    fun `refresh chat expired returns Closed without stale chat`() = runBlocking {
+        api.chatResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "CHAT_EXPIRED",
+        )
+        val current = firstChatState(chatStatus = ChatStatus.Active)
+
+        val result = coordinator.refresh(current, silent = false)
+
+        assertEquals(
+            FirstChatRefreshResult.Closed(
+                matchState = current.match?.state,
+                chatStatus = ChatStatus.Expired,
+            ),
+            result,
+        )
+        assertFalse(result is FirstChatRefreshResult.Show)
+    }
+
+    @Test
+    fun `refresh recoverable chat failure keeps current chat and exposes error`() = runBlocking {
+        api.chatResponse = backendErrorResponse(
+            statusCode = 500,
+            code = "SERVER_ERROR",
+        )
+        val current = firstChatState(chatStatus = ChatStatus.Active)
+
+        val result = coordinator.refresh(current, silent = false)
+
+        assertTrue(result is FirstChatRefreshResult.Show)
+        val state = (result as FirstChatRefreshResult.Show).state
+        assertEquals(current.chat, state.chat)
+        assertEquals(false, state.refreshing)
+        assertTrue(state.error is ApiError.Backend)
     }
 
     @Test
