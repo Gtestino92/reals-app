@@ -97,6 +97,7 @@ fun SecondChatAttendanceResponseDto.toDomain(): SecondChatStatus = SecondChatSta
     mustRespondToPartner = mustRespondToPartner,
     lastMessageAt = lastMessageAt,
     lastMessageSenderId = lastMessageSenderId,
+    audioPolicy = audioPolicy?.toDomain(),
 )
 
 fun SecondChatResolutionRequestResponseDto.toDomain(): SecondChatResolutionRequest =
