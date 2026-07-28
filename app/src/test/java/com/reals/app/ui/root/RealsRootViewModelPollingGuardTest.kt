@@ -183,6 +183,62 @@ class RealsRootViewModelPollingGuardTest {
     }
 
     @Test
+    fun `silent first chat refresh started before draft deletion cannot restore deleted draft`() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val refreshStarted = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeGetFirstChatForMatchResponse = {
+                refreshStarted.complete(Unit)
+                gate.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        val draft = audioDraft("first-chat-draft.m4a")
+        viewModel.setState(firstChatState().copy(audioDraft = draft))
+
+        viewModel.refreshFirstChat(silent = true)
+        runCurrent()
+        refreshStarted.await()
+
+        viewModel.deleteFirstChatAudioDraft()
+        runCurrent()
+        assertNull((viewModel.uiState.value as RealsRootUiState.FirstChat).audioDraft)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertNull((viewModel.uiState.value as RealsRootUiState.FirstChat).audioDraft)
+    }
+
+    @Test
+    fun `silent second chat refresh started before draft deletion cannot restore deleted draft`() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val refreshStarted = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeGetSecondChatStatusResponse = {
+                refreshStarted.complete(Unit)
+                gate.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        val draft = audioDraft("second-chat-draft.m4a")
+        viewModel.setState(secondChatState().copy(audioDraft = draft))
+
+        viewModel.refreshSecondChat(silent = true)
+        runCurrent()
+        refreshStarted.await()
+
+        viewModel.deleteSecondChatAudioDraft()
+        runCurrent()
+        assertNull((viewModel.uiState.value as RealsRootUiState.SecondChat).audioDraft)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertNull((viewModel.uiState.value as RealsRootUiState.SecondChat).audioDraft)
+    }
+
+    @Test
     fun `scheduling refresh ignores overlapping calls and allows later refresh`() = runTest(dispatcher) {
         val gate = CompletableDeferred<Unit>()
         val firstCallStarted = CompletableDeferred<Unit>()
@@ -747,6 +803,14 @@ class RealsRootViewModelPollingGuardTest {
             partnerName = "Alex",
             chatId = "chat-1",
             chat = TestDtos.chat(status = "ACTIVE").copy(id = "chat-1", chatType = "SECOND_CHAT").toDomain(),
+        )
+
+    private fun audioDraft(fileName: String): ChatAudioDraftUiState =
+        ChatAudioDraftUiState(
+            filePath = "C:\\temp\\$fileName",
+            clientMessageId = "$fileName-client-id",
+            durationMillis = 2_000L,
+            sizeBytes = 12_345L,
         )
 
     private fun schedulingState(

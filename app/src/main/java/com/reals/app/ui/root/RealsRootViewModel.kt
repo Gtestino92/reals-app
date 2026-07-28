@@ -424,7 +424,7 @@ class RealsRootViewModel(
             val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return@launch
             if (latest.audioUpload.uploading) return@launch
             if (latest.audioUpload.completedClientMessageId != current.audioUpload.completedClientMessageId) return@launch
-            if (latest.audioDraft != current.audioDraft && latest.audioDraft != null) return@launch
+            if (latest.audioDraft != current.audioDraft) return@launch
             if (silent && (
                     latest.connectionId != current.connectionId ||
                         latest.sending ||
@@ -962,7 +962,7 @@ class RealsRootViewModel(
             val latest = _uiState.value as? RealsRootUiState.FirstChat ?: return@launch
             if (latest.audioUpload.uploading) return@launch
             if (latest.audioUpload.completedClientMessageId != current.audioUpload.completedClientMessageId) return@launch
-            if (latest.audioDraft != current.audioDraft && latest.audioDraft != null) return@launch
+            if (latest.audioDraft != current.audioDraft) return@launch
             if (silent && (
                     latest.matchId != current.matchId ||
                         latest.sending ||

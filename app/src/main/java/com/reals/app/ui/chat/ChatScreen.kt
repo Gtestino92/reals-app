@@ -622,6 +622,7 @@ fun ChatScreen(
                     onSend = {
                         if (composerState.sendButtonEnabled && onSendMessage(draft)) {
                             draft = ""
+                            localAudioError = null
                         }
                     },
                     onStartRecording = {
