@@ -4,7 +4,6 @@
 - Treat current GitHub code and documentation as the source of truth.
 - Confirm the current branch and HEAD before recommendations or edits.
 - Use `development` as the normal comparison base unless the task explicitly names another base.
-- Never leave a local feature branch tracking the comparison/base branch such as `origin/development`; if a feature branch has no matching remote branch, leave it without an upstream until it is explicitly pushed or linked to its own remote branch.
 - Inspect actual files and relevant tests before proposing code.
 - Compare the feature branch against the base before changing it.
 - Do not reconstruct architecture solely from task descriptions, prior reports, or memory.
@@ -56,6 +55,22 @@ Explicitly review for:
 - Do not run the complete test suite or every Gradle task.
 - If a full suite appears necessary, stop and explain why instead of running it.
 - Report exact commands and results.
+
+## Android Gradle Validation
+- Use the Gradle Wrapper from the existing checkout.
+- The repository default is a 3 GiB Gradle heap with `org.gradle.workers.max=2`.
+- Run only one Gradle invocation at a time.
+- Do not use `clean`, `--no-daemon`, `--no-configuration-cache`, or `--offline` for routine validation.
+- Do not run `gradlew --stop` or kill Java processes as a routine first response.
+- Use focused flavor/task validation rather than every variant or the complete test suite.
+- Normal focused compile:
+  `.\gradlew.bat --daemon --configuration-cache --build-cache --console=plain :app:compileLocalDebugKotlin`
+- If the Kotlin compiler daemon is demonstrably stalled in the current Windows environment, retry once with:
+  `.\gradlew.bat --daemon --configuration-cache --build-cache --console=plain -Pkotlin.compiler.execution.strategy=in-process :app:compileLocalDebugKotlin`
+- Treat `in-process` as an environment fallback, not a project-wide default.
+- Reuse one focused unit-test invocation with multiple `--tests` filters where practical.
+- Never start another Gradle command while an earlier one remains active.
+- Before terminating a stuck build, record the active process command line and inspect the Gradle daemon log; terminate only processes proven to belong to the current build.
 
 ## Documentation Rules
 - Update canonical product documentation only when behavior or contract changes.

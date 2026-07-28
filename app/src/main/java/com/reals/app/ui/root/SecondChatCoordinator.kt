@@ -2,6 +2,8 @@ package com.reals.app.ui.root
 
 import com.reals.app.core.network.ApiResult
 import com.reals.app.core.network.ApiError
+import com.reals.app.core.network.BackendErrorCode
+import com.reals.app.core.network.backendErrorCode
 import com.reals.app.di.SecondChatFeatureDependencies
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatExitReason
@@ -322,8 +324,15 @@ internal class SecondChatCoordinator(
                     ),
                     error = null,
                 )
-                val refreshed = if (result.error.isAudioPolicyConflict()) refresh(failed, silent = true) else null
-                (refreshed as? SecondChatLoadResult.Show)?.state ?: failed
+                val refreshed = if (result.error.isSecondChatAudioLifecycleConflict()) {
+                    refresh(failed, silent = true)
+                } else {
+                    null
+                }
+                (refreshed as? SecondChatLoadResult.Show)
+                    ?.state
+                    ?.withTerminalAudioDraftDiscardedIfNeeded(file)
+                    ?: failed
             }
         }
     }
@@ -552,4 +561,28 @@ internal sealed interface SecondChatActionResult {
         val session: ProvisionedSession,
         val message: String?,
     ) : SecondChatActionResult
+}
+
+private fun ApiError.isSecondChatAudioLifecycleConflict(): Boolean =
+    isAudioPolicyConflict() ||
+        this is ApiError.Backend &&
+        backendErrorCode in setOf(
+            BackendErrorCode.ChatNotAvailable,
+            BackendErrorCode.SecondChatExpired,
+            BackendErrorCode.SecondChatAlreadyResolved,
+            BackendErrorCode.SecondChatConversationAlreadyResolved,
+            BackendErrorCode.SecondChatJoinRequired,
+        )
+
+private fun RealsRootUiState.SecondChat.withTerminalAudioDraftDiscardedIfNeeded(
+    file: File,
+): RealsRootUiState.SecondChat {
+    val writable = chat?.status == ChatStatus.Active &&
+        lifecycle.timingPresentation().genuinelyActive
+    if (writable) return this
+    runCatching { file.delete() }
+    return copy(
+        audioDraft = null,
+        audioUpload = ChatAudioUploadUiState(),
+    )
 }

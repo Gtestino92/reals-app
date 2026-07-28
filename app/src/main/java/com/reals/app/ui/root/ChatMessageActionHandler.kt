@@ -227,12 +227,12 @@ internal object ChatMessageActionHandler {
         val file = File(filePath)
         if (clientMessageId.isBlank() || !file.isFile || file.length() <= 0L) {
             return ChatAudioSendPreparation.Rejected(
-                invalidState(ApiError.Unexpected("La grabaciÃ³n no es vÃ¡lida."), true)
+                invalidState(ApiError.Unexpected("La grabación no es válida."), true)
             )
         }
         if (maxFileSizeBytes != null && file.length() > maxFileSizeBytes) {
             return ChatAudioSendPreparation.Rejected(
-                invalidState(ApiError.Unexpected("La grabaciÃ³n supera el tamaÃ±o permitido."), true)
+                invalidState(ApiError.Unexpected("La grabación supera el tamaño permitido."), true)
             )
         }
         if (draftDurationMillis == null || draftDurationMillis < 1_000L) {
@@ -262,19 +262,19 @@ internal object ChatMessageActionHandler {
                 ChatAudioUnavailableReason.GuidanceRequired ->
                     "Respondan la pregunta actual para habilitar audios."
                 ChatAudioUnavailableReason.GuidanceNotAvailable ->
-                    "Los audios se habilitarÃ¡n al avanzar en las preguntas."
+                    "Los audios se habilitarán al avanzar en las preguntas."
                 ChatAudioUnavailableReason.LimitReached ->
                     "Ya enviaste el audio disponible en este chat."
                 ChatAudioUnavailableReason.WaitingForBoth ->
                     "El audio se habilita cuando ambas personas hayan ingresado."
                 ChatAudioUnavailableReason.WaitingDelay ->
-                    "El audio todavÃ­a no estÃ¡ disponible."
+                    "El audio todavía no está disponible."
                 ChatAudioUnavailableReason.ChatNotWritable ->
                     "Este chat no admite nuevos mensajes."
                 ChatAudioUnavailableReason.FeatureDisabled ->
-                    "Los audios no estÃ¡n disponibles."
+                    "Los audios no están disponibles."
                 is ChatAudioUnavailableReason.Unknown,
-                null -> "El audio no estÃ¡ disponible en este momento."
+                null -> "El audio no está disponible en este momento."
             }
         )
 

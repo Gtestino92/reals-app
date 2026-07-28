@@ -73,7 +73,7 @@ internal const val EXPIRED_SELECTED_SLOT_MESSAGE =
 internal const val CONFLICTING_SLOT_MESSAGE =
     "Ese horario se superpone con otra cita confirmada."
 internal const val CONFLICTING_SELECTED_SLOT_MESSAGE =
-    "Uno o mÃ¡s horarios elegidos se superponen con otra cita confirmada. Quitalos o elegi otro horario."
+    "Uno o más horarios elegidos se superponen con otra cita confirmada. Quitalos o elegí otro horario."
 
 internal fun schedulingSlotConflictPolicy(
     candidate: String,

@@ -53,6 +53,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -115,6 +117,11 @@ internal data class ChatLoadingPresentation(
     val body: String,
 )
 
+internal enum class ChatAudioStopDisposition {
+    Preview,
+    Send,
+}
+
 internal fun chatLoadingPresentation(
     chatTitlePrefix: String,
     partnerName: String?,
@@ -175,6 +182,7 @@ fun ChatScreen(
     onSendAudioMessage: (filePath: String, clientMessageId: String) -> Boolean = { _, _ -> false },
     onClearAudioUploadState: () -> Unit = {},
     onAudioDraftReady: (ChatAudioDraftUiState) -> Unit = {},
+    onAudioDraftReadyAndSend: (ChatAudioDraftUiState) -> Boolean = { false },
     onDeleteAudioDraft: () -> Unit = {},
     onRefreshAudioUrl: suspend (messageId: String) -> String? = { null },
     onRetryOptimisticMessage: (localId: String, content: String) -> Unit,
@@ -205,6 +213,7 @@ fun ChatScreen(
     var recordingStartedAtMillis by remember(chat?.id) { mutableStateOf<Long?>(null) }
     var recordingOperationInFlight by remember(chat?.id) { mutableStateOf(false) }
     var localAudioError by rememberSaveable(chat?.id) { mutableStateOf<String?>(null) }
+    var localAudioInfo by rememberSaveable(chat?.id) { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
@@ -272,9 +281,9 @@ fun ChatScreen(
             (secondChatLifecycle == null || secondChatTiming?.genuinelyActive == true) &&
             (!showMutualExitActions || !exitFlowLocked)
     val manualBlockBusy =
-        loading || refreshing || sending || audioInteractionBusy || actionLoading || guidanceActionLoading ||
-            manualBlockLoading
+        loading || refreshing || sending || actionLoading || guidanceActionLoading || manualBlockLoading
     val canManualBlock = !manualBlockBusy
+    val canUseSafetyActions = canChat && !loadingChatAction && !manualBlockLoading
     val canOpenOverflowActions =
         (!loadingChatAction && ((!exitFlowLocked && canUseChatActions) || !showMutualExitActions)) ||
             canManualBlock
@@ -298,21 +307,45 @@ fun ChatScreen(
         loadingChatAction = loadingChatAction || audioInteractionBusy,
         draft = draft,
     )
-    fun publishRecorderResult(result: ChatAudioRecorderResult) {
+    fun publishRecorderResult(
+        result: ChatAudioRecorderResult,
+        disposition: ChatAudioStopDisposition = ChatAudioStopDisposition.Preview,
+    ) {
         when (result) {
             is ChatAudioRecorderResult.Ready -> {
-                onAudioDraftReady(result.draft.toUiState())
+                val draftState = result.draft.toUiState()
                 localAudioError = null
-                onClearAudioUploadState()
+                localAudioInfo = if (result.stopSource == ChatAudioStopSource.MaxDuration) {
+                    "Duración máxima alcanzada."
+                } else {
+                    null
+                }
+                if (
+                    disposition == ChatAudioStopDisposition.Send &&
+                    result.stopSource == ChatAudioStopSource.Manual
+                ) {
+                    if (onAudioDraftReadyAndSend(draftState)) {
+                        localAudioInfo = null
+                    }
+                } else {
+                    onAudioDraftReady(draftState)
+                    onClearAudioUploadState()
+                }
             }
 
-            is ChatAudioRecorderResult.Failed -> localAudioError = result.message
+            is ChatAudioRecorderResult.Failed -> {
+                localAudioError = result.message
+                localAudioInfo = null
+            }
             ChatAudioRecorderResult.Cancelled,
             ChatAudioRecorderResult.Started -> Unit
         }
     }
 
-    fun stopRecordingToPreview(source: ChatAudioStopSource = ChatAudioStopSource.Manual) {
+    fun stopRecording(
+        source: ChatAudioStopSource = ChatAudioStopSource.Manual,
+        disposition: ChatAudioStopDisposition = ChatAudioStopDisposition.Preview,
+    ) {
         if (recordingOperationInFlight) return
         recordingOperationInFlight = true
         coroutineScope.launch {
@@ -323,7 +356,14 @@ fun ChatScreen(
             )
             recordingStartedAtMillis = null
             recordingOperationInFlight = false
-            publishRecorderResult(result)
+            publishRecorderResult(
+                result = result,
+                disposition = if (source == ChatAudioStopSource.Manual) {
+                    disposition
+                } else {
+                    ChatAudioStopDisposition.Preview
+                },
+            )
         }
     }
 
@@ -332,24 +372,49 @@ fun ChatScreen(
         playbackController.release()
         onDeleteAudioDraft()
         onClearAudioUploadState()
+        localAudioInfo = null
         recordingOperationInFlight = true
         coroutineScope.launch {
             val result = recorderController.start(
                 maxDurationMillis = chat?.audioPolicy?.maxDurationMillis ?: DEFAULT_CHAT_AUDIO_MAX_DURATION_MILLIS,
                 maxFileSizeBytes = chat?.audioPolicy?.maxFileSizeBytes ?: DEFAULT_CHAT_AUDIO_MAX_FILE_SIZE_BYTES,
-                onLimitReached = { stopSource -> coroutineScope.launch { stopRecordingToPreview(stopSource) } },
+                onLimitReached = { stopSource ->
+                    coroutineScope.launch {
+                        stopRecording(stopSource, ChatAudioStopDisposition.Preview)
+                    }
+                },
             )
             recordingOperationInFlight = false
             when (result) {
                 ChatAudioRecorderResult.Started -> {
                     recordingStartedAtMillis = SystemClock.elapsedRealtime()
                     localAudioError = null
+                    localAudioInfo = null
                 }
 
-                is ChatAudioRecorderResult.Failed -> localAudioError = result.message
+                is ChatAudioRecorderResult.Failed -> {
+                    localAudioError = result.message
+                    localAudioInfo = null
+                }
                 ChatAudioRecorderResult.Cancelled,
                 is ChatAudioRecorderResult.Ready -> publishRecorderResult(result)
             }
+        }
+    }
+
+    fun cancelRecording(source: ChatAudioStopSource = ChatAudioStopSource.Cancel) {
+        recorderController.invalidateAndReleaseAsync(source = source)
+        recordingStartedAtMillis = null
+        recordingOperationInFlight = false
+    }
+
+    fun cleanupAudioForSafetyAction() {
+        cancelRecording(ChatAudioStopSource.Cancel)
+        playbackController.release()
+        localAudioError = null
+        localAudioInfo = null
+        if (!audioUpload.uploading) {
+            onDeleteAudioDraft()
         }
     }
 
@@ -360,23 +425,25 @@ fun ChatScreen(
             startRecording()
         } else {
             localAudioError = "Necesitamos permiso de micrófono para grabar audios."
+            localAudioInfo = null
         }
     }
 
     DisposableEffect(chat?.id) {
         onDispose {
-            coroutineScope.launch { recorderController.release(deleteOutput = true) }
+            recorderController.invalidateAndReleaseAsync(deleteOutput = true)
             playbackController.release()
+            localAudioInfo = null
         }
     }
 
     DisposableEffect(lifecycleOwner, chat?.id) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
-                if (recordingStartedAtMillis != null) {
-                    coroutineScope.launch { recorderController.cancel(ChatAudioStopSource.Lifecycle) }
-                    recordingStartedAtMillis = null
+                if (recordingStartedAtMillis != null || recordingOperationInFlight) {
+                    cancelRecording(ChatAudioStopSource.Lifecycle)
                     localAudioError = "Se canceló la grabación al salir de la app."
+                    localAudioInfo = null
                 }
                 playbackController.onStoppedInBackground()
             }
@@ -390,14 +457,17 @@ fun ChatScreen(
         audioDraft?.takeIf { it.clientMessageId == completedClientMessageId } ?: return@LaunchedEffect
         playbackController.release()
         localAudioError = null
+        localAudioInfo = null
         onClearAudioUploadState()
     }
 
     LaunchedEffect(chat?.id, canSendMessages, audioComposerState.visible) {
-        if ((!canSendMessages || !audioComposerState.visible) && recordingStartedAtMillis != null) {
-            coroutineScope.launch { recorderController.cancel(ChatAudioStopSource.Lifecycle) }
-            recordingStartedAtMillis = null
+        if ((!canSendMessages || !audioComposerState.visible) &&
+            (recordingStartedAtMillis != null || recordingOperationInFlight)
+        ) {
+            cancelRecording(ChatAudioStopSource.Lifecycle)
             localAudioError = "La grabación se canceló porque el chat ya no admite mensajes."
+            localAudioInfo = null
         }
     }
 
@@ -499,6 +569,7 @@ fun ChatScreen(
                             enabled = canOpenOverflowActions,
                             actionLoading = loadingChatAction,
                             canUseExistingChatActions = canUseExistingChatActions,
+                            canUseSafetyActions = canUseSafetyActions,
                             canDecide = canDecide,
                             canManualBlock = canManualBlock,
                             showMutualExitActions = showMutualExitActions,
@@ -513,11 +584,13 @@ fun ChatScreen(
                             },
                             onShowSafety = {
                                 actionsMenuExpanded = false
+                                cleanupAudioForSafetyAction()
                                 showingSafetyDialog = true
                             },
                             onShowManualBlock = {
                                 actionsMenuExpanded = false
                                 onClearManualBlockError()
+                                cleanupAudioForSafetyAction()
                                 showingManualBlockDialog = true
                             },
                         )
@@ -612,7 +685,9 @@ fun ChatScreen(
                     audioDraft = audioDraft,
                     uploadState = audioUpload,
                     localAudioError = localAudioError,
+                    localAudioInfo = localAudioInfo,
                     recordingStartedAtMillis = recordingStartedAtMillis,
+                    recordingOperationInFlight = recordingOperationInFlight,
                     playbackState = playbackController.state,
                     onDraftChange = {
                         if (composerState.canEditDraft) {
@@ -623,6 +698,7 @@ fun ChatScreen(
                         if (composerState.sendButtonEnabled && onSendMessage(draft)) {
                             draft = ""
                             localAudioError = null
+                            localAudioInfo = null
                         }
                     },
                     onStartRecording = {
@@ -640,11 +716,19 @@ fun ChatScreen(
                             recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                         }
                     },
-                    onStopRecording = { stopRecordingToPreview() },
+                    onStopRecording = {
+                        stopRecording(ChatAudioStopSource.Manual, ChatAudioStopDisposition.Preview)
+                    },
+                    onSendRecording = {
+                        stopRecording(ChatAudioStopSource.Manual, ChatAudioStopDisposition.Send)
+                    },
+                    onMaxDurationReached = {
+                        stopRecording(ChatAudioStopSource.MaxDuration, ChatAudioStopDisposition.Preview)
+                    },
                     onCancelRecording = {
-                        coroutineScope.launch { recorderController.cancel(ChatAudioStopSource.Cancel) }
-                        recordingStartedAtMillis = null
+                        cancelRecording(ChatAudioStopSource.Cancel)
                         localAudioError = null
+                        localAudioInfo = null
                     },
                     onPlayDraft = { draftToPlay ->
                         playbackController.playLocal(
@@ -659,9 +743,11 @@ fun ChatScreen(
                         playbackController.release()
                         onDeleteAudioDraft()
                         localAudioError = null
+                        localAudioInfo = null
                         onClearAudioUploadState()
                     },
                     onSendAudio = { draftToSend ->
+                        localAudioInfo = null
                         onSendAudioMessage(draftToSend.filePath, draftToSend.clientMessageId)
                     },
                 )
@@ -669,7 +755,7 @@ fun ChatScreen(
         }
     }
 
-    if (showingSafetyDialog && showExitActions && canUseExistingChatActions) {
+    if (showingSafetyDialog && showExitActions && canUseSafetyActions) {
         SafetyReportDialog(
             details = safetyDetails,
             selectedReason = safetyReportReasonFromRawValue(safetyReasonRawValue),
@@ -680,6 +766,7 @@ fun ChatScreen(
                 if (!actionLoading) showingSafetyDialog = false
             },
             onConfirm = {
+                cleanupAudioForSafetyAction()
                 onSafetyCancel(
                     safetyReportReasonFromRawValue(safetyReasonRawValue),
                     safetyDetails,
@@ -695,7 +782,10 @@ fun ChatScreen(
         ManualBlockConfirmationDialog(
             loading = manualBlockLoading,
             error = manualBlockError,
-            onConfirm = onManualBlock,
+            onConfirm = {
+                cleanupAudioForSafetyAction()
+                onManualBlock()
+            },
             onDismiss = {
                 if (!manualBlockLoading) {
                     onClearManualBlockError()
@@ -1077,6 +1167,7 @@ private fun ChatOverflowMenu(
     enabled: Boolean,
     actionLoading: Boolean,
     canUseExistingChatActions: Boolean,
+    canUseSafetyActions: Boolean,
     canDecide: Boolean,
     canManualBlock: Boolean,
     showMutualExitActions: Boolean,
@@ -1121,7 +1212,7 @@ private fun ChatOverflowMenu(
 
             DropdownMenuItem(
                 text = { Text("Reportar y cerrar chat") },
-                enabled = !actionLoading && canUseExistingChatActions,
+                enabled = !actionLoading && canUseSafetyActions,
                 onClick = onShowSafety,
             )
 
@@ -1393,19 +1484,23 @@ private fun MessageComposer(
     audioDraft: ChatAudioDraftUiState?,
     uploadState: ChatAudioUploadUiState,
     localAudioError: String?,
+    localAudioInfo: String?,
     recordingStartedAtMillis: Long?,
+    recordingOperationInFlight: Boolean,
     playbackState: ChatAudioPlaybackUiState,
     onDraftChange: (String) -> Unit,
     onSend: () -> Unit,
     onStartRecording: () -> Unit,
     onStopRecording: () -> Unit,
+    onSendRecording: () -> Unit,
+    onMaxDurationReached: () -> Unit,
     onCancelRecording: () -> Unit,
     onPlayDraft: (ChatAudioDraftUiState) -> Unit,
     onPauseAudio: () -> Unit,
     onDeleteDraft: () -> Unit,
     onSendAudio: (ChatAudioDraftUiState) -> Boolean,
 ) {
-    var recordingNowMillis by rememberSaveable(recordingStartedAtMillis) {
+    var recordingNowMillis by remember(recordingStartedAtMillis) {
         mutableStateOf(SystemClock.elapsedRealtime())
     }
     LaunchedEffect(recordingStartedAtMillis) {
@@ -1427,6 +1522,9 @@ private fun MessageComposer(
             localAudioError?.let {
                 Text(it, color = MaterialTheme.colorScheme.error)
             }
+            localAudioInfo?.let {
+                Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             uploadState.error?.let {
                 ApiErrorFeedbackCard(it, ErrorContext.Chat)
             }
@@ -1439,10 +1537,17 @@ private fun MessageComposer(
 
             if (recordingStartedAtMillis != null) {
                 val elapsedMillis = (recordingNowMillis - recordingStartedAtMillis).coerceAtLeast(0L)
+                LaunchedEffect(elapsedMillis, audioState.maxDurationMillis, recordingOperationInFlight) {
+                    if (!recordingOperationInFlight && elapsedMillis >= audioState.maxDurationMillis) {
+                        onMaxDurationReached()
+                    }
+                }
                 RecordingComposer(
                     elapsedMillis = elapsedMillis,
                     maxDurationMillis = audioState.maxDurationMillis,
+                    controlsEnabled = !recordingOperationInFlight,
                     onStop = onStopRecording,
+                    onSend = onSendRecording,
                     onCancel = onCancelRecording,
                 )
             } else if (audioDraft != null) {
@@ -1468,6 +1573,21 @@ private fun MessageComposer(
                         enabled = state.canEditDraft,
                         minLines = 1,
                         maxLines = 4,
+                        trailingIcon = if (audioState.visible) {
+                            {
+                                IconButton(
+                                    onClick = onStartRecording,
+                                    enabled = audioState.startEnabled,
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_mic),
+                                        contentDescription = "Grabar audio",
+                                    )
+                                }
+                            }
+                        } else {
+                            null
+                        },
                         modifier = Modifier.weight(1f),
                     )
 
@@ -1485,15 +1605,6 @@ private fun MessageComposer(
                                 painter = painterResource(R.drawable.ic_send),
                                 contentDescription = "Enviar",
                             )
-                        }
-                    }
-
-                    if (audioState.visible) {
-                        FilledIconButton(
-                            onClick = onStartRecording,
-                            enabled = audioState.startEnabled,
-                        ) {
-                            Text("Mic")
                         }
                     }
                 }
@@ -1514,7 +1625,9 @@ private fun MessageComposer(
 private fun RecordingComposer(
     elapsedMillis: Long,
     maxDurationMillis: Long,
+    controlsEnabled: Boolean,
     onStop: () -> Unit,
+    onSend: () -> Unit,
     onCancel: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1523,12 +1636,37 @@ private fun RecordingComposer(
             progress = { (elapsedMillis.toFloat() / maxDurationMillis.toFloat()).coerceIn(0f, 1f) },
             modifier = Modifier.fillMaxWidth(),
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onStop, modifier = Modifier.weight(1f)) {
-                Text("Detener")
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(
+                onClick = onCancel,
+                enabled = controlsEnabled,
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_close),
+                    contentDescription = "Cancelar grabación",
+                )
             }
-            OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) {
-                Text("Cancelar")
+            IconButton(
+                onClick = onStop,
+                enabled = controlsEnabled,
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_stop),
+                    contentDescription = "Detener y revisar",
+                )
+            }
+            FilledIconButton(
+                onClick = onSend,
+                enabled = controlsEnabled,
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_send),
+                    contentDescription = "Enviar audio",
+                )
             }
         }
     }
@@ -1755,7 +1893,7 @@ private fun AudioPlaybackRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            TextButton(
+            IconButton(
                 onClick = {
                     if (phase == ChatAudioPlaybackPhase.Playing || phase == ChatAudioPlaybackPhase.Preparing) {
                         onPause()
@@ -1765,15 +1903,27 @@ private fun AudioPlaybackRow(
                 },
                 enabled = phase != ChatAudioPlaybackPhase.Preparing,
             ) {
-                Text(
-                    when (phase) {
-                        ChatAudioPlaybackPhase.Playing -> "Pausar"
-                        ChatAudioPlaybackPhase.Preparing -> "Cargando..."
-                        ChatAudioPlaybackPhase.Failed -> "Reintentar"
-                        ChatAudioPlaybackPhase.Idle,
-                        ChatAudioPlaybackPhase.Paused -> "Reproducir"
-                    }
-                )
+                when (phase) {
+                    ChatAudioPlaybackPhase.Preparing -> CircularProgressIndicator(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .semantics { contentDescription = "Cargando audio" },
+                        strokeWidth = 2.dp,
+                    )
+                    ChatAudioPlaybackPhase.Playing -> Icon(
+                        painter = painterResource(R.drawable.ic_pause),
+                        contentDescription = "Pausar audio",
+                    )
+                    ChatAudioPlaybackPhase.Failed -> Icon(
+                        painter = painterResource(R.drawable.ic_replay),
+                        contentDescription = "Reintentar audio",
+                    )
+                    ChatAudioPlaybackPhase.Idle,
+                    ChatAudioPlaybackPhase.Paused -> Icon(
+                        painter = painterResource(R.drawable.ic_play),
+                        contentDescription = "Reproducir audio",
+                    )
+                }
             }
             Text("${formatAudioDuration(positionMillis.takeIf { active } ?: 0L)} / ${formatAudioDuration(durationMillis)}")
         }
