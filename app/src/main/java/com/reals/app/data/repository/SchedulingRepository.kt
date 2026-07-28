@@ -8,6 +8,7 @@ import com.reals.app.data.api.RealsApi
 import com.reals.app.data.dto.AddProposalRequestDto
 import com.reals.app.data.dto.RejectPartnerProposalsRequestDto
 import com.reals.app.data.mapper.toDomain
+import com.reals.app.domain.model.SchedulingAvailability
 import com.reals.app.domain.model.SchedulingConnection
 import com.reals.app.domain.model.SchedulingNegotiation
 import com.reals.app.domain.model.SchedulingProposal
@@ -28,6 +29,10 @@ class SchedulingRepository(
     suspend fun getProposals(connectionId: String): ApiResult<List<SchedulingProposal>> =
         authorizedCall { authorization -> api.getConnectionProposals(authorization, connectionId) }
             .map { proposals -> proposals.map { it.toDomain() } }
+
+    suspend fun getAvailability(connectionId: String): ApiResult<SchedulingAvailability> =
+        authorizedCall { authorization -> api.getConnectionSchedulingAvailability(authorization, connectionId) }
+            .map { it.toDomain() }
 
     suspend fun submitProposals(
         connectionId: String,

@@ -30,6 +30,7 @@ import com.reals.app.domain.usecase.GetMatchUseCase
 import com.reals.app.domain.usecase.GetMeUseCase
 import com.reals.app.domain.usecase.GetPartnerPersonalMessageUseCase
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
+import com.reals.app.domain.usecase.GetSchedulingAvailabilityUseCase
 import com.reals.app.domain.usecase.GetSchedulingNegotiationUseCase
 import com.reals.app.domain.usecase.GetSchedulingProposalsUseCase
 import com.reals.app.domain.usecase.GetSecondChatForConnectionUseCase
@@ -168,6 +169,7 @@ data class VisualApprovalFeatureDependencies(
 data class SchedulingFeatureDependencies(
     val getNegotiation: GetSchedulingNegotiationUseCase,
     val getProposals: GetSchedulingProposalsUseCase,
+    val getAvailability: GetSchedulingAvailabilityUseCase,
     val submitProposals: SubmitSchedulingProposalsUseCase,
     val acceptProposal: AcceptSchedulingProposalUseCase,
     val rejectPartnerProposals: RejectPartnerSchedulingProposalsUseCase,

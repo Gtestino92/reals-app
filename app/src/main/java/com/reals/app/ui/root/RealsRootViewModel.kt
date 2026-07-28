@@ -74,6 +74,7 @@ class RealsRootViewModel(
     private var silentFirstChatRefreshJob: Job? = null
     private var silentSecondChatRefreshJob: Job? = null
     private var schedulingOpenJob: Job? = null
+    private var schedulingRefreshJob: Job? = null
     private var silentSchedulingRefreshJob: Job? = null
     private var legalRerouteJob: Job? = null
     private var pairBlockedRerouteJob: Job? = null
@@ -655,10 +656,23 @@ class RealsRootViewModel(
     fun refreshScheduling(silent: Boolean = false) {
         val current = _uiState.value as? RealsRootUiState.Scheduling ?: return
         if (current.refreshing || current.submitting || current.manualBlock.loading) return
+        if (schedulingRefreshJob?.isActive == true) return
         if (silent && silentSchedulingRefreshJob?.isActive == true) return
 
+        val connectionId = current.connectionId
+        val matchId = current.matchId
         val job = viewModelScope.launch {
-            _uiState.value = schedulingCoordinator.refresh(current, silent)
+            val result = schedulingCoordinator.refresh(current, silent)
+            val latest = _uiState.value as? RealsRootUiState.Scheduling ?: return@launch
+            if (latest.connectionId != connectionId || latest.matchId != matchId) return@launch
+            if (latest.submitting || latest.manualBlock.loading) return@launch
+            _uiState.value = result
+        }
+        schedulingRefreshJob = job
+        job.invokeOnCompletion {
+            if (schedulingRefreshJob == job) {
+                schedulingRefreshJob = null
+            }
         }
         if (silent) {
             silentSchedulingRefreshJob = job
@@ -746,6 +760,9 @@ class RealsRootViewModel(
         val current = _uiState.value as? RealsRootUiState.Scheduling ?: return
         schedulingOpenJob?.cancel()
         schedulingOpenJob = null
+        schedulingRefreshJob?.cancel()
+        schedulingRefreshJob = null
+        silentSchedulingRefreshJob = null
         viewModelScope.launch {
             homeCoordinator.returnHome(current.session)
         }

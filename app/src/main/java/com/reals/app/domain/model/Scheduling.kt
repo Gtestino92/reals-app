@@ -35,6 +35,17 @@ data class SchedulingProposal(
     val createdAt: String,
 )
 
+data class SchedulingAvailability(
+    val conflictWindowMinutes: Long,
+    val unavailableWindows: List<SchedulingUnavailableWindow>,
+    val serverTime: String?,
+)
+
+data class SchedulingUnavailableWindow(
+    val startsAt: String?,
+    val endsAt: String?,
+)
+
 sealed interface ConnectionState {
     val rawValue: String
 

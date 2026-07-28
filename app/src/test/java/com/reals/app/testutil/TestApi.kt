@@ -34,6 +34,7 @@ import com.reals.app.data.dto.RecordLegalDocumentActionRequestDto
 import com.reals.app.data.dto.ReorderProfilePhotosRequestDto
 import com.reals.app.data.dto.RejectPartnerProposalsRequestDto
 import com.reals.app.data.dto.ScheduleProposalResponseDto
+import com.reals.app.data.dto.SchedulingAvailabilityResponseDto
 import com.reals.app.data.dto.SecondChatAttendanceResponseDto
 import com.reals.app.data.dto.SecondChatCompletionDecisionRequestDto
 import com.reals.app.data.dto.SendMessageRequestDto
@@ -130,6 +131,7 @@ class FakeRealsApi : RealsApi {
     var beforeGetChatExitRequestsResponse: suspend () -> Unit = {}
     var beforeGetSecondChatStatusResponse: suspend () -> Unit = {}
     var beforeGetConnectionNegotiationResponse: suspend () -> Unit = {}
+    var beforeGetConnectionSchedulingAvailabilityResponse: suspend () -> Unit = {}
     var beforeSubmitConnectionProposalsResponse: suspend () -> Unit = {}
     var beforeAcceptConnectionProposalResponse: suspend () -> Unit = {}
     var beforeRejectConnectionPartnerProposalsResponse: suspend () -> Unit = {}
@@ -182,6 +184,8 @@ class FakeRealsApi : RealsApi {
         Response.success(ConnectionDismissalResponseDto(dismissed = true))
     var negotiationResponse: Response<NegotiationResponseDto> = Response.success(TestDtos.negotiation())
     var proposalsResponse: Response<List<ScheduleProposalResponseDto>> = Response.success(listOf(TestDtos.proposal()))
+    var schedulingAvailabilityResponse: Response<SchedulingAvailabilityResponseDto> =
+        Response.success(TestDtos.schedulingAvailability())
     var submitProposalsResponse: Response<List<ScheduleProposalResponseDto>>? = null
     var acceptProposalResponse: Response<NegotiationResponseDto>? = null
     var rejectPartnerProposalsResponse: Response<NegotiationResponseDto>? = null
@@ -566,6 +570,17 @@ class FakeRealsApi : RealsApi {
         connectionId: String,
     ): Response<List<ScheduleProposalResponseDto>> =
         record("getConnectionProposals", authorization, connectionId) { proposalsResponse }
+
+    override suspend fun getConnectionSchedulingAvailability(
+        authorization: String,
+        connectionId: String,
+    ): Response<SchedulingAvailabilityResponseDto> =
+        record(
+            "getConnectionSchedulingAvailability",
+            authorization,
+            connectionId,
+            beforeResponse = beforeGetConnectionSchedulingAvailabilityResponse,
+        ) { schedulingAvailabilityResponse }
 
     override suspend fun submitConnectionProposals(
         authorization: String,

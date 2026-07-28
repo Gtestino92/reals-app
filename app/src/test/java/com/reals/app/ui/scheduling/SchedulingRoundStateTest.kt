@@ -5,8 +5,10 @@ import com.reals.app.core.network.BackendErrorCode
 import com.reals.app.core.network.backendErrorCode
 import com.reals.app.domain.model.NegotiationStatus
 import com.reals.app.domain.model.ProposalStatus
+import com.reals.app.domain.model.SchedulingAvailability
 import com.reals.app.domain.model.SchedulingNegotiation
 import com.reals.app.domain.model.SchedulingProposal
+import com.reals.app.domain.model.SchedulingUnavailableWindow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -277,6 +279,29 @@ class SchedulingRoundStateTest {
     }
 
     @Test
+    fun `slot conflict error is placed in proposal and review contexts`() {
+        val proposalPlacement = schedulingErrorPlacement(
+            stage = SchedulingStage.WaitingForMyProposals,
+            error = backendError("SCHEDULING_SLOT_CONFLICT"),
+        )
+        val reviewPlacement = schedulingErrorPlacement(
+            stage = SchedulingStage.ReviewPartnerProposals,
+            error = backendError("SCHEDULING_SLOT_CONFLICT"),
+        )
+
+        assertEquals(
+            BackendErrorCode.SchedulingSlotConflict,
+            (proposalPlacement.proposalError as ApiError.Backend).backendErrorCode,
+        )
+        assertEquals(null, proposalPlacement.topLevelError)
+        assertEquals(
+            BackendErrorCode.SchedulingSlotConflict,
+            (reviewPlacement.reviewError as ApiError.Backend).backendErrorCode,
+        )
+        assertEquals(null, reviewPlacement.topLevelError)
+    }
+
+    @Test
     fun `non proposal scheduling error remains top level`() {
         val error = backendError("SCHEDULING_EXPIRED")
 
@@ -402,6 +427,26 @@ class SchedulingRoundStateTest {
         assertEquals(listOf("future"), state.items.map { it.proposal.id })
         assertEquals(true, state.items.single().acceptanceAvailable)
         assertEquals(false, state.items.single().expired)
+    }
+
+    @Test
+    fun `review state keeps conflicting proposal visible and disables acceptance`() {
+        val nowMillis = java.time.Instant.parse("2026-07-15T22:30:00Z").toEpochMilli()
+        val state = schedulingReceivedProposalReviewState(
+            partnerProposals = listOf(
+                proposal("conflict", "partner", 2, proposedDateTime = "2026-07-15T20:00:00-03:00"),
+            ),
+            nowMillis = nowMillis,
+            availability = availability(
+                window("2026-07-15T20:00:00-03:00", "2026-07-15T20:00:00-03:00"),
+            ),
+        )
+
+        assertEquals(listOf("conflict"), state.items.map { it.proposal.id })
+        assertEquals(SchedulingProposalTimeAvailability.Conflicting, state.items.single().timeAvailability)
+        assertEquals(false, state.items.single().acceptanceAvailable)
+        assertEquals(true, state.items.single().conflicting)
+        assertEquals(true, state.resolutionByRejectionAvailable)
     }
 
     @Test
@@ -579,4 +624,20 @@ class SchedulingRoundStateTest {
             error = code,
             message = "backend error",
         )
+
+    private fun availability(
+        vararg windows: SchedulingUnavailableWindow,
+    ) = SchedulingAvailability(
+        conflictWindowMinutes = 60,
+        unavailableWindows = windows.toList(),
+        serverTime = "2026-07-27T18:00:00-03:00",
+    )
+
+    private fun window(
+        startsAt: String?,
+        endsAt: String?,
+    ) = SchedulingUnavailableWindow(
+        startsAt = startsAt,
+        endsAt = endsAt,
+    )
 }

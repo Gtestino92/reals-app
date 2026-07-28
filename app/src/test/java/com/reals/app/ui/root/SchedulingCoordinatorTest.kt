@@ -9,6 +9,7 @@ import com.reals.app.di.SchedulingFeatureDependencies
 import com.reals.app.data.mapper.toDomain
 import com.reals.app.domain.model.NegotiationStatus
 import com.reals.app.domain.usecase.AcceptSchedulingProposalUseCase
+import com.reals.app.domain.usecase.GetSchedulingAvailabilityUseCase
 import com.reals.app.domain.usecase.GetSchedulingNegotiationUseCase
 import com.reals.app.domain.usecase.GetSchedulingProposalsUseCase
 import com.reals.app.domain.usecase.RejectPartnerSchedulingProposalsUseCase
@@ -49,6 +50,7 @@ class SchedulingCoordinatorTest {
         assertEquals(false, state.loading)
         assertEquals(NegotiationStatus.Pending, state.negotiation?.status)
         assertEquals(1, state.proposals.size)
+        assertEquals(60L, state.availability?.conflictWindowMinutes)
     }
 
     @Test
@@ -92,7 +94,54 @@ class SchedulingCoordinatorTest {
         assertEquals(false, state.refreshing)
         assertEquals(NegotiationStatus.Pending, state.negotiation?.status)
         assertEquals(emptyList<Any>(), state.proposals)
+        assertEquals(60L, state.availability?.conflictWindowMinutes)
         assertEquals(ApiError.Backend::class, state.error!!::class)
+    }
+
+    @Test
+    fun `refresh availability failure preserves prior successful snapshot`() = runBlocking {
+        val priorAvailability = TestDtos.schedulingAvailability(
+            conflictWindowMinutes = 45,
+            unavailableWindows = listOf(TestDtos.unavailableWindow()),
+        ).toDomain()
+        api.schedulingAvailabilityResponse = backendErrorResponse(
+            statusCode = 503,
+            code = "SCHEDULING_AVAILABILITY_UNAVAILABLE",
+        )
+
+        val state = coordinator.refresh(
+            current = baseState().copy(availability = priorAvailability),
+            silent = false,
+        )
+
+        assertEquals(false, state.loading)
+        assertEquals(false, state.refreshing)
+        assertEquals(NegotiationStatus.Pending, state.negotiation?.status)
+        assertEquals(1, state.proposals.size)
+        assertEquals(priorAvailability, state.availability)
+        assertEquals(ApiError.Backend::class, state.error!!::class)
+    }
+
+    @Test
+    fun `refreshed availability replaces prior successful snapshot`() = runBlocking {
+        val priorAvailability = TestDtos.schedulingAvailability(
+            conflictWindowMinutes = 45,
+        ).toDomain()
+        api.schedulingAvailabilityResponse = Response.success(
+            TestDtos.schedulingAvailability(
+                conflictWindowMinutes = 75,
+                unavailableWindows = listOf(TestDtos.unavailableWindow()),
+            ),
+        )
+
+        val state = coordinator.refresh(
+            current = baseState().copy(availability = priorAvailability),
+            silent = false,
+        )
+
+        assertEquals(75L, state.availability?.conflictWindowMinutes)
+        assertEquals(1, state.availability?.unavailableWindows?.size)
+        assertEquals(null, state.error)
     }
 
     @Test
@@ -146,6 +195,42 @@ class SchedulingCoordinatorTest {
             error.toUserMessage(ErrorContext.Scheduling),
         )
         assertNull(state.message)
+    }
+
+    @Test
+    fun `submit slot conflict remains primary and refreshes scheduling snapshot`() = runBlocking {
+        api.submitProposalsResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "SCHEDULING_SLOT_CONFLICT",
+            message = "raw backend message",
+        )
+        api.schedulingAvailabilityResponse = Response.success(
+            TestDtos.schedulingAvailability(
+                unavailableWindows = listOf(TestDtos.unavailableWindow()),
+            ),
+        )
+
+        val state = coordinator.submitProposals(
+            current = baseState(),
+            proposedDateTimes = listOf("2026-07-30T19:00:00-03:00"),
+            onPending = {},
+        )
+        val error = state.error as ApiError.Backend
+
+        assertEquals(BackendErrorCode.SchedulingSlotConflict, error.backendErrorCode)
+        assertNull(state.message)
+        assertEquals(NegotiationStatus.Pending, state.negotiation?.status)
+        assertEquals(1, state.proposals.size)
+        assertEquals(1, state.availability?.unavailableWindows?.size)
+        assertEquals(
+            listOf(
+                "submitConnectionProposals",
+                "getConnectionNegotiation",
+                "getConnectionProposals",
+                "getConnectionSchedulingAvailability",
+            ),
+            api.calls,
+        )
     }
 
     @Test
@@ -284,6 +369,32 @@ class SchedulingCoordinatorTest {
     }
 
     @Test
+    fun `accept slot conflict remains primary and refreshes scheduling snapshot`() = runBlocking {
+        api.acceptProposalResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "SCHEDULING_SLOT_CONFLICT",
+        )
+        api.negotiationResponse = Response.success(TestDtos.negotiation("PENDING"))
+        api.proposalsResponse = Response.success(
+            listOf(TestDtos.proposal("PENDING").copy(userId = "partner")),
+        )
+        api.schedulingAvailabilityResponse = Response.success(
+            TestDtos.schedulingAvailability(
+                unavailableWindows = listOf(TestDtos.unavailableWindow()),
+            ),
+        )
+
+        val state = coordinator.acceptProposal(baseState(), "proposal-1", onPending = {})
+        val error = state.error as ApiError.Backend
+
+        assertEquals(BackendErrorCode.SchedulingSlotConflict, error.backendErrorCode)
+        assertNull(state.message)
+        assertEquals(NegotiationStatus.Pending, state.negotiation?.status)
+        assertEquals("partner", state.proposals.single().userId)
+        assertEquals(1, state.availability?.unavailableWindows?.size)
+    }
+
+    @Test
     fun `accept proposal publishes pending before request completes`() = runTest {
         val acceptStarted = CompletableDeferred<Unit>()
         val releaseAccept = CompletableDeferred<Unit>()
@@ -345,7 +456,15 @@ class SchedulingCoordinatorTest {
         assertEquals("Ambas listas fueron rechazadas. Se abrio una nueva ronda.", state.message)
         assertEquals(3, state.negotiation?.roundNumber)
         assertEquals(NegotiationStatus.Pending, state.negotiation?.status)
-        assertEquals(listOf("rejectConnectionPartnerProposals", "getConnectionNegotiation", "getConnectionProposals"), api.calls)
+        assertEquals(
+            listOf(
+                "rejectConnectionPartnerProposals",
+                "getConnectionNegotiation",
+                "getConnectionProposals",
+                "getConnectionSchedulingAvailability",
+            ),
+            api.calls,
+        )
     }
 
     @Test
@@ -417,6 +536,7 @@ class SchedulingCoordinatorTest {
         return SchedulingFeatureDependencies(
             getNegotiation = GetSchedulingNegotiationUseCase(repository),
             getProposals = GetSchedulingProposalsUseCase(repository),
+            getAvailability = GetSchedulingAvailabilityUseCase(repository),
             submitProposals = SubmitSchedulingProposalsUseCase(repository),
             acceptProposal = AcceptSchedulingProposalUseCase(repository),
             rejectPartnerProposals = RejectPartnerSchedulingProposalsUseCase(repository),

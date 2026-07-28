@@ -1,5 +1,7 @@
 package com.reals.app.ui.scheduling
 
+import com.reals.app.domain.model.SchedulingAvailability
+import com.reals.app.domain.model.SchedulingUnavailableWindow
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -255,4 +257,177 @@ class SchedulingSlotOptionsTest {
         assertEquals(0, centeredWheelFirstVisibleIndex(selectedIndex = 0, optionCount = 0))
         assertEquals(0, centeredWheelFirstVisibleIndex(selectedIndex = 1, optionCount = 2))
     }
+
+    @Test
+    fun `conflict policy treats exact start and end as conflicts`() {
+        val availability = availability(
+            window("2026-07-30T19:00:00-03:00", "2026-07-30T21:00:00-03:00"),
+        )
+
+        assertTrue(schedulingSlotConflictPolicy("2026-07-30T19:00:00-03:00", availability))
+        assertTrue(schedulingSlotConflictPolicy("2026-07-30T21:00:00-03:00", availability))
+    }
+
+    @Test
+    fun `conflict policy treats instants immediately outside boundaries as available`() {
+        val availability = availability(
+            window("2026-07-30T19:00:00-03:00", "2026-07-30T21:00:00-03:00"),
+        )
+
+        assertFalse(schedulingSlotConflictPolicy("2026-07-30T18:59:59-03:00", availability))
+        assertFalse(schedulingSlotConflictPolicy("2026-07-30T21:00:01-03:00", availability))
+    }
+
+    @Test
+    fun `conflict policy compares equivalent instants across offsets`() {
+        val availability = availability(
+            window("2026-07-30T19:00:00-03:00", "2026-07-30T21:00:00-03:00"),
+        )
+
+        assertTrue(schedulingSlotConflictPolicy("2026-07-31T00:00:00+02:00", availability))
+    }
+
+    @Test
+    fun `conflict policy supports multiple and empty windows`() {
+        val availability = availability(
+            window("2026-07-30T10:00:00-03:00", "2026-07-30T11:00:00-03:00"),
+            window("2026-07-30T19:00:00-03:00", "2026-07-30T21:00:00-03:00"),
+        )
+
+        assertTrue(schedulingSlotConflictPolicy("2026-07-30T10:30:00-03:00", availability))
+        assertTrue(schedulingSlotConflictPolicy("2026-07-30T20:30:00-03:00", availability))
+        assertFalse(schedulingSlotConflictPolicy("2026-07-30T12:00:00-03:00", availability))
+        assertFalse(schedulingSlotConflictPolicy("2026-07-30T20:30:00-03:00", availability()))
+    }
+
+    @Test
+    fun `conflict policy ignores malformed timestamps safely`() {
+        val availability = availability(
+            window("not-a-date", "2026-07-30T21:00:00-03:00"),
+            window("2026-07-30T19:00:00-03:00", null),
+            window("2026-07-31T21:00:00-03:00", "2026-07-31T19:00:00-03:00"),
+        )
+
+        assertFalse(schedulingSlotConflictPolicy("2026-07-30T20:00:00-03:00", availability))
+        assertFalse(schedulingSlotConflictPolicy("not-a-date", availability))
+        assertFalse(schedulingAvailabilityHasValidUnavailableWindows(availability))
+    }
+
+    @Test
+    fun `availability notice eligibility requires at least one valid unavailable window`() {
+        assertFalse(schedulingAvailabilityHasValidUnavailableWindows(availability()))
+        assertTrue(
+            schedulingAvailabilityHasValidUnavailableWindows(
+                availability(
+                    window("not-a-date", "2026-07-30T21:00:00-03:00"),
+                    window("2026-07-30T19:00:00-03:00", "2026-07-30T21:00:00-03:00"),
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `conflicting minute is disabled but still represented`() {
+        val pickerNow = OffsetDateTime.parse("2026-07-30T10:00:00-03:00")
+        val availability = availability(
+            window("2026-07-30T11:00:00-03:00", "2026-07-30T11:00:00-03:00"),
+        )
+
+        val options = schedulingMinuteOptions(pickerNow.toLocalDate(), 11, pickerNow, zoneId, availability)
+
+        assertEquals(listOf(0, 30), options.map { it.minute })
+        assertEquals(listOf(false, true), options.map { it.selectable })
+        assertEquals(listOf(true, false), options.map { it.conflicting })
+    }
+
+    @Test
+    fun `hour remains enabled when one half hour option is available`() {
+        val pickerNow = OffsetDateTime.parse("2026-07-30T10:00:00-03:00")
+        val availability = availability(
+            window("2026-07-30T11:00:00-03:00", "2026-07-30T11:00:00-03:00"),
+        )
+
+        assertTrue(11 in visibleSchedulingHours(pickerNow.toLocalDate(), pickerNow, zoneId))
+        assertTrue(11 in availableSchedulingHours(pickerNow.toLocalDate(), pickerNow, zoneId, availability))
+        assertEquals(listOf(30), availableSchedulingMinutes(pickerNow.toLocalDate(), 11, pickerNow, zoneId, availability))
+    }
+
+    @Test
+    fun `hour disabled when both half hour options conflict`() {
+        val pickerNow = OffsetDateTime.parse("2026-07-30T10:00:00-03:00")
+        val availability = availability(
+            window("2026-07-30T11:00:00-03:00", "2026-07-30T11:30:00-03:00"),
+        )
+
+        assertTrue(11 in visibleSchedulingHours(pickerNow.toLocalDate(), pickerNow, zoneId))
+        assertFalse(11 in availableSchedulingHours(pickerNow.toLocalDate(), pickerNow, zoneId, availability))
+    }
+
+    @Test
+    fun `day disabled only when every valid slot conflicts`() {
+        val pickerNow = OffsetDateTime.parse("2026-07-30T23:00:00-03:00")
+        val day = LocalDate.parse("2026-07-31")
+        val fullDayAvailability = availability(
+            window("2026-07-31T00:00:00-03:00", "2026-07-31T23:30:00-03:00"),
+        )
+        val partialDayAvailability = availability(
+            window("2026-07-31T00:00:00-03:00", "2026-07-31T23:00:00-03:00"),
+        )
+
+        assertTrue(visibleSchedulingHours(day, pickerNow, zoneId).isNotEmpty())
+        assertTrue(availableSchedulingHours(day, pickerNow, zoneId, fullDayAvailability).isEmpty())
+        assertTrue(availableSchedulingHours(day, pickerNow, zoneId, partialDayAvailability).isNotEmpty())
+    }
+
+    @Test
+    fun `picker arrows skip fully disabled options`() {
+        val enabled = listOf(true, false, false, true)
+
+        assertEquals(0, previousEnabledOptionIndex(3, enabled.size) { enabled[it] })
+        assertEquals(3, nextEnabledOptionIndex(0, enabled.size) { enabled[it] })
+    }
+
+    @Test
+    fun `blocked option cannot be added or submitted`() {
+        val availability = availability(
+            window("2026-06-18T11:00:00-03:00", "2026-06-18T11:00:00-03:00"),
+        )
+        val selected = listOf("2026-06-18T11:00:00-03:00")
+
+        assertEquals(CONFLICTING_SELECTED_SLOT_MESSAGE, validateSelectedSlots(selected, now, availability))
+        assertFalse(canSubmitSelectedSlots(selected, now, availability))
+    }
+
+    @Test
+    fun `selected draft remains visible but blocks submit after availability refresh until removed`() {
+        val selected = listOf(
+            "2026-06-18T11:00:00-03:00",
+            "2026-06-18T11:30:00-03:00",
+        )
+        val refreshedAvailability = availability(
+            window("2026-06-18T11:00:00-03:00", "2026-06-18T11:00:00-03:00"),
+        )
+        val afterRemoval = selected.filterNot { it == "2026-06-18T11:00:00-03:00" }
+
+        assertEquals(CONFLICTING_SELECTED_SLOT_MESSAGE, validateCurrentSelectedSlots(selected, now, refreshedAvailability))
+        assertEquals(selected, selected)
+        assertFalse(canSubmitSelectedSlots(selected, now, refreshedAvailability))
+        assertTrue(canSubmitSelectedSlots(afterRemoval, now, refreshedAvailability))
+    }
+
+    private fun availability(
+        vararg windows: SchedulingUnavailableWindow,
+    ) = SchedulingAvailability(
+        conflictWindowMinutes = 60,
+        unavailableWindows = windows.toList(),
+        serverTime = "2026-07-27T18:00:00-03:00",
+    )
+
+    private fun window(
+        startsAt: String?,
+        endsAt: String?,
+    ) = SchedulingUnavailableWindow(
+        startsAt = startsAt,
+        endsAt = endsAt,
+    )
 }

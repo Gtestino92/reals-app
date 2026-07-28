@@ -33,6 +33,8 @@ import com.reals.app.data.dto.PingResponseDto
 import com.reals.app.data.dto.ProfileResponseDto
 import com.reals.app.data.dto.QueueStatusResponseDto
 import com.reals.app.data.dto.ScheduleProposalResponseDto
+import com.reals.app.data.dto.SchedulingAvailabilityResponseDto
+import com.reals.app.data.dto.SchedulingUnavailableWindowResponseDto
 import com.reals.app.data.dto.SecondChatAttendanceResponseDto
 import com.reals.app.data.dto.SecondChatResolutionRequestResponseDto
 import com.reals.app.data.dto.UserResponseDto
@@ -479,6 +481,24 @@ object TestDtos {
         status = status,
         chatId = null,
         createdAt = now,
+    )
+
+    fun schedulingAvailability(
+        conflictWindowMinutes: Long = 60,
+        unavailableWindows: List<SchedulingUnavailableWindowResponseDto> = emptyList(),
+        serverTime: String = now,
+    ) = SchedulingAvailabilityResponseDto(
+        conflictWindowMinutes = conflictWindowMinutes,
+        unavailableWindows = unavailableWindows,
+        serverTime = serverTime,
+    )
+
+    fun unavailableWindow(
+        startsAt: String? = "2026-07-30T19:00:00-03:00",
+        endsAt: String? = "2026-07-30T21:00:00-03:00",
+    ) = SchedulingUnavailableWindowResponseDto(
+        startsAt = startsAt,
+        endsAt = endsAt,
     )
 
     fun userBlock() = UserBlockResponseDto(
