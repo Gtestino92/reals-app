@@ -269,6 +269,15 @@ interface RealsApi {
         @Body body: SendMessageRequestDto,
     ): Response<ChatMessageResponseDto>
 
+    @Multipart
+    @POST("api/chats/{chatId}/audio-messages")
+    suspend fun sendChatAudioMessage(
+        @Header("Authorization") authorization: String,
+        @Path("chatId") chatId: String,
+        @Part file: MultipartBody.Part,
+        @Part("clientMessageId") clientMessageId: RequestBody,
+    ): Response<ChatMessageResponseDto>
+
     @GET("api/chats/{chatId}/messages")
     suspend fun getChatMessages(
         @Header("Authorization") authorization: String,

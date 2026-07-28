@@ -14,6 +14,7 @@ import com.reals.app.domain.model.SecondChatEndedReason
 import com.reals.app.domain.model.SecondChatResolutionRequestStatus
 import com.reals.app.domain.model.SecondChatResolutionRequestType
 import com.reals.app.domain.model.SecondChatStatus
+import java.io.File
 
 internal class SecondChatCoordinator(
     private val dependencies: SecondChatFeatureDependencies,
@@ -72,6 +73,28 @@ internal class SecondChatCoordinator(
                 loading = false,
             )
         }
+    }
+
+    suspend fun refreshMessagesForAudioPlayback(
+        current: RealsRootUiState.SecondChat,
+    ): RealsRootUiState.SecondChat {
+        val chat = current.chat ?: return current
+        val statusResult = dependencies.getStatus(current.connectionId)
+        val statusSnapshot = (statusResult as? ApiResult.Success)?.value?.receivedNow()
+        val messagesResult = dependencies.getChatMessages(chat.id, afterMessageId = null)
+        val chatResult = dependencies.getChat(chat.id)
+        return current.copy(
+            lifecycle = statusSnapshot?.let(current.lifecycle::withStatusSnapshot)
+                ?: current.lifecycle,
+            chat = (chatResult as? ApiResult.Success)?.value ?: current.chat,
+            messages = (messagesResult as? ApiResult.Success)?.value
+                ?.let { current.messages.appendUnique(it) }
+                ?: current.messages,
+            error = (statusResult as? ApiResult.Failure)?.error
+                ?: (messagesResult as? ApiResult.Failure)?.error
+                ?: (chatResult as? ApiResult.Failure)?.error
+                ?: current.error,
+        )
     }
 
     suspend fun createNoShowClaim(
@@ -251,6 +274,49 @@ internal class SecondChatCoordinator(
                         sending = false,
                         error = result.error,
                     )
+            }
+        }
+    }
+
+    suspend fun sendAudioMessage(
+        current: RealsRootUiState.SecondChat,
+        file: File,
+        clientMessageId: String,
+    ): RealsRootUiState.SecondChat {
+        val chat = current.chat ?: return current
+        val cursorBeforeSend = current.messages.lastMessageCursor()
+
+        return when (val result = dependencies.sendChatAudioMessage(chat.id, file, clientMessageId)) {
+            is ApiResult.Success -> {
+                val statusResult = dependencies.getStatus(current.connectionId)
+                val statusSnapshot = (statusResult as? ApiResult.Success)?.value?.receivedNow()
+                val messagesResult = dependencies.getChatMessages(chat.id, cursorBeforeSend)
+                val chatResult = dependencies.getChat(chat.id)
+                current.copy(
+                    lifecycle = statusSnapshot?.let(current.lifecycle::withStatusSnapshot)
+                        ?: current.lifecycle,
+                    chat = (chatResult as? ApiResult.Success)?.value ?: current.chat,
+                    messages = current.messages.appendUnique(
+                        (messagesResult as? ApiResult.Success)?.value.orEmpty() + result.value
+                    ),
+                    audioUpload = ChatAudioUploadUiState(completedClientMessageId = clientMessageId),
+                    error = (statusResult as? ApiResult.Failure)?.error
+                        ?: (messagesResult as? ApiResult.Failure)?.error
+                        ?: (chatResult as? ApiResult.Failure)?.error,
+                )
+            }
+
+            is ApiResult.Failure -> {
+                val failed = current.copy(
+                    audioUpload = ChatAudioUploadUiState(
+                        uploading = false,
+                        error = result.error,
+                        nonRetryable = result.error.isAudioIdempotencyConflict(),
+                    ),
+                    error = null,
+                )
+                val refreshed = if (result.error.isAudioPolicyConflict()) refresh(failed, silent = true) else null
+                (refreshed as? SecondChatLoadResult.Show)?.state ?: failed
             }
         }
     }

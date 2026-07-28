@@ -92,6 +92,18 @@ enum class BackendErrorCode(val raw: String) {
     ChatDecisionAlreadySubmitted("CHAT_DECISION_ALREADY_SUBMITTED"),
     ChatMinMessagesRequired("CHAT_MIN_MESSAGES_REQUIRED"),
     ChatMutualCancellationPending("CHAT_MUTUAL_CANCELLATION_PENDING"),
+    ChatAudioFeatureDisabled("CHAT_AUDIO_FEATURE_DISABLED"),
+    ChatAudioInvalidFormat("CHAT_AUDIO_INVALID_FORMAT"),
+    ChatAudioTooLarge("CHAT_AUDIO_TOO_LARGE"),
+    ChatAudioTooLong("CHAT_AUDIO_TOO_LONG"),
+    ChatAudioGuidanceRequired("CHAT_AUDIO_GUIDANCE_REQUIRED"),
+    ChatAudioGuidanceNotAvailable("CHAT_AUDIO_GUIDANCE_NOT_AVAILABLE"),
+    ChatAudioLimitReached("CHAT_AUDIO_LIMIT_REACHED"),
+    ChatAudioWaitingForBoth("CHAT_AUDIO_WAITING_FOR_BOTH"),
+    ChatAudioNotAvailableYet("CHAT_AUDIO_NOT_AVAILABLE_YET"),
+    ChatAudioUploadBusy("CHAT_AUDIO_UPLOAD_BUSY"),
+    ChatAudioUploadFailed("CHAT_AUDIO_UPLOAD_FAILED"),
+    ChatMessageIdempotencyConflict("CHAT_MESSAGE_IDEMPOTENCY_CONFLICT"),
     FirstChatGuidanceParticipationRequired("FIRST_CHAT_GUIDANCE_PARTICIPATION_REQUIRED"),
     FirstChatGuidanceNextAlreadyRequested("FIRST_CHAT_GUIDANCE_NEXT_ALREADY_REQUESTED"),
     FirstChatGuidanceCompleted("FIRST_CHAT_GUIDANCE_COMPLETED"),
@@ -290,6 +302,19 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.ChatMinMessagesRequired -> "Antes de decidir, enviá al menos un poco más de conversación."
     BackendErrorCode.ChatMutualCancellationPending ->
         "La conversaci\u00f3n est\u00e1 pausada mientras se resuelve la solicitud."
+    BackendErrorCode.ChatAudioFeatureDisabled -> "Los audios no están disponibles en este entorno."
+    BackendErrorCode.ChatAudioInvalidFormat -> "El audio debe ser M4A/AAC válido."
+    BackendErrorCode.ChatAudioTooLarge -> "El audio supera el tamaño máximo permitido."
+    BackendErrorCode.ChatAudioTooLong -> "El audio supera la duración máxima permitida."
+    BackendErrorCode.ChatAudioGuidanceRequired -> "Respondan la pregunta actual para habilitar audios."
+    BackendErrorCode.ChatAudioGuidanceNotAvailable -> "Los audios se habilitarán al avanzar en las preguntas."
+    BackendErrorCode.ChatAudioLimitReached -> "Ya enviaste el audio disponible en este chat."
+    BackendErrorCode.ChatAudioWaitingForBoth -> "El audio se habilita cuando ambas personas hayan ingresado."
+    BackendErrorCode.ChatAudioNotAvailableYet -> "El audio todavía no está disponible."
+    BackendErrorCode.ChatAudioUploadBusy -> "La carga de audios está ocupada. Intentá nuevamente en unos segundos."
+    BackendErrorCode.ChatAudioUploadFailed -> "No pudimos subir el audio. Intentá nuevamente."
+    BackendErrorCode.ChatMessageIdempotencyConflict ->
+        "No pudimos reintentar este audio. Borrá la grabación y creá una nueva."
     BackendErrorCode.FirstChatGuidanceParticipationRequired ->
         "Particip\u00e1 un poco m\u00e1s antes de pedir otra pregunta."
     BackendErrorCode.FirstChatGuidanceNextAlreadyRequested -> "Ya pediste cambiar ésta pregunta."

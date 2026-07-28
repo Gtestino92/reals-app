@@ -65,6 +65,7 @@ import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
 import com.reals.app.domain.usecase.RequestNextFirstChatGuidanceQuestionUseCase
 import com.reals.app.domain.usecase.RecordLegalDocumentActionUseCase
 import com.reals.app.domain.usecase.SafetyCancelChatUseCase
+import com.reals.app.domain.usecase.SendChatAudioMessageUseCase
 import com.reals.app.domain.usecase.SendChatMessageUseCase
 import com.reals.app.domain.usecase.SubmitChatDecisionUseCase
 import com.reals.app.domain.usecase.SubmitSchedulingProposalsUseCase
@@ -152,6 +153,7 @@ class AppContainer(context: Context) {
     val dismissSecondChatForConnectionUseCase = DismissSecondChatForConnectionUseCase(chatRepository)
     val getChatMessagesUseCase = GetChatMessagesUseCase(chatRepository)
     val sendChatMessageUseCase = SendChatMessageUseCase(chatRepository)
+    val sendChatAudioMessageUseCase = SendChatAudioMessageUseCase(chatRepository)
     val requestNextFirstChatGuidanceQuestionUseCase = RequestNextFirstChatGuidanceQuestionUseCase(chatRepository)
     val getChatExitRequestsUseCase = GetChatExitRequestsUseCase(chatRepository)
     val requestMutualChatExitUseCase = RequestMutualChatExitUseCase(chatRepository)
@@ -218,6 +220,7 @@ class AppContainer(context: Context) {
             submitChatDecision = submitChatDecisionUseCase,
             getChatMessages = getChatMessagesUseCase,
             sendChatMessage = sendChatMessageUseCase,
+            sendChatAudioMessage = sendChatAudioMessageUseCase,
             requestNextFirstChatGuidanceQuestion = requestNextFirstChatGuidanceQuestionUseCase,
             getChatExitRequests = getChatExitRequestsUseCase,
             requestMutualChatExit = requestMutualChatExitUseCase,
@@ -235,6 +238,7 @@ class AppContainer(context: Context) {
             getSecondChatForConnection = getSecondChatForConnectionUseCase,
             getChatMessages = getChatMessagesUseCase,
             sendChatMessage = sendChatMessageUseCase,
+            sendChatAudioMessage = sendChatAudioMessageUseCase,
             safetyCancelChat = safetyCancelChatUseCase,
             createCompletionRequest = createSecondChatCompletionRequestUseCase,
             decideCompletionRequest = decideSecondChatCompletionRequestUseCase,

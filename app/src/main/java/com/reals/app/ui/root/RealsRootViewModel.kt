@@ -457,6 +457,53 @@ class RealsRootViewModel(
         }
     }
 
+    fun sendSecondChatAudioMessage(filePath: String, clientMessageId: String): Boolean {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return false
+        return when (val preparation = ChatMessageActionHandler.prepareSecondChatAudioSend(
+            current,
+            filePath,
+            clientMessageId,
+        )) {
+            is ChatAudioSendPreparation.Accepted -> {
+                val instanceKey = preparation.pendingState.expiryKey()
+                _uiState.value = preparation.pendingState
+                viewModelScope.launch {
+                    val result = secondChatCoordinator.sendAudioMessage(
+                        preparation.pendingState,
+                        preparation.file,
+                        preparation.clientMessageId,
+                    )
+                    val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return@launch
+                    if (latest.matches(instanceKey)) {
+                        _uiState.value = result
+                    }
+                }
+                true
+            }
+
+            is ChatAudioSendPreparation.Rejected -> {
+                _uiState.value = preparation.state
+                false
+            }
+
+            ChatAudioSendPreparation.Ignored -> false
+        }
+    }
+
+    fun clearSecondChatAudioUploadState() {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        _uiState.value = current.copy(audioUpload = ChatAudioUploadUiState())
+    }
+
+    suspend fun refreshSecondChatAudioUrl(messageId: String): String? {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return null
+        val refreshed = secondChatCoordinator.refreshMessagesForAudioPlayback(current)
+        val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return null
+        if (latest.connectionId != current.connectionId) return null
+        _uiState.value = refreshed
+        return refreshed.messages.firstOrNull { it.id == messageId }?.audio?.url
+    }
+
     fun retrySecondChatMessage(localId: String, content: String) {
         val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
         _uiState.value = ChatMessageActionHandler.retrySecondChat(current, localId)
@@ -943,6 +990,50 @@ class RealsRootViewModel(
 
             ChatMessageSendPreparation.Ignored -> false
         }
+    }
+
+    fun sendFirstChatAudioMessage(filePath: String, clientMessageId: String): Boolean {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return false
+        return when (val preparation = ChatMessageActionHandler.prepareFirstChatAudioSend(
+            current,
+            filePath,
+            clientMessageId,
+        )) {
+            is ChatAudioSendPreparation.Accepted -> {
+                _uiState.value = preparation.pendingState
+                viewModelScope.launch {
+                    applyFirstChatSendResult(
+                        firstChatCoordinator.sendAudioMessage(
+                            preparation.pendingState,
+                            preparation.file,
+                            preparation.clientMessageId,
+                        )
+                    )
+                }
+                true
+            }
+
+            is ChatAudioSendPreparation.Rejected -> {
+                _uiState.value = preparation.state
+                false
+            }
+
+            ChatAudioSendPreparation.Ignored -> false
+        }
+    }
+
+    fun clearFirstChatAudioUploadState() {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        _uiState.value = current.copy(audioUpload = ChatAudioUploadUiState())
+    }
+
+    suspend fun refreshFirstChatAudioUrl(messageId: String): String? {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return null
+        val refreshed = firstChatCoordinator.refreshMessagesForAudioPlayback(current)
+        val latest = _uiState.value as? RealsRootUiState.FirstChat ?: return null
+        if (latest.matchId != current.matchId || latest.chatId != current.chatId) return null
+        _uiState.value = refreshed
+        return refreshed.messages.firstOrNull { it.id == messageId }?.audio?.url
     }
 
     fun retryFirstChatMessage(localId: String, content: String) {

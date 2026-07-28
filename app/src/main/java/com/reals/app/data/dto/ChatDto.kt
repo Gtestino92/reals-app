@@ -23,6 +23,17 @@ data class ChatResponseDto(
     val readOnlyUntil: String? = null,
     val lastMessageAt: String? = null,
     val guidance: FirstChatGuidanceResponseDto? = null,
+    val audioPolicy: ChatAudioPolicyResponseDto? = null,
+)
+
+@Serializable
+data class ChatAudioPolicyResponseDto(
+    val enabled: Boolean,
+    val unavailableReason: String? = null,
+    val enabledAt: String? = null,
+    val maxDurationMillis: Long,
+    val maxFileSizeBytes: Long,
+    val remainingMessages: Int? = null,
 )
 
 @Serializable
@@ -59,8 +70,19 @@ data class ChatMessageResponseDto(
     val id: String,
     val chatSessionId: String,
     val senderId: String,
-    val content: String,
+    val clientMessageId: String? = null,
+    val messageType: String = "TEXT",
+    val content: String? = null,
+    val audio: ChatAudioResponseDto? = null,
     val sentAt: String,
+)
+
+@Serializable
+data class ChatAudioResponseDto(
+    val url: String? = null,
+    val durationMillis: Long? = null,
+    val contentType: String? = null,
+    val sizeBytes: Long? = null,
 )
 
 @Serializable
@@ -141,6 +163,7 @@ data class SecondChatAttendanceResponseDto(
     val mustRespondToPartner: Boolean = false,
     val lastMessageAt: String? = null,
     val lastMessageSenderId: String? = null,
+    val audioPolicy: ChatAudioPolicyResponseDto? = null,
 )
 
 @Serializable

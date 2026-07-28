@@ -5,11 +5,16 @@ import com.reals.app.data.dto.ChatExitRequestResponseDto
 import com.reals.app.data.dto.ChatMessageResponseDto
 import com.reals.app.data.dto.ChatPartnerResponseDto
 import com.reals.app.data.dto.ChatResponseDto
+import com.reals.app.data.dto.ChatAudioPolicyResponseDto
+import com.reals.app.data.dto.ChatAudioResponseDto
 import com.reals.app.data.dto.FirstChatGuidanceQuestionResponseDto
 import com.reals.app.data.dto.FirstChatGuidanceResponseDto
 import com.reals.app.data.dto.SecondChatAttendanceResponseDto
 import com.reals.app.data.dto.SecondChatResolutionRequestResponseDto
 import com.reals.app.domain.model.Chat
+import com.reals.app.domain.model.ChatAudio
+import com.reals.app.domain.model.ChatAudioPolicy
+import com.reals.app.domain.model.ChatAudioUnavailableReason
 import com.reals.app.domain.model.ChatDecisionState
 import com.reals.app.domain.model.ChatExitOutcome
 import com.reals.app.domain.model.ChatExitReason
@@ -17,6 +22,7 @@ import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatExitRequestType
 import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.ChatMessageType
 import com.reals.app.domain.model.ChatPartner
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.ChatType
@@ -49,6 +55,16 @@ fun ChatResponseDto.toDomain(): Chat = Chat(
     readOnlyUntil = readOnlyUntil,
     lastMessageAt = lastMessageAt,
     guidance = guidance?.toDomain(),
+    audioPolicy = audioPolicy?.toDomain(),
+)
+
+fun ChatAudioPolicyResponseDto.toDomain(): ChatAudioPolicy = ChatAudioPolicy(
+    enabled = enabled,
+    unavailableReason = ChatAudioUnavailableReason.fromBackend(unavailableReason),
+    enabledAt = enabledAt,
+    maxDurationMillis = maxDurationMillis,
+    maxFileSizeBytes = maxFileSizeBytes,
+    remainingMessages = remainingMessages,
 )
 
 fun SecondChatAttendanceResponseDto.toDomain(): SecondChatStatus = SecondChatStatus(
@@ -81,6 +97,7 @@ fun SecondChatAttendanceResponseDto.toDomain(): SecondChatStatus = SecondChatSta
     mustRespondToPartner = mustRespondToPartner,
     lastMessageAt = lastMessageAt,
     lastMessageSenderId = lastMessageSenderId,
+    audioPolicy = audioPolicy?.toDomain(),
 )
 
 fun SecondChatResolutionRequestResponseDto.toDomain(): SecondChatResolutionRequest =
@@ -122,8 +139,18 @@ fun ChatMessageResponseDto.toDomain(): ChatMessage = ChatMessage(
     id = id,
     chatSessionId = chatSessionId,
     senderId = senderId,
+    clientMessageId = clientMessageId,
+    messageType = ChatMessageType.fromBackend(messageType),
     content = content,
+    audio = audio?.toDomain(),
     sentAt = sentAt,
+)
+
+fun ChatAudioResponseDto.toDomain(): ChatAudio = ChatAudio(
+    url = url,
+    durationMillis = durationMillis,
+    contentType = contentType,
+    sizeBytes = sizeBytes,
 )
 
 fun ChatExitRequestResponseDto.toDomain(): ChatExitRequest = ChatExitRequest(

@@ -1,5 +1,10 @@
 package com.reals.app.ui.chat
 
+import android.Manifest
+import android.content.pm.PackageManager
+import java.io.File
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,26 +32,34 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.reals.app.R
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
@@ -54,11 +67,13 @@ import com.reals.app.core.security.TextSafety
 import com.reals.app.core.time.backendInstantOrNull
 import com.reals.app.core.time.remainingExitSeconds
 import com.reals.app.domain.model.Chat
+import com.reals.app.domain.model.ChatAudioUnavailableReason
 import com.reals.app.domain.model.ChatDecisionState
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.ChatMessagePresentation
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.ChatType
 import com.reals.app.domain.model.FirstChatGuidance
@@ -76,6 +91,7 @@ import com.reals.app.ui.common.formatBackendDateTime
 import com.reals.app.ui.common.formatBackendTime
 import com.reals.app.ui.root.OptimisticOutgoingMessage
 import com.reals.app.ui.root.OutgoingMessageDeliveryState
+import com.reals.app.ui.root.ChatAudioUploadUiState
 import com.reals.app.ui.root.SecondChatLifecycleUiState
 import com.reals.app.ui.root.SecondChatResolutionPresentation
 import com.reals.app.ui.root.hasPendingNoShowClaim
@@ -85,6 +101,7 @@ import com.reals.app.ui.root.resolutionPresentation
 import com.reals.app.ui.root.secondChatResultCopy
 import com.reals.app.ui.root.timingPresentation
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
 private const val MUTUAL_EXIT_TIMEOUT_SECONDS = 20L
@@ -126,6 +143,7 @@ fun ChatScreen(
     loading: Boolean,
     refreshing: Boolean,
     sending: Boolean,
+    audioUpload: ChatAudioUploadUiState = ChatAudioUploadUiState(),
     actionLoading: Boolean,
     actionLoadingLabel: String?,
     guidance: FirstChatGuidance? = null,
@@ -152,6 +170,9 @@ fun ChatScreen(
     onDecideSecondChatCompletion: (String, SecondChatCompletionDecision) -> Unit = { _, _ -> },
     onClaimSecondChatInactivity: () -> Unit = {},
     onSendMessage: (String) -> Boolean,
+    onSendAudioMessage: (filePath: String, clientMessageId: String) -> Boolean = { _, _ -> false },
+    onClearAudioUploadState: () -> Unit = {},
+    onRefreshAudioUrl: suspend (messageId: String) -> String? = { null },
     onRetryOptimisticMessage: (localId: String, content: String) -> Unit,
     onApprove: () -> Unit,
     onReject: () -> Unit,
@@ -177,6 +198,14 @@ fun ChatScreen(
     var nowMillis by rememberSaveable(chat?.id) { mutableStateOf(System.currentTimeMillis()) }
     var firstChatExpiryHandled by rememberSaveable(chat?.id) { mutableStateOf(false) }
     var secondChatUnavailableHandled by rememberSaveable(chat?.id) { mutableStateOf(false) }
+    var recordingStartedAtMillis by rememberSaveable(chat?.id) { mutableStateOf<Long?>(null) }
+    var audioDraft by remember(chat?.id) { mutableStateOf<LocalChatAudioDraft?>(null) }
+    var localAudioError by rememberSaveable(chat?.id) { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val coroutineScope = rememberCoroutineScope()
+    val recorderController = remember(chat?.id) { ChatAudioRecorderController(context.applicationContext) }
+    val playbackController = remember(chat?.id) { ChatAudioPlaybackController() }
     val firstChatLifecycle = firstChatLifecycleUiState(chat, nowMillis)
     val firstChatLocallyExpired = firstChatLifecycle?.expired == true
     val secondChatTiming = secondChatLifecycle?.timingPresentation(nowMillis)
@@ -221,6 +250,14 @@ fun ChatScreen(
         .maxByOrNull { it.createdAt }
     val exitFlowLocked = pendingExitRequest != null
     val canSendMessages = canChat && !exitFlowLocked
+    val audioComposerState = chatAudioComposerUiState(
+        chat = chat,
+        canSendMessages = canSendMessages,
+        sendingMessage = sendingMessage,
+        audioUploading = audioUpload.uploading,
+        recordingActive = recordingStartedAtMillis != null,
+        loadingChatAction = loadingChatAction || guidanceActionLoading,
+    )
     val guidancePanelState = firstChatGuidancePanelState(
         guidance = guidance,
         canRequestNextWhileChatOpen = canSendMessages,
@@ -230,7 +267,7 @@ fun ChatScreen(
             (secondChatLifecycle == null || secondChatTiming?.genuinelyActive == true) &&
             (!showMutualExitActions || !exitFlowLocked)
     val manualBlockBusy =
-        loading || refreshing || sending || actionLoading || guidanceActionLoading ||
+        loading || refreshing || sending || audioUpload.uploading || actionLoading || guidanceActionLoading ||
             manualBlockLoading
     val canManualBlock = !manualBlockBusy
     val canOpenOverflowActions =
@@ -252,9 +289,108 @@ fun ChatScreen(
         canChat = canChat,
         canSendMessages = canSendMessages,
         sendingMessage = sendingMessage,
-        loadingChatAction = loadingChatAction,
+        loadingChatAction = loadingChatAction || audioUpload.uploading || recordingStartedAtMillis != null,
         draft = draft,
     )
+    fun stopRecordingToPreview() {
+        val result = recorderController.stop(
+            maxDurationMillis = chat?.audioPolicy?.maxDurationMillis ?: DEFAULT_CHAT_AUDIO_MAX_DURATION_MILLIS,
+            maxFileSizeBytes = chat?.audioPolicy?.maxFileSizeBytes ?: DEFAULT_CHAT_AUDIO_MAX_FILE_SIZE_BYTES,
+        )
+        recordingStartedAtMillis = null
+        when (result) {
+            is ChatAudioRecorderResult.Ready -> {
+                audioDraft?.filePath?.let { File(it).delete() }
+                audioDraft = result.draft
+                localAudioError = null
+                onClearAudioUploadState()
+            }
+
+            is ChatAudioRecorderResult.Failed -> localAudioError = result.message
+            ChatAudioRecorderResult.Cancelled,
+            ChatAudioRecorderResult.Started -> Unit
+        }
+    }
+
+    fun startRecording() {
+        playbackController.release()
+        audioDraft?.filePath?.let { File(it).delete() }
+        audioDraft = null
+        onClearAudioUploadState()
+        val result = recorderController.start(
+            maxDurationMillis = chat?.audioPolicy?.maxDurationMillis ?: DEFAULT_CHAT_AUDIO_MAX_DURATION_MILLIS,
+            maxFileSizeBytes = chat?.audioPolicy?.maxFileSizeBytes ?: DEFAULT_CHAT_AUDIO_MAX_FILE_SIZE_BYTES,
+            onLimitReached = { coroutineScope.launch { stopRecordingToPreview() } },
+        )
+        when (result) {
+            ChatAudioRecorderResult.Started -> {
+                recordingStartedAtMillis = System.currentTimeMillis()
+                localAudioError = null
+            }
+
+            is ChatAudioRecorderResult.Failed -> localAudioError = result.message
+            ChatAudioRecorderResult.Cancelled,
+            is ChatAudioRecorderResult.Ready -> Unit
+        }
+    }
+
+    val recordPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted && audioComposerState.startEnabled && chat != null) {
+            startRecording()
+        } else {
+            localAudioError = "Necesitamos permiso de micrófono para grabar audios."
+        }
+    }
+
+    DisposableEffect(chat?.id) {
+        onDispose {
+            recorderController.release(deleteOutput = true)
+            playbackController.release()
+            audioDraft?.filePath?.let { File(it).delete() }
+        }
+    }
+
+    DisposableEffect(lifecycleOwner, chat?.id) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                if (recordingStartedAtMillis != null) {
+                    recorderController.cancel()
+                    recordingStartedAtMillis = null
+                    localAudioError = "Se canceló la grabación al salir de la app."
+                }
+                playbackController.pause()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    LaunchedEffect(chat?.id, audioUpload.completedClientMessageId) {
+        val completedClientMessageId = audioUpload.completedClientMessageId ?: return@LaunchedEffect
+        val draftToClear = audioDraft?.takeIf { it.clientMessageId == completedClientMessageId } ?: return@LaunchedEffect
+        playbackController.release()
+        File(draftToClear.filePath).delete()
+        audioDraft = null
+        localAudioError = null
+        onClearAudioUploadState()
+    }
+
+    LaunchedEffect(chat?.id, canSendMessages, audioComposerState.visible) {
+        if ((!canSendMessages || !audioComposerState.visible) && recordingStartedAtMillis != null) {
+            recorderController.cancel()
+            recordingStartedAtMillis = null
+            localAudioError = "La grabación se canceló porque el chat ya no admite mensajes."
+        }
+    }
+
+    LaunchedEffect(playbackController.state.phase, playbackController.state.key) {
+        while (playbackController.state.phase == ChatAudioPlaybackPhase.Playing) {
+            delay(250.milliseconds)
+            playbackController.tick()
+        }
+    }
 
     if (loading && chat == null) {
         val loadingPresentation = chatLoadingPresentation(chatTitlePrefix, partnerNameFallback)
@@ -432,6 +568,9 @@ fun ChatScreen(
                 bottomContentPadding = bottomContentPadding + 12.dp,
                 modifier = Modifier.weight(1f),
                 onRetryOptimisticMessage = onRetryOptimisticMessage,
+                playbackController = playbackController,
+                coroutineScope = coroutineScope,
+                onRefreshAudioUrl = onRefreshAudioUrl,
             )
         }
 
@@ -449,6 +588,12 @@ fun ChatScreen(
                 MessageComposer(
                     draft = draft,
                     state = composerState,
+                    audioState = audioComposerState,
+                    audioDraft = audioDraft,
+                    uploadState = audioUpload,
+                    localAudioError = localAudioError,
+                    recordingStartedAtMillis = recordingStartedAtMillis,
+                    playbackState = playbackController.state,
                     onDraftChange = {
                         if (composerState.canEditDraft) {
                             draft = it.take(1_000)
@@ -458,6 +603,46 @@ fun ChatScreen(
                         if (composerState.sendButtonEnabled && onSendMessage(draft)) {
                             draft = ""
                         }
+                    },
+                    onStartRecording = {
+                        if (!audioComposerState.startEnabled) {
+                            localAudioError = audioComposerState.disabledCopy
+                            return@MessageComposer
+                        }
+                        val hasPermission = ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.RECORD_AUDIO,
+                        ) == PackageManager.PERMISSION_GRANTED
+                        if (hasPermission) {
+                            startRecording()
+                        } else {
+                            recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        }
+                    },
+                    onStopRecording = { stopRecordingToPreview() },
+                    onCancelRecording = {
+                        recorderController.cancel()
+                        recordingStartedAtMillis = null
+                        localAudioError = null
+                    },
+                    onPlayDraft = { draftToPlay ->
+                        playbackController.playLocal(
+                            key = "draft-${draftToPlay.clientMessageId}",
+                            filePath = draftToPlay.filePath,
+                            durationMillis = draftToPlay.durationMillis,
+                            scope = coroutineScope,
+                        )
+                    },
+                    onPauseAudio = playbackController::pause,
+                    onDeleteDraft = {
+                        playbackController.release()
+                        audioDraft?.filePath?.let { File(it).delete() }
+                        audioDraft = null
+                        localAudioError = null
+                        onClearAudioUploadState()
+                    },
+                    onSendAudio = { draftToSend ->
+                        onSendAudioMessage(draftToSend.filePath, draftToSend.clientMessageId)
                     },
                 )
             }
@@ -937,8 +1122,11 @@ private fun MessageList(
     bottomContentPadding: Dp,
     modifier: Modifier,
     onRetryOptimisticMessage: (localId: String, content: String) -> Unit,
+    playbackController: ChatAudioPlaybackController,
+    coroutineScope: kotlinx.coroutines.CoroutineScope,
+    onRefreshAudioUrl: suspend (messageId: String) -> String?,
 ) {
-    val sortedMessages = messages.sortedBy { it.sentAt }
+    val sortedMessages = messages.sortedWith(compareBy<ChatMessage> { it.sentAt }.thenBy { it.id })
     val messageItems = sortedMessages.map { ChatMessageListItem.Backend(it) } +
             optimisticMessages.sortedBy { it.createdAtMillis }
                 .map { ChatMessageListItem.Optimistic(it) }
@@ -984,6 +1172,19 @@ private fun MessageList(
                         is ChatMessageListItem.Backend -> MessageBubble(
                             message = item.message,
                             mine = item.message.senderId == currentUserId,
+                            playbackState = playbackController.state,
+                            onPlayAudio = { message ->
+                                val audio = message.audio ?: return@MessageBubble
+                                val url = audio.url ?: return@MessageBubble
+                                playbackController.playRemote(
+                                    messageId = message.id,
+                                    url = url,
+                                    durationMillis = audio.durationMillis ?: 0L,
+                                    scope = coroutineScope,
+                                    refreshUrl = { onRefreshAudioUrl(message.id) },
+                                )
+                            },
+                            onPauseAudio = playbackController::pause,
                         )
 
                         is ChatMessageListItem.Optimistic -> OptimisticMessageBubble(
@@ -1168,9 +1369,31 @@ private fun ChatActionsPanel(
 private fun MessageComposer(
     draft: String,
     state: MessageComposerUiState,
+    audioState: ChatAudioComposerUiState,
+    audioDraft: LocalChatAudioDraft?,
+    uploadState: ChatAudioUploadUiState,
+    localAudioError: String?,
+    recordingStartedAtMillis: Long?,
+    playbackState: ChatAudioPlaybackUiState,
     onDraftChange: (String) -> Unit,
     onSend: () -> Unit,
+    onStartRecording: () -> Unit,
+    onStopRecording: () -> Unit,
+    onCancelRecording: () -> Unit,
+    onPlayDraft: (LocalChatAudioDraft) -> Unit,
+    onPauseAudio: () -> Unit,
+    onDeleteDraft: () -> Unit,
+    onSendAudio: (LocalChatAudioDraft) -> Boolean,
 ) {
+    var recordingNowMillis by rememberSaveable(recordingStartedAtMillis) {
+        mutableStateOf(System.currentTimeMillis())
+    }
+    LaunchedEffect(recordingStartedAtMillis) {
+        while (recordingStartedAtMillis != null) {
+            delay(250.milliseconds)
+            recordingNowMillis = System.currentTimeMillis()
+        }
+    }
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -1181,6 +1404,12 @@ private fun MessageComposer(
             modifier = Modifier.padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            localAudioError?.let {
+                Text(it, color = MaterialTheme.colorScheme.error)
+            }
+            uploadState.error?.let {
+                ApiErrorFeedbackCard(it, ErrorContext.Chat)
+            }
             state.explanatoryCopy?.let { copy ->
                 Text(
                     text = copy,
@@ -1188,37 +1417,144 @@ private fun MessageComposer(
                 )
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedTextField(
-                    value = draft,
-                    onValueChange = onDraftChange,
-                    placeholder = { Text("Mensaje") },
-                    enabled = state.canEditDraft,
-                    minLines = 1,
-                    maxLines = 4,
-                    modifier = Modifier.weight(1f),
+            if (recordingStartedAtMillis != null) {
+                val elapsedMillis = (recordingNowMillis - recordingStartedAtMillis).coerceAtLeast(0L)
+                RecordingComposer(
+                    elapsedMillis = elapsedMillis,
+                    maxDurationMillis = audioState.maxDurationMillis,
+                    onStop = onStopRecording,
+                    onCancel = onCancelRecording,
                 )
-
-                FilledIconButton(
-                    onClick = onSend,
-                    enabled = state.sendButtonEnabled,
+            } else if (audioDraft != null) {
+                AudioDraftComposer(
+                    draft = audioDraft,
+                    uploadState = uploadState,
+                    playbackState = playbackState,
+                    onPlay = { onPlayDraft(audioDraft) },
+                    onPause = onPauseAudio,
+                    onDelete = onDeleteDraft,
+                    onSend = { onSendAudio(audioDraft) },
+                )
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    if (state.sendingMessage) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                        )
-                    } else {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_send),
-                            contentDescription = "Enviar",
-                        )
+                    OutlinedTextField(
+                        value = draft,
+                        onValueChange = onDraftChange,
+                        placeholder = { Text("Mensaje") },
+                        enabled = state.canEditDraft,
+                        minLines = 1,
+                        maxLines = 4,
+                        modifier = Modifier.weight(1f),
+                    )
+
+                    FilledIconButton(
+                        onClick = onSend,
+                        enabled = state.sendButtonEnabled,
+                    ) {
+                        if (state.sendingMessage) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_send),
+                                contentDescription = "Enviar",
+                            )
+                        }
+                    }
+
+                    if (audioState.visible) {
+                        FilledIconButton(
+                            onClick = onStartRecording,
+                            enabled = audioState.startEnabled,
+                        ) {
+                            Text("Mic")
+                        }
                     }
                 }
+
+                if (audioState.visible && !audioState.startEnabled && audioState.disabledCopy != null) {
+                    Text(
+                        text = audioState.disabledCopy,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecordingComposer(
+    elapsedMillis: Long,
+    maxDurationMillis: Long,
+    onStop: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Grabando ${formatAudioDuration(elapsedMillis)} / ${formatAudioDuration(maxDurationMillis)}")
+        LinearProgressIndicator(
+            progress = { (elapsedMillis.toFloat() / maxDurationMillis.toFloat()).coerceIn(0f, 1f) },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onStop, modifier = Modifier.weight(1f)) {
+                Text("Detener")
+            }
+            OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) {
+                Text("Cancelar")
+            }
+        }
+    }
+}
+
+@Composable
+private fun AudioDraftComposer(
+    draft: LocalChatAudioDraft,
+    uploadState: ChatAudioUploadUiState,
+    playbackState: ChatAudioPlaybackUiState,
+    onPlay: () -> Unit,
+    onPause: () -> Unit,
+    onDelete: () -> Unit,
+    onSend: () -> Boolean,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Audio listo para enviar")
+        AudioPlaybackRow(
+            key = "draft-${draft.clientMessageId}",
+            durationMillis = draft.durationMillis,
+            playbackState = playbackState,
+            onPlay = onPlay,
+            onPause = onPause,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = onDelete,
+                enabled = !uploadState.uploading,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(if (uploadState.nonRetryable) "Borrar" else "Cancelar")
+            }
+            Button(
+                onClick = { onSend() },
+                enabled = !uploadState.uploading && !uploadState.nonRetryable,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(
+                    if (uploadState.uploading) {
+                        "Enviando..."
+                    } else if (uploadState.error != null) {
+                        "Reintentar"
+                    } else {
+                        "Enviar"
+                    }
+                )
             }
         }
     }
@@ -1329,6 +1665,9 @@ internal fun timedExitRequestBodyText(
 private fun MessageBubble(
     message: ChatMessage,
     mine: Boolean,
+    playbackState: ChatAudioPlaybackUiState,
+    onPlayAudio: (ChatMessage) -> Unit,
+    onPauseAudio: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1351,7 +1690,18 @@ private fun MessageBubble(
             ),
         ) {
             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                Text(TextSafety.safeDisplay(message.content))
+                when (val presentation = message.presentation) {
+                    is ChatMessagePresentation.Text -> Text(TextSafety.safeDisplay(presentation.content))
+                    is ChatMessagePresentation.Audio -> AudioPlaybackRow(
+                        key = message.id,
+                        durationMillis = presentation.audio.durationMillis ?: 0L,
+                        playbackState = playbackState,
+                        onPlay = { onPlayAudio(message) },
+                        onPause = onPauseAudio,
+                    )
+
+                    ChatMessagePresentation.Unsupported -> Text("Mensaje no compatible")
+                }
                 Text(
                     text = formatBackendTime(message.sentAt),
                     modifier = Modifier.fillMaxWidth(),
@@ -1362,6 +1712,70 @@ private fun MessageBubble(
             }
         }
     }
+}
+
+@Composable
+private fun AudioPlaybackRow(
+    key: String,
+    durationMillis: Long,
+    playbackState: ChatAudioPlaybackUiState,
+    onPlay: () -> Unit,
+    onPause: () -> Unit,
+) {
+    val active = playbackState.key == key
+    val phase = if (active) playbackState.phase else ChatAudioPlaybackPhase.Idle
+    val positionMillis = if (active) playbackState.positionMillis.toLong() else 0L
+    val progress = if (durationMillis > 0) {
+        (positionMillis.toFloat() / durationMillis.toFloat()).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            TextButton(
+                onClick = {
+                    if (phase == ChatAudioPlaybackPhase.Playing || phase == ChatAudioPlaybackPhase.Preparing) {
+                        onPause()
+                    } else {
+                        onPlay()
+                    }
+                },
+                enabled = phase != ChatAudioPlaybackPhase.Preparing,
+            ) {
+                Text(
+                    when (phase) {
+                        ChatAudioPlaybackPhase.Playing -> "Pausar"
+                        ChatAudioPlaybackPhase.Preparing -> "Cargando..."
+                        ChatAudioPlaybackPhase.Failed -> "Reintentar"
+                        ChatAudioPlaybackPhase.Idle,
+                        ChatAudioPlaybackPhase.Paused -> "Reproducir"
+                    }
+                )
+            }
+            Text("${formatAudioDuration(positionMillis.takeIf { active } ?: 0L)} / ${formatAudioDuration(durationMillis)}")
+        }
+        LinearProgressIndicator(
+            progress = { progress },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (active && phase == ChatAudioPlaybackPhase.Failed) {
+            Text(
+                playbackState.error ?: "No pudimos reproducir este audio.",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
+
+private fun formatAudioDuration(durationMillis: Long): String {
+    val totalSeconds = (durationMillis / 1_000L).coerceAtLeast(0L)
+    val minutes = totalSeconds / 60L
+    val seconds = totalSeconds % 60L
+    return "$minutes:${seconds.toString().padStart(2, '0')}"
 }
 
 @Composable
@@ -1548,6 +1962,62 @@ internal fun messageComposerUiState(
             else -> null
         },
     )
+}
+
+internal data class ChatAudioComposerUiState(
+    val visible: Boolean,
+    val startEnabled: Boolean,
+    val disabledCopy: String?,
+    val maxDurationMillis: Long,
+)
+
+internal fun chatAudioComposerUiState(
+    chat: Chat?,
+    canSendMessages: Boolean,
+    sendingMessage: Boolean,
+    audioUploading: Boolean,
+    recordingActive: Boolean,
+    loadingChatAction: Boolean,
+): ChatAudioComposerUiState {
+    val policy = chat?.audioPolicy
+    val visible = policy != null &&
+        policy.unavailableReason != ChatAudioUnavailableReason.FeatureDisabled
+    val startEnabled = visible &&
+        canSendMessages &&
+        policy?.enabled == true &&
+        !sendingMessage &&
+        !audioUploading &&
+        !recordingActive &&
+        !loadingChatAction
+    return ChatAudioComposerUiState(
+        visible = visible,
+        startEnabled = startEnabled,
+        disabledCopy = if (visible && !startEnabled) {
+            audioUnavailableCopy(policy?.unavailableReason)
+        } else {
+            null
+        },
+        maxDurationMillis = policy?.maxDurationMillis ?: DEFAULT_CHAT_AUDIO_MAX_DURATION_MILLIS,
+    )
+}
+
+private fun audioUnavailableCopy(reason: ChatAudioUnavailableReason?): String = when (reason) {
+    ChatAudioUnavailableReason.GuidanceRequired ->
+        "Respondan la pregunta actual para habilitar audios."
+    ChatAudioUnavailableReason.GuidanceNotAvailable ->
+        "Los audios se habilitarán al avanzar en las preguntas."
+    ChatAudioUnavailableReason.LimitReached ->
+        "Ya enviaste el audio disponible en este chat."
+    ChatAudioUnavailableReason.WaitingForBoth ->
+        "El audio se habilita cuando ambas personas hayan ingresado."
+    ChatAudioUnavailableReason.WaitingDelay ->
+        "El audio todavía no está disponible."
+    ChatAudioUnavailableReason.ChatNotWritable ->
+        "Este chat no admite nuevos mensajes."
+    ChatAudioUnavailableReason.FeatureDisabled ->
+        "Los audios no están disponibles."
+    is ChatAudioUnavailableReason.Unknown,
+    null -> "El audio no está disponible en este momento."
 }
 
 internal fun chatPollingEnabled(canChat: Boolean): Boolean = canChat

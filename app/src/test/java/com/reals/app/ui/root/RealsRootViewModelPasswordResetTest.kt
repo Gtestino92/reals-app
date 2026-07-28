@@ -809,6 +809,7 @@ class RealsRootViewModelPasswordResetTest {
                 submitChatDecision = SubmitChatDecisionUseCase(matchRepository),
                 getChatMessages = GetChatMessagesUseCase(chatRepository),
                 sendChatMessage = SendChatMessageUseCase(chatRepository),
+                sendChatAudioMessage = com.reals.app.domain.usecase.SendChatAudioMessageUseCase(chatRepository),
                 requestNextFirstChatGuidanceQuestion = RequestNextFirstChatGuidanceQuestionUseCase(chatRepository),
                 getChatExitRequests = GetChatExitRequestsUseCase(chatRepository),
                 requestMutualChatExit = RequestMutualChatExitUseCase(chatRepository),
@@ -826,6 +827,7 @@ class RealsRootViewModelPasswordResetTest {
                 getSecondChatForConnection = GetSecondChatForConnectionUseCase(chatRepository),
                 getChatMessages = GetChatMessagesUseCase(chatRepository),
                 sendChatMessage = SendChatMessageUseCase(chatRepository),
+                sendChatAudioMessage = com.reals.app.domain.usecase.SendChatAudioMessageUseCase(chatRepository),
                 safetyCancelChat = SafetyCancelChatUseCase(chatRepository),
                 createCompletionRequest =
                     com.reals.app.domain.usecase.CreateSecondChatCompletionRequestUseCase(chatRepository),

@@ -10,6 +10,7 @@ import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.FirstChatGuidance
 import com.reals.app.domain.model.SecondChatCompletionDecision
 import com.reals.app.domain.model.SecondChatStatus
+import java.io.File
 
 class GetChatUseCase(
     private val chatRepository: ChatRepository,
@@ -90,6 +91,13 @@ class SendChatMessageUseCase(
 ) {
     suspend operator fun invoke(chatId: String, content: String): ApiResult<ChatMessage> =
         chatRepository.sendMessage(chatId, content)
+}
+
+class SendChatAudioMessageUseCase(
+    private val chatRepository: ChatRepository,
+) {
+    suspend operator fun invoke(chatId: String, file: File, clientMessageId: String): ApiResult<ChatMessage> =
+        chatRepository.sendAudioMessage(chatId, file, clientMessageId)
 }
 
 class RequestNextFirstChatGuidanceQuestionUseCase(

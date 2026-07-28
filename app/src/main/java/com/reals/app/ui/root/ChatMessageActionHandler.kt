@@ -2,14 +2,16 @@ package com.reals.app.ui.root
 
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.security.TextSafety
+import com.reals.app.domain.model.ChatAudioUnavailableReason
 import com.reals.app.domain.model.ChatExitRequestStatus
+import java.io.File
 
 internal object ChatMessageActionHandler {
     fun prepareFirstChatSend(
         current: RealsRootUiState.FirstChat,
         content: String,
     ): ChatMessageSendPreparation<RealsRootUiState.FirstChat> {
-        if (current.loading || current.refreshing || current.sending || current.actionLoading) {
+        if (current.loading || current.refreshing || current.sending || current.audioUpload.uploading || current.actionLoading) {
             return ChatMessageSendPreparation.Ignored
         }
         if (current.hasPendingExitRequest()) {
@@ -30,6 +32,49 @@ internal object ChatMessageActionHandler {
                 current.copy(
                     optimisticMessages = current.optimisticMessages + optimisticMessage,
                     sending = true,
+                    audioUpload = current.audioUpload.copy(error = null, completedClientMessageId = null),
+                    error = null,
+                    message = null,
+                )
+            },
+        )
+    }
+
+    fun prepareFirstChatAudioSend(
+        current: RealsRootUiState.FirstChat,
+        filePath: String,
+        clientMessageId: String,
+    ): ChatAudioSendPreparation<RealsRootUiState.FirstChat> {
+        if (
+            current.loading ||
+            current.refreshing ||
+            current.sending ||
+            current.audioUpload.uploading ||
+            current.actionLoading ||
+            current.guidanceActionLoading ||
+            current.manualBlock.loading ||
+            current.hasPendingExitRequest()
+        ) {
+            return ChatAudioSendPreparation.Ignored
+        }
+        val chat = current.chat ?: return ChatAudioSendPreparation.Ignored
+        return prepareAudioSend(
+            filePath = filePath,
+            clientMessageId = clientMessageId,
+            chatId = chat.id,
+            maxFileSizeBytes = chat.audioPolicy?.maxFileSizeBytes,
+            policyEnabled = chat.audioPolicy?.enabled == true,
+            unavailableReason = chat.audioPolicy?.unavailableReason,
+            invalidState = { error, nonRetryable ->
+                current.copy(
+                    audioUpload = ChatAudioUploadUiState(error = error, nonRetryable = nonRetryable),
+                    error = null,
+                    message = null,
+                )
+            },
+            pendingState = {
+                current.copy(
+                    audioUpload = ChatAudioUploadUiState(uploading = true),
                     error = null,
                     message = null,
                 )
@@ -41,7 +86,7 @@ internal object ChatMessageActionHandler {
         current: RealsRootUiState.SecondChat,
         content: String,
     ): ChatMessageSendPreparation<RealsRootUiState.SecondChat> {
-        if (current.loading || current.refreshing || current.sending || current.actionLoading) {
+        if (current.loading || current.refreshing || current.sending || current.audioUpload.uploading || current.actionLoading) {
             return ChatMessageSendPreparation.Ignored
         }
         if (current.lifecycle.status != null && !current.lifecycle.timingPresentation().genuinelyActive) {
@@ -62,6 +107,48 @@ internal object ChatMessageActionHandler {
                 current.copy(
                     optimisticMessages = current.optimisticMessages + optimisticMessage,
                     sending = true,
+                    audioUpload = current.audioUpload.copy(error = null, completedClientMessageId = null),
+                    error = null,
+                    message = null,
+                )
+            },
+        )
+    }
+
+    fun prepareSecondChatAudioSend(
+        current: RealsRootUiState.SecondChat,
+        filePath: String,
+        clientMessageId: String,
+    ): ChatAudioSendPreparation<RealsRootUiState.SecondChat> {
+        if (
+            current.loading ||
+            current.refreshing ||
+            current.sending ||
+            current.audioUpload.uploading ||
+            current.actionLoading ||
+            current.manualBlock.loading ||
+            current.lifecycle.status != null && !current.lifecycle.timingPresentation().genuinelyActive
+        ) {
+            return ChatAudioSendPreparation.Ignored
+        }
+        val chat = current.chat ?: return ChatAudioSendPreparation.Ignored
+        return prepareAudioSend(
+            filePath = filePath,
+            clientMessageId = clientMessageId,
+            chatId = chat.id,
+            maxFileSizeBytes = chat.audioPolicy?.maxFileSizeBytes,
+            policyEnabled = chat.audioPolicy?.enabled == true,
+            unavailableReason = chat.audioPolicy?.unavailableReason,
+            invalidState = { error, nonRetryable ->
+                current.copy(
+                    audioUpload = ChatAudioUploadUiState(error = error, nonRetryable = nonRetryable),
+                    error = null,
+                    message = null,
+                )
+            },
+            pendingState = {
+                current.copy(
+                    audioUpload = ChatAudioUploadUiState(uploading = true),
                     error = null,
                     message = null,
                 )
@@ -112,8 +199,64 @@ internal object ChatMessageActionHandler {
         )
     }
 
+    private fun <T> prepareAudioSend(
+        filePath: String,
+        clientMessageId: String,
+        chatId: String,
+        maxFileSizeBytes: Long?,
+        policyEnabled: Boolean,
+        unavailableReason: ChatAudioUnavailableReason?,
+        invalidState: (ApiError, Boolean) -> T,
+        pendingState: () -> T,
+    ): ChatAudioSendPreparation<T> {
+        if (!policyEnabled) {
+            return ChatAudioSendPreparation.Rejected(
+                invalidState(audioPolicyUnavailableError(unavailableReason), true)
+            )
+        }
+        val file = File(filePath)
+        if (clientMessageId.isBlank() || !file.isFile || file.length() <= 0L) {
+            return ChatAudioSendPreparation.Rejected(
+                invalidState(ApiError.Unexpected("La grabación no es válida."), true)
+            )
+        }
+        if (maxFileSizeBytes != null && file.length() > maxFileSizeBytes) {
+            return ChatAudioSendPreparation.Rejected(
+                invalidState(ApiError.Unexpected("La grabación supera el tamaño permitido."), true)
+            )
+        }
+        return ChatAudioSendPreparation.Accepted(
+            pendingState = pendingState(),
+            chatId = chatId,
+            file = file,
+            clientMessageId = clientMessageId,
+        )
+    }
+
     private fun invalidMessageError(): ApiError =
         ApiError.Unexpected("El mensaje no es válido.")
+
+    private fun audioPolicyUnavailableError(reason: ChatAudioUnavailableReason?): ApiError =
+        ApiError.Unexpected(
+            when (reason) {
+                ChatAudioUnavailableReason.GuidanceRequired ->
+                    "Respondan la pregunta actual para habilitar audios."
+                ChatAudioUnavailableReason.GuidanceNotAvailable ->
+                    "Los audios se habilitarán al avanzar en las preguntas."
+                ChatAudioUnavailableReason.LimitReached ->
+                    "Ya enviaste el audio disponible en este chat."
+                ChatAudioUnavailableReason.WaitingForBoth ->
+                    "El audio se habilita cuando ambas personas hayan ingresado."
+                ChatAudioUnavailableReason.WaitingDelay ->
+                    "El audio todavía no está disponible."
+                ChatAudioUnavailableReason.ChatNotWritable ->
+                    "Este chat no admite nuevos mensajes."
+                ChatAudioUnavailableReason.FeatureDisabled ->
+                    "Los audios no están disponibles."
+                is ChatAudioUnavailableReason.Unknown,
+                null -> "El audio no está disponible en este momento."
+            }
+        )
 
     private fun RealsRootUiState.FirstChat.hasPendingExitRequest(): Boolean =
         exitRequests.any { it.status == ChatExitRequestStatus.Pending }
@@ -131,4 +274,19 @@ internal sealed interface ChatMessageSendPreparation<out T> {
     ) : ChatMessageSendPreparation<T>
 
     data object Ignored : ChatMessageSendPreparation<Nothing>
+}
+
+internal sealed interface ChatAudioSendPreparation<out T> {
+    data class Accepted<T>(
+        val pendingState: T,
+        val chatId: String,
+        val file: File,
+        val clientMessageId: String,
+    ) : ChatAudioSendPreparation<T>
+
+    data class Rejected<T>(
+        val state: T,
+    ) : ChatAudioSendPreparation<T>
+
+    data object Ignored : ChatAudioSendPreparation<Nothing>
 }

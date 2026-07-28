@@ -22,8 +22,15 @@ internal fun List<ChatMessage>.lastMessageCursor(): String? =
     ).lastOrNull()?.id
 
 internal fun List<ChatMessage>.appendUnique(newMessages: List<ChatMessage>): List<ChatMessage> {
-    val seen = map { it.id }.toMutableSet()
-    return (this + newMessages.filter { seen.add(it.id) }).sortedBy { it.sentAt }
+    val incomingById = newMessages.associateBy { it.id }
+    return (
+        map { message -> incomingById[message.id] ?: message } +
+            newMessages.filterNot { incoming -> any { it.id == incoming.id } }
+        )
+        .sortedWith(
+            compareBy<ChatMessage> { it.sentAt }
+                .thenBy { it.id }
+        )
 }
 
 internal fun List<ChatExitRequest>.latestExitRequest(): ChatExitRequest? =

@@ -5,6 +5,9 @@ import com.reals.app.domain.model.ChatDecisionState
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatExitRequestType
+import com.reals.app.domain.model.ChatAudioUnavailableReason
+import com.reals.app.domain.model.ChatMessagePresentation
+import com.reals.app.domain.model.ChatMessageType
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.testutil.TestDtos
 import com.reals.app.testutil.testJson
@@ -153,7 +156,42 @@ class ChatMappersTest {
         assertEquals("chat-1", message.chatSessionId)
         assertEquals("user-1", message.senderId)
         assertEquals("hola", message.content)
+        assertEquals(ChatMessageType.Text, message.messageType)
+        assertTrue(message.presentation is ChatMessagePresentation.Text)
         assertEquals(TestDtos.now, message.sentAt)
+    }
+
+    @Test
+    fun `AUDIO message with null content maps nested metadata`() {
+        val message = TestDtos.audioChatMessage().toDomain()
+
+        assertEquals(ChatMessageType.Audio, message.messageType)
+        assertEquals(null, message.content)
+        assertEquals("https://example.test/audio", message.audio?.url)
+        assertEquals(3_158L, message.audio?.durationMillis)
+        assertTrue(message.presentation is ChatMessagePresentation.Audio)
+    }
+
+    @Test
+    fun `unknown and malformed messages map to unsupported presentation`() {
+        val unknown = TestDtos.chatMessage().copy(messageType = "VIDEO").toDomain()
+        val audioWithoutMetadata = TestDtos.audioChatMessage().copy(audio = null).toDomain()
+        val textWithoutContent = TestDtos.chatMessage().copy(content = null).toDomain()
+
+        assertTrue(unknown.messageType is ChatMessageType.Unknown)
+        assertEquals(ChatMessagePresentation.Unsupported, unknown.presentation)
+        assertEquals(ChatMessagePresentation.Unsupported, audioWithoutMetadata.presentation)
+        assertEquals(ChatMessagePresentation.Unsupported, textWithoutContent.presentation)
+    }
+
+    @Test
+    fun `audio policy maps unknown reason safely`() {
+        val chat = TestDtos.chat(
+            audioPolicy = TestDtos.audioPolicy(enabled = false, unavailableReason = "FUTURE_REASON"),
+        ).toDomain()
+
+        assertTrue(chat.audioPolicy?.unavailableReason is ChatAudioUnavailableReason.Unknown)
+        assertEquals("FUTURE_REASON", chat.audioPolicy?.unavailableReason?.rawValue)
     }
 
     @Test

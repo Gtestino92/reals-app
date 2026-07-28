@@ -4,6 +4,7 @@
 - Treat current GitHub code and documentation as the source of truth.
 - Confirm the current branch and HEAD before recommendations or edits.
 - Use `development` as the normal comparison base unless the task explicitly names another base.
+- Never leave a local feature branch tracking the comparison/base branch such as `origin/development`; if a feature branch has no matching remote branch, leave it without an upstream until it is explicitly pushed or linked to its own remote branch.
 - Inspect actual files and relevant tests before proposing code.
 - Compare the feature branch against the base before changing it.
 - Do not reconstruct architecture solely from task descriptions, prior reports, or memory.

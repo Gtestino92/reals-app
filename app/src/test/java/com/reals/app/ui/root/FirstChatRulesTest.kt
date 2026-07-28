@@ -4,7 +4,9 @@ import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatExitRequestType
+import com.reals.app.domain.model.ChatAudio
 import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.ChatMessageType
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.MatchState
 import org.junit.Assert.assertEquals
@@ -35,6 +37,25 @@ class FirstChatRulesTest {
         )
 
         assertEquals(listOf("2", "1"), appended.map { it.id })
+    }
+
+    @Test
+    fun `appendUnique replaces same id message metadata`() {
+        val current = listOf(audioMessage("1", "https://old.test/audio"))
+        val appended = current.appendUnique(listOf(audioMessage("1", "https://new.test/audio")))
+
+        assertEquals(1, appended.size)
+        assertEquals("https://new.test/audio", appended.single().audio?.url)
+    }
+
+    @Test
+    fun `lastMessageCursor includes audio messages`() {
+        val messages = listOf(
+            message("text", "2026-06-18T21:00:00Z"),
+            audioMessage("audio", "https://example.test/audio", "2026-06-18T21:01:00Z"),
+        )
+
+        assertEquals("audio", messages.lastMessageCursor())
     }
 
     @Test
@@ -108,6 +129,26 @@ class FirstChatRulesTest {
         chatSessionId = "chat-1",
         senderId = "user-1",
         content = "hola",
+        sentAt = sentAt,
+    )
+
+    private fun audioMessage(
+        id: String,
+        url: String,
+        sentAt: String = "2026-06-18T21:00:00Z",
+    ) = ChatMessage(
+        id = id,
+        chatSessionId = "chat-1",
+        senderId = "user-1",
+        clientMessageId = "00000000-0000-0000-0000-000000000101",
+        messageType = ChatMessageType.Audio,
+        content = null,
+        audio = ChatAudio(
+            url = url,
+            durationMillis = 3_158,
+            contentType = "audio/mp4",
+            sizeBytes = 77_832,
+        ),
         sentAt = sentAt,
     )
 
