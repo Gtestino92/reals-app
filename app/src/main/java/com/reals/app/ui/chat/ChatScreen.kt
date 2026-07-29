@@ -29,7 +29,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -69,7 +68,6 @@ import com.reals.app.core.security.TextSafety
 import com.reals.app.core.time.backendInstantOrNull
 import com.reals.app.core.time.remainingExitSeconds
 import com.reals.app.domain.model.Chat
-import com.reals.app.domain.model.ChatAudioUnavailableReason
 import com.reals.app.domain.model.ChatDecisionState
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequest
@@ -280,6 +278,16 @@ fun ChatScreen(
         canUseChatActions &&
             (secondChatLifecycle == null || secondChatTiming?.genuinelyActive == true) &&
             (!showMutualExitActions || !exitFlowLocked)
+    val firstChatUnansweredSuggestion = firstChatUnansweredSuggestionState(
+        chat = chat,
+        currentUserId = currentUserId,
+        confirmedMessages = messages,
+        optimisticMessages = optimisticMessages,
+        pendingExitRequest = pendingExitRequest,
+        nowMillis = nowMillis,
+        mutualExitActionAvailable = showMutualExitActions && canUseExistingChatActions,
+        messageSendInFlight = sendingMessage,
+    )
     val manualBlockBusy =
         loading || refreshing || sending || actionLoading || guidanceActionLoading || manualBlockLoading
     val canManualBlock = !manualBlockBusy
@@ -608,6 +616,10 @@ fun ChatScreen(
                     tone = FeedbackTone.Warning,
                 )
             }
+            FirstChatUnansweredSuggestionCard(
+                state = firstChatUnansweredSuggestion,
+                onRequestMutualExit = onRequestMutualExit,
+            )
             if (secondChatTiming?.showAbsoluteExpiryWarning == true) {
                 FeedbackCard(
                     title = "Tiempo restante",
@@ -678,9 +690,9 @@ fun ChatScreen(
                     bottomBarHeight = with(density) { size.height.toDp() }
                 },
             ) {
-                MessageComposer(
+                val composerPresentation = ChatAudioComposerPresentation(
                     draft = draft,
-                    state = composerState,
+                    textState = composerState,
                     audioState = audioComposerState,
                     audioDraft = audioDraft,
                     uploadState = audioUpload,
@@ -689,22 +701,24 @@ fun ChatScreen(
                     recordingStartedAtMillis = recordingStartedAtMillis,
                     recordingOperationInFlight = recordingOperationInFlight,
                     playbackState = playbackController.state,
-                    onDraftChange = {
+                )
+                val composerCallbacks = ChatAudioComposerCallbacks(
+                    onDraftChange = { value: String ->
                         if (composerState.canEditDraft) {
-                            draft = it.take(1_000)
+                            draft = value.take(1_000)
                         }
                     },
-                    onSend = {
+                    onSendText = {
                         if (composerState.sendButtonEnabled && onSendMessage(draft)) {
                             draft = ""
                             localAudioError = null
                             localAudioInfo = null
                         }
                     },
-                    onStartRecording = {
+                    onStartRecording = startRecording@{
                         if (!audioComposerState.startEnabled) {
                             localAudioError = audioComposerState.disabledCopy
-                            return@MessageComposer
+                            return@startRecording
                         }
                         val hasPermission = ContextCompat.checkSelfPermission(
                             context,
@@ -750,6 +764,10 @@ fun ChatScreen(
                         localAudioInfo = null
                         onSendAudioMessage(draftToSend.filePath, draftToSend.clientMessageId)
                     },
+                )
+                MessageComposer(
+                    presentation = composerPresentation,
+                    callbacks = composerCallbacks,
                 )
             }
         }
@@ -1226,6 +1244,46 @@ private fun ChatOverflowMenu(
 }
 
 @Composable
+private fun FirstChatUnansweredSuggestionCard(
+    state: FirstChatUnansweredSuggestionState,
+    onRequestMutualExit: () -> Unit,
+) {
+    if (!state.visible) return
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = "Todavía no recibiste respuesta",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            Text(
+                text = "Podés solicitar el cierre de la conversación. Si la otra persona no responde a la solicitud, el chat se cerrará sin penalizarte.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            Button(
+                onClick = onRequestMutualExit,
+                enabled = state.actionEnabled,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Solicitar cierre")
+            }
+        }
+    }
+}
+
+@Composable
 private fun MessageList(
     currentUserId: String,
     messages: List<ChatMessage>,
@@ -1477,248 +1535,6 @@ private fun ChatActionsPanel(
 }
 
 @Composable
-private fun MessageComposer(
-    draft: String,
-    state: MessageComposerUiState,
-    audioState: ChatAudioComposerUiState,
-    audioDraft: ChatAudioDraftUiState?,
-    uploadState: ChatAudioUploadUiState,
-    localAudioError: String?,
-    localAudioInfo: String?,
-    recordingStartedAtMillis: Long?,
-    recordingOperationInFlight: Boolean,
-    playbackState: ChatAudioPlaybackUiState,
-    onDraftChange: (String) -> Unit,
-    onSend: () -> Unit,
-    onStartRecording: () -> Unit,
-    onStopRecording: () -> Unit,
-    onSendRecording: () -> Unit,
-    onMaxDurationReached: () -> Unit,
-    onCancelRecording: () -> Unit,
-    onPlayDraft: (ChatAudioDraftUiState) -> Unit,
-    onPauseAudio: () -> Unit,
-    onDeleteDraft: () -> Unit,
-    onSendAudio: (ChatAudioDraftUiState) -> Boolean,
-) {
-    var recordingNowMillis by remember(recordingStartedAtMillis) {
-        mutableStateOf(SystemClock.elapsedRealtime())
-    }
-    LaunchedEffect(recordingStartedAtMillis) {
-        while (recordingStartedAtMillis != null) {
-            delay(250.milliseconds)
-            recordingNowMillis = SystemClock.elapsedRealtime()
-        }
-    }
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        ),
-    ) {
-        Column(
-            modifier = Modifier.padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            localAudioError?.let {
-                Text(it, color = MaterialTheme.colorScheme.error)
-            }
-            localAudioInfo?.let {
-                Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            uploadState.error?.let {
-                ApiErrorFeedbackCard(it, ErrorContext.Chat)
-            }
-            state.explanatoryCopy?.let { copy ->
-                Text(
-                    text = copy,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            if (recordingStartedAtMillis != null) {
-                val elapsedMillis = (recordingNowMillis - recordingStartedAtMillis).coerceAtLeast(0L)
-                LaunchedEffect(elapsedMillis, audioState.maxDurationMillis, recordingOperationInFlight) {
-                    if (!recordingOperationInFlight && elapsedMillis >= audioState.maxDurationMillis) {
-                        onMaxDurationReached()
-                    }
-                }
-                RecordingComposer(
-                    elapsedMillis = elapsedMillis,
-                    maxDurationMillis = audioState.maxDurationMillis,
-                    controlsEnabled = !recordingOperationInFlight,
-                    onStop = onStopRecording,
-                    onSend = onSendRecording,
-                    onCancel = onCancelRecording,
-                )
-            } else if (audioDraft != null) {
-                AudioDraftComposer(
-                    draft = audioDraft,
-                    uploadState = uploadState,
-                    playbackState = playbackState,
-                    onPlay = { onPlayDraft(audioDraft) },
-                    onPause = onPauseAudio,
-                    onDelete = onDeleteDraft,
-                    onSend = { onSendAudio(audioDraft) },
-                )
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    OutlinedTextField(
-                        value = draft,
-                        onValueChange = onDraftChange,
-                        placeholder = { Text("Mensaje") },
-                        enabled = state.canEditDraft,
-                        minLines = 1,
-                        maxLines = 4,
-                        trailingIcon = if (audioState.visible) {
-                            {
-                                IconButton(
-                                    onClick = onStartRecording,
-                                    enabled = audioState.startEnabled,
-                                ) {
-                                    Icon(
-                                        painter = painterResource(R.drawable.ic_mic),
-                                        contentDescription = "Grabar audio",
-                                    )
-                                }
-                            }
-                        } else {
-                            null
-                        },
-                        modifier = Modifier.weight(1f),
-                    )
-
-                    FilledIconButton(
-                        onClick = onSend,
-                        enabled = state.sendButtonEnabled,
-                    ) {
-                        if (state.sendingMessage) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                            )
-                        } else {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_send),
-                                contentDescription = "Enviar",
-                            )
-                        }
-                    }
-                }
-
-                if (audioState.visible && !audioState.startEnabled && audioState.disabledCopy != null) {
-                    Text(
-                        text = audioState.disabledCopy,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun RecordingComposer(
-    elapsedMillis: Long,
-    maxDurationMillis: Long,
-    controlsEnabled: Boolean,
-    onStop: () -> Unit,
-    onSend: () -> Unit,
-    onCancel: () -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Grabando ${formatAudioDuration(elapsedMillis)} / ${formatAudioDuration(maxDurationMillis)}")
-        LinearProgressIndicator(
-            progress = { (elapsedMillis.toFloat() / maxDurationMillis.toFloat()).coerceIn(0f, 1f) },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(
-                onClick = onCancel,
-                enabled = controlsEnabled,
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_close),
-                    contentDescription = "Cancelar grabación",
-                )
-            }
-            IconButton(
-                onClick = onStop,
-                enabled = controlsEnabled,
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_stop),
-                    contentDescription = "Detener y revisar",
-                )
-            }
-            FilledIconButton(
-                onClick = onSend,
-                enabled = controlsEnabled,
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_send),
-                    contentDescription = "Enviar audio",
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun AudioDraftComposer(
-    draft: ChatAudioDraftUiState,
-    uploadState: ChatAudioUploadUiState,
-    playbackState: ChatAudioPlaybackUiState,
-    onPlay: () -> Unit,
-    onPause: () -> Unit,
-    onDelete: () -> Unit,
-    onSend: () -> Boolean,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Audio listo para enviar")
-        AudioPlaybackRow(
-            key = "draft-${draft.clientMessageId}",
-            durationMillis = draft.durationMillis,
-            playbackState = playbackState,
-            onPlay = onPlay,
-            onPause = onPause,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(
-                onClick = onDelete,
-                enabled = !uploadState.uploading,
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(if (uploadState.nonRetryable) "Borrar" else "Cancelar")
-            }
-            Button(
-                onClick = { onSend() },
-                enabled = !uploadState.uploading && !uploadState.nonRetryable,
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(
-                    if (uploadState.uploading) {
-                        "Enviando..."
-                    } else if (uploadState.error != null) {
-                        "Reintentar"
-                    } else {
-                        "Enviar"
-                    }
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun TimedExitRequestCard(
     currentUserId: String,
     request: ChatExitRequest,
@@ -1873,7 +1689,7 @@ private fun MessageBubble(
 }
 
 @Composable
-private fun AudioPlaybackRow(
+internal fun AudioPlaybackRow(
     key: String,
     durationMillis: Long,
     playbackState: ChatAudioPlaybackUiState,
@@ -1939,17 +1755,6 @@ private fun AudioPlaybackRow(
             )
         }
     }
-}
-
-internal fun formatAudioDuration(durationMillis: Long): String {
-    val totalSeconds = when {
-        durationMillis <= 0L -> 0L
-        durationMillis < 1_000L -> 1L
-        else -> durationMillis / 1_000L
-    }
-    val minutes = totalSeconds / 60L
-    val seconds = totalSeconds % 60L
-    return "$minutes:${seconds.toString().padStart(2, '0')}"
 }
 
 private fun LocalChatAudioDraft.toUiState(): ChatAudioDraftUiState =
@@ -2112,94 +1917,6 @@ internal fun chatHeaderStatusText(
     secondChatUnavailable -> "Este segundo chat ya no est\u00e1 disponible."
     else -> firstChatHeaderDeadlineLabel(expiresAt, firstChatLifecycle)
         ?.let { "V\u00e1lido hasta ${formatDateTime(it)}" }
-}
-
-internal data class MessageComposerUiState(
-    val canSendMessages: Boolean,
-    val canEditDraft: Boolean,
-    val sendButtonEnabled: Boolean,
-    val sendingMessage: Boolean,
-    val explanatoryCopy: String?,
-)
-
-internal fun messageComposerUiState(
-    canChat: Boolean,
-    canSendMessages: Boolean,
-    sendingMessage: Boolean,
-    loadingChatAction: Boolean,
-    draft: String,
-): MessageComposerUiState {
-    val canEditDraft = canSendMessages && !loadingChatAction
-    return MessageComposerUiState(
-        canSendMessages = canSendMessages,
-        canEditDraft = canEditDraft,
-        sendButtonEnabled = canSendMessages &&
-                !sendingMessage &&
-                !loadingChatAction &&
-                draft.isNotBlank(),
-        sendingMessage = sendingMessage,
-        explanatoryCopy = when {
-            !canChat -> "Este chat no est\u00e1 disponible para enviar mensajes."
-            !canSendMessages -> MUTUAL_EXIT_CONVERSATION_PAUSED_COPY
-            else -> null
-        },
-    )
-}
-
-internal data class ChatAudioComposerUiState(
-    val visible: Boolean,
-    val startEnabled: Boolean,
-    val disabledCopy: String?,
-    val maxDurationMillis: Long,
-)
-
-internal fun chatAudioComposerUiState(
-    chat: Chat?,
-    canSendMessages: Boolean,
-    sendingMessage: Boolean,
-    audioUploading: Boolean,
-    recordingActive: Boolean,
-    loadingChatAction: Boolean,
-): ChatAudioComposerUiState {
-    val policy = chat?.audioPolicy
-    val visible = policy != null &&
-        policy.unavailableReason != ChatAudioUnavailableReason.FeatureDisabled
-    val startEnabled = visible &&
-        canSendMessages &&
-        policy?.enabled == true &&
-        !sendingMessage &&
-        !audioUploading &&
-        !recordingActive &&
-        !loadingChatAction
-    return ChatAudioComposerUiState(
-        visible = visible,
-        startEnabled = startEnabled,
-        disabledCopy = if (visible && !startEnabled) {
-            audioUnavailableCopy(policy?.unavailableReason)
-        } else {
-            null
-        },
-        maxDurationMillis = policy?.maxDurationMillis ?: DEFAULT_CHAT_AUDIO_MAX_DURATION_MILLIS,
-    )
-}
-
-private fun audioUnavailableCopy(reason: ChatAudioUnavailableReason?): String = when (reason) {
-    ChatAudioUnavailableReason.GuidanceRequired ->
-        "Respondan la pregunta actual para habilitar audios."
-    ChatAudioUnavailableReason.GuidanceNotAvailable ->
-        "Los audios se habilitarán al avanzar en las preguntas."
-    ChatAudioUnavailableReason.LimitReached ->
-        "Ya enviaste el audio disponible en este chat."
-    ChatAudioUnavailableReason.WaitingForBoth ->
-        "El audio se habilita cuando ambas personas hayan ingresado."
-    ChatAudioUnavailableReason.WaitingDelay ->
-        "El audio todavía no está disponible."
-    ChatAudioUnavailableReason.ChatNotWritable ->
-        "Este chat no admite nuevos mensajes."
-    ChatAudioUnavailableReason.FeatureDisabled ->
-        "Los audios no están disponibles."
-    is ChatAudioUnavailableReason.Unknown,
-    null -> "El audio no está disponible en este momento."
 }
 
 internal fun chatPollingEnabled(canChat: Boolean): Boolean = canChat
