@@ -183,6 +183,286 @@ class RealsRootViewModelPollingGuardTest {
     }
 
     @Test
+    fun `silent first chat refresh started before draft deletion cannot restore deleted draft`() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val refreshStarted = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeGetFirstChatForMatchResponse = {
+                refreshStarted.complete(Unit)
+                gate.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        val draft = audioDraft("first-chat-draft.m4a")
+        viewModel.setState(firstChatState().copy(audioDraft = draft))
+
+        viewModel.refreshFirstChat(silent = true)
+        runCurrent()
+        refreshStarted.await()
+
+        viewModel.deleteFirstChatAudioDraft()
+        runCurrent()
+        assertNull((viewModel.uiState.value as RealsRootUiState.FirstChat).audioDraft)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertNull((viewModel.uiState.value as RealsRootUiState.FirstChat).audioDraft)
+    }
+
+    @Test
+    fun `silent second chat refresh started before draft deletion cannot restore deleted draft`() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val refreshStarted = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeGetSecondChatStatusResponse = {
+                refreshStarted.complete(Unit)
+                gate.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        val draft = audioDraft("second-chat-draft.m4a")
+        viewModel.setState(secondChatState().copy(audioDraft = draft))
+
+        viewModel.refreshSecondChat(silent = true)
+        runCurrent()
+        refreshStarted.await()
+
+        viewModel.deleteSecondChatAudioDraft()
+        runCurrent()
+        assertNull((viewModel.uiState.value as RealsRootUiState.SecondChat).audioDraft)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertNull((viewModel.uiState.value as RealsRootUiState.SecondChat).audioDraft)
+    }
+
+    @Test
+    fun `silent first chat refresh started before draft replacement cannot restore old draft`() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val refreshStarted = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeGetFirstChatForMatchResponse = {
+                refreshStarted.complete(Unit)
+                gate.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        val oldDraft = audioDraft("first-old.m4a")
+        val newDraft = audioDraft("first-new.m4a")
+        viewModel.setState(firstChatState().copy(audioDraft = oldDraft))
+
+        viewModel.refreshFirstChat(silent = true)
+        runCurrent()
+        refreshStarted.await()
+
+        viewModel.setFirstChatAudioDraft(newDraft)
+        runCurrent()
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(newDraft, (viewModel.uiState.value as RealsRootUiState.FirstChat).audioDraft)
+    }
+
+    @Test
+    fun `silent second chat refresh started before draft replacement cannot restore old draft`() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val refreshStarted = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeGetSecondChatStatusResponse = {
+                refreshStarted.complete(Unit)
+                gate.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        val oldDraft = audioDraft("second-old.m4a")
+        val newDraft = audioDraft("second-new.m4a")
+        viewModel.setState(secondChatState().copy(audioDraft = oldDraft))
+
+        viewModel.refreshSecondChat(silent = true)
+        runCurrent()
+        refreshStarted.await()
+
+        viewModel.setSecondChatAudioDraft(newDraft)
+        runCurrent()
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(newDraft, (viewModel.uiState.value as RealsRootUiState.SecondChat).audioDraft)
+    }
+
+    @Test
+    fun `silent first chat refresh cannot erase audio upload completion`() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val refreshStarted = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeGetFirstChatForMatchResponse = {
+                refreshStarted.complete(Unit)
+                gate.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(firstChatState())
+
+        viewModel.refreshFirstChat(silent = true)
+        runCurrent()
+        refreshStarted.await()
+
+        viewModel.setState(
+            firstChatState().copy(audioUpload = ChatAudioUploadUiState(completedClientMessageId = "client-1"))
+        )
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(
+            "client-1",
+            (viewModel.uiState.value as RealsRootUiState.FirstChat).audioUpload.completedClientMessageId,
+        )
+    }
+
+    @Test
+    fun `silent second chat refresh cannot erase audio upload completion`() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val refreshStarted = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeGetSecondChatStatusResponse = {
+                refreshStarted.complete(Unit)
+                gate.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(secondChatState())
+
+        viewModel.refreshSecondChat(silent = true)
+        runCurrent()
+        refreshStarted.await()
+
+        viewModel.setState(
+            secondChatState().copy(audioUpload = ChatAudioUploadUiState(completedClientMessageId = "client-2"))
+        )
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(
+            "client-2",
+            (viewModel.uiState.value as RealsRootUiState.SecondChat).audioUpload.completedClientMessageId,
+        )
+    }
+
+    @Test
+    fun `silent first chat refresh cannot erase audio upload failure`() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val refreshStarted = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeGetFirstChatForMatchResponse = {
+                refreshStarted.complete(Unit)
+                gate.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        val failure = ApiError.Unexpected("upload failed")
+        viewModel.setState(firstChatState())
+
+        viewModel.refreshFirstChat(silent = true)
+        runCurrent()
+        refreshStarted.await()
+
+        viewModel.setState(firstChatState().copy(audioUpload = ChatAudioUploadUiState(error = failure)))
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(failure, (viewModel.uiState.value as RealsRootUiState.FirstChat).audioUpload.error)
+    }
+
+    @Test
+    fun `silent second chat refresh cannot erase audio upload failure`() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val refreshStarted = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeGetSecondChatStatusResponse = {
+                refreshStarted.complete(Unit)
+                gate.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        val failure = ApiError.Unexpected("upload failed")
+        viewModel.setState(secondChatState())
+
+        viewModel.refreshSecondChat(silent = true)
+        runCurrent()
+        refreshStarted.await()
+
+        viewModel.setState(secondChatState().copy(audioUpload = ChatAudioUploadUiState(error = failure)))
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(failure, (viewModel.uiState.value as RealsRootUiState.SecondChat).audioUpload.error)
+    }
+
+    @Test
+    fun `silent first chat refresh cannot restore cleared audio upload error`() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val refreshStarted = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeGetFirstChatForMatchResponse = {
+                refreshStarted.complete(Unit)
+                gate.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(
+            firstChatState().copy(audioUpload = ChatAudioUploadUiState(error = ApiError.Unexpected("old")))
+        )
+
+        viewModel.refreshFirstChat(silent = true)
+        runCurrent()
+        refreshStarted.await()
+
+        viewModel.clearFirstChatAudioUploadState()
+        runCurrent()
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertNull((viewModel.uiState.value as RealsRootUiState.FirstChat).audioUpload.error)
+    }
+
+    @Test
+    fun `silent second chat refresh cannot restore cleared audio upload error`() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val refreshStarted = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeGetSecondChatStatusResponse = {
+                refreshStarted.complete(Unit)
+                gate.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(
+            secondChatState().copy(audioUpload = ChatAudioUploadUiState(error = ApiError.Unexpected("old")))
+        )
+
+        viewModel.refreshSecondChat(silent = true)
+        runCurrent()
+        refreshStarted.await()
+
+        viewModel.clearSecondChatAudioUploadState()
+        runCurrent()
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertNull((viewModel.uiState.value as RealsRootUiState.SecondChat).audioUpload.error)
+    }
+
+    @Test
     fun `scheduling refresh ignores overlapping calls and allows later refresh`() = runTest(dispatcher) {
         val gate = CompletableDeferred<Unit>()
         val firstCallStarted = CompletableDeferred<Unit>()
@@ -749,6 +1029,14 @@ class RealsRootViewModelPollingGuardTest {
             chat = TestDtos.chat(status = "ACTIVE").copy(id = "chat-1", chatType = "SECOND_CHAT").toDomain(),
         )
 
+    private fun audioDraft(fileName: String): ChatAudioDraftUiState =
+        ChatAudioDraftUiState(
+            filePath = "C:\\temp\\$fileName",
+            clientMessageId = "$fileName-client-id",
+            durationMillis = 2_000L,
+            sizeBytes = 12_345L,
+        )
+
     private fun schedulingState(
         connectionId: String = "connection-1",
         matchId: String = "match-1",
@@ -824,6 +1112,7 @@ internal fun rootViewModelTestDependencies(api: FakeRealsApi): RealsRootDependen
                 submitChatDecision = SubmitChatDecisionUseCase(matchRepository),
                 getChatMessages = GetChatMessagesUseCase(chatRepository),
                 sendChatMessage = SendChatMessageUseCase(chatRepository),
+                sendChatAudioMessage = com.reals.app.domain.usecase.SendChatAudioMessageUseCase(chatRepository),
                 requestNextFirstChatGuidanceQuestion = RequestNextFirstChatGuidanceQuestionUseCase(chatRepository),
                 getChatExitRequests = GetChatExitRequestsUseCase(chatRepository),
                 requestMutualChatExit = RequestMutualChatExitUseCase(chatRepository),
@@ -841,6 +1130,7 @@ internal fun rootViewModelTestDependencies(api: FakeRealsApi): RealsRootDependen
                 getSecondChatForConnection = GetSecondChatForConnectionUseCase(chatRepository),
                 getChatMessages = GetChatMessagesUseCase(chatRepository),
                 sendChatMessage = SendChatMessageUseCase(chatRepository),
+                sendChatAudioMessage = com.reals.app.domain.usecase.SendChatAudioMessageUseCase(chatRepository),
                 safetyCancelChat = SafetyCancelChatUseCase(chatRepository),
                 createCompletionRequest = CreateSecondChatCompletionRequestUseCase(chatRepository),
                 decideCompletionRequest = DecideSecondChatCompletionRequestUseCase(chatRepository),

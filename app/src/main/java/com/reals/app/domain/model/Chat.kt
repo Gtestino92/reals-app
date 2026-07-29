@@ -20,7 +20,44 @@ data class Chat(
     val readOnlyUntil: String?,
     val lastMessageAt: String?,
     val guidance: FirstChatGuidance?,
+    val audioPolicy: ChatAudioPolicy? = null,
 )
+
+data class ChatAudioPolicy(
+    val enabled: Boolean,
+    val unavailableReason: ChatAudioUnavailableReason?,
+    val enabledAt: String?,
+    val maxDurationMillis: Long,
+    val maxFileSizeBytes: Long,
+    val remainingMessages: Int?,
+)
+
+sealed interface ChatAudioUnavailableReason {
+    val rawValue: String
+
+    data object FeatureDisabled : ChatAudioUnavailableReason { override val rawValue = "FEATURE_DISABLED" }
+    data object ChatNotWritable : ChatAudioUnavailableReason { override val rawValue = "CHAT_NOT_WRITABLE" }
+    data object GuidanceNotAvailable : ChatAudioUnavailableReason { override val rawValue = "GUIDANCE_NOT_AVAILABLE" }
+    data object GuidanceRequired : ChatAudioUnavailableReason { override val rawValue = "GUIDANCE_REQUIRED" }
+    data object LimitReached : ChatAudioUnavailableReason { override val rawValue = "LIMIT_REACHED" }
+    data object WaitingForBoth : ChatAudioUnavailableReason { override val rawValue = "WAITING_FOR_BOTH" }
+    data object WaitingDelay : ChatAudioUnavailableReason { override val rawValue = "WAITING_DELAY" }
+    data class Unknown(override val rawValue: String) : ChatAudioUnavailableReason
+
+    companion object {
+        fun fromBackend(value: String?): ChatAudioUnavailableReason? = when (value?.uppercase()) {
+            null, "" -> null
+            FeatureDisabled.rawValue -> FeatureDisabled
+            ChatNotWritable.rawValue -> ChatNotWritable
+            GuidanceNotAvailable.rawValue -> GuidanceNotAvailable
+            GuidanceRequired.rawValue -> GuidanceRequired
+            LimitReached.rawValue -> LimitReached
+            WaitingForBoth.rawValue -> WaitingForBoth
+            WaitingDelay.rawValue -> WaitingDelay
+            else -> Unknown(value)
+        }
+    }
+}
 
 data class ChatPartner(
     val userId: String,
@@ -32,9 +69,68 @@ data class ChatMessage(
     val id: String,
     val chatSessionId: String,
     val senderId: String,
-    val content: String,
+    val clientMessageId: String? = null,
+    val messageType: ChatMessageType = ChatMessageType.Text,
+    val content: String? = null,
+    val audio: ChatAudio? = null,
     val sentAt: String,
-)
+) {
+    val presentation: ChatMessagePresentation
+        get() = when (messageType) {
+            ChatMessageType.Text ->
+                if (content?.isNotBlank() == true) {
+                    ChatMessagePresentation.Text(content)
+                } else {
+                    ChatMessagePresentation.Unsupported
+                }
+
+            ChatMessageType.Audio ->
+                if (audio?.isUsable == true) {
+                    ChatMessagePresentation.Audio(audio)
+                } else {
+                    ChatMessagePresentation.Unsupported
+                }
+
+            is ChatMessageType.Unknown -> ChatMessagePresentation.Unsupported
+        }
+}
+
+sealed interface ChatMessageType {
+    val rawValue: String
+
+    data object Text : ChatMessageType { override val rawValue = "TEXT" }
+    data object Audio : ChatMessageType { override val rawValue = "AUDIO" }
+    data class Unknown(override val rawValue: String) : ChatMessageType
+
+    companion object {
+        fun fromBackend(value: String?): ChatMessageType = when (value?.uppercase()) {
+            null, "", Text.rawValue -> Text
+            Audio.rawValue -> Audio
+            else -> Unknown(value)
+        }
+    }
+}
+
+data class ChatAudio(
+    val url: String?,
+    val durationMillis: Long?,
+    val contentType: String?,
+    val sizeBytes: Long?,
+) {
+    val isUsable: Boolean
+        get() = !url.isNullOrBlank() &&
+            durationMillis != null &&
+            durationMillis > 0 &&
+            !contentType.isNullOrBlank() &&
+            sizeBytes != null &&
+            sizeBytes > 0
+}
+
+sealed interface ChatMessagePresentation {
+    data class Text(val content: String) : ChatMessagePresentation
+    data class Audio(val audio: ChatAudio) : ChatMessagePresentation
+    data object Unsupported : ChatMessagePresentation
+}
 
 data class ChatExitRequest(
     val id: String,
@@ -86,6 +182,7 @@ data class SecondChatStatus(
     val mustRespondToPartner: Boolean,
     val lastMessageAt: String?,
     val lastMessageSenderId: String?,
+    val audioPolicy: ChatAudioPolicy? = null,
 )
 
 data class SecondChatResolutionRequest(

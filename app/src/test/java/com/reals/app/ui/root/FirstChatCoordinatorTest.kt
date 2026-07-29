@@ -43,6 +43,7 @@ import com.reals.app.testutil.TestDtos
 import com.reals.app.testutil.backendErrorResponse
 import com.reals.app.testutil.testApiExecutor
 import com.reals.app.testutil.testJson
+import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -986,7 +987,7 @@ class FirstChatCoordinatorTest {
         val result = coordinator.safetyCancel(
             current = current,
             reason = ChatExitReason.ChildSafetyConcern,
-            details = "detalle vÃ¡lido",
+            details = "detalle válido",
             onPending = {},
         )
 
@@ -1027,18 +1028,85 @@ class FirstChatCoordinatorTest {
         val result = secondCoordinator.safetyCancel(
             current = current,
             reason = ChatExitReason.ChildSafetyConcern,
-            details = "detalle vÃ¡lido",
+            details = "detalle válido",
             onPending = {},
         )
 
         assertTrue(result is SecondChatActionResult.ReturnHome)
         result as SecondChatActionResult.ReturnHome
         assertEquals(
-            "Reporte enviado. Cerramos esta conversación por seguridad y no volveremos a cruzarte con esta persona.",
+            "Reporte enviado. Cerramos ésta conversación por seguridad y no volveremos a cruzarte con ésta persona.",
             result.message,
         )
         assertEquals(listOf("safetyCancelChat"), api.calls)
         assertEquals("CHILD_SAFETY_CONCERN", api.exitBody?.reason)
+    }
+
+    @Test
+    fun `second chat audio lifecycle failures refresh authoritative status`() = runBlocking {
+        val codes = listOf(
+            "CHAT_NOT_AVAILABLE",
+            "SECOND_CHAT_EXPIRED",
+            "SECOND_CHAT_ALREADY_RESOLVED",
+            "SECOND_CHAT_CONVERSATION_ALREADY_RESOLVED",
+            "SECOND_CHAT_JOIN_REQUIRED",
+            "CHAT_AUDIO_WAITING_FOR_BOTH",
+            "CHAT_AUDIO_NOT_AVAILABLE_YET",
+            "CHAT_AUDIO_FEATURE_DISABLED",
+        )
+
+        codes.forEach { code ->
+            val api = FakeRealsApi().apply {
+                chatAudioMessageResponse = backendErrorResponse(statusCode = 409, code = code)
+                secondChatStatusResponse = Response.success(
+                    TestDtos.secondChatStatus(chatStatus = "EXPIRED", readOnlyUntil = "2026-06-18T21:10:00Z")
+                )
+                chatResponse = Response.success(
+                    TestDtos.chat(status = "EXPIRED").copy(chatType = "SECOND_CHAT")
+                )
+            }
+            val secondCoordinator = SecondChatCoordinator(secondChatDependencies(api))
+            val file = tempAudioFile()
+
+            secondCoordinator.sendAudioMessage(
+                current = secondChatState().copy(
+                    audioDraft = audioDraft(file),
+                    audioUpload = ChatAudioUploadUiState(uploading = true),
+                ),
+                file = file,
+                clientMessageId = "client-1",
+            )
+
+            assertTrue("Expected status refresh for $code", api.calls.contains("getSecondChatStatus"))
+        }
+    }
+
+    @Test
+    fun `second chat terminal audio failure clears unsendable draft`() = runBlocking {
+        val api = FakeRealsApi().apply {
+            chatAudioMessageResponse = backendErrorResponse(statusCode = 409, code = "SECOND_CHAT_EXPIRED")
+            secondChatStatusResponse = Response.success(
+                TestDtos.secondChatStatus(chatStatus = "EXPIRED", readOnlyUntil = "2026-06-18T21:10:00Z")
+            )
+            chatResponse = Response.success(
+                TestDtos.chat(status = "EXPIRED").copy(chatType = "SECOND_CHAT")
+            )
+        }
+        val secondCoordinator = SecondChatCoordinator(secondChatDependencies(api))
+        val file = tempAudioFile()
+
+        val result = secondCoordinator.sendAudioMessage(
+            current = secondChatState().copy(
+                audioDraft = audioDraft(file),
+                audioUpload = ChatAudioUploadUiState(uploading = true),
+            ),
+            file = file,
+            clientMessageId = "client-1",
+        )
+
+        assertEquals(null, result.audioDraft)
+        assertEquals(ChatAudioUploadUiState(), result.audioUpload)
+        assertFalse(file.exists())
     }
 
     @Test
@@ -1077,8 +1145,21 @@ class FirstChatCoordinatorTest {
             connectionId = "connection-1",
             matchId = "match-1",
             chatId = "chat-1",
-            chat = TestDtos.chat(status = "ACTIVE").toDomain(),
+            chat = TestDtos.chat(status = "ACTIVE").copy(chatType = "SECOND_CHAT").toDomain(),
         )
+
+    private fun audioDraft(file: File): ChatAudioDraftUiState =
+        ChatAudioDraftUiState(
+            filePath = file.absolutePath,
+            clientMessageId = "client-1",
+            durationMillis = 2_000L,
+            sizeBytes = file.length(),
+        )
+
+    private fun tempAudioFile(): File =
+        kotlin.io.path.createTempFile(suffix = ".m4a").toFile().apply {
+            writeBytes(byteArrayOf(1))
+        }
 
     private fun firstChatDependencies(api: FakeRealsApi): FirstChatFeatureDependencies {
         val tokenProvider = FakeAuthTokenProvider()
@@ -1092,6 +1173,7 @@ class FirstChatCoordinatorTest {
             submitChatDecision = SubmitChatDecisionUseCase(matchRepository),
             getChatMessages = GetChatMessagesUseCase(chatRepository),
             sendChatMessage = SendChatMessageUseCase(chatRepository),
+            sendChatAudioMessage = com.reals.app.domain.usecase.SendChatAudioMessageUseCase(chatRepository),
             requestNextFirstChatGuidanceQuestion = RequestNextFirstChatGuidanceQuestionUseCase(chatRepository),
             getChatExitRequests = GetChatExitRequestsUseCase(chatRepository),
             requestMutualChatExit = RequestMutualChatExitUseCase(chatRepository),
@@ -1114,6 +1196,7 @@ class FirstChatCoordinatorTest {
             getSecondChatForConnection = GetSecondChatForConnectionUseCase(chatRepository),
             getChatMessages = GetChatMessagesUseCase(chatRepository),
             sendChatMessage = SendChatMessageUseCase(chatRepository),
+            sendChatAudioMessage = com.reals.app.domain.usecase.SendChatAudioMessageUseCase(chatRepository),
             safetyCancelChat = SafetyCancelChatUseCase(chatRepository),
             createCompletionRequest = CreateSecondChatCompletionRequestUseCase(chatRepository),
             decideCompletionRequest = DecideSecondChatCompletionRequestUseCase(chatRepository),

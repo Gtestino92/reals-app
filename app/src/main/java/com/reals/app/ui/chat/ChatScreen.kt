@@ -1,4 +1,4 @@
-package com.reals.app.ui.chat
+﻿package com.reals.app.ui.chat
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,9 +24,9 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -44,6 +44,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -59,6 +61,7 @@ import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.ChatMessagePresentation
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.ChatType
 import com.reals.app.domain.model.FirstChatGuidance
@@ -76,6 +79,8 @@ import com.reals.app.ui.common.formatBackendDateTime
 import com.reals.app.ui.common.formatBackendTime
 import com.reals.app.ui.root.OptimisticOutgoingMessage
 import com.reals.app.ui.root.OutgoingMessageDeliveryState
+import com.reals.app.ui.root.ChatAudioDraftUiState
+import com.reals.app.ui.root.ChatAudioUploadUiState
 import com.reals.app.ui.root.SecondChatLifecycleUiState
 import com.reals.app.ui.root.SecondChatResolutionPresentation
 import com.reals.app.ui.root.hasPendingNoShowClaim
@@ -126,6 +131,8 @@ fun ChatScreen(
     loading: Boolean,
     refreshing: Boolean,
     sending: Boolean,
+    audioUpload: ChatAudioUploadUiState = ChatAudioUploadUiState(),
+    audioDraft: ChatAudioDraftUiState? = null,
     actionLoading: Boolean,
     actionLoadingLabel: String?,
     guidance: FirstChatGuidance? = null,
@@ -152,6 +159,12 @@ fun ChatScreen(
     onDecideSecondChatCompletion: (String, SecondChatCompletionDecision) -> Unit = { _, _ -> },
     onClaimSecondChatInactivity: () -> Unit = {},
     onSendMessage: (String) -> Boolean,
+    onSendAudioMessage: (filePath: String, clientMessageId: String) -> Boolean = { _, _ -> false },
+    onClearAudioUploadState: () -> Unit = {},
+    onAudioDraftReady: (ChatAudioDraftUiState) -> Unit = {},
+    onAudioDraftReadyAndSend: (ChatAudioDraftUiState) -> Boolean = { false },
+    onDeleteAudioDraft: () -> Unit = {},
+    onRefreshAudioUrl: suspend (messageId: String) -> String? = { null },
     onRetryOptimisticMessage: (localId: String, content: String) -> Unit,
     onApprove: () -> Unit,
     onReject: () -> Unit,
@@ -208,19 +221,51 @@ fun ChatScreen(
                     )
     val sendingMessage = sending
     val loadingChatAction = actionLoading || manualBlockLoading
-    val secondChatResolution = secondChatLifecycle?.resolutionPresentation(
-        currentUserId = currentUserId,
-        nowMillis = nowMillis,
-        actionLoading = loadingChatAction,
-    )
-    val canUseChatActions = canChat && !loadingChatAction
-    val canUseNavigationActions = !loadingChatAction &&
-            secondChatTiming?.genuinelyActive != true
     val pendingExitRequest = exitRequests
         .filter { it.status == ChatExitRequestStatus.Pending }
         .maxByOrNull { it.createdAt }
     val exitFlowLocked = pendingExitRequest != null
     val canSendMessages = canChat && !exitFlowLocked
+    val audioSession = rememberChatAudioSessionState(
+        inputs = ChatAudioSessionInputs(
+            chatId = chat?.id,
+            audioPolicy = chat?.audioPolicy,
+            canChat = canChat,
+            canSendMessages = canSendMessages,
+            sendingMessage = sendingMessage,
+            messageComposerLoading = loadingChatAction,
+            audioActionLoading = loadingChatAction || guidanceActionLoading,
+            textDraft = draft,
+            uploadState = audioUpload,
+            draft = audioDraft,
+        ),
+        callbacks = ChatAudioSessionExternalCallbacks(
+            onTextDraftChange = { value: String ->
+                draft = value
+            },
+            onSendText = { value: String ->
+                onSendMessage(value)
+            },
+            onClearTextDraft = {
+                draft = ""
+            },
+            onClearUploadState = onClearAudioUploadState,
+            onDraftReady = onAudioDraftReady,
+            onDraftReadyAndSend = onAudioDraftReadyAndSend,
+            onDeleteDraft = onDeleteAudioDraft,
+            onSendAudioMessage = onSendAudioMessage,
+            onRefreshAudioUrl = onRefreshAudioUrl,
+        ),
+    )
+    val audioInteractionBusy = audioSession.interactionBusy
+    val secondChatResolution = secondChatLifecycle?.resolutionPresentation(
+        currentUserId = currentUserId,
+        nowMillis = nowMillis,
+        actionLoading = loadingChatAction || audioInteractionBusy,
+    )
+    val canUseChatActions = canChat && !loadingChatAction && !audioInteractionBusy
+    val canUseNavigationActions = !loadingChatAction && !audioInteractionBusy &&
+            secondChatTiming?.genuinelyActive != true
     val guidancePanelState = firstChatGuidancePanelState(
         guidance = guidance,
         canRequestNextWhileChatOpen = canSendMessages,
@@ -229,10 +274,20 @@ fun ChatScreen(
         canUseChatActions &&
             (secondChatLifecycle == null || secondChatTiming?.genuinelyActive == true) &&
             (!showMutualExitActions || !exitFlowLocked)
+    val firstChatUnansweredSuggestion = firstChatUnansweredSuggestionState(
+        chat = chat,
+        currentUserId = currentUserId,
+        confirmedMessages = messages,
+        optimisticMessages = optimisticMessages,
+        pendingExitRequest = pendingExitRequest,
+        nowMillis = nowMillis,
+        mutualExitActionAvailable = showMutualExitActions && canUseExistingChatActions,
+        messageSendInFlight = sendingMessage,
+    )
     val manualBlockBusy =
-        loading || refreshing || sending || actionLoading || guidanceActionLoading ||
-            manualBlockLoading
+        loading || refreshing || sending || actionLoading || guidanceActionLoading || manualBlockLoading
     val canManualBlock = !manualBlockBusy
+    val canUseSafetyActions = canChat && !loadingChatAction && !manualBlockLoading
     val canOpenOverflowActions =
         (!loadingChatAction && ((!exitFlowLocked && canUseChatActions) || !showMutualExitActions)) ||
             canManualBlock
@@ -241,20 +296,14 @@ fun ChatScreen(
             chat?.status == ChatStatus.Active &&
             chat.myDecision == ChatDecisionState.Pending &&
             !exitFlowLocked &&
-            !firstChatLocallyExpired
+            !firstChatLocallyExpired &&
+            !audioInteractionBusy
     val partnerDisplayName = chat?.partner?.displayName
         ?.takeIf { it.isNotBlank() }
         ?: partnerNameFallback?.takeIf { it.isNotBlank() }
     var bottomBarHeight by remember { mutableStateOf(0.dp) }
     val density = LocalDensity.current
     val bottomContentPadding = bottomBarHeight.takeIf { it > 0.dp } ?: 180.dp
-    val composerState = messageComposerUiState(
-        canChat = canChat,
-        canSendMessages = canSendMessages,
-        sendingMessage = sendingMessage,
-        loadingChatAction = loadingChatAction,
-        draft = draft,
-    )
 
     if (loading && chat == null) {
         val loadingPresentation = chatLoadingPresentation(chatTitlePrefix, partnerNameFallback)
@@ -265,7 +314,7 @@ fun ChatScreen(
         return
     }
 
-    val pollChat = chatPollingEnabled(canChat)
+    val pollChat = chatPollingEnabled(canChat && !audioInteractionBusy)
     LaunchedEffect(chat?.id, pollChat) {
         while (pollChat) {
             delay(2000.milliseconds)
@@ -343,6 +392,7 @@ fun ChatScreen(
                             enabled = canOpenOverflowActions,
                             actionLoading = loadingChatAction,
                             canUseExistingChatActions = canUseExistingChatActions,
+                            canUseSafetyActions = canUseSafetyActions,
                             canDecide = canDecide,
                             canManualBlock = canManualBlock,
                             showMutualExitActions = showMutualExitActions,
@@ -357,11 +407,13 @@ fun ChatScreen(
                             },
                             onShowSafety = {
                                 actionsMenuExpanded = false
+                                audioSession.cleanupForSafetyAction()
                                 showingSafetyDialog = true
                             },
                             onShowManualBlock = {
                                 actionsMenuExpanded = false
                                 onClearManualBlockError()
+                                audioSession.cleanupForSafetyAction()
                                 showingManualBlockDialog = true
                             },
                         )
@@ -379,23 +431,27 @@ fun ChatScreen(
                     tone = FeedbackTone.Warning,
                 )
             }
+            FirstChatUnansweredSuggestionCard(
+                state = firstChatUnansweredSuggestion,
+                onRequestMutualExit = onRequestMutualExit,
+            )
             if (secondChatTiming?.showAbsoluteExpiryWarning == true) {
                 FeedbackCard(
                     title = "Tiempo restante",
-                    message = "El segundo chat vence pronto. Al finalizar volverás a Home.",
+                    message = "El segundo chat vence pronto. Al finalizar volverÃ¡s a Home.",
                     tone = FeedbackTone.Warning,
                 )
             }
             SecondChatLifecyclePanel(
                 lifecycle = secondChatLifecycle,
                 partnerName = partnerDisplayName,
-                actionLoading = loadingChatAction,
+                actionLoading = loadingChatAction || audioInteractionBusy,
                 onClaimNoShow = onClaimSecondChatNoShow,
                 onRefresh = onRefresh,
             )
             SecondChatResolutionPanel(
                 presentation = secondChatResolution,
-                actionLoading = loadingChatAction,
+                actionLoading = loadingChatAction || audioInteractionBusy,
                 actionLoadingLabel = actionLoadingLabel,
                 onRequestCompletion = { showingSecondChatCompletionDialog = true },
                 onAcceptCompletion = { requestId ->
@@ -409,7 +465,7 @@ fun ChatScreen(
             ChatActionsPanel(
                 currentUserId = currentUserId,
                 activeExitRequest = if (showExitActions) pendingExitRequest else null,
-                loadingChatAction = loadingChatAction,
+                loadingChatAction = loadingChatAction || audioInteractionBusy,
                 actionLoadingLabel = actionLoadingLabel,
                 canDecide = canDecide,
                 canUseNavigationActions = canUseNavigationActions,
@@ -422,7 +478,7 @@ fun ChatScreen(
             )
             FirstChatGuidancePanel(
                 state = guidancePanelState,
-                actionLoading = guidanceActionLoading,
+                actionLoading = guidanceActionLoading || audioInteractionBusy,
                 onRequestNext = onRequestNextGuidanceQuestion,
             )
             MessageList(
@@ -432,6 +488,9 @@ fun ChatScreen(
                 bottomContentPadding = bottomContentPadding + 12.dp,
                 modifier = Modifier.weight(1f),
                 onRetryOptimisticMessage = onRetryOptimisticMessage,
+                playbackState = audioSession.playbackState,
+                onPlayAudio = audioSession::playRemoteMessage,
+                onPauseAudio = audioSession::pauseAudio,
             )
         }
 
@@ -447,24 +506,14 @@ fun ChatScreen(
                 },
             ) {
                 MessageComposer(
-                    draft = draft,
-                    state = composerState,
-                    onDraftChange = {
-                        if (composerState.canEditDraft) {
-                            draft = it.take(1_000)
-                        }
-                    },
-                    onSend = {
-                        if (composerState.sendButtonEnabled && onSendMessage(draft)) {
-                            draft = ""
-                        }
-                    },
+                    presentation = audioSession.composerPresentation(),
+                    callbacks = audioSession.composerCallbacks(),
                 )
             }
         }
     }
 
-    if (showingSafetyDialog && showExitActions && canUseExistingChatActions) {
+    if (showingSafetyDialog && showExitActions && canUseSafetyActions) {
         SafetyReportDialog(
             details = safetyDetails,
             selectedReason = safetyReportReasonFromRawValue(safetyReasonRawValue),
@@ -475,6 +524,7 @@ fun ChatScreen(
                 if (!actionLoading) showingSafetyDialog = false
             },
             onConfirm = {
+                audioSession.cleanupForSafetyAction()
                 onSafetyCancel(
                     safetyReportReasonFromRawValue(safetyReasonRawValue),
                     safetyDetails,
@@ -490,7 +540,10 @@ fun ChatScreen(
         ManualBlockConfirmationDialog(
             loading = manualBlockLoading,
             error = manualBlockError,
-            onConfirm = onManualBlock,
+            onConfirm = {
+                audioSession.cleanupForSafetyAction()
+                onManualBlock()
+            },
             onDismiss = {
                 if (!manualBlockLoading) {
                     onClearManualBlockError()
@@ -637,7 +690,7 @@ private fun SecondChatLifecyclePanel(
         }
         status.myAttendanceStatus == SecondChatAttendanceStatus.Pending && !status.canJoin -> {
             FeedbackCard(
-                title = "Todavía no está disponible",
+                title = "TodavÃ­a no estÃ¡ disponible",
                 message = "El segundo chat abre a las ${formatBackendTime(status.scheduledAt)}.",
                 tone = FeedbackTone.Info,
             )
@@ -654,7 +707,7 @@ private fun SecondChatLifecyclePanel(
                 ) + 999) / 1000
             FeedbackCard(
                 title = "Esperando a la otra persona",
-                message = "Puede entrar durante los próximos ${seconds.coerceAtLeast(0)} segundos.",
+                message = "Puede entrar durante los prÃ³ximos ${seconds.coerceAtLeast(0)} segundos.",
                 tone = FeedbackTone.Warning,
             )
         }
@@ -667,18 +720,18 @@ private fun SecondChatLifecyclePanel(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text("Ya estás en la cita", style = MaterialTheme.typography.titleMedium)
+                    Text("Ya estÃ¡s en la cita", style = MaterialTheme.typography.titleMedium)
                     Text("Estamos esperando a $safePartnerName.")
                     Text(
                         when (status.myAttendanceStatus) {
                             SecondChatAttendanceStatus.OnTime -> "Llegaste a horario"
                             SecondChatAttendanceStatus.Late -> "Llegaste tarde"
-                            else -> "Tu asistencia está registrada"
+                            else -> "Tu asistencia estÃ¡ registrada"
                         },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        "Podés mandar mensajes mientras esperás. Eso no significa que la otra persona haya llegado.",
+                        "PodÃ©s mandar mensajes mientras esperÃ¡s. Eso no significa que la otra persona haya llegado.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     if (status.canClaimPartnerNoShow) {
@@ -686,7 +739,7 @@ private fun SecondChatLifecyclePanel(
                             onClick = onClaimNoShow,
                             enabled = !actionLoading && lifecycle.claimingNoShow.not(),
                         ) {
-                            Text("La otra persona no llegó")
+                            Text("La otra persona no llegÃ³")
                         }
                     }
                 }
@@ -742,7 +795,7 @@ private fun SecondChatResolutionPanel(
                 }
                 if (request.type == SecondChatResolutionRequestType.MutualCompletion) {
                     Text(
-                        text = "Pueden seguir conversando; un nuevo mensaje cancela esta solicitud.",
+                        text = "Pueden seguir conversando; un nuevo mensaje cancela ésta solicitud.",
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -872,6 +925,7 @@ private fun ChatOverflowMenu(
     enabled: Boolean,
     actionLoading: Boolean,
     canUseExistingChatActions: Boolean,
+    canUseSafetyActions: Boolean,
     canDecide: Boolean,
     canManualBlock: Boolean,
     showMutualExitActions: Boolean,
@@ -888,7 +942,7 @@ private fun ChatOverflowMenu(
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_more_vert),
-                contentDescription = "Más acciones",
+                contentDescription = "MÃ¡s acciones",
             )
         }
 
@@ -916,15 +970,55 @@ private fun ChatOverflowMenu(
 
             DropdownMenuItem(
                 text = { Text("Reportar y cerrar chat") },
-                enabled = !actionLoading && canUseExistingChatActions,
+                enabled = !actionLoading && canUseSafetyActions,
                 onClick = onShowSafety,
             )
 
             DropdownMenuItem(
-                text = { Text("Bloquear a ésta persona") },
+                text = { Text("Bloquear a Ã©sta persona") },
                 enabled = canManualBlock,
                 onClick = onShowManualBlock,
             )
+        }
+    }
+}
+
+@Composable
+private fun FirstChatUnansweredSuggestionCard(
+    state: FirstChatUnansweredSuggestionState,
+    onRequestMutualExit: () -> Unit,
+) {
+    if (!state.visible) return
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = "TodavÃ­a no recibiste respuesta",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            Text(
+                text = "PodÃ©s solicitar el cierre de la conversaciÃ³n. Si la otra persona no responde a la solicitud, el chat se cerrarÃ¡ sin penalizarte.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            Button(
+                onClick = onRequestMutualExit,
+                enabled = state.actionEnabled,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Solicitar cierre")
+            }
         }
     }
 }
@@ -937,8 +1031,11 @@ private fun MessageList(
     bottomContentPadding: Dp,
     modifier: Modifier,
     onRetryOptimisticMessage: (localId: String, content: String) -> Unit,
+    playbackState: ChatAudioPlaybackUiState,
+    onPlayAudio: (ChatMessage) -> Unit,
+    onPauseAudio: () -> Unit,
 ) {
-    val sortedMessages = messages.sortedBy { it.sentAt }
+    val sortedMessages = messages.sortedWith(compareBy<ChatMessage> { it.sentAt }.thenBy { it.id })
     val messageItems = sortedMessages.map { ChatMessageListItem.Backend(it) } +
             optimisticMessages.sortedBy { it.createdAtMillis }
                 .map { ChatMessageListItem.Optimistic(it) }
@@ -974,7 +1071,7 @@ private fun MessageList(
             if (messageItems.isEmpty()) {
                 item {
                     Text(
-                        "Todavía no hay mensajes.",
+                        "TodavÃ­a no hay mensajes.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -984,6 +1081,9 @@ private fun MessageList(
                         is ChatMessageListItem.Backend -> MessageBubble(
                             message = item.message,
                             mine = item.message.senderId == currentUserId,
+                            playbackState = playbackState,
+                            onPlayAudio = onPlayAudio,
+                            onPauseAudio = onPauseAudio,
                         )
 
                         is ChatMessageListItem.Optimistic -> OptimisticMessageBubble(
@@ -1165,66 +1265,6 @@ private fun ChatActionsPanel(
 }
 
 @Composable
-private fun MessageComposer(
-    draft: String,
-    state: MessageComposerUiState,
-    onDraftChange: (String) -> Unit,
-    onSend: () -> Unit,
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        ),
-    ) {
-        Column(
-            modifier = Modifier.padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            state.explanatoryCopy?.let { copy ->
-                Text(
-                    text = copy,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedTextField(
-                    value = draft,
-                    onValueChange = onDraftChange,
-                    placeholder = { Text("Mensaje") },
-                    enabled = state.canEditDraft,
-                    minLines = 1,
-                    maxLines = 4,
-                    modifier = Modifier.weight(1f),
-                )
-
-                FilledIconButton(
-                    onClick = onSend,
-                    enabled = state.sendButtonEnabled,
-                ) {
-                    if (state.sendingMessage) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                        )
-                    } else {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_send),
-                            contentDescription = "Enviar",
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun TimedExitRequestCard(
     currentUserId: String,
     request: ChatExitRequest,
@@ -1329,6 +1369,9 @@ internal fun timedExitRequestBodyText(
 private fun MessageBubble(
     message: ChatMessage,
     mine: Boolean,
+    playbackState: ChatAudioPlaybackUiState,
+    onPlayAudio: (ChatMessage) -> Unit,
+    onPauseAudio: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1351,7 +1394,18 @@ private fun MessageBubble(
             ),
         ) {
             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                Text(TextSafety.safeDisplay(message.content))
+                when (val presentation = message.presentation) {
+                    is ChatMessagePresentation.Text -> Text(TextSafety.safeDisplay(presentation.content))
+                    is ChatMessagePresentation.Audio -> AudioPlaybackRow(
+                        key = message.id,
+                        durationMillis = presentation.audio.durationMillis ?: 0L,
+                        playbackState = playbackState,
+                        onPlay = { onPlayAudio(message) },
+                        onPause = onPauseAudio,
+                    )
+
+                    ChatMessagePresentation.Unsupported -> Text("Mensaje no compatible")
+                }
                 Text(
                     text = formatBackendTime(message.sentAt),
                     modifier = Modifier.fillMaxWidth(),
@@ -1360,6 +1414,75 @@ private fun MessageBubble(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
+    }
+}
+
+@Composable
+internal fun AudioPlaybackRow(
+    key: String,
+    durationMillis: Long,
+    playbackState: ChatAudioPlaybackUiState,
+    onPlay: () -> Unit,
+    onPause: () -> Unit,
+) {
+    val active = playbackState.key == key
+    val phase = if (active) playbackState.phase else ChatAudioPlaybackPhase.Idle
+    val positionMillis = if (active) playbackState.positionMillis.toLong() else 0L
+    val progress = if (durationMillis > 0) {
+        (positionMillis.toFloat() / durationMillis.toFloat()).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            IconButton(
+                onClick = {
+                    if (phase == ChatAudioPlaybackPhase.Playing || phase == ChatAudioPlaybackPhase.Preparing) {
+                        onPause()
+                    } else {
+                        onPlay()
+                    }
+                },
+                enabled = phase != ChatAudioPlaybackPhase.Preparing,
+            ) {
+                when (phase) {
+                    ChatAudioPlaybackPhase.Preparing -> CircularProgressIndicator(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .semantics { contentDescription = "Cargando audio" },
+                        strokeWidth = 2.dp,
+                    )
+                    ChatAudioPlaybackPhase.Playing -> Icon(
+                        painter = painterResource(R.drawable.ic_pause),
+                        contentDescription = "Pausar audio",
+                    )
+                    ChatAudioPlaybackPhase.Failed -> Icon(
+                        painter = painterResource(R.drawable.ic_replay),
+                        contentDescription = "Reintentar audio",
+                    )
+                    ChatAudioPlaybackPhase.Idle,
+                    ChatAudioPlaybackPhase.Paused -> Icon(
+                        painter = painterResource(R.drawable.ic_play),
+                        contentDescription = "Reproducir audio",
+                    )
+                }
+            }
+            Text("${formatAudioDuration(positionMillis.takeIf { active } ?: 0L)} / ${formatAudioDuration(durationMillis)}")
+        }
+        LinearProgressIndicator(
+            progress = { progress },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (active && phase == ChatAudioPlaybackPhase.Failed) {
+            Text(
+                playbackState.error ?: "No pudimos reproducir este audio.",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 }
@@ -1428,7 +1551,7 @@ private fun SafetyReportDialog(
         title = { Text("Reportar y cerrar chat") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Describí que pasó. Este reporte cerrará el chat por seguridad y será revisado.")
+                Text("DescribÃ­ que pasÃ³. Este reporte cerrarÃ¡ el chat por seguridad y serÃ¡ revisado.")
                 Box(modifier = Modifier.fillMaxWidth()) {
                     OutlinedButton(
                         onClick = { reasonMenuExpanded = true },
@@ -1518,38 +1641,6 @@ internal fun chatHeaderStatusText(
         ?.let { "V\u00e1lido hasta ${formatDateTime(it)}" }
 }
 
-internal data class MessageComposerUiState(
-    val canSendMessages: Boolean,
-    val canEditDraft: Boolean,
-    val sendButtonEnabled: Boolean,
-    val sendingMessage: Boolean,
-    val explanatoryCopy: String?,
-)
-
-internal fun messageComposerUiState(
-    canChat: Boolean,
-    canSendMessages: Boolean,
-    sendingMessage: Boolean,
-    loadingChatAction: Boolean,
-    draft: String,
-): MessageComposerUiState {
-    val canEditDraft = canSendMessages && !loadingChatAction
-    return MessageComposerUiState(
-        canSendMessages = canSendMessages,
-        canEditDraft = canEditDraft,
-        sendButtonEnabled = canSendMessages &&
-                !sendingMessage &&
-                !loadingChatAction &&
-                draft.isNotBlank(),
-        sendingMessage = sendingMessage,
-        explanatoryCopy = when {
-            !canChat -> "Este chat no est\u00e1 disponible para enviar mensajes."
-            !canSendMessages -> MUTUAL_EXIT_CONVERSATION_PAUSED_COPY
-            else -> null
-        },
-    )
-}
-
 internal fun chatPollingEnabled(canChat: Boolean): Boolean = canChat
 
 internal fun shouldDispatchSecondChatLocalAbsoluteExpiry(secondChatLocallyExpired: Boolean): Boolean =
@@ -1565,13 +1656,13 @@ private fun chatDecisionSummary(
 
     return when {
         myDecision == ChatDecisionState.Approved && partnerDecision == ChatDecisionState.Pending ->
-            "Aprobaste el chat. Esperando decisión de $partnerLabel."
+            "Aprobaste el chat. Esperando decisiÃ³n de $partnerLabel."
 
         myDecision == ChatDecisionState.Pending && partnerDecision == ChatDecisionState.Approved ->
-            "$partnerLabel aprobó el chat. Falta tu decisión."
+            "$partnerLabel aprobÃ³ el chat. Falta tu decisiÃ³n."
 
         myDecision == ChatDecisionState.Approved && partnerDecision == ChatDecisionState.Approved ->
-            "Ambas personas aprobaron. Pasando a revisión visual."
+            "Ambas personas aprobaron. Pasando a revisiÃ³n visual."
 
         myDecision == ChatDecisionState.Rejected || partnerDecision == ChatDecisionState.Rejected ->
             "El chat fue rechazado."

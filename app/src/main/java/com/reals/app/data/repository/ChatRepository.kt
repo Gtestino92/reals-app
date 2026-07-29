@@ -1,6 +1,7 @@
 package com.reals.app.data.repository
 
 import com.reals.app.core.network.ApiExecutor
+import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ApiResult
 import com.reals.app.core.network.map
 import com.reals.app.data.api.AuthTokenProvider
@@ -19,10 +20,17 @@ import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.FirstChatGuidance
 import com.reals.app.domain.model.SecondChatStatus
+import java.io.File
+import kotlinx.coroutines.CancellationException
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.decodeFromJsonElement
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 
 class ChatRepository(
     private val api: RealsApi,
@@ -90,7 +98,7 @@ class ChatRepository(
                 limit = CHAT_MESSAGES_PAGE_LIMIT,
             )
         }
-            .map { payload -> payload.toMessageDtos().map { it.toDomain() } }
+            .mapChatMessages { payload -> payload.toMessageDtos().map { it.toDomain() } }
 
     suspend fun sendMessage(chatId: String, content: String): ApiResult<ChatMessage> =
         authorizedCall { authorization ->
@@ -98,6 +106,24 @@ class ChatRepository(
                 authorization = authorization,
                 chatId = chatId,
                 body = SendMessageRequestDto(content),
+            )
+        }.map { it.toDomain() }
+
+    suspend fun sendAudioMessage(
+        chatId: String,
+        file: File,
+        clientMessageId: String,
+    ): ApiResult<ChatMessage> =
+        authorizedCall { authorization ->
+            api.sendChatAudioMessage(
+                authorization = authorization,
+                chatId = chatId,
+                file = MultipartBody.Part.createFormData(
+                    name = "file",
+                    filename = file.name.ensureM4aExtension(),
+                    body = file.asRequestBody(CHAT_AUDIO_MEDIA_TYPE.toMediaType()),
+                ),
+                clientMessageId = clientMessageId.toRequestBody("text/plain".toMediaType()),
             )
         }.map { it.toDomain() }
 
@@ -176,4 +202,25 @@ class ChatRepository(
         } else {
             json.decodeFromJsonElement<ChatMessagesResponseDto>(this).messages
         }
+}
+
+private const val CHAT_AUDIO_MEDIA_TYPE = "audio/mp4"
+
+private fun String.ensureM4aExtension(): String =
+    if (endsWith(".m4a", ignoreCase = true)) this else "$this.m4a"
+
+private inline fun <R> ApiResult<JsonElement>.mapChatMessages(
+    transform: (JsonElement) -> R,
+): ApiResult<R> = when (this) {
+    is ApiResult.Success -> try {
+        ApiResult.Success(transform(value))
+    } catch (exception: CancellationException) {
+        throw exception
+    } catch (exception: SerializationException) {
+        ApiResult.Failure(ApiError.Unexpected(exception.message ?: "No se pudo parsear la respuesta de mensajes."))
+    } catch (exception: IllegalArgumentException) {
+        ApiResult.Failure(ApiError.Unexpected(exception.message ?: "No se pudo convertir la respuesta de mensajes."))
+    }
+
+    is ApiResult.Failure -> this
 }

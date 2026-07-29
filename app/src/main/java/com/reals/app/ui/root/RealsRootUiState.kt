@@ -124,6 +124,8 @@ sealed interface RealsRootUiState {
         val loading: Boolean = false,
         val refreshing: Boolean = false,
         val sending: Boolean = false,
+        val audioUpload: ChatAudioUploadUiState = ChatAudioUploadUiState(),
+        val audioDraft: ChatAudioDraftUiState? = null,
         val actionLoading: Boolean = false,
         val actionLoadingLabel: String? = null,
         val guidanceActionLoading: Boolean = false,
@@ -146,6 +148,8 @@ sealed interface RealsRootUiState {
         val loading: Boolean = false,
         val refreshing: Boolean = false,
         val sending: Boolean = false,
+        val audioUpload: ChatAudioUploadUiState = ChatAudioUploadUiState(),
+        val audioDraft: ChatAudioDraftUiState? = null,
         val actionLoading: Boolean = false,
         val actionLoadingLabel: String? = null,
         val manualBlock: ManualBlockUiState = ManualBlockUiState(),
@@ -229,6 +233,20 @@ data class SecondChatLifecycleUiState(
 data class ManualBlockUiState(
     val loading: Boolean = false,
     val error: ApiError? = null,
+)
+
+data class ChatAudioUploadUiState(
+    val uploading: Boolean = false,
+    val error: ApiError? = null,
+    val completedClientMessageId: String? = null,
+    val nonRetryable: Boolean = false,
+)
+
+data class ChatAudioDraftUiState(
+    val filePath: String,
+    val clientMessageId: String,
+    val durationMillis: Long,
+    val sizeBytes: Long,
 )
 
 data class ProfileManagementState(
@@ -429,7 +447,7 @@ fun RealsRootUiState.canHandleSystemBack(): Boolean = when (this) {
             !photos.reorderingPhotos
 
     is RealsRootUiState.SecondChat -> !isJoinedActiveSecondChat() &&
-        !sending && !actionLoading && !manualBlock.loading
+        !sending && !audioUpload.uploading && !actionLoading && !manualBlock.loading
     is RealsRootUiState.VisualApproval ->
         !deciding && !writingMessage && !readingPartnerMessage && !manualBlock.loading
     is RealsRootUiState.Scheduling -> !submitting && !manualBlock.loading
@@ -453,6 +471,7 @@ fun RealsRootUiState.FirstChat.canRecoverFirstChatToHome(): Boolean =
         chat == null &&
         !refreshing &&
         !sending &&
+        !audioUpload.uploading &&
         !actionLoading &&
         !guidanceActionLoading &&
         !manualBlock.loading

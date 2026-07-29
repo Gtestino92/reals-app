@@ -50,6 +50,7 @@ import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
 import com.reals.app.domain.usecase.RequestNextFirstChatGuidanceQuestionUseCase
 import com.reals.app.domain.usecase.SafetyCancelChatUseCase
+import com.reals.app.domain.usecase.SendChatAudioMessageUseCase
 import com.reals.app.domain.usecase.SendChatMessageUseCase
 import com.reals.app.domain.usecase.SubmitChatDecisionUseCase
 import com.reals.app.domain.usecase.SubmitSchedulingProposalsUseCase
@@ -134,6 +135,7 @@ data class FirstChatFeatureDependencies(
     val submitChatDecision: SubmitChatDecisionUseCase,
     val getChatMessages: GetChatMessagesUseCase,
     val sendChatMessage: SendChatMessageUseCase,
+    val sendChatAudioMessage: SendChatAudioMessageUseCase,
     val requestNextFirstChatGuidanceQuestion: RequestNextFirstChatGuidanceQuestionUseCase,
     val getChatExitRequests: GetChatExitRequestsUseCase,
     val requestMutualChatExit: RequestMutualChatExitUseCase,
@@ -152,6 +154,7 @@ data class SecondChatFeatureDependencies(
     val getSecondChatForConnection: GetSecondChatForConnectionUseCase,
     val getChatMessages: GetChatMessagesUseCase,
     val sendChatMessage: SendChatMessageUseCase,
+    val sendChatAudioMessage: SendChatAudioMessageUseCase,
     val safetyCancelChat: SafetyCancelChatUseCase,
     val createCompletionRequest: CreateSecondChatCompletionRequestUseCase,
     val decideCompletionRequest: DecideSecondChatCompletionRequestUseCase,

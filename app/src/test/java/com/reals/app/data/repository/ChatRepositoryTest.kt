@@ -21,10 +21,12 @@ import com.reals.app.testutil.successValue
 import com.reals.app.testutil.testApiExecutor
 import com.reals.app.testutil.testJson
 import kotlinx.coroutines.runBlocking
+import okio.Buffer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import retrofit2.Response
+import java.io.File
 
 class ChatRepositoryTest {
     private val api = FakeRealsApi()
@@ -68,6 +70,53 @@ class ChatRepositoryTest {
     }
 
     @Test
+    fun `getMessages handles mixed text and audio array response without content null crash`() = runBlocking {
+        api.chatMessagesResponse = Response.success(
+            TestDtos.chatMessagesArrayPayload(
+                listOf(TestDtos.chatMessage("message-1"), TestDtos.audioChatMessage("message-2")),
+            )
+        )
+
+        val messages = repository.getMessages("chat-1").successValue()
+
+        assertEquals(listOf("message-1", "message-2"), messages.map { it.id })
+        assertEquals(null, messages[1].content)
+        assertEquals("https://example.test/audio", messages[1].audio?.url)
+    }
+
+    @Test
+    fun `getMessages handles mixed text and audio paged response`() = runBlocking {
+        api.chatMessagesResponse = Response.success(
+            TestDtos.chatMessagesPagedPayload(
+                listOf(TestDtos.chatMessage("message-1"), TestDtos.audioChatMessage("message-2")),
+            )
+        )
+
+        val messages = repository.getMessages("chat-1").successValue()
+
+        assertEquals(listOf("message-1", "message-2"), messages.map { it.id })
+        assertEquals("audio/mp4", messages[1].audio?.contentType)
+    }
+
+    @Test
+    fun `structurally invalid messages array returns failure`() = runBlocking {
+        api.chatMessagesResponse = Response.success(testJson.parseToJsonElement("""[{"id":4}]"""))
+
+        val error = repository.getMessages("chat-1").failureError()
+
+        assertTrue(error is ApiError.Unexpected)
+    }
+
+    @Test
+    fun `structurally invalid paged response returns failure`() = runBlocking {
+        api.chatMessagesResponse = Response.success(testJson.parseToJsonElement("""{"messages":4}"""))
+
+        val error = repository.getMessages("chat-1").failureError()
+
+        assertTrue(error is ApiError.Unexpected)
+    }
+
+    @Test
     fun `sendMessage sends content as expected`() = runBlocking {
         val message = repository.sendMessage("chat-1", "  hola  ").successValue()
 
@@ -75,6 +124,28 @@ class ChatRepositoryTest {
         assertEquals("chat-1", api.lastPathId)
         assertEquals("  hola  ", api.chatMessageBody?.content)
         assertEquals("message-1", message.id)
+    }
+
+    @Test
+    fun `sendAudioMessage sends multipart file and client id`() = runBlocking {
+        val file = File.createTempFile("chat-audio-test", ".m4a").apply { writeBytes(byteArrayOf(1, 2, 3)) }
+        val clientMessageId = "00000000-0000-0000-0000-000000000101"
+        try {
+            val message = repository.sendAudioMessage("chat-1", file, clientMessageId).successValue()
+
+            assertEquals("sendChatAudioMessage", api.calls.single())
+            assertEquals("chat-1", api.lastPathId)
+            assertEquals("audio-message-1", message.id)
+            val filePart = api.chatAudioFilePart
+            assertEquals("audio/mp4", filePart?.body?.contentType().toString())
+            assertTrue(filePart?.headers.toString().contains("name=\"file\""))
+            assertTrue(filePart?.headers.toString().contains(".m4a"))
+            val buffer = Buffer()
+            api.chatAudioClientMessageIdPart?.writeTo(buffer)
+            assertEquals(clientMessageId, buffer.readUtf8())
+        } finally {
+            file.delete()
+        }
     }
 
     @Test

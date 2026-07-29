@@ -284,7 +284,7 @@ private fun SecondChatResolutionRequest.presentationMessage(role: SecondChatReso
     when (type) {
         SecondChatResolutionRequestType.MutualCompletion -> when (role) {
             SecondChatResolutionRole.Requester ->
-                "Esperando confirmaci\u00f3n. Pueden seguir conversando; un nuevo mensaje cancela esta solicitud."
+                "Esperando confirmaci\u00f3n. Pueden seguir conversando; un nuevo mensaje cancela ésta solicitud."
             SecondChatResolutionRole.Responder ->
                 "La otra persona propuso terminar el chat de com\u00fan acuerdo."
             SecondChatResolutionRole.Other ->

@@ -2,6 +2,8 @@ package com.reals.app.testutil
 
 import com.reals.app.data.dto.ChatExitOutcomeResponseDto
 import com.reals.app.data.dto.ChatExitRequestResponseDto
+import com.reals.app.data.dto.ChatAudioPolicyResponseDto
+import com.reals.app.data.dto.ChatAudioResponseDto
 import com.reals.app.data.dto.ChatMessageResponseDto
 import com.reals.app.data.dto.ChatPartnerResponseDto
 import com.reals.app.data.dto.ChatResponseDto
@@ -179,6 +181,7 @@ object TestDtos {
         myDecision: String? = "PENDING",
         partnerDecision: String? = "PENDING",
         guidance: FirstChatGuidanceResponseDto? = null,
+        audioPolicy: ChatAudioPolicyResponseDto? = null,
     ) = ChatResponseDto(
         id = "chat-1",
         matchId = "match-1",
@@ -198,6 +201,20 @@ object TestDtos {
         endedAt = null,
         lastMessageAt = now,
         guidance = guidance,
+        audioPolicy = audioPolicy,
+    )
+
+    fun audioPolicy(
+        enabled: Boolean = true,
+        unavailableReason: String? = null,
+        remainingMessages: Int? = 1,
+    ) = ChatAudioPolicyResponseDto(
+        enabled = enabled,
+        unavailableReason = unavailableReason,
+        enabledAt = null,
+        maxDurationMillis = 60_000,
+        maxFileSizeBytes = 2_097_152,
+        remainingMessages = remainingMessages,
     )
 
     fun firstChatGuidance(
@@ -226,7 +243,30 @@ object TestDtos {
         id = id,
         chatSessionId = "chat-1",
         senderId = "user-1",
+        clientMessageId = null,
+        messageType = "TEXT",
         content = "hola",
+        audio = null,
+        sentAt = now,
+    )
+
+    fun audioChatMessage(
+        id: String = "audio-message-1",
+        clientMessageId: String = "00000000-0000-0000-0000-000000000101",
+        url: String = "https://example.test/audio",
+    ) = ChatMessageResponseDto(
+        id = id,
+        chatSessionId = "chat-1",
+        senderId = "user-1",
+        clientMessageId = clientMessageId,
+        messageType = "AUDIO",
+        content = null,
+        audio = ChatAudioResponseDto(
+            url = url,
+            durationMillis = 3_158,
+            contentType = "audio/mp4",
+            sizeBytes = 77_832,
+        ),
         sentAt = now,
     )
 

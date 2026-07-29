@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.reals.app.core.network.ApiError
+import com.reals.app.core.network.ApiResult
 import com.reals.app.core.network.isLegalActionRequired
 import com.reals.app.core.network.isTerminalAuthFailure
 import com.reals.app.core.network.isUserPairBlocked
@@ -30,6 +31,7 @@ import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_CONF
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_PROPOSALS_RECEIVED
 import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_REMINDER
 import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_REMINDER
+import java.io.File
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -342,6 +344,7 @@ class RealsRootViewModel(
 
     fun closeFirstChat() {
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        current.audioDraft?.deleteFile()
         viewModelScope.launch {
             homeCoordinator.returnHome(current.session)
         }
@@ -395,7 +398,13 @@ class RealsRootViewModel(
 
     fun refreshSecondChat(silent: Boolean = false) {
         val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
-        if (current.refreshing || current.sending || current.actionLoading || current.manualBlock.loading) return
+        if (
+            current.refreshing ||
+            current.sending ||
+            current.audioUpload.uploading ||
+            current.actionLoading ||
+            current.manualBlock.loading
+        ) return
         if (silent && silentSecondChatRefreshJob?.isActive == true) return
         if (current.chat == null) return openSecondChat(
             connectionId = current.connectionId,
@@ -413,6 +422,8 @@ class RealsRootViewModel(
             }
             val result = secondChatCoordinator.refresh(current, silent)
             val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return@launch
+            if (latest.audioUpload != current.audioUpload) return@launch
+            if (latest.audioDraft != current.audioDraft) return@launch
             if (silent && (
                     latest.connectionId != current.connectionId ||
                         latest.sending ||
@@ -457,6 +468,103 @@ class RealsRootViewModel(
         }
     }
 
+    fun sendSecondChatAudioMessage(filePath: String, clientMessageId: String): Boolean {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return false
+        return when (val preparation = ChatMessageActionHandler.prepareSecondChatAudioSend(
+            current,
+            filePath,
+            clientMessageId,
+        )) {
+            is ChatAudioSendPreparation.Accepted -> {
+                val instanceKey = preparation.pendingState.expiryKey()
+                silentSecondChatRefreshJob?.cancel()
+                silentSecondChatRefreshJob = null
+                _uiState.value = preparation.pendingState
+                viewModelScope.launch {
+                    val result = secondChatCoordinator.sendAudioMessage(
+                        preparation.pendingState,
+                        preparation.file,
+                        preparation.clientMessageId,
+                    )
+                    val latest = _uiState.value as? RealsRootUiState.SecondChat
+                    val latestDraft = latest?.audioDraft
+                    val canInstall =
+                        latest != null &&
+                        latest.matches(instanceKey) &&
+                        latest.audioUpload.uploading &&
+                        latestDraft != null &&
+                        latestDraft.clientMessageId == preparation.clientMessageId &&
+                        latestDraft.filePath == preparation.file.absolutePath
+                    if (canInstall) {
+                        _uiState.value = result
+                        deleteCompletedSecondChatDraftIfMatching(
+                            chatId = preparation.chatId,
+                            clientMessageId = preparation.clientMessageId,
+                            filePath = preparation.file.absolutePath,
+                        )
+                    } else {
+                        runCatching { preparation.file.delete() }
+                    }
+                }
+                true
+            }
+
+            is ChatAudioSendPreparation.Rejected -> {
+                _uiState.value = preparation.state
+                false
+            }
+
+            ChatAudioSendPreparation.Ignored -> false
+        }
+    }
+
+    fun clearSecondChatAudioUploadState() {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        _uiState.value = current.copy(audioUpload = ChatAudioUploadUiState())
+    }
+
+    fun setSecondChatAudioDraft(draft: ChatAudioDraftUiState) {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        current.audioDraft
+            ?.takeIf { it.filePath != draft.filePath && !current.audioUpload.uploading }
+            ?.deleteFile()
+        _uiState.value = current.copy(
+            audioDraft = draft,
+            audioUpload = ChatAudioUploadUiState(),
+            error = null,
+        )
+    }
+
+    fun setAndSendSecondChatAudioDraft(draft: ChatAudioDraftUiState): Boolean {
+        setSecondChatAudioDraft(draft)
+        return sendSecondChatAudioMessage(draft.filePath, draft.clientMessageId)
+    }
+
+    fun deleteSecondChatAudioDraft() {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        if (current.audioUpload.uploading) return
+        current.audioDraft?.deleteFile()
+        _uiState.value = current.copy(
+            audioDraft = null,
+            audioUpload = ChatAudioUploadUiState(),
+        )
+    }
+
+    suspend fun refreshSecondChatAudioUrl(messageId: String): String? {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return null
+        val instanceKey = current.expiryKey()
+        val messagesResult = secondChatCoordinator.loadFullMessagesForAudioPlayback(current)
+        val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return null
+        if (!latest.matches(instanceKey)) return null
+        val incoming = when (messagesResult) {
+            is ApiResult.Success -> messagesResult.value
+            is ApiResult.Failure -> return null
+        }
+        val merged = latest.messages.appendUnique(incoming)
+        _uiState.value = latest.copy(messages = merged)
+        return merged.firstOrNull { it.id == messageId }?.audio?.url
+    }
+
     fun retrySecondChatMessage(localId: String, content: String) {
         val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
         _uiState.value = ChatMessageActionHandler.retrySecondChat(current, localId)
@@ -464,7 +572,9 @@ class RealsRootViewModel(
     }
 
     fun safetyCancelSecondChat(reason: ChatExitReason, details: String) {
-        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        val current = ((_uiState.value as? RealsRootUiState.SecondChat)
+            ?.withDiscardedAudioTransaction() as? RealsRootUiState.SecondChat) ?: return
+        _uiState.value = current
         viewModelScope.launch {
             applySecondChatActionResult(
                 secondChatCoordinator.safetyCancel(
@@ -480,6 +590,7 @@ class RealsRootViewModel(
     fun closeSecondChat() {
         val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
         if (current.isJoinedActiveSecondChat()) return
+        current.audioDraft?.deleteFile()
         viewModelScope.launch {
             homeCoordinator.returnHome(current.session)
         }
@@ -821,7 +932,10 @@ class RealsRootViewModel(
     fun blockCurrentMatchParticipant() {
         if (manualBlockJob?.isActive == true) return
         manualBlockJob = viewModelScope.launch {
-            val current = _uiState.value
+            val current = _uiState.value.withDiscardedAudioTransaction()
+            if (current !== _uiState.value) {
+                _uiState.value = current
+            }
             when (
                 val result = manualBlockCoordinator.block(
                     current = current,
@@ -849,7 +963,7 @@ class RealsRootViewModel(
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
         if (
             current.refreshing || current.sending || current.actionLoading ||
-            current.guidanceActionLoading || current.manualBlock.loading
+            current.audioUpload.uploading || current.guidanceActionLoading || current.manualBlock.loading
         ) return
         if (silent && silentFirstChatRefreshJob?.isActive == true) return
         if (current.chat == null) return openFirstChat(current.matchId, current.chatId)
@@ -864,6 +978,8 @@ class RealsRootViewModel(
             }
             val result = firstChatCoordinator.refresh(current, silent)
             val latest = _uiState.value as? RealsRootUiState.FirstChat ?: return@launch
+            if (latest.audioUpload != current.audioUpload) return@launch
+            if (latest.audioDraft != current.audioDraft) return@launch
             if (silent && (
                     latest.matchId != current.matchId ||
                         latest.sending ||
@@ -945,6 +1061,106 @@ class RealsRootViewModel(
         }
     }
 
+    fun sendFirstChatAudioMessage(filePath: String, clientMessageId: String): Boolean {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return false
+        return when (val preparation = ChatMessageActionHandler.prepareFirstChatAudioSend(
+            current,
+            filePath,
+            clientMessageId,
+        )) {
+            is ChatAudioSendPreparation.Accepted -> {
+                val matchId = preparation.pendingState.matchId
+                val chatId = preparation.pendingState.chatId
+                silentFirstChatRefreshJob?.cancel()
+                silentFirstChatRefreshJob = null
+                _uiState.value = preparation.pendingState
+                viewModelScope.launch {
+                    val result = firstChatCoordinator.sendAudioMessage(
+                        preparation.pendingState,
+                        preparation.file,
+                        preparation.clientMessageId,
+                    )
+                    val latest = _uiState.value as? RealsRootUiState.FirstChat
+                    val latestDraft = latest?.audioDraft
+                    val canInstall =
+                        latest != null &&
+                        latest.matchId == matchId &&
+                        latest.chatId == chatId &&
+                        latest.audioUpload.uploading &&
+                        latestDraft != null &&
+                        latestDraft.clientMessageId == preparation.clientMessageId &&
+                        latestDraft.filePath == preparation.file.absolutePath
+                    if (canInstall) {
+                        applyFirstChatSendResult(result)
+                        deleteCompletedFirstChatDraftIfMatching(
+                            chatId = preparation.chatId,
+                            clientMessageId = preparation.clientMessageId,
+                            filePath = preparation.file.absolutePath,
+                        )
+                    } else {
+                        runCatching { preparation.file.delete() }
+                    }
+                }
+                true
+            }
+
+            is ChatAudioSendPreparation.Rejected -> {
+                _uiState.value = preparation.state
+                false
+            }
+
+            ChatAudioSendPreparation.Ignored -> false
+        }
+    }
+
+    fun clearFirstChatAudioUploadState() {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        _uiState.value = current.copy(audioUpload = ChatAudioUploadUiState())
+    }
+
+    fun setFirstChatAudioDraft(draft: ChatAudioDraftUiState) {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        current.audioDraft
+            ?.takeIf { it.filePath != draft.filePath && !current.audioUpload.uploading }
+            ?.deleteFile()
+        _uiState.value = current.copy(
+            audioDraft = draft,
+            audioUpload = ChatAudioUploadUiState(),
+            error = null,
+        )
+    }
+
+    fun setAndSendFirstChatAudioDraft(draft: ChatAudioDraftUiState): Boolean {
+        setFirstChatAudioDraft(draft)
+        return sendFirstChatAudioMessage(draft.filePath, draft.clientMessageId)
+    }
+
+    fun deleteFirstChatAudioDraft() {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        if (current.audioUpload.uploading) return
+        current.audioDraft?.deleteFile()
+        _uiState.value = current.copy(
+            audioDraft = null,
+            audioUpload = ChatAudioUploadUiState(),
+        )
+    }
+
+    suspend fun refreshFirstChatAudioUrl(messageId: String): String? {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return null
+        val matchId = current.matchId
+        val chatId = current.chatId
+        val messagesResult = firstChatCoordinator.loadFullMessagesForAudioPlayback(current)
+        val newest = _uiState.value as? RealsRootUiState.FirstChat ?: return null
+        if (newest.matchId != matchId || newest.chatId != chatId) return null
+        val incoming = when (messagesResult) {
+            is ApiResult.Success -> messagesResult.value
+            is ApiResult.Failure -> return null
+        }
+        val merged = newest.messages.appendUnique(incoming)
+        _uiState.value = newest.copy(messages = merged)
+        return merged.firstOrNull { it.id == messageId }?.audio?.url
+    }
+
     fun retryFirstChatMessage(localId: String, content: String) {
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
         _uiState.value = ChatMessageActionHandler.retryFirstChat(current, localId)
@@ -966,6 +1182,7 @@ class RealsRootViewModel(
 
     fun handleFirstChatLocalExpiry(inactivity: Boolean) {
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        current.audioDraft?.deleteFile()
         homeCoordinator.hideFirstChatLocally(current.matchId)
         viewModelScope.launch {
             homeCoordinator.returnHome(
@@ -981,6 +1198,7 @@ class RealsRootViewModel(
 
     fun handleSecondChatUnavailable() {
         val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        current.audioDraft?.deleteFile()
         viewModelScope.launch {
             homeCoordinator.returnHome(
                 session = current.session,
@@ -1014,7 +1232,9 @@ class RealsRootViewModel(
     }
 
     fun safetyCancelChat(reason: ChatExitReason, details: String) {
-        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        val current = ((_uiState.value as? RealsRootUiState.FirstChat)
+            ?.withDiscardedAudioTransaction() as? RealsRootUiState.FirstChat) ?: return
+        _uiState.value = current
         viewModelScope.launch {
             applyFirstChatActionResult(
                 firstChatCoordinator.safetyCancel(
@@ -1193,6 +1413,7 @@ class RealsRootViewModel(
                 _uiState.value = latest?.let { result.state.withFreshGuidanceFrom(it) } ?: result.state
             }
             is FirstChatActionResult.ReturnHome -> {
+                (_uiState.value as? RealsRootUiState.FirstChat)?.audioDraft?.deleteFile()
                 result.hideFirstChatMatchId?.let(homeCoordinator::hideFirstChatLocally)
                 homeCoordinator.returnHome(
                     session = result.session,
@@ -1201,6 +1422,7 @@ class RealsRootViewModel(
             }
 
             is FirstChatActionResult.ReloadHome -> {
+                (_uiState.value as? RealsRootUiState.FirstChat)?.audioDraft?.deleteFile()
                 result.hideFirstChatMatchId?.let(homeCoordinator::hideFirstChatLocally)
                 homeCoordinator.loadHomeForReady(
                     ready = RealsRootUiState.Ready(
@@ -1249,6 +1471,7 @@ class RealsRootViewModel(
                 _uiState.value = latest?.let { result.state.withFreshGuidanceFrom(it) } ?: result.state
             }
             is FirstChatSendResult.ReturnHome -> {
+                (_uiState.value as? RealsRootUiState.FirstChat)?.audioDraft?.deleteFile()
                 homeCoordinator.hideFirstChatLocally(result.hideFirstChatMatchId)
                 homeCoordinator.returnHome(
                     session = result.session,
@@ -1262,20 +1485,26 @@ class RealsRootViewModel(
         when (result) {
             SecondChatActionResult.Ignore -> Unit
             is SecondChatActionResult.Show -> _uiState.value = result.state
-            is SecondChatActionResult.ReturnHome -> homeCoordinator.returnHome(
-                session = result.session,
-                message = result.message,
-            )
+            is SecondChatActionResult.ReturnHome -> {
+                (_uiState.value as? RealsRootUiState.SecondChat)?.audioDraft?.deleteFile()
+                homeCoordinator.returnHome(
+                    session = result.session,
+                    message = result.message,
+                )
+            }
         }
     }
 
     private suspend fun applySecondChatLoadResult(result: SecondChatLoadResult) {
         when (result) {
             is SecondChatLoadResult.Show -> _uiState.value = result.state
-            is SecondChatLoadResult.ReturnHome -> homeCoordinator.returnHome(
-                session = result.session,
-                message = result.message,
-            )
+            is SecondChatLoadResult.ReturnHome -> {
+                (_uiState.value as? RealsRootUiState.SecondChat)?.audioDraft?.deleteFile()
+                homeCoordinator.returnHome(
+                    session = result.session,
+                    message = result.message,
+                )
+            }
         }
     }
 
@@ -1425,11 +1654,69 @@ class RealsRootViewModel(
         }
     }
 
+    private fun deleteCompletedFirstChatDraftIfMatching(
+        chatId: String,
+        clientMessageId: String,
+        filePath: String,
+    ) {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        val draft = current.audioDraft ?: return
+        if (
+            current.chat?.id == chatId &&
+            current.audioUpload.completedClientMessageId == clientMessageId &&
+            draft.clientMessageId == clientMessageId &&
+            draft.filePath == filePath
+        ) {
+            draft.deleteFile()
+            _uiState.value = current.copy(
+                audioDraft = null,
+                audioUpload = ChatAudioUploadUiState(),
+            )
+        }
+    }
+
+    private fun deleteCompletedSecondChatDraftIfMatching(
+        chatId: String,
+        clientMessageId: String,
+        filePath: String,
+    ) {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        val draft = current.audioDraft ?: return
+        if (
+            current.chat?.id == chatId &&
+            current.audioUpload.completedClientMessageId == clientMessageId &&
+            draft.clientMessageId == clientMessageId &&
+            draft.filePath == filePath
+        ) {
+            draft.deleteFile()
+            _uiState.value = current.copy(
+                audioDraft = null,
+                audioUpload = ChatAudioUploadUiState(),
+            )
+        }
+    }
+
     private fun returnHomeFromExternalNotification(session: ProvisionedSession) {
         viewModelScope.launch {
             homeCoordinator.returnHome(session)
         }
     }
+}
+
+private fun ChatAudioDraftUiState.deleteFile() {
+    runCatching { File(filePath).delete() }
+}
+
+private fun RealsRootUiState.withDiscardedAudioTransaction(): RealsRootUiState = when (this) {
+    is RealsRootUiState.FirstChat -> {
+        if (!audioUpload.uploading) audioDraft?.deleteFile()
+        copy(audioDraft = null, audioUpload = ChatAudioUploadUiState())
+    }
+    is RealsRootUiState.SecondChat -> {
+        if (!audioUpload.uploading) audioDraft?.deleteFile()
+        copy(audioDraft = null, audioUpload = ChatAudioUploadUiState())
+    }
+    else -> this
 }
 
 private fun RealsRootUiState.hasLegalActionRequiredError(): Boolean = when (this) {

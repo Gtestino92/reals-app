@@ -93,6 +93,10 @@ class FakeRealsApi : RealsApi {
         private set
     var chatMessageBody: SendMessageRequestDto? = null
         private set
+    var chatAudioFilePart: MultipartBody.Part? = null
+        private set
+    var chatAudioClientMessageIdPart: RequestBody? = null
+        private set
     var lastChatMessagesLimit: Int? = null
         private set
     var exitBody: ChatExitRequestCreateRequestDto? = null
@@ -173,6 +177,8 @@ class FakeRealsApi : RealsApi {
     var partnerMessageResponse: Response<PartnerPersonalMessageResponseDto> =
         Response.success(PartnerPersonalMessageResponseDto("hola"))
     var chatMessageResponse: Response<ChatMessageResponseDto> = Response.success(TestDtos.chatMessage())
+    var chatAudioMessageResponse: Response<ChatMessageResponseDto> =
+        Response.success(TestDtos.audioChatMessage())
     var chatMessagesResponse: Response<JsonElement> = Response.success(TestDtos.chatMessagesArrayPayload())
     var firstChatGuidanceResponse: Response<FirstChatGuidanceResponseDto> =
         Response.success(TestDtos.firstChatGuidance())
@@ -414,6 +420,18 @@ class FakeRealsApi : RealsApi {
         record("sendChatMessage", authorization, chatId) {
             chatMessageBody = body
             chatMessageResponse
+        }
+
+    override suspend fun sendChatAudioMessage(
+        authorization: String,
+        chatId: String,
+        file: MultipartBody.Part,
+        clientMessageId: RequestBody,
+    ): Response<ChatMessageResponseDto> =
+        record("sendChatAudioMessage", authorization, chatId) {
+            chatAudioFilePart = file
+            chatAudioClientMessageIdPart = clientMessageId
+            chatAudioMessageResponse
         }
 
     override suspend fun getChatMessages(

@@ -14,6 +14,7 @@ import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.MatchState
 import com.reals.app.domain.model.ProvisionedSession
+import java.io.File
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 
@@ -176,6 +177,23 @@ internal class FirstChatCoordinator(
         )
     }
 
+    suspend fun refreshMessagesForAudioPlayback(
+        current: RealsRootUiState.FirstChat,
+    ): RealsRootUiState.FirstChat {
+        val chat = current.chat ?: return current
+        val messagesResult = dependencies.getChatMessages(chat.id, afterMessageId = null)
+        val chatResult = dependencies.getFirstChatForMatch(current.matchId)
+        return current.copy(
+            chat = (chatResult as? ApiResult.Success)?.value ?: current.chat,
+            messages = (messagesResult as? ApiResult.Success)?.value
+                ?.let { current.messages.appendUnique(it) }
+                ?: current.messages,
+            error = (messagesResult as? ApiResult.Failure)?.error
+                ?: (chatResult as? ApiResult.Failure)?.error
+                ?: current.error,
+        )
+    }
+
     suspend fun sendMessage(
         current: RealsRootUiState.FirstChat,
         cleanContent: String,
@@ -218,6 +236,83 @@ internal class FirstChatCoordinator(
                     )
             )
         }
+    }
+
+    suspend fun sendAudioMessage(
+        current: RealsRootUiState.FirstChat,
+        file: File,
+        clientMessageId: String,
+    ): FirstChatSendResult {
+        val chat = current.chat ?: return FirstChatSendResult.Show(current)
+        val cursorBeforeSend = current.messages.lastMessageCursor()
+        return when (val result = dependencies.sendChatAudioMessage(chat.id, file, clientMessageId)) {
+            is ApiResult.Success -> {
+                val sentMessage = result.value
+                val messagesWithSent = current.messages.appendUnique(listOf(sentMessage))
+                val messagesResult = dependencies.getChatMessages(chat.id, cursorBeforeSend)
+                val chatResult = dependencies.getFirstChatForMatch(current.matchId)
+
+                FirstChatSendResult.Show(
+                    current.copy(
+                        chat = (chatResult as? ApiResult.Success)?.value ?: current.chat,
+                        messages = messagesWithSent.appendUnique(
+                            (messagesResult as? ApiResult.Success)?.value.orEmpty()
+                        ),
+                        audioUpload = ChatAudioUploadUiState(completedClientMessageId = clientMessageId),
+                        error = (messagesResult as? ApiResult.Failure)?.error
+                            ?: (chatResult as? ApiResult.Failure)?.error,
+                    )
+                )
+            }
+
+            is ApiResult.Failure -> result.error.firstChatSendExpiryRoute(current)
+                ?: refreshAudioAfterPendingMutualCancellation(
+                    error = result.error,
+                    current = current,
+                    chatId = chat.id,
+                )
+                ?: FirstChatSendResult.Show(
+                    current.copy(
+                        chat = refreshChatAfterAudioConflict(current, result.error),
+                        audioUpload = ChatAudioUploadUiState(
+                            uploading = false,
+                            error = result.error,
+                            nonRetryable = result.error.isAudioIdempotencyConflict(),
+                        ),
+                        error = null,
+                    )
+                )
+        }
+    }
+
+    private suspend fun refreshAudioAfterPendingMutualCancellation(
+        error: ApiError,
+        current: RealsRootUiState.FirstChat,
+        chatId: String,
+    ): FirstChatSendResult.Show? =
+        refreshLockedExitStateAfterPendingMutualCancellation(
+            error = error,
+            current = current,
+            chatId = chatId,
+        )?.let { refreshed ->
+            FirstChatSendResult.Show(
+                refreshed.copy(
+                    audioUpload = ChatAudioUploadUiState(
+                        uploading = false,
+                        error = error,
+                        nonRetryable = false,
+                    ),
+                    error = null,
+                )
+            )
+        }
+
+    private suspend fun refreshChatAfterAudioConflict(
+        current: RealsRootUiState.FirstChat,
+        error: ApiError,
+    ): com.reals.app.domain.model.Chat? {
+        if (!error.isAudioPolicyConflict()) return current.chat
+        return (dependencies.getFirstChatForMatch(current.matchId) as? ApiResult.Success)?.value ?: current.chat
     }
 
     private suspend fun refreshAfterPendingMutualCancellation(
@@ -311,7 +406,7 @@ internal class FirstChatCoordinator(
         decision: ChatContinueDecision,
         onPending: (RealsRootUiState.FirstChat) -> Unit,
     ): FirstChatActionResult {
-        if (current.loading || current.refreshing || current.sending || current.actionLoading) {
+        if (current.loading || current.refreshing || current.sending || current.audioUpload.uploading || current.actionLoading) {
             return FirstChatActionResult.Ignore
         }
         if (current.hasPendingExitRequest()) {
@@ -415,7 +510,14 @@ internal class FirstChatCoordinator(
         current: RealsRootUiState.FirstChat,
         onPending: (RealsRootUiState.FirstChat) -> Unit,
     ): FirstChatActionResult {
-        if (current.loading || current.refreshing || current.actionLoading || current.guidanceActionLoading) {
+        if (
+            current.loading ||
+            current.refreshing ||
+            current.sending ||
+            current.audioUpload.uploading ||
+            current.actionLoading ||
+            current.guidanceActionLoading
+        ) {
             return FirstChatActionResult.Ignore
         }
         if (current.hasPendingExitRequest()) {
@@ -488,7 +590,7 @@ internal class FirstChatCoordinator(
         details: String,
         onPending: (RealsRootUiState.FirstChat) -> Unit,
     ): FirstChatActionResult {
-        if (current.loading || current.refreshing || current.sending || current.actionLoading) {
+        if (current.loading || current.refreshing || current.sending || current.audioUpload.uploading || current.actionLoading) {
             return FirstChatActionResult.Ignore
         }
         if (current.chat == null) return FirstChatActionResult.Ignore
@@ -560,7 +662,7 @@ internal class FirstChatCoordinator(
         onPending: (RealsRootUiState.FirstChat) -> Unit,
         action: suspend (chatId: String) -> ApiResult<*>,
     ): FirstChatActionResult {
-        if (current.loading || current.refreshing || current.sending || current.actionLoading) {
+        if (current.loading || current.refreshing || current.sending || current.audioUpload.uploading || current.actionLoading) {
             return FirstChatActionResult.Ignore
         }
         val chat = current.chat ?: return FirstChatActionResult.Ignore
@@ -619,6 +721,13 @@ internal class FirstChatCoordinator(
 
     private fun RealsRootUiState.FirstChat.hasPendingExitRequest(): Boolean =
         exitRequests.any { it.status == ChatExitRequestStatus.Pending }
+
+    suspend fun loadFullMessagesForAudioPlayback(
+        current: RealsRootUiState.FirstChat,
+    ): ApiResult<List<com.reals.app.domain.model.ChatMessage>> {
+        val chat = current.chat ?: return ApiResult.Success(current.messages)
+        return dependencies.getChatMessages(chat.id, afterMessageId = null)
+    }
 }
 
 internal sealed interface FirstChatLoadResult {
@@ -697,6 +806,23 @@ private fun ApiError.firstChatTerminalStatus(): ChatStatus? {
         else -> null
     }
 }
+
+internal fun ApiError.isAudioIdempotencyConflict(): Boolean =
+    this is ApiError.Backend && backendErrorCode == BackendErrorCode.ChatMessageIdempotencyConflict
+
+internal fun ApiError.isAudioPolicyConflict(): Boolean =
+    this is ApiError.Backend &&
+        backendErrorCode in setOf(
+            BackendErrorCode.ChatAudioFeatureDisabled,
+            BackendErrorCode.ChatAudioGuidanceRequired,
+            BackendErrorCode.ChatAudioGuidanceNotAvailable,
+            BackendErrorCode.ChatAudioLimitReached,
+            BackendErrorCode.ChatAudioWaitingForBoth,
+            BackendErrorCode.ChatAudioNotAvailableYet,
+            BackendErrorCode.ChatNotAvailable,
+            BackendErrorCode.SecondChatJoinRequired,
+            BackendErrorCode.ChatMutualCancellationPending,
+        )
 
 internal fun normalizeSafetyReportDetails(details: String): String? =
     TextSafety.normalizeMultiline(details, maxLength = 1_000)
