@@ -143,7 +143,7 @@ fun ChatScreen(
     manualBlockError: ApiError?,
     error: ApiError?,
     message: String?,
-    chatTitlePrefix: String = "Chat",
+    chatTitlePrefix: String = "Cargando chat",
     partnerNameFallback: String? = null,
     showDecisionActions: Boolean = true,
     showExitActions: Boolean = true,
@@ -732,7 +732,7 @@ private fun SecondChatLifecyclePanel(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        "PodÃ©s mandar mensajes mientras esperás. Eso no significa que la otra persona haya llegado.",
+                        "Podés mandar mensajes mientras esperás. Eso no significa que la otra persona haya llegado.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     if (status.canClaimPartnerNoShow) {
@@ -976,7 +976,7 @@ private fun ChatOverflowMenu(
             )
 
             DropdownMenuItem(
-                text = { Text("Bloquear a Ã©sta persona") },
+                text = { Text("Bloquear a ésta persona") },
                 enabled = canManualBlock,
                 onClick = onShowManualBlock,
             )
@@ -1009,7 +1009,7 @@ private fun FirstChatUnansweredSuggestionCard(
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
             Text(
-                text = "PodÃ©s solicitar el cierre de la conversación. Si la otra persona no responde a la solicitud, el chat se cerrará sin penalizarte.",
+                text = "Podés solicitar el cierre de la conversación. Si la otra persona no responde a la solicitud, el chat se cerrará sin penalizarte.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )

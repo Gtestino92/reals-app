@@ -28,9 +28,9 @@ class ChatLifecycleUiStateTest {
 
     @Test
     fun `first chat loading preserves generic loading body`() {
-        val presentation = chatLoadingPresentation("Chat", null)
+        val presentation = chatLoadingPresentation("Cargando chat", null)
 
-        assertEquals("Chat", presentation.title)
+        assertEquals("Cargando chat", presentation.title)
         assertEquals("Estamos preparando la conversación.", presentation.body)
     }
 
