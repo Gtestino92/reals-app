@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import com.reals.app.R
 import com.reals.app.core.network.ErrorContext
 import com.reals.app.domain.model.Chat
+import com.reals.app.domain.model.ChatAudioPolicy
 import com.reals.app.domain.model.ChatAudioUnavailableReason
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.root.ChatAudioDraftUiState
@@ -366,13 +367,14 @@ internal data class ChatAudioComposerUiState(
 
 internal fun chatAudioComposerUiState(
     chat: Chat?,
+    audioPolicy: ChatAudioPolicy? = chat?.audioPolicy,
     canSendMessages: Boolean,
     sendingMessage: Boolean,
     audioUploading: Boolean,
     recordingActive: Boolean,
     loadingChatAction: Boolean,
 ): ChatAudioComposerUiState {
-    val policy = chat?.audioPolicy
+    val policy = audioPolicy
     val visible = policy != null &&
         policy.unavailableReason != ChatAudioUnavailableReason.FeatureDisabled
     val startEnabled = visible &&
