@@ -9,6 +9,7 @@ import com.reals.app.core.network.ApiResult
 import com.reals.app.core.network.isLegalActionRequired
 import com.reals.app.core.network.isTerminalAuthFailure
 import com.reals.app.core.network.isUserPairBlocked
+import com.reals.app.core.time.ServerClockSnapshot
 import com.reals.app.di.AppContainer
 import com.reals.app.di.RealsRootDependencies
 import com.reals.app.domain.model.ChatContinueDecision
@@ -31,6 +32,7 @@ import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_CONF
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_PROPOSALS_RECEIVED
 import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_REMINDER
 import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_REMINDER
+import com.reals.app.ui.chat.firstChatUnansweredPeriodReference
 import java.io.File
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,7 +42,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 class RealsRootViewModel(
-    dependencies: RealsRootDependencies,
+    private val dependencies: RealsRootDependencies,
     autoRefreshSession: Boolean = true,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<RealsRootUiState>(RealsRootUiState.Checking)
@@ -990,7 +992,8 @@ class RealsRootViewModel(
                 return@launch
             }
             when (result) {
-                is FirstChatRefreshResult.Show -> _uiState.value = result.state.withFreshGuidanceFrom(latest)
+                is FirstChatRefreshResult.Show ->
+                    _uiState.value = result.state.reconcileAsyncFirstChatResult(latest) ?: return@launch
                 is FirstChatRefreshResult.Reopen -> openFirstChat(result.matchId, result.chatId)
                 is FirstChatRefreshResult.Closed -> {
                     homeCoordinator.hideFirstChatLocally(current.matchId)
@@ -1165,6 +1168,42 @@ class RealsRootViewModel(
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
         _uiState.value = ChatMessageActionHandler.retryFirstChat(current, localId)
         sendFirstChatMessage(content)
+    }
+
+    fun dismissFirstChatUnansweredSuggestion(periodReference: String) {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        val chat = current.chat ?: return
+        val currentPeriod = firstChatUnansweredPeriodReference(
+            chat = chat,
+            currentUserId = current.session.user.id,
+            confirmedMessages = current.messages,
+        ) ?: return
+        if (currentPeriod.reference != periodReference) return
+
+        val latestBeforePersist = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        val latestBeforePeriod = firstChatUnansweredPeriodReference(
+            chat = latestBeforePersist.chat,
+            currentUserId = latestBeforePersist.session.user.id,
+            confirmedMessages = latestBeforePersist.messages,
+        ) ?: return
+        if (latestBeforePeriod.reference != periodReference) return
+
+        dependencies.firstChat.unansweredSuggestionDismissalStore.dismissPeriod(
+            userId = current.session.user.id,
+            chatId = chat.id,
+            periodReference = periodReference,
+        )
+
+        val latest = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        if (latest.matchId != current.matchId || latest.chatId != current.chatId) return
+        val latestPeriod = firstChatUnansweredPeriodReference(
+            chat = latest.chat,
+            currentUserId = latest.session.user.id,
+            confirmedMessages = latest.messages,
+        ) ?: return
+        if (latestPeriod.reference == periodReference) {
+            _uiState.value = latest.copy(dismissedUnansweredPeriodReference = periodReference)
+        }
     }
 
     fun submitFirstChatDecision(decision: ChatContinueDecision) {
@@ -1410,7 +1449,9 @@ class RealsRootViewModel(
             FirstChatActionResult.Ignore -> Unit
             is FirstChatActionResult.Show -> {
                 val latest = _uiState.value as? RealsRootUiState.FirstChat
-                _uiState.value = latest?.let { result.state.withFreshGuidanceFrom(it) } ?: result.state
+                _uiState.value = latest?.let {
+                    result.state.reconcileAsyncFirstChatResult(it) ?: return
+                } ?: result.state
             }
             is FirstChatActionResult.ReturnHome -> {
                 (_uiState.value as? RealsRootUiState.FirstChat)?.audioDraft?.deleteFile()
@@ -1468,7 +1509,9 @@ class RealsRootViewModel(
         when (result) {
             is FirstChatSendResult.Show -> {
                 val latest = _uiState.value as? RealsRootUiState.FirstChat
-                _uiState.value = latest?.let { result.state.withFreshGuidanceFrom(it) } ?: result.state
+                _uiState.value = latest?.let {
+                    result.state.reconcileAsyncFirstChatResult(it) ?: return
+                } ?: result.state
             }
             is FirstChatSendResult.ReturnHome -> {
                 (_uiState.value as? RealsRootUiState.FirstChat)?.audioDraft?.deleteFile()
@@ -1811,11 +1854,65 @@ private fun RealsRootUiState.blockedPairSession(): ProvisionedSession? = when (t
 private fun ApiError?.isUserPairBlockedError(): Boolean =
     this?.isUserPairBlocked() == true
 
-private fun RealsRootUiState.FirstChat.withFreshGuidanceFrom(
+private fun RealsRootUiState.FirstChat.reconcileAsyncFirstChatResult(
     displayed: RealsRootUiState.FirstChat,
-): RealsRootUiState.FirstChat {
-    if (matchId != displayed.matchId || chatId != displayed.chatId) return this
-    return copy(chat = chat.withFreshGuidanceFrom(displayed.chat))
+): RealsRootUiState.FirstChat? {
+    if (!sameFirstChatInstance(displayed)) return null
+
+    val atomicPair = freshestAtomicChatServerClockPair(displayed)
+    val reconciledChat = atomicPair.chat
+        .withFreshGuidanceFrom(displayed.chat)
+        .withFreshGuidanceFrom(chat)
+
+    return copy(
+        chat = reconciledChat,
+        chatId = atomicPair.chatId,
+        serverClockSnapshot = atomicPair.serverClockSnapshot,
+        dismissedUnansweredPeriodReference = displayed.dismissedUnansweredPeriodReference,
+    )
+}
+
+private data class FirstChatAtomicChatServerClockPair(
+    val chat: Chat?,
+    val chatId: String?,
+    val serverClockSnapshot: ServerClockSnapshot?,
+)
+
+private fun RealsRootUiState.FirstChat.freshestAtomicChatServerClockPair(
+    displayed: RealsRootUiState.FirstChat,
+): FirstChatAtomicChatServerClockPair {
+    val returnedSnapshot = serverClockSnapshot
+    val displayedSnapshot = displayed.serverClockSnapshot
+    val useDisplayed = when {
+        displayedSnapshot == null -> false
+        returnedSnapshot == null -> true
+        // Equal serverTime keeps the already displayed atomic pair to avoid stale-result churn.
+        displayedSnapshot.serverTimeEpochMillis >= returnedSnapshot.serverTimeEpochMillis -> true
+        else -> false
+    }
+    return if (useDisplayed) {
+        FirstChatAtomicChatServerClockPair(
+            chat = displayed.chat,
+            chatId = displayed.chatId ?: displayed.chat?.id,
+            serverClockSnapshot = displayedSnapshot,
+        )
+    } else {
+        FirstChatAtomicChatServerClockPair(
+            chat = chat,
+            chatId = chatId ?: chat?.id,
+            serverClockSnapshot = returnedSnapshot,
+        )
+    }
+}
+
+private fun RealsRootUiState.FirstChat.sameFirstChatInstance(
+    displayed: RealsRootUiState.FirstChat,
+): Boolean {
+    if (session.user.id != displayed.session.user.id) return false
+    if (matchId != displayed.matchId) return false
+    val resultChatId = chatId ?: chat?.id
+    val displayedChatId = displayed.chatId ?: displayed.chat?.id
+    return resultChatId != null && resultChatId == displayedChatId
 }
 
 private fun Chat?.withFreshGuidanceFrom(displayed: Chat?): Chat? {

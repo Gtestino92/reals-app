@@ -13,7 +13,7 @@ import org.junit.Test
 
 class VisualAndSchedulingUseCasesTest {
     private val api = FakeRealsApi()
-    private val matchRepository = MatchRepository(api, FakeAuthTokenProvider(), testApiExecutor())
+    private val matchRepository = MatchRepository(api, { 0L }, FakeAuthTokenProvider(), testApiExecutor())
     private val schedulingRepository = SchedulingRepository(api, FakeAuthTokenProvider(), testApiExecutor())
 
     @Test

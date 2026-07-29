@@ -24,6 +24,7 @@ data class ChatResponseDto(
     val lastMessageAt: String? = null,
     val guidance: FirstChatGuidanceResponseDto? = null,
     val audioPolicy: ChatAudioPolicyResponseDto? = null,
+    val serverTime: String? = null,
 )
 
 @Serializable

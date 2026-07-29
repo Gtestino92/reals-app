@@ -8,67 +8,102 @@ import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.ChatType
 import com.reals.app.testutil.TestDtos
-import com.reals.app.ui.root.OptimisticOutgoingMessage
-import com.reals.app.ui.root.OutgoingMessageDeliveryState
 import java.time.Instant
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FirstChatUnansweredSuggestionStateTest {
     @Test
-    fun `no messages hides suggestion`() {
+    fun `counterpart never wrote uses chat start as reference`() {
+        val state = suggestionState(
+            confirmedMessages = listOf(message(id = "own-1", sentAt = "2026-06-18T21:01:00Z")),
+        )
+
+        assertTrue(state.visible)
+        assertEquals("started:2026-06-18T21:00:00Z", state.periodReference)
+    }
+
+    @Test
+    fun `no own confirmed message after reference hides suggestion`() {
         val state = suggestionState(confirmedMessages = emptyList())
 
         assertFalse(state.visible)
-        assertFalse(state.actionEnabled)
     }
 
     @Test
-    fun `latest partner message hides suggestion`() {
-        val state = suggestionState(
-            confirmedMessages = listOf(message(id = "partner-1", senderId = PARTNER_USER_ID, sentAt = THRESHOLD_START)),
-        )
-
-        assertFalse(state.visible)
-    }
-
-    @Test
-    fun `latest own message below threshold hides suggestion`() {
-        val state = suggestionState(
-            nowMillis = millis("2026-06-18T21:02:59Z"),
-            confirmedMessages = listOf(message(id = "own-1", sentAt = THRESHOLD_START)),
-        )
-
-        assertFalse(state.visible)
-    }
-
-    @Test
-    fun `latest own message at threshold shows suggestion`() {
-        val state = suggestionState(
-            confirmedMessages = listOf(message(id = "own-1", sentAt = THRESHOLD_START)),
-        )
-
-        assertTrue(state.visible)
-        assertTrue(state.actionEnabled)
-    }
-
-    @Test
-    fun `latest own message above threshold shows suggestion`() {
-        val state = suggestionState(
-            nowMillis = millis("2026-06-18T21:03:01Z"),
-            confirmedMessages = listOf(message(id = "own-1", sentAt = THRESHOLD_START)),
-        )
-
-        assertTrue(state.visible)
-        assertTrue(state.actionEnabled)
-    }
-
-    @Test
-    fun `newer partner reply hides suggestion`() {
+    fun `first own confirmed message after partner keeps threshold at partner reference`() {
         val state = suggestionState(
             confirmedMessages = listOf(
-                message(id = "own-1", sentAt = "2026-06-18T21:00:00Z"),
+                message(id = "partner-1", senderId = PARTNER_USER_ID, sentAt = "2026-06-18T21:00:00Z"),
+                message(id = "own-1", sentAt = "2026-06-18T21:02:30Z"),
+            ),
+        )
+
+        assertTrue(state.visible)
+        assertEquals("partner:partner-1", state.periodReference)
+    }
+
+    @Test
+    fun `several own messages do not reset threshold`() {
+        val state = suggestionState(
+            confirmedMessages = listOf(
+                message(id = "partner-1", senderId = PARTNER_USER_ID, sentAt = "2026-06-18T21:00:00Z"),
+                message(id = "own-1", sentAt = "2026-06-18T21:01:00Z"),
+                message(id = "own-2", sentAt = "2026-06-18T21:02:59Z"),
+            ),
+        )
+
+        assertTrue(state.visible)
+    }
+
+    @Test
+    fun `new own message does not hide eligible suggestion`() {
+        val state = suggestionState(
+            confirmedMessages = listOf(
+                message(id = "own-1", sentAt = "2026-06-18T21:01:00Z"),
+                message(id = "own-2", sentAt = "2026-06-18T21:03:01Z"),
+            ),
+        )
+
+        assertTrue(state.visible)
+    }
+
+    @Test
+    fun `latest counterpart message creates new period`() {
+        val state = suggestionState(
+            nowMillis = millis("2026-06-18T21:04:00Z"),
+            confirmedMessages = listOf(
+                message(id = "partner-1", senderId = PARTNER_USER_ID, sentAt = "2026-06-18T21:00:00Z"),
+                message(id = "own-1", sentAt = "2026-06-18T21:01:00Z"),
+                message(id = "partner-2", senderId = PARTNER_USER_ID, sentAt = "2026-06-18T21:01:00Z"),
+                message(id = "own-2", sentAt = "2026-06-18T21:02:00Z"),
+            ),
+        )
+
+        assertTrue(state.visible)
+        assertEquals("partner:partner-2", state.periodReference)
+    }
+
+    @Test
+    fun `new counterpart message immediately hides old suggestion`() {
+        val state = suggestionState(
+            confirmedMessages = listOf(
+                message(id = "own-1", sentAt = "2026-06-18T21:01:00Z"),
+                message(id = "partner-1", senderId = PARTNER_USER_ID, sentAt = "2026-06-18T21:03:00Z"),
+            ),
+        )
+
+        assertFalse(state.visible)
+    }
+
+    @Test
+    fun `own message before latest counterpart does not satisfy participation`() {
+        val state = suggestionState(
+            nowMillis = millis("2026-06-18T21:06:00Z"),
+            confirmedMessages = listOf(
+                message(id = "own-1", sentAt = "2026-06-18T21:01:00Z"),
                 message(id = "partner-1", senderId = PARTNER_USER_ID, sentAt = "2026-06-18T21:02:00Z"),
             ),
         )
@@ -77,11 +112,56 @@ class FirstChatUnansweredSuggestionStateTest {
     }
 
     @Test
-    fun `newer own message restarts threshold`() {
+    fun `own message after latest counterpart satisfies participation`() {
         val state = suggestionState(
+            nowMillis = millis("2026-06-18T21:04:00Z"),
             confirmedMessages = listOf(
-                message(id = "own-1", sentAt = "2026-06-18T21:00:00Z"),
-                message(id = "own-2", sentAt = "2026-06-18T21:02:00Z"),
+                message(id = "partner-1", senderId = PARTNER_USER_ID, sentAt = "2026-06-18T21:01:00Z"),
+                message(id = "own-1", sentAt = "2026-06-18T21:01:01Z"),
+            ),
+        )
+
+        assertTrue(state.visible)
+    }
+
+    @Test
+    fun `exact three minute boundary is visible`() {
+        val state = suggestionState(
+            nowMillis = millis("2026-06-18T21:03:00Z"),
+            confirmedMessages = listOf(message(id = "own-1", sentAt = "2026-06-18T21:01:00Z")),
+        )
+
+        assertTrue(state.visible)
+        assertTrue(state.actionEnabled)
+    }
+
+    @Test
+    fun `one millisecond below threshold is hidden`() {
+        val state = suggestionState(
+            nowMillis = millis("2026-06-18T21:02:59.999Z"),
+            confirmedMessages = listOf(message(id = "own-1", sentAt = "2026-06-18T21:01:00Z")),
+        )
+
+        assertFalse(state.visible)
+    }
+
+    @Test
+    fun `dismissed current period is hidden`() {
+        val state = suggestionState(
+            dismissedPeriodReference = "started:2026-06-18T21:00:00Z",
+            confirmedMessages = listOf(message(id = "own-1", sentAt = "2026-06-18T21:01:00Z")),
+        )
+
+        assertFalse(state.visible)
+    }
+
+    @Test
+    fun `own messages do not invalidate dismissal`() {
+        val state = suggestionState(
+            dismissedPeriodReference = "started:2026-06-18T21:00:00Z",
+            confirmedMessages = listOf(
+                message(id = "own-1", sentAt = "2026-06-18T21:01:00Z"),
+                message(id = "own-2", sentAt = "2026-06-18T21:04:00Z"),
             ),
         )
 
@@ -89,10 +169,34 @@ class FirstChatUnansweredSuggestionStateTest {
     }
 
     @Test
+    fun `new counterpart period does not match old dismissal`() {
+        val state = suggestionState(
+            nowMillis = millis("2026-06-18T21:04:00Z"),
+            dismissedPeriodReference = "started:2026-06-18T21:00:00Z",
+            confirmedMessages = listOf(
+                message(id = "partner-1", senderId = PARTNER_USER_ID, sentAt = "2026-06-18T21:01:00Z"),
+                message(id = "own-1", sentAt = "2026-06-18T21:02:00Z"),
+            ),
+        )
+
+        assertTrue(state.visible)
+        assertEquals("partner:partner-1", state.periodReference)
+    }
+
+    @Test
+    fun `optimistic and failed messages are ignored by derivation`() {
+        val state = suggestionState(
+            confirmedMessages = listOf(message(id = "own-1", sentAt = "2026-06-18T21:01:00Z")),
+        )
+
+        assertTrue(state.visible)
+    }
+
+    @Test
     fun `pending exit request hides suggestion`() {
         val state = suggestionState(
             pendingExitRequest = TestDtos.exitRequest().toDomain(),
-            confirmedMessages = listOf(message(id = "own-1", sentAt = THRESHOLD_START)),
+            confirmedMessages = listOf(message(id = "own-1", sentAt = "2026-06-18T21:01:00Z")),
         )
 
         assertFalse(state.visible)
@@ -102,7 +206,7 @@ class FirstChatUnansweredSuggestionStateTest {
     fun `non-active first chat hides suggestion`() {
         val state = suggestionState(
             chat = activeFirstChat().copy(status = ChatStatus.Cancelled),
-            confirmedMessages = listOf(message(id = "own-1", sentAt = THRESHOLD_START)),
+            confirmedMessages = listOf(message(id = "own-1", sentAt = "2026-06-18T21:01:00Z")),
         )
 
         assertFalse(state.visible)
@@ -111,8 +215,18 @@ class FirstChatUnansweredSuggestionStateTest {
     @Test
     fun `expired first chat hides suggestion`() {
         val state = suggestionState(
-            nowMillis = millis("2026-06-18T21:05:00Z"),
-            confirmedMessages = listOf(message(id = "own-1", sentAt = THRESHOLD_START)),
+            nowMillis = millis("2026-06-18T21:06:00Z"),
+            confirmedMessages = listOf(message(id = "own-1", sentAt = "2026-06-18T21:01:00Z")),
+        )
+
+        assertFalse(state.visible)
+    }
+
+    @Test
+    fun `non-pending own decision hides suggestion`() {
+        val state = suggestionState(
+            chat = activeFirstChat().copy(myDecision = ChatDecisionState.Approved),
+            confirmedMessages = listOf(message(id = "own-1", sentAt = "2026-06-18T21:01:00Z")),
         )
 
         assertFalse(state.visible)
@@ -122,91 +236,49 @@ class FirstChatUnansweredSuggestionStateTest {
     fun `second chat hides suggestion`() {
         val state = suggestionState(
             chat = activeFirstChat().copy(chatType = ChatType.SecondChat),
-            confirmedMessages = listOf(message(id = "own-1", sentAt = THRESHOLD_START)),
+            confirmedMessages = listOf(message(id = "own-1", sentAt = "2026-06-18T21:01:00Z")),
         )
 
         assertFalse(state.visible)
     }
 
     @Test
-    fun `non-pending user decision hides suggestion`() {
-        val state = suggestionState(
-            chat = activeFirstChat().copy(myDecision = ChatDecisionState.Approved),
-            confirmedMessages = listOf(message(id = "own-1", sentAt = THRESHOLD_START)),
-        )
-
-        assertFalse(state.visible)
-    }
-
-    @Test
-    fun `optimistic sending message suppresses suggestion`() {
-        val state = suggestionState(
-            confirmedMessages = listOf(message(id = "own-1", sentAt = THRESHOLD_START)),
-            optimisticMessages = listOf(optimisticMessage(OutgoingMessageDeliveryState.Sending)),
-        )
-
-        assertFalse(state.visible)
-    }
-
-    @Test
-    fun `failed optimistic message suppresses suggestion while retryable`() {
-        val state = suggestionState(
-            confirmedMessages = listOf(message(id = "own-1", sentAt = THRESHOLD_START)),
-            optimisticMessages = listOf(optimisticMessage(OutgoingMessageDeliveryState.Failed)),
-        )
-
-        assertFalse(state.visible)
-    }
-
-    @Test
-    fun `action loading hides CTA`() {
-        val state = suggestionState(
-            confirmedMessages = listOf(message(id = "own-1", sentAt = THRESHOLD_START)),
-            mutualExitActionAvailable = false,
-        )
-
-        assertFalse(state.visible)
-        assertFalse(state.actionEnabled)
-    }
-
-    @Test
-    fun `message send in progress hides suggestion`() {
-        val state = suggestionState(
-            confirmedMessages = listOf(message(id = "own-1", sentAt = THRESHOLD_START)),
-            messageSendInFlight = true,
-        )
-
-        assertFalse(state.visible)
-        assertFalse(state.actionEnabled)
-    }
-
-    @Test
-    fun `audio interaction in progress hides CTA`() {
-        val state = suggestionState(
-            confirmedMessages = listOf(message(id = "own-1", sentAt = THRESHOLD_START)),
-            mutualExitActionAvailable = false,
-        )
-
-        assertFalse(state.visible)
-        assertFalse(state.actionEnabled)
-    }
-
-    @Test
-    fun `latest audio message uses same confirmed timestamp threshold`() {
-        val state = suggestionState(
-            confirmedMessages = listOf(audioMessage(id = "audio-1", sentAt = THRESHOLD_START)),
-        )
-
-        assertTrue(state.visible)
-    }
-
-    @Test
-    fun `sentAt then id selects latest confirmed message deterministically`() {
+    fun `messages from another chat are ignored`() {
         val state = suggestionState(
             confirmedMessages = listOf(
-                message(id = "b", sentAt = THRESHOLD_START),
-                message(id = "z", senderId = PARTNER_USER_ID, sentAt = THRESHOLD_START),
+                message(id = "own-other", chatId = "other-chat", sentAt = "2026-06-18T21:01:00Z"),
             ),
+        )
+
+        assertFalse(state.visible)
+    }
+
+    @Test
+    fun `malformed timestamps fail closed`() {
+        val state = suggestionState(
+            confirmedMessages = listOf(message(id = "own-1", sentAt = "not-a-date")),
+        )
+
+        assertFalse(state.visible)
+    }
+
+    @Test
+    fun `equal timestamps use message id tie breaker`() {
+        val state = suggestionState(
+            confirmedMessages = listOf(
+                message(id = "z-partner", senderId = PARTNER_USER_ID, sentAt = "2026-06-18T21:00:00Z"),
+                message(id = "a-own", sentAt = "2026-06-18T21:00:00Z"),
+            ),
+        )
+
+        assertFalse(state.visible)
+    }
+
+    @Test
+    fun `missing server estimate hides suggestion`() {
+        val state = suggestionState(
+            nowMillis = null,
+            confirmedMessages = listOf(message(id = "own-1", sentAt = "2026-06-18T21:01:00Z")),
         )
 
         assertFalse(state.visible)
@@ -215,21 +287,19 @@ class FirstChatUnansweredSuggestionStateTest {
     private fun suggestionState(
         chat: Chat = activeFirstChat(),
         confirmedMessages: List<ChatMessage>,
-        optimisticMessages: List<OptimisticOutgoingMessage> = emptyList(),
         pendingExitRequest: ChatExitRequest? = null,
-        nowMillis: Long = THRESHOLD_MILLIS,
+        nowMillis: Long? = millis("2026-06-18T21:03:00Z"),
+        dismissedPeriodReference: String? = null,
         mutualExitActionAvailable: Boolean = true,
-        messageSendInFlight: Boolean = false,
     ): FirstChatUnansweredSuggestionState =
         firstChatUnansweredSuggestionState(
             chat = chat,
             currentUserId = CURRENT_USER_ID,
             confirmedMessages = confirmedMessages,
-            optimisticMessages = optimisticMessages,
             pendingExitRequest = pendingExitRequest,
-            nowMillis = nowMillis,
+            estimatedServerNowMillis = nowMillis,
+            dismissedPeriodReference = dismissedPeriodReference,
             mutualExitActionAvailable = mutualExitActionAvailable,
-            messageSendInFlight = messageSendInFlight,
         )
 
     private fun activeFirstChat(): Chat = TestDtos.chat().toDomain()
@@ -237,39 +307,17 @@ class FirstChatUnansweredSuggestionStateTest {
     private fun message(
         id: String,
         senderId: String = CURRENT_USER_ID,
+        chatId: String = "chat-1",
         sentAt: String,
     ): ChatMessage =
         TestDtos.chatMessage(id = id)
-            .copy(senderId = senderId, sentAt = sentAt)
+            .copy(chatSessionId = chatId, senderId = senderId, sentAt = sentAt)
             .toDomain()
-
-    private fun audioMessage(
-        id: String,
-        senderId: String = CURRENT_USER_ID,
-        sentAt: String,
-    ): ChatMessage =
-        TestDtos.audioChatMessage(id = id)
-            .copy(senderId = senderId, sentAt = sentAt)
-            .toDomain()
-
-    private fun optimisticMessage(
-        deliveryState: OutgoingMessageDeliveryState,
-    ): OptimisticOutgoingMessage =
-        OptimisticOutgoingMessage(
-            localId = "local-1",
-            chatId = "chat-1",
-            senderId = CURRENT_USER_ID,
-            content = "mensaje local",
-            createdAtMillis = millis("2026-06-18T21:02:30Z"),
-            deliveryState = deliveryState,
-        )
 
     private fun millis(value: String): Long = Instant.parse(value).toEpochMilli()
 
     private companion object {
         const val CURRENT_USER_ID = "user-1"
         const val PARTNER_USER_ID = "user-2"
-        const val THRESHOLD_START = "2026-06-18T21:00:00Z"
-        val THRESHOLD_MILLIS: Long = Instant.parse("2026-06-18T21:03:00Z").toEpochMilli()
     }
 }

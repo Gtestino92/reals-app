@@ -2,6 +2,7 @@ package com.reals.app.ui.root
 
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.isLegalActionRequired
+import com.reals.app.core.time.ServerClockSnapshot
 import com.reals.app.domain.model.BackendUser
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatExitRequest
@@ -121,6 +122,8 @@ sealed interface RealsRootUiState {
         val messages: List<ChatMessage> = emptyList(),
         val optimisticMessages: List<OptimisticOutgoingMessage> = emptyList(),
         val exitRequests: List<ChatExitRequest> = emptyList(),
+        val serverClockSnapshot: ServerClockSnapshot? = null,
+        val dismissedUnansweredPeriodReference: String? = null,
         val loading: Boolean = false,
         val refreshing: Boolean = false,
         val sending: Boolean = false,

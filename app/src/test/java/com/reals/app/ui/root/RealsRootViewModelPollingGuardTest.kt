@@ -1051,7 +1051,11 @@ class RealsRootViewModelPollingGuardTest {
 
 }
 
-internal fun rootViewModelTestDependencies(api: FakeRealsApi): RealsRootDependencies {
+internal fun rootViewModelTestDependencies(
+    api: FakeRealsApi,
+    firstChatDismissalStore: com.reals.app.data.preferences.InMemoryFirstChatUnansweredSuggestionDismissalStore =
+        com.reals.app.data.preferences.InMemoryFirstChatUnansweredSuggestionDismissalStore(),
+): RealsRootDependencies {
         val context = ContextWrapper(null)
         val tokenProvider = FakeAuthTokenProvider()
         val apiExecutor = testApiExecutor()
@@ -1059,7 +1063,7 @@ internal fun rootViewModelTestDependencies(api: FakeRealsApi): RealsRootDependen
         val meRepository = MeRepository(api, tokenProvider, apiExecutor)
         val profileRepository = ProfileRepository(context, api, tokenProvider, apiExecutor)
         val matchmakingRepository = MatchmakingRepository(api, tokenProvider, apiExecutor)
-        val matchRepository = MatchRepository(api, tokenProvider, apiExecutor)
+        val matchRepository = MatchRepository(api, { 0L }, tokenProvider, apiExecutor)
         val chatRepository = ChatRepository(api, testJson, tokenProvider, apiExecutor)
         val schedulingRepository = SchedulingRepository(api, tokenProvider, apiExecutor)
         val legalRepository = LegalRepository(api, tokenProvider, apiExecutor)
@@ -1121,6 +1125,7 @@ internal fun rootViewModelTestDependencies(api: FakeRealsApi): RealsRootDependen
                 timeoutChatExitRequest = TimeoutChatExitRequestUseCase(chatRepository),
                 cancelChat = CancelChatUseCase(chatRepository),
                 safetyCancelChat = SafetyCancelChatUseCase(chatRepository),
+                unansweredSuggestionDismissalStore = firstChatDismissalStore,
             ),
             secondChat = SecondChatFeatureDependencies(
                 getStatus = GetSecondChatStatusUseCase(chatRepository),

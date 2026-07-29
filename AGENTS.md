@@ -4,6 +4,10 @@
 - Treat current GitHub code and documentation as the source of truth.
 - Confirm the current branch and HEAD before recommendations or edits.
 - Use `development` as the normal comparison base unless the task explicitly names another base.
+- Before implementation edits, create or switch to a dedicated task branch based on the latest `development`.
+- Use an appropriate branch prefix such as `feature/`, `fix/`, `refactor/`, `chore/`, `docs/`, or `test/`.
+- Never implement directly on `development`, `main`, or `master`.
+- When a task explicitly names a branch, verify and use that branch instead of creating an additional one.
 - Inspect actual files and relevant tests before proposing code.
 - Compare the feature branch against the base before changing it.
 - Do not reconstruct architecture solely from task descriptions, prior reports, or memory.

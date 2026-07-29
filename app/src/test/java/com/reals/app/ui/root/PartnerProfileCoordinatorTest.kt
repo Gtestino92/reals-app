@@ -323,12 +323,12 @@ class PartnerProfileCoordinatorTest {
 
     private fun getVisualProfile(api: FakeRealsApi): GetVisualProfileUseCase {
         api.visualProfileResponse = Response.success(TestDtos.visualProfile())
-        val repository = MatchRepository(api, FakeAuthTokenProvider(), testApiExecutor())
+        val repository = MatchRepository(api, { 0L }, FakeAuthTokenProvider(), testApiExecutor())
         return GetVisualProfileUseCase(repository)
     }
 
     private fun getPartnerPersonalMessage(api: FakeRealsApi): GetPartnerPersonalMessageUseCase {
-        val repository = MatchRepository(api, FakeAuthTokenProvider(), testApiExecutor())
+        val repository = MatchRepository(api, { 0L }, FakeAuthTokenProvider(), testApiExecutor())
         return GetPartnerPersonalMessageUseCase(repository)
     }
 }

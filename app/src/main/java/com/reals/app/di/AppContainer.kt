@@ -5,6 +5,8 @@ import com.reals.app.BuildConfig
 import com.reals.app.core.appcheck.FirebaseAppCheckTokenProvider
 import com.reals.app.core.firebase.FirebaseAuthTokenProvider
 import com.reals.app.core.network.ApiExecutor
+import com.reals.app.core.time.AndroidElapsedRealtimeClock
+import com.reals.app.data.preferences.SharedPreferencesFirstChatUnansweredSuggestionDismissalStore
 import com.reals.app.data.api.RealsApiClient
 import com.reals.app.data.repository.FirebaseAuthRepository
 import com.reals.app.data.repository.ChatRepository
@@ -96,7 +98,10 @@ class AppContainer(context: Context) {
     private val meRepository = MeRepository(api, tokenProvider, apiExecutor)
     private val profileRepository = ProfileRepository(appContext, api, tokenProvider, apiExecutor)
     private val matchmakingRepository = MatchmakingRepository(api, tokenProvider, apiExecutor)
-    private val matchRepository = MatchRepository(api, tokenProvider, apiExecutor)
+    private val elapsedRealtimeClock = AndroidElapsedRealtimeClock
+    private val firstChatUnansweredSuggestionDismissalStore =
+        SharedPreferencesFirstChatUnansweredSuggestionDismissalStore(appContext)
+    private val matchRepository = MatchRepository(api, elapsedRealtimeClock, tokenProvider, apiExecutor)
     private val chatRepository = ChatRepository(api, json, tokenProvider, apiExecutor)
     private val schedulingRepository = SchedulingRepository(api, tokenProvider, apiExecutor)
     private val legalRepository = LegalRepository(api, tokenProvider, apiExecutor)
@@ -229,6 +234,7 @@ class AppContainer(context: Context) {
             timeoutChatExitRequest = timeoutChatExitRequestUseCase,
             cancelChat = cancelChatUseCase,
             safetyCancelChat = safetyCancelChatUseCase,
+            unansweredSuggestionDismissalStore = firstChatUnansweredSuggestionDismissalStore,
         ),
         secondChat = SecondChatFeatureDependencies(
             getStatus = getSecondChatStatusUseCase,

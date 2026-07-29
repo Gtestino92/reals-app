@@ -12,6 +12,7 @@ import com.reals.app.domain.model.ChatExitOutcome
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatStatus
+import com.reals.app.domain.model.FirstChatSnapshot
 import com.reals.app.domain.model.MatchState
 import com.reals.app.domain.model.ProvisionedSession
 import java.io.File
@@ -67,7 +68,8 @@ internal class FirstChatCoordinator(
             )
         }
 
-        val chat = (chatResult as ApiResult.Success).value
+        val firstChatSnapshot = (chatResult as ApiResult.Success).value
+        val chat = firstChatSnapshot.chat
 
         if (!chat.status.isOpenFirstChatStatus()) {
             return FirstChatLoadResult.RouteHome(
@@ -94,6 +96,9 @@ internal class FirstChatCoordinator(
                 chat = chat,
                 messages = (messagesResult as? ApiResult.Success)?.value.orEmpty(),
                 exitRequests = (exitsResult as? ApiResult.Success)?.value.orEmpty(),
+                serverClockSnapshot = firstChatSnapshot.serverClockSnapshot,
+                dismissedUnansweredPeriodReference =
+                    dependencies.unansweredSuggestionDismissalStore.dismissedPeriod(session.user.id, chat.id),
                 loading = false,
                 error = (messagesResult as? ApiResult.Failure)?.error
                     ?: (exitsResult as? ApiResult.Failure)?.error,
@@ -125,7 +130,10 @@ internal class FirstChatCoordinator(
         val messagesResult = dependencies.getChatMessages(chat.id, pending.messages.lastMessageCursor())
         val exitsResult = dependencies.getChatExitRequests(chat.id)
         val updatedMatch = (matchResult as? ApiResult.Success)?.value ?: pending.match
-        val updatedChat = (chatResult as? ApiResult.Success)?.value ?: pending.chat
+        val updatedState = (chatResult as? ApiResult.Success)
+            ?.let { pending.withInstalledFirstChatSnapshot(it.value) }
+            ?: pending
+        val updatedChat = updatedState.chat
         val updatedExitRequests = (exitsResult as? ApiResult.Success)?.value ?: pending.exitRequests
         val resolvedExitRequest = updatedExitRequests
             .latestExitRequest()
@@ -157,12 +165,11 @@ internal class FirstChatCoordinator(
         }
 
         return FirstChatRefreshResult.Show(
-            pending.copy(
+            updatedState.copy(
                 match = updatedMatch,
-                chat = updatedChat,
                 messages = (messagesResult as? ApiResult.Success)?.value
-                    ?.let { pending.messages.appendUnique(it) }
-                    ?: pending.messages,
+                    ?.let { updatedState.messages.appendUnique(it) }
+                    ?: updatedState.messages,
                 exitRequests = updatedExitRequests,
                 refreshing = false,
                 error = if (silent) {
@@ -183,11 +190,13 @@ internal class FirstChatCoordinator(
         val chat = current.chat ?: return current
         val messagesResult = dependencies.getChatMessages(chat.id, afterMessageId = null)
         val chatResult = dependencies.getFirstChatForMatch(current.matchId)
-        return current.copy(
-            chat = (chatResult as? ApiResult.Success)?.value ?: current.chat,
+        val updated = (chatResult as? ApiResult.Success)
+            ?.let { current.withInstalledFirstChatSnapshot(it.value) }
+            ?: current
+        return updated.copy(
             messages = (messagesResult as? ApiResult.Success)?.value
-                ?.let { current.messages.appendUnique(it) }
-                ?: current.messages,
+                ?.let { updated.messages.appendUnique(it) }
+                ?: updated.messages,
             error = (messagesResult as? ApiResult.Failure)?.error
                 ?: (chatResult as? ApiResult.Failure)?.error
                 ?: current.error,
@@ -209,8 +218,10 @@ internal class FirstChatCoordinator(
                 val messagesResult = dependencies.getChatMessages(chat.id, cursorBeforeSend)
                 val chatResult = dependencies.getFirstChatForMatch(current.matchId)
 
-                FirstChatSendResult.Show(current.copy(
-                    chat = (chatResult as? ApiResult.Success)?.value ?: current.chat,
+                val updated = (chatResult as? ApiResult.Success)
+                    ?.let { current.withInstalledFirstChatSnapshot(it.value) }
+                    ?: current
+                FirstChatSendResult.Show(updated.copy(
                     messages = messagesWithSent.appendUnique(
                         (messagesResult as? ApiResult.Success)?.value.orEmpty()
                     ),
@@ -251,10 +262,12 @@ internal class FirstChatCoordinator(
                 val messagesWithSent = current.messages.appendUnique(listOf(sentMessage))
                 val messagesResult = dependencies.getChatMessages(chat.id, cursorBeforeSend)
                 val chatResult = dependencies.getFirstChatForMatch(current.matchId)
+                val updated = (chatResult as? ApiResult.Success)
+                    ?.let { current.withInstalledFirstChatSnapshot(it.value) }
+                    ?: current
 
                 FirstChatSendResult.Show(
-                    current.copy(
-                        chat = (chatResult as? ApiResult.Success)?.value ?: current.chat,
+                    updated.copy(
                         messages = messagesWithSent.appendUnique(
                             (messagesResult as? ApiResult.Success)?.value.orEmpty()
                         ),
@@ -274,8 +287,7 @@ internal class FirstChatCoordinator(
                     clientMessageId = clientMessageId,
                 )
                 ?: FirstChatSendResult.Show(
-                    current.copy(
-                        chat = refreshChatAfterAudioConflict(current, result.error),
+                    refreshStateAfterAudioConflict(current, result.error).copy(
                         optimisticMessages = current.optimisticMessages.withoutOptimisticMessage(clientMessageId),
                         audioUpload = ChatAudioUploadUiState(
                             uploading = false,
@@ -312,12 +324,14 @@ internal class FirstChatCoordinator(
             )
         }
 
-    private suspend fun refreshChatAfterAudioConflict(
+    private suspend fun refreshStateAfterAudioConflict(
         current: RealsRootUiState.FirstChat,
         error: ApiError,
-    ): com.reals.app.domain.model.Chat? {
-        if (!error.isAudioPolicyConflict()) return current.chat
-        return (dependencies.getFirstChatForMatch(current.matchId) as? ApiResult.Success)?.value ?: current.chat
+    ): RealsRootUiState.FirstChat {
+        if (!error.isAudioPolicyConflict()) return current
+        return (dependencies.getFirstChatForMatch(current.matchId) as? ApiResult.Success)
+            ?.let { current.withInstalledFirstChatSnapshot(it.value) }
+            ?: current
     }
 
     private suspend fun refreshAfterPendingMutualCancellation(
@@ -334,11 +348,13 @@ internal class FirstChatCoordinator(
 
         val chatResult = dependencies.getFirstChatForMatch(current.matchId)
         val exitsResult = dependencies.getChatExitRequests(chatId)
+        val updated = (chatResult as? ApiResult.Success)
+            ?.let { current.withInstalledFirstChatSnapshot(it.value) }
+            ?: current
         return FirstChatSendResult.Show(
-            current.copy(
-                chat = (chatResult as? ApiResult.Success)?.value ?: current.chat,
+            updated.copy(
                 exitRequests = (exitsResult as? ApiResult.Success)?.value
-                    ?: current.exitRequests,
+                    ?: updated.exitRequests,
                 optimisticMessages = current.optimisticMessages.filterNot { it.localId == localId },
                 sending = false,
                 error = (chatResult as? ApiResult.Failure)?.error
@@ -396,10 +412,12 @@ internal class FirstChatCoordinator(
 
         val chatResult = dependencies.getFirstChatForMatch(current.matchId)
         val exitsResult = dependencies.getChatExitRequests(chatId)
-        return current.copy(
-            chat = (chatResult as? ApiResult.Success)?.value ?: current.chat,
+        val updated = (chatResult as? ApiResult.Success)
+            ?.let { current.withInstalledFirstChatSnapshot(it.value) }
+            ?: current
+        return updated.copy(
             exitRequests = (exitsResult as? ApiResult.Success)?.value
-                ?: current.exitRequests,
+                ?: updated.exitRequests,
             error = (chatResult as? ApiResult.Failure)?.error
                 ?: (exitsResult as? ApiResult.Failure)?.error
                 ?: error,
@@ -700,11 +718,13 @@ internal class FirstChatCoordinator(
 
                 val chatResult = dependencies.getFirstChatForMatch(current.matchId)
                 val exitsResult = dependencies.getChatExitRequests(chat.id)
+                val updated = (chatResult as? ApiResult.Success)
+                    ?.let { pending.withInstalledFirstChatSnapshot(it.value) }
+                    ?: pending
                 FirstChatActionResult.Show(
-                    pending.copy(
-                        chat = (chatResult as? ApiResult.Success)?.value ?: pending.chat,
+                    updated.copy(
                         exitRequests = (exitsResult as? ApiResult.Success)?.value
-                            ?: pending.exitRequests,
+                            ?: updated.exitRequests,
                         actionLoading = false,
                         actionLoadingLabel = null,
                         message = successMessage,
@@ -835,3 +855,20 @@ internal fun normalizeSafetyReportDetails(details: String): String? =
 
 internal fun invalidSafetyReportDetailsError(): ApiError =
     ApiError.Unexpected("El detalle del reporte no es válido.")
+
+private fun RealsRootUiState.FirstChat.withInstalledFirstChatSnapshot(
+    snapshot: FirstChatSnapshot,
+): RealsRootUiState.FirstChat {
+    val currentSnapshot = serverClockSnapshot
+    if (
+        currentSnapshot != null &&
+        snapshot.serverClockSnapshot.serverTimeEpochMillis < currentSnapshot.serverTimeEpochMillis
+    ) {
+        return this
+    }
+    return copy(
+        chat = snapshot.chat,
+        chatId = snapshot.chat.id,
+        serverClockSnapshot = snapshot.serverClockSnapshot,
+    )
+}

@@ -182,6 +182,7 @@ object TestDtos {
         partnerDecision: String? = "PENDING",
         guidance: FirstChatGuidanceResponseDto? = null,
         audioPolicy: ChatAudioPolicyResponseDto? = null,
+        serverTime: String? = now,
     ) = ChatResponseDto(
         id = "chat-1",
         matchId = "match-1",
@@ -202,6 +203,7 @@ object TestDtos {
         lastMessageAt = now,
         guidance = guidance,
         audioPolicy = audioPolicy,
+        serverTime = serverTime,
     )
 
     fun audioPolicy(

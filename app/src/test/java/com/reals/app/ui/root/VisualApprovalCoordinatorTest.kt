@@ -573,7 +573,7 @@ class VisualApprovalCoordinatorTest {
     )
 
     private fun visualDependencies(api: FakeRealsApi): VisualApprovalFeatureDependencies {
-        val repository = MatchRepository(api, FakeAuthTokenProvider(), testApiExecutor())
+        val repository = MatchRepository(api, { 0L }, FakeAuthTokenProvider(), testApiExecutor())
         return VisualApprovalFeatureDependencies(
             getMatch = GetMatchUseCase(repository),
             getVisualProfile = GetVisualProfileUseCase(repository),
