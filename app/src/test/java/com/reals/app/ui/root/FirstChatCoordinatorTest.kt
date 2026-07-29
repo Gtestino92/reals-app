@@ -1035,7 +1035,7 @@ class FirstChatCoordinatorTest {
         assertTrue(result is SecondChatActionResult.ReturnHome)
         result as SecondChatActionResult.ReturnHome
         assertEquals(
-            "Reporte enviado. Cerramos esta conversación por seguridad y no volveremos a cruzarte con esta persona.",
+            "Reporte enviado. Cerramos ésta conversación por seguridad y no volveremos a cruzarte con ésta persona.",
             result.message,
         )
         assertEquals(listOf("safetyCancelChat"), api.calls)

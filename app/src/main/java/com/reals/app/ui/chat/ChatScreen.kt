@@ -114,8 +114,8 @@ internal fun chatLoadingPresentation(
     val body = when {
         isSecondChat && safePartnerName != null -> "Estamos cargando el segundo chat con $safePartnerName."
         isSecondChat -> "Estamos cargando el segundo chat."
-        safePartnerName != null -> "Estamos preparando la conversaciÃ³n con $safePartnerName."
-        else -> "Estamos preparando la conversaciÃ³n."
+        safePartnerName != null -> "Estamos preparando la conversación con $safePartnerName."
+        else -> "Estamos preparando la conversación."
     }
     return ChatLoadingPresentation(title = title, body = body)
 }
@@ -795,7 +795,7 @@ private fun SecondChatResolutionPanel(
                 }
                 if (request.type == SecondChatResolutionRequestType.MutualCompletion) {
                     Text(
-                        text = "Pueden seguir conversando; un nuevo mensaje cancela esta solicitud.",
+                        text = "Pueden seguir conversando; un nuevo mensaje cancela ésta solicitud.",
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -1360,9 +1360,9 @@ internal fun timedExitRequestBodyText(
     remainingSeconds: Long,
 ): String =
     when {
-        remainingSeconds == 0L -> "La solicitud venciÃ³. Estamos cerrando el chat."
+        remainingSeconds == 0L -> "La solicitud venció. Estamos cerrando el chat."
         requestedByMe -> "Esperando respuesta. Si no contesta, el chat se cierra en ${remainingSeconds}s."
-        else -> "Te propusieron cerrar el chat. RespondÃ© en ${remainingSeconds}s."
+        else -> "Te propusieron cerrar el chat. Respondé en ${remainingSeconds}s."
     }
 
 @Composable

@@ -346,7 +346,7 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.SecondChatInactivityClaimAlreadyPending ->
         "Ya hay un reclamo por falta de respuesta pendiente."
     BackendErrorCode.SecondChatOrdinaryCancellationNotAllowed ->
-        "El segundo chat no permite cancelar por esta vía. Podés reportar por seguridad o bloquear a la persona."
+        "El segundo chat no permite cancelar por ésta vía. Podés reportar por seguridad o bloquear a la persona."
     BackendErrorCode.SchedulingNotAvailable -> "La coordinación de horarios ya no está disponible. Actualizá el estado e intentá nuevamente."
     BackendErrorCode.SchedulingExpired -> "La coordinación de horarios venció."
     BackendErrorCode.SchedulingNegotiationNotFound -> "No encontramos la coordinación de horarios. Actualizá el estado."
