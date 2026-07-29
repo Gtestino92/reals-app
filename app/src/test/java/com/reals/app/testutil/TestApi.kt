@@ -132,6 +132,8 @@ class FakeRealsApi : RealsApi {
     var beforeGetFirstChatForMatchResponse: suspend () -> Unit = {}
     var beforeGetChatResponse: suspend () -> Unit = {}
     var beforeGetChatMessagesResponse: suspend () -> Unit = {}
+    var beforeSendChatMessageResponse: suspend () -> Unit = {}
+    var beforeSendChatAudioMessageResponse: suspend () -> Unit = {}
     var beforeGetChatExitRequestsResponse: suspend () -> Unit = {}
     var beforeGetSecondChatStatusResponse: suspend () -> Unit = {}
     var beforeGetConnectionNegotiationResponse: suspend () -> Unit = {}
@@ -417,7 +419,7 @@ class FakeRealsApi : RealsApi {
         chatId: String,
         body: SendMessageRequestDto,
     ): Response<ChatMessageResponseDto> =
-        record("sendChatMessage", authorization, chatId) {
+        record("sendChatMessage", authorization, chatId, beforeResponse = beforeSendChatMessageResponse) {
             chatMessageBody = body
             chatMessageResponse
         }
@@ -428,7 +430,7 @@ class FakeRealsApi : RealsApi {
         file: MultipartBody.Part,
         clientMessageId: RequestBody,
     ): Response<ChatMessageResponseDto> =
-        record("sendChatAudioMessage", authorization, chatId) {
+        record("sendChatAudioMessage", authorization, chatId, beforeResponse = beforeSendChatAudioMessageResponse) {
             chatAudioFilePart = file
             chatAudioClientMessageIdPart = clientMessageId
             chatAudioMessageResponse

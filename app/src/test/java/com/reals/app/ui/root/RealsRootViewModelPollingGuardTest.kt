@@ -1051,7 +1051,11 @@ class RealsRootViewModelPollingGuardTest {
 
 }
 
-internal fun rootViewModelTestDependencies(api: FakeRealsApi): RealsRootDependencies {
+internal fun rootViewModelTestDependencies(
+    api: FakeRealsApi,
+    firstChatDismissalStore: com.reals.app.data.preferences.InMemoryFirstChatUnansweredSuggestionDismissalStore =
+        com.reals.app.data.preferences.InMemoryFirstChatUnansweredSuggestionDismissalStore(),
+): RealsRootDependencies {
         val context = ContextWrapper(null)
         val tokenProvider = FakeAuthTokenProvider()
         val apiExecutor = testApiExecutor()
@@ -1121,8 +1125,7 @@ internal fun rootViewModelTestDependencies(api: FakeRealsApi): RealsRootDependen
                 timeoutChatExitRequest = TimeoutChatExitRequestUseCase(chatRepository),
                 cancelChat = CancelChatUseCase(chatRepository),
                 safetyCancelChat = SafetyCancelChatUseCase(chatRepository),
-                unansweredSuggestionDismissalStore =
-                    com.reals.app.data.preferences.InMemoryFirstChatUnansweredSuggestionDismissalStore(),
+                unansweredSuggestionDismissalStore = firstChatDismissalStore,
             ),
             secondChat = SecondChatFeatureDependencies(
                 getStatus = GetSecondChatStatusUseCase(chatRepository),
