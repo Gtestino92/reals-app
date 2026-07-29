@@ -235,7 +235,7 @@ internal class ChatAudioSessionState internal constructor(
                 stopRecording(ChatAudioStopSource.Manual, ChatAudioStopDisposition.Send)
             },
             onMaxDurationReached = {
-                stopRecording(ChatAudioStopSource.MaxDuration, ChatAudioStopDisposition.Preview)
+                stopRecording(ChatAudioStopSource.MaxDuration, ChatAudioStopDisposition.Send)
             },
             onCancelRecording = {
                 cancelRecording(ChatAudioStopSource.Cancel)
@@ -354,15 +354,19 @@ internal class ChatAudioSessionState internal constructor(
                 val draftState = result.draft.toUiState()
                 localAudioError = null
                 localAudioInfo = if (result.stopSource == ChatAudioStopSource.MaxDuration) {
-                    "Duración máxima alcanzada."
+                    "Duración máxima permitida alcanzada"
                 } else {
                     null
                 }
-                if (
-                    disposition == ChatAudioStopDisposition.Send &&
-                    result.stopSource == ChatAudioStopSource.Manual
-                ) {
-                    if (currentCallbacks.onDraftReadyAndSend(draftState)) {
+                val sendsImmediately = disposition == ChatAudioStopDisposition.Send &&
+                    (
+                        result.stopSource == ChatAudioStopSource.Manual ||
+                            result.stopSource == ChatAudioStopSource.MaxDuration
+                        )
+                if (sendsImmediately) {
+                    if (currentCallbacks.onDraftReadyAndSend(draftState) &&
+                        result.stopSource != ChatAudioStopSource.MaxDuration
+                    ) {
                         localAudioInfo = null
                     }
                 } else {
@@ -400,6 +404,8 @@ internal class ChatAudioSessionState internal constructor(
                 result = result,
                 disposition = if (source == ChatAudioStopSource.Manual) {
                     disposition
+                } else if (source == ChatAudioStopSource.MaxDuration) {
+                    ChatAudioStopDisposition.Send
                 } else {
                     ChatAudioStopDisposition.Preview
                 },
@@ -413,6 +419,7 @@ internal class ChatAudioSessionState internal constructor(
         currentCallbacks.onDeleteDraft()
         currentCallbacks.onClearUploadState()
         localAudioInfo = null
+        recordingStartedAtMillis = SystemClock.elapsedRealtime()
         recordingOperationInFlight = true
         coroutineScope.launch {
             val result = recorderController.start(
@@ -429,16 +436,18 @@ internal class ChatAudioSessionState internal constructor(
             recordingOperationInFlight = false
             when (result) {
                 ChatAudioRecorderResult.Started -> {
-                    recordingStartedAtMillis = SystemClock.elapsedRealtime()
                     localAudioError = null
                     localAudioInfo = null
                 }
 
                 is ChatAudioRecorderResult.Failed -> {
+                    recordingStartedAtMillis = null
                     localAudioError = result.message
                     localAudioInfo = null
                 }
-                ChatAudioRecorderResult.Cancelled,
+                ChatAudioRecorderResult.Cancelled -> {
+                    recordingStartedAtMillis = null
+                }
                 is ChatAudioRecorderResult.Ready -> publishRecorderResult(result)
             }
         }

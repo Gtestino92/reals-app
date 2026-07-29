@@ -130,7 +130,7 @@ internal fun MessageComposer(
                     onCancel = callbacks.onCancelRecording,
                 )
             } else {
-                val audioDraft = presentation.audioDraft
+                val audioDraft = presentation.audioDraft.takeUnless { presentation.uploadState.uploading }
                 if (audioDraft == null) {
                     TextComposerRow(
                         presentation = presentation,
@@ -228,7 +228,9 @@ private fun RecordingComposer(
     onCancel: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Grabando ${formatAudioDuration(elapsedMillis)} / ${formatAudioDuration(maxDurationMillis)}")
+        Text(
+            "Grabando ${formatRecordingElapsedDuration(elapsedMillis)} / ${formatAudioDuration(maxDurationMillis)}"
+        )
         LinearProgressIndicator(
             progress = { (elapsedMillis.toFloat() / maxDurationMillis.toFloat()).coerceIn(0f, 1f) },
             modifier = Modifier.fillMaxWidth(),
@@ -321,6 +323,13 @@ internal fun formatAudioDuration(durationMillis: Long): String {
         durationMillis < 1_000L -> 1L
         else -> durationMillis / 1_000L
     }
+    val minutes = totalSeconds / 60L
+    val seconds = totalSeconds % 60L
+    return "$minutes:${seconds.toString().padStart(2, '0')}"
+}
+
+internal fun formatRecordingElapsedDuration(durationMillis: Long): String {
+    val totalSeconds = (durationMillis / 1_000L).coerceAtLeast(0L)
     val minutes = totalSeconds / 60L
     val seconds = totalSeconds % 60L
     return "$minutes:${seconds.toString().padStart(2, '0')}"

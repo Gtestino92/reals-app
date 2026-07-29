@@ -308,6 +308,7 @@ internal class SecondChatCoordinator(
                     messages = current.messages.appendUnique(
                         (messagesResult as? ApiResult.Success)?.value.orEmpty() + result.value
                     ),
+                    optimisticMessages = current.optimisticMessages.withoutOptimisticMessage(clientMessageId),
                     audioUpload = ChatAudioUploadUiState(completedClientMessageId = clientMessageId),
                     error = (statusResult as? ApiResult.Failure)?.error
                         ?: (messagesResult as? ApiResult.Failure)?.error
@@ -317,6 +318,7 @@ internal class SecondChatCoordinator(
 
             is ApiResult.Failure -> {
                 val failed = current.copy(
+                    optimisticMessages = current.optimisticMessages.withoutOptimisticMessage(clientMessageId),
                     audioUpload = ChatAudioUploadUiState(
                         uploading = false,
                         error = result.error,

@@ -47,6 +47,18 @@ Explicitly review for:
 - action responses returning fresher state than polling;
 - state updates occurring through secondary paths rather than the main load path.
 
+## Text Encoding And User-Visible Strings
+- Treat every repository text file as UTF-8.
+- Preserve valid Unicode characters directly, including Spanish accents, `ñ`, `ü`, `¿`, and `¡`.
+- Never introduce mojibake such as `Ã¡`, `Ã©`, `Ã­`, `Ã³`, `Ãº`, `Ã±`, `Â¿`, `Â¡`, malformed smart quotes, or the Unicode replacement character `�`.
+- When editing files on Windows, use tools and APIs that read and write UTF-8 explicitly. Do not use shell redirection or file-writing commands whose encoding depends on the platform default.
+- Do not encode valid Spanish text as Latin-1, Windows-1252, escaped byte sequences, or already-corrupted UTF-8 text.
+- Do not convert an entire file's encoding, line endings, formatting, or unrelated contents merely to edit one string.
+- Before completion, inspect every newly added or modified user-visible string in the final diff and confirm that accented characters appear correctly in the source file.
+- Search added lines for common mojibake markers using an equivalent command to `git diff --unified=0 | rg "^\+.*(Ã|Â|â€|�)"`.
+- Inspect and correct every match unless the malformed text is intentionally present in an encoding-specific test fixture or documentation example.
+- Do not perform global replacement of suspected mojibake without determining the intended original text.
+
 ## Testing Rules
 - Tests must cover materially different mutation paths, not only the main acceptance scenario.
 - Add focused regression coverage for every fixed defect.
@@ -81,4 +93,5 @@ Explicitly review for:
 ## Write and Delivery Restrictions
 - Do not commit, push, merge, open or close PRs, or modify deployment resources unless explicitly requested.
 - Do not modify backend or AWS resources from Android tasks.
+- Before final delivery, inspect added and modified text for malformed Unicode or mojibake.
 - Final reports must contain root cause, invariants, mutation matrix summary, files changed, tests and commands, remaining risks, `git diff --stat`, and a concise final diff summary.
