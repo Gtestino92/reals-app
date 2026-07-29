@@ -1,5 +1,6 @@
 ﻿package com.reals.app.ui.chat
 
+import android.os.SystemClock
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -53,6 +54,7 @@ import com.reals.app.R
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
 import com.reals.app.core.security.TextSafety
+import com.reals.app.core.time.ServerClockSnapshot
 import com.reals.app.core.time.backendInstantOrNull
 import com.reals.app.core.time.remainingExitSeconds
 import com.reals.app.domain.model.Chat
@@ -129,6 +131,8 @@ fun ChatScreen(
     messages: List<ChatMessage>,
     optimisticMessages: List<OptimisticOutgoingMessage>,
     exitRequests: List<ChatExitRequest>,
+    serverClockSnapshot: ServerClockSnapshot? = null,
+    dismissedUnansweredPeriodReference: String? = null,
     loading: Boolean,
     refreshing: Boolean,
     sending: Boolean,
@@ -170,6 +174,7 @@ fun ChatScreen(
     onApprove: () -> Unit,
     onReject: () -> Unit,
     onRequestMutualExit: () -> Unit,
+    onDismissFirstChatUnansweredSuggestion: (String) -> Unit = {},
     onSafetyCancel: (ChatExitReason, String) -> Unit,
     onManualBlock: () -> Unit,
     onClearManualBlockError: () -> Unit,
@@ -189,6 +194,7 @@ fun ChatScreen(
     var showingSecondChatInactivityDialog by rememberSaveable(chat?.id) { mutableStateOf(false) }
     var secondChatResolutionRefreshHandledKey by rememberSaveable(chat?.id) { mutableStateOf<String?>(null) }
     var nowMillis by rememberSaveable(chat?.id) { mutableStateOf(System.currentTimeMillis()) }
+    var elapsedRealtimeMillis by remember(chat?.id) { mutableStateOf(SystemClock.elapsedRealtime()) }
     var firstChatExpiryHandled by rememberSaveable(chat?.id) { mutableStateOf(false) }
     var secondChatUnavailableHandled by rememberSaveable(chat?.id) { mutableStateOf(false) }
     val firstChatLifecycle = firstChatLifecycleUiState(chat, nowMillis)
@@ -279,11 +285,10 @@ fun ChatScreen(
         chat = chat,
         currentUserId = currentUserId,
         confirmedMessages = messages,
-        optimisticMessages = optimisticMessages,
         pendingExitRequest = pendingExitRequest,
-        nowMillis = nowMillis,
+        estimatedServerNowMillis = serverClockSnapshot?.estimatedServerTimeEpochMillis(elapsedRealtimeMillis),
+        dismissedPeriodReference = dismissedUnansweredPeriodReference,
         mutualExitActionAvailable = showMutualExitActions && canUseExistingChatActions,
-        messageSendInFlight = sendingMessage,
     )
     val manualBlockBusy =
         loading || refreshing || sending || actionLoading || guidanceActionLoading || manualBlockLoading
@@ -332,6 +337,14 @@ fun ChatScreen(
             nowMillis = System.currentTimeMillis()
         }
         nowMillis = System.currentTimeMillis()
+    }
+
+    LaunchedEffect(chat?.id, serverClockSnapshot, canChat) {
+        while (canChat && serverClockSnapshot != null) {
+            delay(1_000.milliseconds)
+            elapsedRealtimeMillis = SystemClock.elapsedRealtime()
+        }
+        elapsedRealtimeMillis = SystemClock.elapsedRealtime()
     }
 
     LaunchedEffect(chat?.id, firstChatLocallyExpired, firstChatLifecycle?.reason) {
@@ -435,6 +448,7 @@ fun ChatScreen(
             FirstChatUnansweredSuggestionCard(
                 state = firstChatUnansweredSuggestion,
                 onRequestMutualExit = onRequestMutualExit,
+                onDismiss = onDismissFirstChatUnansweredSuggestion,
             )
             if (secondChatTiming?.showAbsoluteExpiryWarning == true) {
                 FeedbackCard(
@@ -988,6 +1002,7 @@ private fun ChatOverflowMenu(
 private fun FirstChatUnansweredSuggestionCard(
     state: FirstChatUnansweredSuggestionState,
     onRequestMutualExit: () -> Unit,
+    onDismiss: (String) -> Unit,
 ) {
     if (!state.visible) return
 
@@ -1003,11 +1018,27 @@ private fun FirstChatUnansweredSuggestionCard(
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
-                text = "Todavía no recibiste respuesta",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Todavía no recibiste respuesta",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+                IconButton(
+                    onClick = { state.periodReference?.let(onDismiss) },
+                    enabled = state.periodReference != null,
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_close),
+                        contentDescription = "Ocultar sugerencia",
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                }
+            }
             Text(
                 text = "Podés solicitar el cierre de la conversación. Si la otra persona no responde a la solicitud, el chat se cerrará sin penalizarte.",
                 style = MaterialTheme.typography.bodyMedium,

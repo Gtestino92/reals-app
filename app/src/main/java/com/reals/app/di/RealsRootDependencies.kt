@@ -1,6 +1,7 @@
 package com.reals.app.di
 
 import com.reals.app.data.repository.FirebaseAuthRepository
+import com.reals.app.data.preferences.FirstChatUnansweredSuggestionDismissalStore
 import com.reals.app.domain.usecase.AcceptChatExitRequestUseCase
 import com.reals.app.domain.usecase.AcceptSchedulingProposalUseCase
 import com.reals.app.domain.usecase.ActivateProfileUseCase
@@ -144,6 +145,7 @@ data class FirstChatFeatureDependencies(
     val timeoutChatExitRequest: TimeoutChatExitRequestUseCase,
     val cancelChat: CancelChatUseCase,
     val safetyCancelChat: SafetyCancelChatUseCase,
+    val unansweredSuggestionDismissalStore: FirstChatUnansweredSuggestionDismissalStore,
 )
 
 data class SecondChatFeatureDependencies(

@@ -31,6 +31,7 @@ import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_CONF
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_PROPOSALS_RECEIVED
 import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_REMINDER
 import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_REMINDER
+import com.reals.app.ui.chat.firstChatUnansweredPeriodReference
 import java.io.File
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,7 +41,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 class RealsRootViewModel(
-    dependencies: RealsRootDependencies,
+    private val dependencies: RealsRootDependencies,
     autoRefreshSession: Boolean = true,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<RealsRootUiState>(RealsRootUiState.Checking)
@@ -1165,6 +1166,42 @@ class RealsRootViewModel(
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
         _uiState.value = ChatMessageActionHandler.retryFirstChat(current, localId)
         sendFirstChatMessage(content)
+    }
+
+    fun dismissFirstChatUnansweredSuggestion(periodReference: String) {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        val chat = current.chat ?: return
+        val currentPeriod = firstChatUnansweredPeriodReference(
+            chat = chat,
+            currentUserId = current.session.user.id,
+            confirmedMessages = current.messages,
+        ) ?: return
+        if (currentPeriod.reference != periodReference) return
+
+        val latestBeforePersist = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        val latestBeforePeriod = firstChatUnansweredPeriodReference(
+            chat = latestBeforePersist.chat,
+            currentUserId = latestBeforePersist.session.user.id,
+            confirmedMessages = latestBeforePersist.messages,
+        ) ?: return
+        if (latestBeforePeriod.reference != periodReference) return
+
+        dependencies.firstChat.unansweredSuggestionDismissalStore.dismissPeriod(
+            userId = current.session.user.id,
+            chatId = chat.id,
+            periodReference = periodReference,
+        )
+
+        val latest = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        if (latest.matchId != current.matchId || latest.chatId != current.chatId) return
+        val latestPeriod = firstChatUnansweredPeriodReference(
+            chat = latest.chat,
+            currentUserId = latest.session.user.id,
+            confirmedMessages = latest.messages,
+        ) ?: return
+        if (latestPeriod.reference == periodReference) {
+            _uiState.value = latest.copy(dismissedUnansweredPeriodReference = periodReference)
+        }
     }
 
     fun submitFirstChatDecision(decision: ChatContinueDecision) {

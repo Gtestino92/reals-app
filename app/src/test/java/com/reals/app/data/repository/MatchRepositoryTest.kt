@@ -11,6 +11,7 @@ import com.reals.app.testutil.backendErrorResponse
 import com.reals.app.testutil.failureError
 import com.reals.app.testutil.successValue
 import com.reals.app.testutil.testApiExecutor
+import java.time.Instant
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -19,7 +20,7 @@ import retrofit2.Response
 
 class MatchRepositoryTest {
     private val api = FakeRealsApi()
-    private val repository = MatchRepository(api, FakeAuthTokenProvider(), testApiExecutor())
+    private val repository = MatchRepository(api, { 0L }, FakeAuthTokenProvider(), testApiExecutor())
 
     @Test
     fun `getMatch maps response`() = runBlocking {
@@ -76,6 +77,34 @@ class MatchRepositoryTest {
         val message = repository.getPartnerPersonalMessage("match-1").successValue()
 
         assertEquals("hola", message)
+    }
+
+    @Test
+    fun `getFirstChatForMatch maps chat and required server clock`() = runBlocking {
+        val snapshot = repository.getFirstChatForMatch("match-1").successValue()
+
+        assertEquals("chat-1", snapshot.chat.id)
+        assertEquals("2026-06-18T21:00:00Z", snapshot.serverTime)
+        assertEquals(0L, snapshot.serverClockSnapshot.receivedAtElapsedRealtimeMillis)
+        assertEquals(Instant.parse("2026-06-18T21:00:00Z").toEpochMilli(), snapshot.serverClockSnapshot.serverTimeEpochMillis)
+    }
+
+    @Test
+    fun `getFirstChatForMatch fails when required serverTime is missing`() = runBlocking {
+        api.chatResponse = Response.success(TestDtos.chat(serverTime = null))
+
+        val error = repository.getFirstChatForMatch("match-1").failureError()
+
+        assertTrue(error is ApiError.Unexpected)
+    }
+
+    @Test
+    fun `getFirstChatForMatch fails when required serverTime is malformed`() = runBlocking {
+        api.chatResponse = Response.success(TestDtos.chat(serverTime = "not-a-date"))
+
+        val error = repository.getFirstChatForMatch("match-1").failureError()
+
+        assertTrue(error is ApiError.Unexpected)
     }
 
     @Test

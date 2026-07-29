@@ -167,8 +167,9 @@ persisted visual-review record. These fields are `null` for pending actions that
 are not `VISUAL_REVIEW`.
 
 `GET /api/matches/{matchId}/chat` returns the active first chat plus `partner`,
-`myDecision`, `partnerDecision`, `expiresAt`, `inactivityExpiresAt` and nullable
-`guidance` metadata. New first chats initialize guidance; legacy chats may have
+`myDecision`, `partnerDecision`, `expiresAt`, `inactivityExpiresAt`, required
+`serverTime` captured while building the response and nullable `guidance`
+metadata. New first chats initialize guidance; legacy chats may have
 `guidance = null`. The decision fields are API-facing statuses from the current
 user's perspective: `PENDING`, `APPROVED`, `REJECTED` or `ABANDONED`.
 

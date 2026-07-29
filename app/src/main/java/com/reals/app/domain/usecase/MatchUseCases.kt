@@ -4,6 +4,7 @@ import com.reals.app.core.network.ApiResult
 import com.reals.app.data.repository.MatchRepository
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatContinueDecision
+import com.reals.app.domain.model.FirstChatSnapshot
 import com.reals.app.domain.model.Match
 import com.reals.app.domain.model.VisualDecision
 import com.reals.app.domain.model.VisualProfile
@@ -26,7 +27,7 @@ class GetMatchUseCase(
 class GetFirstChatForMatchUseCase(
     private val matchRepository: MatchRepository,
 ) {
-    suspend operator fun invoke(matchId: String): ApiResult<Chat> =
+    suspend operator fun invoke(matchId: String): ApiResult<FirstChatSnapshot> =
         matchRepository.getFirstChatForMatch(matchId)
 }
 

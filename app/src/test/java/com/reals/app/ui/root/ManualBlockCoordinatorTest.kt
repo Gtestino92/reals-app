@@ -20,7 +20,7 @@ class ManualBlockCoordinatorTest {
     private val api = FakeRealsApi()
     private val coordinator = ManualBlockCoordinator(
         BlockMatchParticipantUseCase(
-            MatchRepository(api, FakeAuthTokenProvider(), testApiExecutor()),
+            MatchRepository(api, { 0L }, FakeAuthTokenProvider(), testApiExecutor()),
         ),
     )
 

@@ -5,6 +5,8 @@ import com.reals.app.core.network.BackendErrorCode
 import com.reals.app.core.network.ErrorContext
 import com.reals.app.core.network.backendErrorCode
 import com.reals.app.core.network.toUserMessage
+import com.reals.app.core.time.ServerClockSnapshot
+import com.reals.app.data.preferences.InMemoryFirstChatUnansweredSuggestionDismissalStore
 import com.reals.app.data.dto.FirstChatGuidanceResponseDto
 import com.reals.app.data.repository.ChatRepository
 import com.reals.app.data.repository.MatchRepository
@@ -81,7 +83,27 @@ class FirstChatCoordinatorTest {
         assertEquals("chat-1", state.chat?.id)
         assertEquals("message-load", state.messages.single().id)
         assertEquals("exit-1", state.exitRequests.single().id)
+        assertEquals(
+            java.time.Instant.parse(TestDtos.now).toEpochMilli(),
+            state.serverClockSnapshot?.serverTimeEpochMillis,
+        )
         assertEquals(null, state.error)
+    }
+
+    @Test
+    fun `load reads stored unanswered dismissal for user and chat`() = runBlocking {
+        val store = InMemoryFirstChatUnansweredSuggestionDismissalStore()
+        store.dismissPeriod("user-1", "chat-1", "started:2026-06-18T21:00:00Z")
+        val coordinator = FirstChatCoordinator(firstChatDependencies(api, store))
+
+        val result = coordinator.load(
+            session = TestDomain.session(),
+            matchId = "match-1",
+            chatId = null,
+        )
+
+        val state = (result as FirstChatLoadResult.Show).state
+        assertEquals("started:2026-06-18T21:00:00Z", state.dismissedUnansweredPeriodReference)
     }
 
     @Test
@@ -355,6 +377,50 @@ class FirstChatCoordinatorTest {
     }
 
     @Test
+    fun `refresh success installs chat and server clock together`() = runBlocking {
+        val current = firstChatState().copy(
+            serverClockSnapshot = ServerClockSnapshot(1_000L, 0L),
+        )
+        api.chatResponse = Response.success(TestDtos.chat(serverTime = "2026-06-18T21:02:00Z"))
+
+        val result = coordinator.refresh(current, silent = false)
+
+        val state = (result as FirstChatRefreshResult.Show).state
+        assertEquals("chat-1", state.chat?.id)
+        assertEquals(java.time.Instant.parse("2026-06-18T21:02:00Z").toEpochMilli(), state.serverClockSnapshot?.serverTimeEpochMillis)
+    }
+
+    @Test
+    fun `failed refresh preserves previous server clock`() = runBlocking {
+        val previousClock = ServerClockSnapshot(1_000L, 0L)
+        api.chatResponse = backendErrorResponse(500, "INTERNAL_ERROR")
+
+        val result = coordinator.refresh(
+            firstChatState().copy(serverClockSnapshot = previousClock),
+            silent = false,
+        )
+
+        val state = (result as FirstChatRefreshResult.Show).state
+        assertEquals(previousClock, state.serverClockSnapshot)
+    }
+
+    @Test
+    fun `older first chat snapshot does not regress installed clock`() = runBlocking {
+        val current = firstChatState().copy(
+            serverClockSnapshot = ServerClockSnapshot(
+                serverTimeEpochMillis = java.time.Instant.parse("2026-06-18T21:05:00Z").toEpochMilli(),
+                receivedAtElapsedRealtimeMillis = 0L,
+            ),
+        )
+        api.chatResponse = Response.success(TestDtos.chat(serverTime = "2026-06-18T21:04:00Z"))
+
+        val result = coordinator.refresh(current, silent = false)
+
+        val state = (result as FirstChatRefreshResult.Show).state
+        assertEquals(current.serverClockSnapshot, state.serverClockSnapshot)
+    }
+
+    @Test
     fun `refresh chat abandoned returns Closed without stale chat`() = runBlocking {
         api.chatResponse = backendErrorResponse(
             statusCode = 409,
@@ -452,7 +518,10 @@ class FirstChatCoordinatorTest {
 
     @Test
     fun `sendMessage appends sent message and refreshes messages`() = runBlocking {
-        val current = firstChatState(chatStatus = ChatStatus.Active)
+        api.chatResponse = Response.success(TestDtos.chat(serverTime = "2026-06-18T21:02:00Z"))
+        val current = firstChatState(chatStatus = ChatStatus.Active).copy(
+            dismissedUnansweredPeriodReference = "started:2026-06-18T21:00:00Z",
+        )
 
         val result = coordinator.sendMessage(current, "hola", localId = "local-1")
         assertTrue(result is FirstChatSendResult.Show)
@@ -460,6 +529,8 @@ class FirstChatCoordinatorTest {
 
         assertEquals(false, state.sending)
         assertTrue(state.messages.any { it.id == "message-1" })
+        assertEquals("started:2026-06-18T21:00:00Z", state.dismissedUnansweredPeriodReference)
+        assertEquals(java.time.Instant.parse("2026-06-18T21:02:00Z").toEpochMilli(), state.serverClockSnapshot?.serverTimeEpochMillis)
         assertEquals("sendChatMessage", api.calls.first())
     }
 
@@ -491,7 +562,7 @@ class FirstChatCoordinatorTest {
             statusCode = 409,
             code = "CHAT_MUTUAL_CANCELLATION_PENDING",
         )
-        api.chatResponse = Response.success(TestDtos.chat(status = "ACTIVE"))
+        api.chatResponse = Response.success(TestDtos.chat(status = "ACTIVE", serverTime = "2026-06-18T21:02:00Z"))
         api.exitRequestsResponse = Response.success(listOf(TestDtos.exitRequest(status = "PENDING")))
         val optimistic = newOptimisticOutgoingMessage(
             chatId = "chat-1",
@@ -579,7 +650,7 @@ class FirstChatCoordinatorTest {
             statusCode = 409,
             code = "CHAT_MUTUAL_CANCELLATION_PENDING",
         )
-        api.chatResponse = Response.success(TestDtos.chat(status = "ACTIVE"))
+        api.chatResponse = Response.success(TestDtos.chat(status = "ACTIVE", serverTime = "2026-06-18T21:02:00Z"))
         api.exitRequestsResponse = Response.success(listOf(TestDtos.exitRequest(status = "PENDING")))
         val current = firstChatState(chatStatus = ChatStatus.Active)
 
@@ -836,7 +907,9 @@ class FirstChatCoordinatorTest {
             statusCode = 409,
             code = "CHAT_MUTUAL_CANCELLATION_PENDING",
         )
-        api.chatResponse = Response.success(TestDtos.chat(status = "ACTIVE"))
+        api.chatResponse = Response.success(
+            TestDtos.chat(status = "ACTIVE", serverTime = "2026-06-18T21:02:00Z")
+        )
         api.exitRequestsResponse = Response.success(listOf(TestDtos.exitRequest(status = "PENDING")))
         val current = firstChatState(
             chatStatus = ChatStatus.Active,
@@ -1115,7 +1188,9 @@ class FirstChatCoordinatorTest {
             TestDtos.audioChatMessage(clientMessageId = "client-1")
         )
         api.chatMessagesResponse = Response.success(TestDtos.chatMessagesArrayPayload(emptyList()))
-        api.chatResponse = Response.success(TestDtos.chat(status = "ACTIVE"))
+        api.chatResponse = Response.success(
+            TestDtos.chat(status = "ACTIVE", serverTime = "2026-06-18T21:02:00Z")
+        )
         val file = tempAudioFile()
         val optimistic = newOptimisticOutgoingAudioMessage(
             chatId = "chat-1",
@@ -1129,6 +1204,7 @@ class FirstChatCoordinatorTest {
                 audioDraft = audioDraft(file),
                 audioUpload = ChatAudioUploadUiState(uploading = true),
                 optimisticMessages = listOf(optimistic),
+                dismissedUnansweredPeriodReference = "started:2026-06-18T21:00:00Z",
             ),
             file = file,
             clientMessageId = "client-1",
@@ -1137,6 +1213,8 @@ class FirstChatCoordinatorTest {
         result as FirstChatSendResult.Show
         assertTrue(result.state.optimisticMessages.isEmpty())
         assertEquals("client-1", result.state.audioUpload.completedClientMessageId)
+        assertEquals("started:2026-06-18T21:00:00Z", result.state.dismissedUnansweredPeriodReference)
+        assertEquals(java.time.Instant.parse("2026-06-18T21:02:00Z").toEpochMilli(), result.state.serverClockSnapshot?.serverTimeEpochMillis)
     }
 
     @Test
@@ -1175,7 +1253,7 @@ class FirstChatCoordinatorTest {
     }
 
     private fun firstChatState(
-        chatStatus: ChatStatus,
+        chatStatus: ChatStatus = ChatStatus.Active,
         guidance: FirstChatGuidanceResponseDto? = null,
     ): RealsRootUiState.FirstChat =
         RealsRootUiState.FirstChat(
@@ -1208,9 +1286,13 @@ class FirstChatCoordinatorTest {
             writeBytes(byteArrayOf(1))
         }
 
-    private fun firstChatDependencies(api: FakeRealsApi): FirstChatFeatureDependencies {
+    private fun firstChatDependencies(
+        api: FakeRealsApi,
+        dismissalStore: InMemoryFirstChatUnansweredSuggestionDismissalStore =
+            InMemoryFirstChatUnansweredSuggestionDismissalStore(),
+    ): FirstChatFeatureDependencies {
         val tokenProvider = FakeAuthTokenProvider()
-        val matchRepository = MatchRepository(api, tokenProvider, testApiExecutor())
+        val matchRepository = MatchRepository(api, { 0L }, tokenProvider, testApiExecutor())
         val chatRepository = ChatRepository(api, testJson, tokenProvider, testApiExecutor())
         return FirstChatFeatureDependencies(
             getMatch = GetMatchUseCase(matchRepository),
@@ -1229,6 +1311,7 @@ class FirstChatCoordinatorTest {
             timeoutChatExitRequest = TimeoutChatExitRequestUseCase(chatRepository),
             cancelChat = CancelChatUseCase(chatRepository),
             safetyCancelChat = SafetyCancelChatUseCase(chatRepository),
+            unansweredSuggestionDismissalStore = dismissalStore,
         )
     }
 

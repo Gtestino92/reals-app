@@ -314,7 +314,7 @@ class RealsRootViewModelLegalRoutingTest {
         val meRepository = MeRepository(api, tokenProvider, apiExecutor)
         val profileRepository = ProfileRepository(context, api, tokenProvider, apiExecutor)
         val matchmakingRepository = MatchmakingRepository(api, tokenProvider, apiExecutor)
-        val matchRepository = MatchRepository(api, tokenProvider, apiExecutor)
+        val matchRepository = MatchRepository(api, { 0L }, tokenProvider, apiExecutor)
         val chatRepository = ChatRepository(api, testJson, tokenProvider, apiExecutor)
         val schedulingRepository = SchedulingRepository(api, tokenProvider, apiExecutor)
         val legalRepository = LegalRepository(api, tokenProvider, apiExecutor)
@@ -376,6 +376,8 @@ class RealsRootViewModelLegalRoutingTest {
                 timeoutChatExitRequest = TimeoutChatExitRequestUseCase(chatRepository),
                 cancelChat = CancelChatUseCase(chatRepository),
                 safetyCancelChat = SafetyCancelChatUseCase(chatRepository),
+                unansweredSuggestionDismissalStore =
+                    com.reals.app.data.preferences.InMemoryFirstChatUnansweredSuggestionDismissalStore(),
             ),
             secondChat = com.reals.app.di.SecondChatFeatureDependencies(
                 getStatus = com.reals.app.domain.usecase.GetSecondChatStatusUseCase(chatRepository),

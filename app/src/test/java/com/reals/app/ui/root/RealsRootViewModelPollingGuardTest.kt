@@ -1059,7 +1059,7 @@ internal fun rootViewModelTestDependencies(api: FakeRealsApi): RealsRootDependen
         val meRepository = MeRepository(api, tokenProvider, apiExecutor)
         val profileRepository = ProfileRepository(context, api, tokenProvider, apiExecutor)
         val matchmakingRepository = MatchmakingRepository(api, tokenProvider, apiExecutor)
-        val matchRepository = MatchRepository(api, tokenProvider, apiExecutor)
+        val matchRepository = MatchRepository(api, { 0L }, tokenProvider, apiExecutor)
         val chatRepository = ChatRepository(api, testJson, tokenProvider, apiExecutor)
         val schedulingRepository = SchedulingRepository(api, tokenProvider, apiExecutor)
         val legalRepository = LegalRepository(api, tokenProvider, apiExecutor)
@@ -1121,6 +1121,8 @@ internal fun rootViewModelTestDependencies(api: FakeRealsApi): RealsRootDependen
                 timeoutChatExitRequest = TimeoutChatExitRequestUseCase(chatRepository),
                 cancelChat = CancelChatUseCase(chatRepository),
                 safetyCancelChat = SafetyCancelChatUseCase(chatRepository),
+                unansweredSuggestionDismissalStore =
+                    com.reals.app.data.preferences.InMemoryFirstChatUnansweredSuggestionDismissalStore(),
             ),
             secondChat = SecondChatFeatureDependencies(
                 getStatus = GetSecondChatStatusUseCase(chatRepository),
