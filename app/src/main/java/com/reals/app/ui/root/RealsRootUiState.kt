@@ -346,6 +346,11 @@ enum class OutgoingMessageDeliveryState {
     Failed,
 }
 
+enum class OptimisticOutgoingMessageType {
+    Text,
+    Audio,
+}
+
 data class OptimisticOutgoingMessage(
     val localId: String,
     val chatId: String,
@@ -353,6 +358,8 @@ data class OptimisticOutgoingMessage(
     val content: String,
     val createdAtMillis: Long,
     val deliveryState: OutgoingMessageDeliveryState,
+    val messageType: OptimisticOutgoingMessageType = OptimisticOutgoingMessageType.Text,
+    val audioDurationMillis: Long? = null,
 )
 
 internal fun newOptimisticOutgoingMessage(
@@ -368,6 +375,23 @@ internal fun newOptimisticOutgoingMessage(
     content = content,
     createdAtMillis = createdAtMillis,
     deliveryState = OutgoingMessageDeliveryState.Sending,
+)
+
+internal fun newOptimisticOutgoingAudioMessage(
+    chatId: String,
+    senderId: String,
+    clientMessageId: String,
+    durationMillis: Long,
+    createdAtMillis: Long = System.currentTimeMillis(),
+): OptimisticOutgoingMessage = OptimisticOutgoingMessage(
+    localId = clientMessageId,
+    chatId = chatId,
+    senderId = senderId,
+    content = "",
+    createdAtMillis = createdAtMillis,
+    deliveryState = OutgoingMessageDeliveryState.Sending,
+    messageType = OptimisticOutgoingMessageType.Audio,
+    audioDurationMillis = durationMillis,
 )
 
 private fun optimisticMessageLocalId(): String = "local-${System.currentTimeMillis()}"

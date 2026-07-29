@@ -232,6 +232,13 @@ class ChatMessageActionHandlerTest {
         assertEquals(file.absolutePath, result.file.absolutePath)
         assertEquals("client-1", result.clientMessageId)
         assertTrue(result.pendingState.audioUpload.uploading)
+        val optimistic = result.pendingState.optimisticMessages.single()
+        assertEquals("client-1", optimistic.localId)
+        assertEquals("chat-1", optimistic.chatId)
+        assertEquals("user-1", optimistic.senderId)
+        assertEquals(OptimisticOutgoingMessageType.Audio, optimistic.messageType)
+        assertEquals(1_000L, optimistic.audioDurationMillis)
+        assertEquals(OutgoingMessageDeliveryState.Sending, optimistic.deliveryState)
     }
 
     private fun firstChatState(

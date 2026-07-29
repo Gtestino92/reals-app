@@ -78,6 +78,7 @@ import com.reals.app.ui.common.SearchingDotsIndicator
 import com.reals.app.ui.common.formatBackendDateTime
 import com.reals.app.ui.common.formatBackendTime
 import com.reals.app.ui.root.OptimisticOutgoingMessage
+import com.reals.app.ui.root.OptimisticOutgoingMessageType
 import com.reals.app.ui.root.OutgoingMessageDeliveryState
 import com.reals.app.ui.root.ChatAudioDraftUiState
 import com.reals.app.ui.root.ChatAudioUploadUiState
@@ -438,7 +439,7 @@ fun ChatScreen(
             if (secondChatTiming?.showAbsoluteExpiryWarning == true) {
                 FeedbackCard(
                     title = "Tiempo restante",
-                    message = "El segundo chat vence pronto. Al finalizar volverÃ¡s a Home.",
+                    message = "El segundo chat vence pronto. Al finalizar volverás a Home.",
                     tone = FeedbackTone.Warning,
                 )
             }
@@ -690,7 +691,7 @@ private fun SecondChatLifecyclePanel(
         }
         status.myAttendanceStatus == SecondChatAttendanceStatus.Pending && !status.canJoin -> {
             FeedbackCard(
-                title = "TodavÃ­a no estÃ¡ disponible",
+                title = "Todavía no está disponible",
                 message = "El segundo chat abre a las ${formatBackendTime(status.scheduledAt)}.",
                 tone = FeedbackTone.Info,
             )
@@ -707,7 +708,7 @@ private fun SecondChatLifecyclePanel(
                 ) + 999) / 1000
             FeedbackCard(
                 title = "Esperando a la otra persona",
-                message = "Puede entrar durante los prÃ³ximos ${seconds.coerceAtLeast(0)} segundos.",
+                message = "Puede entrar durante los próximos ${seconds.coerceAtLeast(0)} segundos.",
                 tone = FeedbackTone.Warning,
             )
         }
@@ -720,18 +721,18 @@ private fun SecondChatLifecyclePanel(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text("Ya estÃ¡s en la cita", style = MaterialTheme.typography.titleMedium)
+                    Text("Ya estás en la cita", style = MaterialTheme.typography.titleMedium)
                     Text("Estamos esperando a $safePartnerName.")
                     Text(
                         when (status.myAttendanceStatus) {
                             SecondChatAttendanceStatus.OnTime -> "Llegaste a horario"
                             SecondChatAttendanceStatus.Late -> "Llegaste tarde"
-                            else -> "Tu asistencia estÃ¡ registrada"
+                            else -> "Tu asistencia está registrada"
                         },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        "PodÃ©s mandar mensajes mientras esperÃ¡s. Eso no significa que la otra persona haya llegado.",
+                        "PodÃ©s mandar mensajes mientras esperás. Eso no significa que la otra persona haya llegado.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     if (status.canClaimPartnerNoShow) {
@@ -739,7 +740,7 @@ private fun SecondChatLifecyclePanel(
                             onClick = onClaimNoShow,
                             enabled = !actionLoading && lifecycle.claimingNoShow.not(),
                         ) {
-                            Text("La otra persona no llegÃ³")
+                            Text("La otra persona no llegó")
                         }
                     }
                 }
@@ -942,7 +943,7 @@ private fun ChatOverflowMenu(
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_more_vert),
-                contentDescription = "MÃ¡s acciones",
+                contentDescription = "Más acciones",
             )
         }
 
@@ -1003,12 +1004,12 @@ private fun FirstChatUnansweredSuggestionCard(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                text = "TodavÃ­a no recibiste respuesta",
+                text = "Todavía no recibiste respuesta",
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
             Text(
-                text = "PodÃ©s solicitar el cierre de la conversaciÃ³n. Si la otra persona no responde a la solicitud, el chat se cerrarÃ¡ sin penalizarte.",
+                text = "PodÃ©s solicitar el cierre de la conversación. Si la otra persona no responde a la solicitud, el chat se cerrará sin penalizarte.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
@@ -1071,7 +1072,7 @@ private fun MessageList(
             if (messageItems.isEmpty()) {
                 item {
                     Text(
-                        "TodavÃ­a no hay mensajes.",
+                        "Todavía no hay mensajes.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -1509,7 +1510,12 @@ private fun OptimisticMessageBubble(
             ),
         ) {
             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                Text(TextSafety.safeDisplay(message.content))
+                when (message.messageType) {
+                    OptimisticOutgoingMessageType.Text -> Text(TextSafety.safeDisplay(message.content))
+                    OptimisticOutgoingMessageType.Audio -> {
+                        Text("Audio ${formatAudioDuration(message.audioDurationMillis ?: 0L)}")
+                    }
+                }
                 Text(
                     text = when (message.deliveryState) {
                         OutgoingMessageDeliveryState.Sending -> "Enviando..."
@@ -1520,7 +1526,10 @@ private fun OptimisticMessageBubble(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (message.deliveryState == OutgoingMessageDeliveryState.Failed) {
+                if (
+                    message.deliveryState == OutgoingMessageDeliveryState.Failed &&
+                    message.messageType == OptimisticOutgoingMessageType.Text
+                ) {
                     TextButton(
                         onClick = { onRetry(message.localId, message.content) },
                         modifier = Modifier.align(Alignment.End),
@@ -1551,7 +1560,7 @@ private fun SafetyReportDialog(
         title = { Text("Reportar y cerrar chat") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("DescribÃ­ que pasÃ³. Este reporte cerrarÃ¡ el chat por seguridad y serÃ¡ revisado.")
+                Text("Describí que pasó. Este reporte cerrará el chat por seguridad y será revisado.")
                 Box(modifier = Modifier.fillMaxWidth()) {
                     OutlinedButton(
                         onClick = { reasonMenuExpanded = true },
@@ -1656,13 +1665,13 @@ private fun chatDecisionSummary(
 
     return when {
         myDecision == ChatDecisionState.Approved && partnerDecision == ChatDecisionState.Pending ->
-            "Aprobaste el chat. Esperando decisiÃ³n de $partnerLabel."
+            "Aprobaste el chat. Esperando decisión de $partnerLabel."
 
         myDecision == ChatDecisionState.Pending && partnerDecision == ChatDecisionState.Approved ->
-            "$partnerLabel aprobÃ³ el chat. Falta tu decisiÃ³n."
+            "$partnerLabel aprobó el chat. Falta tu decisión."
 
         myDecision == ChatDecisionState.Approved && partnerDecision == ChatDecisionState.Approved ->
-            "Ambas personas aprobaron. Pasando a revisiÃ³n visual."
+            "Ambas personas aprobaron. Pasando a revisión visual."
 
         myDecision == ChatDecisionState.Rejected || partnerDecision == ChatDecisionState.Rejected ->
             "El chat fue rechazado."

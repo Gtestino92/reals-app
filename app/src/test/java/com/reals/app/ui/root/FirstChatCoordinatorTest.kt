@@ -1110,6 +1110,36 @@ class FirstChatCoordinatorTest {
     }
 
     @Test
+    fun `first chat audio success removes optimistic audio message`() = runBlocking {
+        api.chatAudioMessageResponse = Response.success(
+            TestDtos.audioChatMessage(clientMessageId = "client-1")
+        )
+        api.chatMessagesResponse = Response.success(TestDtos.chatMessagesArrayPayload(emptyList()))
+        api.chatResponse = Response.success(TestDtos.chat(status = "ACTIVE"))
+        val file = tempAudioFile()
+        val optimistic = newOptimisticOutgoingAudioMessage(
+            chatId = "chat-1",
+            senderId = "user-1",
+            clientMessageId = "client-1",
+            durationMillis = 2_000L,
+        )
+
+        val result = coordinator.sendAudioMessage(
+            current = firstChatState(ChatStatus.Active).copy(
+                audioDraft = audioDraft(file),
+                audioUpload = ChatAudioUploadUiState(uploading = true),
+                optimisticMessages = listOf(optimistic),
+            ),
+            file = file,
+            clientMessageId = "client-1",
+        )
+
+        result as FirstChatSendResult.Show
+        assertTrue(result.state.optimisticMessages.isEmpty())
+        assertEquals("client-1", result.state.audioUpload.completedClientMessageId)
+    }
+
+    @Test
     fun `optimistic message helper preserves sending state shape`() {
         val message = newOptimisticOutgoingMessage(
             chatId = "chat-1",
@@ -1125,6 +1155,23 @@ class FirstChatCoordinatorTest {
         assertEquals("hola", message.content)
         assertEquals(OutgoingMessageDeliveryState.Sending, message.deliveryState)
         assertTrue(listOf(message).withoutOptimisticMessage("local-123").isEmpty())
+    }
+
+    @Test
+    fun `optimistic audio helper reuses client message id as local id`() {
+        val message = newOptimisticOutgoingAudioMessage(
+            chatId = "chat-1",
+            senderId = "user-1",
+            clientMessageId = "client-123",
+            durationMillis = 2_000L,
+            createdAtMillis = 123L,
+        )
+
+        assertEquals("client-123", message.localId)
+        assertEquals(OptimisticOutgoingMessageType.Audio, message.messageType)
+        assertEquals(2_000L, message.audioDurationMillis)
+        assertEquals(OutgoingMessageDeliveryState.Sending, message.deliveryState)
+        assertTrue(listOf(message).withoutOptimisticMessage("client-123").isEmpty())
     }
 
     private fun firstChatState(

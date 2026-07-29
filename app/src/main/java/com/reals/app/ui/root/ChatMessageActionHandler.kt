@@ -62,6 +62,7 @@ internal object ChatMessageActionHandler {
             filePath = filePath,
             clientMessageId = clientMessageId,
             chatId = chat.id,
+            senderId = current.session.user.id,
             maxFileSizeBytes = chat.audioPolicy?.maxFileSizeBytes,
             maxDurationMillis = chat.audioPolicy?.maxDurationMillis,
             draftDurationMillis = current.audioDraft?.takeIf {
@@ -76,8 +77,9 @@ internal object ChatMessageActionHandler {
                     message = null,
                 )
             },
-            pendingState = {
+            pendingState = { optimisticMessage ->
                 current.copy(
+                    optimisticMessages = current.optimisticMessages + optimisticMessage,
                     audioUpload = ChatAudioUploadUiState(uploading = true),
                     error = null,
                     message = null,
@@ -140,6 +142,7 @@ internal object ChatMessageActionHandler {
             filePath = filePath,
             clientMessageId = clientMessageId,
             chatId = chat.id,
+            senderId = current.session.user.id,
             maxFileSizeBytes = chat.audioPolicy?.maxFileSizeBytes,
             maxDurationMillis = chat.audioPolicy?.maxDurationMillis,
             draftDurationMillis = current.audioDraft?.takeIf {
@@ -154,8 +157,9 @@ internal object ChatMessageActionHandler {
                     message = null,
                 )
             },
-            pendingState = {
+            pendingState = { optimisticMessage ->
                 current.copy(
+                    optimisticMessages = current.optimisticMessages + optimisticMessage,
                     audioUpload = ChatAudioUploadUiState(uploading = true),
                     error = null,
                     message = null,
@@ -211,13 +215,14 @@ internal object ChatMessageActionHandler {
         filePath: String,
         clientMessageId: String,
         chatId: String,
+        senderId: String,
         maxFileSizeBytes: Long?,
         maxDurationMillis: Long?,
         draftDurationMillis: Long?,
         policyEnabled: Boolean,
         unavailableReason: ChatAudioUnavailableReason?,
         invalidState: (ApiError, Boolean) -> T,
-        pendingState: () -> T,
+        pendingState: (OptimisticOutgoingMessage) -> T,
     ): ChatAudioSendPreparation<T> {
         if (!policyEnabled) {
             return ChatAudioSendPreparation.Rejected(
@@ -245,8 +250,14 @@ internal object ChatMessageActionHandler {
                 invalidState(ApiError.Unexpected("La grabación supera la duración permitida."), true)
             )
         }
+        val optimisticMessage = newOptimisticOutgoingAudioMessage(
+            chatId = chatId,
+            senderId = senderId,
+            clientMessageId = clientMessageId,
+            durationMillis = draftDurationMillis,
+        )
         return ChatAudioSendPreparation.Accepted(
-            pendingState = pendingState(),
+            pendingState = pendingState(optimisticMessage),
             chatId = chatId,
             file = file,
             clientMessageId = clientMessageId,

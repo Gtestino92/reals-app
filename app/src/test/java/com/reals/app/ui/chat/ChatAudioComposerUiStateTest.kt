@@ -79,4 +79,11 @@ class ChatAudioComposerUiStateTest {
         assertEquals("0:01", formatAudioDuration(838))
         assertEquals("0:07", formatAudioDuration(7_059))
     }
+
+    @Test
+    fun `recording elapsed duration floors subsecond as zero`() {
+        assertEquals("0:00", formatRecordingElapsedDuration(0))
+        assertEquals("0:00", formatRecordingElapsedDuration(838))
+        assertEquals("0:07", formatRecordingElapsedDuration(7_059))
+    }
 }

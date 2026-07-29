@@ -258,6 +258,7 @@ internal class FirstChatCoordinator(
                         messages = messagesWithSent.appendUnique(
                             (messagesResult as? ApiResult.Success)?.value.orEmpty()
                         ),
+                        optimisticMessages = current.optimisticMessages.withoutOptimisticMessage(clientMessageId),
                         audioUpload = ChatAudioUploadUiState(completedClientMessageId = clientMessageId),
                         error = (messagesResult as? ApiResult.Failure)?.error
                             ?: (chatResult as? ApiResult.Failure)?.error,
@@ -270,10 +271,12 @@ internal class FirstChatCoordinator(
                     error = result.error,
                     current = current,
                     chatId = chat.id,
+                    clientMessageId = clientMessageId,
                 )
                 ?: FirstChatSendResult.Show(
                     current.copy(
                         chat = refreshChatAfterAudioConflict(current, result.error),
+                        optimisticMessages = current.optimisticMessages.withoutOptimisticMessage(clientMessageId),
                         audioUpload = ChatAudioUploadUiState(
                             uploading = false,
                             error = result.error,
@@ -289,6 +292,7 @@ internal class FirstChatCoordinator(
         error: ApiError,
         current: RealsRootUiState.FirstChat,
         chatId: String,
+        clientMessageId: String,
     ): FirstChatSendResult.Show? =
         refreshLockedExitStateAfterPendingMutualCancellation(
             error = error,
@@ -297,6 +301,7 @@ internal class FirstChatCoordinator(
         )?.let { refreshed ->
             FirstChatSendResult.Show(
                 refreshed.copy(
+                    optimisticMessages = refreshed.optimisticMessages.withoutOptimisticMessage(clientMessageId),
                     audioUpload = ChatAudioUploadUiState(
                         uploading = false,
                         error = error,
