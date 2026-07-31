@@ -12,4 +12,5 @@ apply: always
 - Do not introduce behavior listed as deferred in `docs/technical-debt-frontend-mvp.md` or `docs/technical-debt-frontend-prod.md` unless explicitly requested.
 - Do not change backend API paths from Android.
 - Do not introduce Navigation Compose unless explicitly requested.
-- Work branches created or renamed by agents should use the `feature/` prefix unless the user explicitly asks for another branch type.
+- Work branches created or renamed by agents should use an appropriate prefix such as `feature/`, `fix/`, `refactor/`, `chore/`, `docs/`, or `test/`.
+- Work branches must not track `origin/development`, `origin/main`, or `origin/master`; create them with `git switch --no-track -c <prefix>/<task-name> origin/development` and unset accidental protected-base upstreams before any push.
