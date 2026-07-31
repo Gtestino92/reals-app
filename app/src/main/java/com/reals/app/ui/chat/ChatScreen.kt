@@ -908,7 +908,7 @@ private fun ChatHeader(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalAlignment = Alignment.Top,
             ) {
                 Text(
                     text = chatHeaderTitle(titlePrefix, partnerName),
@@ -961,7 +961,7 @@ private fun ChatOverflowMenu(
     onShowSafety: () -> Unit,
     onShowManualBlock: () -> Unit,
 ) {
-    Box {
+    Box(contentAlignment = Alignment.TopEnd) {
         IconButton(
             onClick = { onExpandedChange(true) },
             enabled = enabled,
@@ -1668,15 +1668,6 @@ private fun SuccessFeedback(message: String, modifier: Modifier = Modifier) {
     )
 }
 
-internal fun firstChatHeaderDeadlineLabel(
-    expiresAt: String?,
-    firstChatLifecycle: FirstChatLifecycleUiState?,
-): String? = if (firstChatLifecycle == null) {
-    expiresAt?.takeIf { it.isNotBlank() }
-} else {
-    null
-}
-
 internal fun chatHeaderStatusText(
     expiresAt: String?,
     firstChatLifecycle: FirstChatLifecycleUiState?,
@@ -1688,8 +1679,7 @@ internal fun chatHeaderStatusText(
         "Este segundo chat venci\u00f3. Pod\u00e9s leerlo hasta ${formatDateTime(secondChatReadOnlyUntil)}."
 
     secondChatUnavailable -> "Este segundo chat ya no est\u00e1 disponible."
-    else -> firstChatHeaderDeadlineLabel(expiresAt, firstChatLifecycle)
-        ?.let { "V\u00e1lido hasta ${formatDateTime(it)}" }
+    else -> null
 }
 
 internal fun chatPollingEnabled(canChat: Boolean): Boolean = canChat

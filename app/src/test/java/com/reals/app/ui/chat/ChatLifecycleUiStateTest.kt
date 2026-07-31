@@ -117,12 +117,6 @@ class ChatLifecycleUiStateTest {
             expired = false,
         )
 
-        val label = firstChatHeaderDeadlineLabel(
-            expiresAt = "2026-06-18T21:10:00Z",
-            firstChatLifecycle = lifecycle,
-        )
-
-        assertNull(label)
         assertNull(
             chatHeaderStatusText(
                 expiresAt = "2026-06-18T21:10:00Z",
@@ -172,7 +166,7 @@ class ChatLifecycleUiStateTest {
     }
 
     @Test
-    fun `second chat header keeps permanent expiration when available`() {
+    fun `second chat header hides permanent expiration when available`() {
         val text = chatHeaderStatusText(
             expiresAt = "2026-06-18T21:10:00Z",
             firstChatLifecycle = null,
@@ -181,7 +175,7 @@ class ChatLifecycleUiStateTest {
             formatDateTime = { value -> "formatted-$value" },
         )
 
-        assertEquals("Válido hasta formatted-2026-06-18T21:10:00Z", text)
+        assertNull(text)
     }
 
     @Test

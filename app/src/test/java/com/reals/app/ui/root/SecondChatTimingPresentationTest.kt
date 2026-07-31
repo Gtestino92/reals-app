@@ -57,15 +57,18 @@ class SecondChatTimingPresentationTest {
     }
 
     @Test
-    fun `joined active second chat warns inside final ten minutes`() {
-        val presentation = lifecycle(
+    fun `joined active second chat warns throughout final ten minutes`() {
+        fun warningAt(nowMillis: Long): Boolean = lifecycle(
             serverTime = "2026-06-18T21:00:00Z",
-            absoluteExpiresAt = "2026-06-18T21:10:00Z",
+            absoluteExpiresAt = "2026-06-18T21:11:00Z",
             receivedAtMillis = 1_000L,
-        ).timingPresentation(nowMillis = 1_000L)
+        ).timingPresentation(nowMillis = nowMillis).showAbsoluteExpiryWarning
 
-        assertTrue(presentation.genuinelyActive)
-        assertTrue(presentation.showAbsoluteExpiryWarning)
+        assertFalse(warningAt(1_000L))
+        assertTrue(warningAt(61_000L))
+        assertTrue(warningAt(301_000L))
+        assertTrue(warningAt(361_000L))
+        assertTrue(warningAt(421_000L))
     }
 
     @Test
