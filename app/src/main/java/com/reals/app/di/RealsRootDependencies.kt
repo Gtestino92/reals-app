@@ -130,9 +130,7 @@ data class HomeFeatureDependencies(
 
 data class FirstChatFeatureDependencies(
     val getMatch: GetMatchUseCase,
-    val getChat: GetChatUseCase,
     val getFirstChatForMatch: GetFirstChatForMatchUseCase,
-    val getSecondChatForConnection: GetSecondChatForConnectionUseCase,
     val submitChatDecision: SubmitChatDecisionUseCase,
     val getChatMessages: GetChatMessagesUseCase,
     val sendChatMessage: SendChatMessageUseCase,

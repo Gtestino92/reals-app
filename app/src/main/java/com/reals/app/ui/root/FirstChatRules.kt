@@ -3,7 +3,6 @@ package com.reals.app.ui.root
 import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatExitRequestType
-import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.MatchState
 
@@ -13,26 +12,6 @@ internal fun ChatStatus.firstChatClosedMessage(): String? = when (this) {
     ChatStatus.Expired -> "El chat venci\u00f3."
     ChatStatus.Abandoned -> "La conversaci\u00f3n se cerr\u00f3 por inactividad."
     else -> null
-}
-
-internal fun List<ChatMessage>.lastMessageCursor(): String? =
-    sortedWith(
-        compareBy<ChatMessage> { it.sentAt }
-            .thenBy { it.id }
-    ).lastOrNull()?.id
-
-internal fun List<ChatMessage>.appendUnique(newMessages: List<ChatMessage>): List<ChatMessage> {
-    val mergedById = LinkedHashMap<String, ChatMessage>()
-    forEach { message ->
-        mergedById[message.id] = message
-    }
-    newMessages.forEach { message ->
-        mergedById[message.id] = message
-    }
-    return mergedById.values.sortedWith(
-        compareBy<ChatMessage> { it.sentAt }
-            .thenBy { it.id }
-    )
 }
 
 internal fun List<ChatExitRequest>.latestExitRequest(): ChatExitRequest? =

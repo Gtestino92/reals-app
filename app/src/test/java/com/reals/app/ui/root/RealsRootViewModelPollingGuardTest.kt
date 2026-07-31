@@ -1110,9 +1110,7 @@ internal fun rootViewModelTestDependencies(
             ),
             firstChat = FirstChatFeatureDependencies(
                 getMatch = GetMatchUseCase(matchRepository),
-                getChat = GetChatUseCase(chatRepository),
                 getFirstChatForMatch = GetFirstChatForMatchUseCase(matchRepository),
-                getSecondChatForConnection = GetSecondChatForConnectionUseCase(chatRepository),
                 submitChatDecision = SubmitChatDecisionUseCase(matchRepository),
                 getChatMessages = GetChatMessagesUseCase(chatRepository),
                 sendChatMessage = SendChatMessageUseCase(chatRepository),
