@@ -219,9 +219,7 @@ class AppContainer(context: Context) {
         ),
         firstChat = FirstChatFeatureDependencies(
             getMatch = getMatchUseCase,
-            getChat = getChatUseCase,
             getFirstChatForMatch = getFirstChatForMatchUseCase,
-            getSecondChatForConnection = getSecondChatForConnectionUseCase,
             submitChatDecision = submitChatDecisionUseCase,
             getChatMessages = getChatMessagesUseCase,
             sendChatMessage = sendChatMessageUseCase,
