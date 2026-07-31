@@ -106,10 +106,10 @@ internal data class ChatLoadingPresentation(
 )
 
 internal fun chatLoadingPresentation(
-    chatTitlePrefix: String,
+    loadingTitle: String,
     partnerName: String?,
 ): ChatLoadingPresentation {
-    val title = chatTitlePrefix.trim().ifBlank { "Preparando chat" }
+    val title = loadingTitle.trim().ifBlank { "Cargando chat" }
     val safePartnerName = partnerName
         ?.takeIf { it.isNotBlank() }
         ?.let { TextSafety.safeDisplay(it, maxLength = 100) }
@@ -121,6 +121,17 @@ internal fun chatLoadingPresentation(
         else -> "Estamos preparando la conversación."
     }
     return ChatLoadingPresentation(title = title, body = body)
+}
+
+internal fun chatHeaderTitle(
+    titlePrefix: String,
+    partnerName: String?,
+): String {
+    val safeTitlePrefix = titlePrefix.trim().ifBlank { "Chat" }
+    val safePartnerName = partnerName
+        ?.takeIf { it.isNotBlank() }
+        ?.let { TextSafety.safeDisplay(it) }
+    return safePartnerName?.let { "$safeTitlePrefix con $it" } ?: safeTitlePrefix
 }
 
 @Composable
@@ -147,7 +158,8 @@ fun ChatScreen(
     manualBlockError: ApiError?,
     error: ApiError?,
     message: String?,
-    chatTitlePrefix: String = "Cargando chat",
+    chatTitlePrefix: String = "Chat",
+    loadingChatTitle: String = "Cargando chat",
     partnerNameFallback: String? = null,
     showDecisionActions: Boolean = true,
     showExitActions: Boolean = true,
@@ -312,7 +324,7 @@ fun ChatScreen(
     val bottomContentPadding = bottomBarHeight.takeIf { it > 0.dp } ?: 180.dp
 
     if (loading && chat == null) {
-        val loadingPresentation = chatLoadingPresentation(chatTitlePrefix, partnerNameFallback)
+        val loadingPresentation = chatLoadingPresentation(loadingChatTitle, partnerNameFallback)
         LoadingChatScreen(
             title = loadingPresentation.title,
             body = loadingPresentation.body,
@@ -899,8 +911,7 @@ private fun ChatHeader(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = partnerName?.let { "$titlePrefix con ${TextSafety.safeDisplay(it)}" }
-                        ?: "Cargando $titlePrefix",
+                    text = chatHeaderTitle(titlePrefix, partnerName),
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.headlineSmall,
                     color = MaterialTheme.colorScheme.primary,

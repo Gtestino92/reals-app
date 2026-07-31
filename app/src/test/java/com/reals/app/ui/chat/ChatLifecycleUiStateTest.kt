@@ -35,6 +35,27 @@ class ChatLifecycleUiStateTest {
     }
 
     @Test
+    fun `first chat header uses stable title after partner loads`() {
+        val title = chatHeaderTitle("Chat", "Juls")
+
+        assertEquals("Chat con Juls", title)
+    }
+
+    @Test
+    fun `loaded chat header does not show loading when partner is unavailable`() {
+        val title = chatHeaderTitle("Chat", null)
+
+        assertEquals("Chat", title)
+    }
+
+    @Test
+    fun `second chat header keeps second chat title after partner loads`() {
+        val title = chatHeaderTitle("Segundo chat", "Juls")
+
+        assertEquals("Segundo chat con Juls", title)
+    }
+
+    @Test
     fun `first chat does not warn before final minute`() {
         val chat = TestDtos.chat().copy(
             expiresAt = "2026-06-18T21:05:00Z",

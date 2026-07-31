@@ -315,6 +315,7 @@ fun RealsApp(
                 error = current.error,
                 message = current.message,
                 chatTitlePrefix = "Segundo chat",
+                loadingChatTitle = "Segundo chat",
                 partnerNameFallback = current.partnerName,
                 showDecisionActions = false,
                 showExitActions = true,
