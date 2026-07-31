@@ -50,9 +50,36 @@ class NotificationHelperTest {
     @Test
     fun `second chat started and reminder share notification identity`() {
         assertEquals(
-            PushNotificationContract.SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE +
-                NotificationHelper.notificationSuffix("connection-1"),
-            NotificationHelper.secondChatNotificationId("connection-1"),
+            NotificationDisplayIdentity(tag = "second-chat-connection-1", id = 0),
+            NotificationHelper.secondChatNotificationDisplayIdentity("connection-1"),
+        )
+        assertEquals(
+            NotificationHelper.secondChatNotificationDisplayIdentity("connection-1"),
+            NotificationHelper.secondChatNotificationDisplayIdentity(" connection-1 "),
+        )
+    }
+
+    @Test
+    fun `second chat tag matches backend replacement contract`() {
+        assertEquals("second-chat-connection-1", NotificationHelper.secondChatNotificationTag("connection-1"))
+        assertEquals("second-chat-connection-1", NotificationHelper.secondChatNotificationTag(" connection-1 "))
+    }
+
+    @Test
+    fun `missing second chat connection uses deterministic untagged fallback identity`() {
+        val fallback = NotificationDisplayIdentity(
+            tag = null,
+            id = PushNotificationContract.SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE,
+        )
+
+        assertEquals(null, NotificationHelper.secondChatNotificationTag(null))
+        assertEquals(null, NotificationHelper.secondChatNotificationTag(""))
+        assertEquals(null, NotificationHelper.secondChatNotificationTag("   "))
+        assertEquals(fallback, NotificationHelper.secondChatNotificationDisplayIdentity(null))
+        assertEquals(fallback, NotificationHelper.secondChatNotificationDisplayIdentity("   "))
+        assertEquals(
+            PushNotificationContract.SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE,
+            NotificationHelper.secondChatNotificationId("   "),
         )
     }
 

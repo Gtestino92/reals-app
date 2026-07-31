@@ -132,7 +132,23 @@ reminder range applies, and no reminder is sent after the confirmed start time.
 The notification type is `SECOND_CHAT_REMINDER`; the provider payload includes
 a display title/body plus data fields. The data contract contains only `type`,
 `connectionId` and `availableAt`. Delivery is deduplicated per user,
-notification type, connection id and lead time.
+notification type, connection id and lead time. Android FCM uses
+`second-chat-<connectionId>` as the notification tag and caps transport TTL at
+the confirmed start time.
+
+After a confirmed second-chat start, `SecondChatStartNotificationJob` attempts
+a privacy-safe external push with type `SECOND_CHAT_STARTED` only for
+participants who have not joined. The default window is
+`confirmedDateTime <= now <= confirmedDateTime + 5 minutes`; later scheduler
+runs skip stale starts. The job runs every 4 minutes by default so normal
+fixed-delay execution has slack inside the five-minute window. The provider
+payload includes `type`, `connectionId`, `matchId` and `availableAt`. The
+backend title is `Tu segunda charla ya empezó` and the body is `Entrá ahora a
+Reals para sumarte.` Android FCM uses `second-chat-<connectionId>` as the same
+replacement tag as the second-chat reminder, and transport TTL is capped at the
+configured second-chat on-time cutoff. Delivery is deduplicated per user,
+notification type and a deterministic aggregate derived from
+`second-chat-started:<connectionId>`.
 
 Home returns `matchmaking` for search UX:
 
@@ -178,6 +194,15 @@ job moves the connection to `SCHEDULING_PHASE`. The passive notice has no
 prepared. Pending scheduling still occupies internal capacity through
 connection locks, but Home surfaces only this generic preparation state until
 scheduling is activated.
+
+Home ordering is backend-canonical. `pendingActions[]` orders actionable items
+by earliest authoritative expiration first across item types, including visual
+reviews by `visualExpiresAt` and first chats by backend `timeoutAt`, with a
+stable backend tie-breaker. `nextSteps[]` orders current or available second
+chats first by most recent `availableAt`, then scheduled second chats by nearest
+future `availableAt`, then scheduling items by earliest `schedulingExpiresAt`,
+then read-only second chats by earliest `readOnlyUntil`, then fallback or
+unknown entries. Clients should preserve this section-local order.
 
 `SCHEDULING_PENDING` is advanced by `SchedulingActivationJob`, not by user
 actions and not by `SchedulingNegotiationTimeoutJob`. The scheduling timeout is
@@ -387,7 +412,7 @@ Audio messages are part of the same ordered chat-message stream as text, not a s
 
 The audio MVP accepts actual MPEG-4/M4A audio-only AAC (`mp4a`) uploaded as `audio/mp4`, at most 2 MiB and at most 60,000 ms. Equality belongs to the accepted side: `duration <= 60s` passes and `duration > 60s` fails. Persisted `durationMillis` is rounded up from the MP4 timescale rational value. The backend validates the binary container server-side and rejects empty, malformed/truncated, MIME-spoofed, metadata-only, video-containing, no-audio, missing AAC codec configuration, no-media-payload and unsupported-codec MP4 files. There is no transcription, waveform generation, speech recognition, moderation, voice analysis or transcoding.
 
-Audio creation is feature-flagged. Local profiles and tests enable it; shared `dev` and `prod` default `CHAT_AUDIO_ENABLED=false`. The flag blocks new audio sends only; existing persisted audio remains readable and serialized. `audioPolicy` is advisory UX state exposed on chat-loading/status responses. Stable reasons include `FEATURE_DISABLED`, `CHAT_NOT_WRITABLE`, `GUIDANCE_NOT_AVAILABLE`, `GUIDANCE_REQUIRED`, `LIMIT_REACHED`, `WAITING_FOR_BOTH` and `WAITING_DELAY`; the send transaction remains authoritative.
+Audio creation is feature-flagged. Local profiles and tests enable it. Shared `dev` enables it by default. `prod` enables it by default. An environment can set `CHAT_AUDIO_ENABLED=false` to disable creation of new audio messages. The flag blocks new audio sends only; existing persisted audio remains readable and serialized. `audioPolicy` is advisory UX state exposed on chat-loading/status responses. Stable reasons include `FEATURE_DISABLED`, `CHAT_NOT_WRITABLE`, `GUIDANCE_NOT_AVAILABLE`, `GUIDANCE_REQUIRED`, `LIMIT_REACHED`, `WAITING_FOR_BOTH` and `WAITING_DELAY`; the send transaction remains authoritative.
 
 First-chat guidance is backend-owned for MVP:
 
@@ -529,6 +554,10 @@ Second-chat read-only lifecycle can be tested locally with:
 Second-chat reminder push notifications can be tested locally with:
 
 - `POST /api/local-dev/jobs/second-chat-reminder/run`
+
+Second-chat start push notifications can be tested locally with:
+
+- `POST /api/local-dev/jobs/second-chat-start-notification/run`
 
 Visual-review reminder push notifications can be tested locally with:
 

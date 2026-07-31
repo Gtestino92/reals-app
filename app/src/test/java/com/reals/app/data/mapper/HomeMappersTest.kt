@@ -140,12 +140,12 @@ class HomeMappersTest {
                 secondChatStep("SECOND_CHAT_SCHEDULED", "connection-future-equal-a", "2026-08-01T20:00:00Z"),
                 secondChatStep("SECOND_CHAT_SCHEDULED", "connection-future-equal-b", "2026-08-01T20:00:00Z"),
                 secondChatStep("SECOND_CHAT_SCHEDULED", "connection-future-far", "2026-08-02T20:00:00Z"),
-                secondChatStep("SECOND_CHAT_READ_ONLY", "connection-read-only", "2026-07-30T20:00:00Z"),
                 HomeNextStepResponseDto(
                     type = "SCHEDULING",
                     connectionId = "connection-scheduling",
                     matchId = "match-scheduling",
                 ),
+                secondChatStep("SECOND_CHAT_READ_ONLY", "connection-read-only", "2026-07-30T20:00:00Z"),
             ),
             passiveNotices = listOf(
                 HomePassiveNoticeResponseDto(type = "NEW_NOTICE_A"),
@@ -178,8 +178,8 @@ class HomeMappersTest {
                 "connection-future-equal-a",
                 "connection-future-equal-b",
                 "connection-future-far",
-                "connection-read-only",
                 "connection-scheduling",
+                "connection-read-only",
             ),
             home.nextSteps.map {
                 when (it) {

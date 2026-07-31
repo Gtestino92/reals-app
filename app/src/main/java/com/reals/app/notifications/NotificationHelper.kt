@@ -91,8 +91,10 @@ object NotificationHelper {
             .build()
 
         try {
+            val identity = secondChatNotificationDisplayIdentity(connectionId)
             NotificationManagerCompat.from(context).notify(
-                secondChatNotificationId(connectionId),
+                identity.tag,
+                identity.id,
                 notification,
             )
         } catch (exception: SecurityException) {
@@ -126,8 +128,10 @@ object NotificationHelper {
             .build()
 
         try {
+            val identity = secondChatNotificationDisplayIdentity(connectionId)
             NotificationManagerCompat.from(context).notify(
-                secondChatNotificationId(connectionId),
+                identity.tag,
+                identity.id,
                 notification,
             )
         } catch (exception: SecurityException) {
@@ -187,7 +191,7 @@ object NotificationHelper {
         availableAt: String?,
     ) = NotificationPendingIntents.mainActivity(
         context,
-        SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE + notificationSuffix(connectionId),
+        secondChatNotificationId(connectionId),
         TYPE_SECOND_CHAT_REMINDER,
         connectionId,
         null,
@@ -234,11 +238,28 @@ object NotificationHelper {
     internal fun secondChatStartedNotificationCopy(): Pair<String, String> =
         "Tu segunda charla ya empezó" to "Entrá ahora a Reals para sumarte."
 
+    internal fun secondChatNotificationTag(connectionId: String?): String? =
+        normalizedNotificationTargetId(connectionId)?.let { "second-chat-$it" }
+
+    internal fun secondChatNotificationDisplayIdentity(connectionId: String?): NotificationDisplayIdentity {
+        val tag = secondChatNotificationTag(connectionId)
+        return if (tag != null) {
+            NotificationDisplayIdentity(tag = tag, id = 0)
+        } else {
+            NotificationDisplayIdentity(tag = null, id = secondChatNotificationId(connectionId))
+        }
+    }
+
     internal fun secondChatNotificationId(connectionId: String?): Int =
-        SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE + notificationSuffix(connectionId)
+        SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE + notificationSuffix(
+            normalizedNotificationTargetId(connectionId),
+        )
 
     internal fun notificationSuffix(matchId: String?): Int =
         matchId?.hashCode()?.floorMod(9000) ?: 0
+
+    private fun normalizedNotificationTargetId(value: String?): String? =
+        value?.trim()?.takeIf { it.isNotEmpty() }
 
     private fun Int.floorMod(modulus: Int): Int = ((this % modulus) + modulus) % modulus
 
@@ -250,3 +271,8 @@ object NotificationHelper {
         ) == PackageManager.PERMISSION_GRANTED
     }
 }
+
+internal data class NotificationDisplayIdentity(
+    val tag: String?,
+    val id: Int,
+)

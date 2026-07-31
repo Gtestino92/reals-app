@@ -107,7 +107,7 @@ class HomeCardsTest {
     }
 
     @Test
-    fun `home actions are grouped by section`() {
+    fun `pending actions top level section preserves caller order`() {
         val firstChat = HomeActionItem.FirstChat(
             matchId = "match-1",
             chatId = "chat-1",
@@ -118,14 +118,11 @@ class HomeCardsTest {
             partnerDisplayName = "Sam",
         )
 
-        val sections = homeActionSections(listOf(firstChat, visualReview))
-
-        assertEquals(listOf(firstChat), sections.firstChats)
-        assertEquals(listOf(visualReview), sections.visualReviews)
+        assertEquals(listOf("match-1", "match-2"), listOf(firstChat, visualReview).map { it.matchIdForTest() })
     }
 
     @Test
-    fun `home next steps are grouped by section`() {
+    fun `next steps top level section preserves caller order across categories`() {
         val scheduling = HomeNextStepItem.Scheduling(
             connectionId = "connection-1",
             matchId = "match-1",
@@ -148,11 +145,10 @@ class HomeCardsTest {
             partnerDisplayName = "Taylor",
         )
 
-        val sections = homeNextStepSections(listOf(scheduling, scheduledSecondChat, unknown))
-
-        assertEquals(listOf(scheduling), sections.schedulingItems)
-        assertEquals(listOf(scheduledSecondChat), sections.secondChatItems)
-        assertEquals(listOf(unknown), sections.unknownItems)
+        assertEquals(
+            listOf("connection-2", "connection-1", "connection-3"),
+            listOf(scheduledSecondChat, scheduling, unknown).map { it.connectionIdForTest() },
+        )
     }
 
     @Test
@@ -247,5 +243,18 @@ class HomeCardsTest {
                 locale,
             ),
         )
+    }
+
+    private fun HomeActionItem.matchIdForTest(): String = when (this) {
+        is HomeActionItem.FirstChat -> matchId
+        is HomeActionItem.VisualReview -> matchId
+    }
+
+    private fun HomeNextStepItem.connectionIdForTest(): String = when (this) {
+        is HomeNextStepItem.Scheduling -> connectionId
+        is HomeNextStepItem.SecondChatScheduled -> connectionId
+        is HomeNextStepItem.SecondChatAvailable -> connectionId
+        is HomeNextStepItem.SecondChatReadOnly -> connectionId
+        is HomeNextStepItem.Unknown -> connectionId
     }
 }

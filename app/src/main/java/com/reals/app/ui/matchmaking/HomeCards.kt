@@ -149,34 +149,6 @@ internal fun NextStepCard(
     }
 }
 
-internal data class HomeActionSections(
-    val firstChats: List<HomeActionItem.FirstChat>,
-    val visualReviews: List<HomeActionItem.VisualReview>,
-)
-
-internal fun homeActionSections(actions: List<HomeActionItem>): HomeActionSections =
-    HomeActionSections(
-        firstChats = actions.filterIsInstance<HomeActionItem.FirstChat>(),
-        visualReviews = actions.filterIsInstance<HomeActionItem.VisualReview>(),
-    )
-
-internal data class HomeNextStepSections(
-    val schedulingItems: List<HomeNextStepItem.Scheduling>,
-    val secondChatItems: List<HomeNextStepItem>,
-    val unknownItems: List<HomeNextStepItem.Unknown>,
-)
-
-internal fun homeNextStepSections(nextSteps: List<HomeNextStepItem>): HomeNextStepSections =
-    HomeNextStepSections(
-        schedulingItems = nextSteps.filterIsInstance<HomeNextStepItem.Scheduling>(),
-        secondChatItems = nextSteps.filter {
-            it is HomeNextStepItem.SecondChatScheduled ||
-                it is HomeNextStepItem.SecondChatAvailable ||
-                it is HomeNextStepItem.SecondChatReadOnly
-        },
-        unknownItems = nextSteps.filterIsInstance<HomeNextStepItem.Unknown>(),
-    )
-
 internal enum class HomeSectionKey {
     PendingActions,
     NextSteps,
