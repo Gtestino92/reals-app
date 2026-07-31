@@ -7,6 +7,14 @@
 - Before implementation edits, create or switch to a dedicated task branch based on the latest `development`.
 - Use an appropriate branch prefix such as `feature/`, `fix/`, `refactor/`, `chore/`, `docs/`, or `test/`.
 - Never implement directly on `development`, `main`, or `master`.
+- Never create a work branch whose upstream/tracking branch is `origin/development`, `origin/main`, or `origin/master`.
+- When branching from `development`, use a non-tracking branch such as
+  `git switch --no-track -c <prefix>/<task-name> origin/development`.
+- After branch creation, verify `git status --short --branch` does not show the work branch tracking a protected base branch.
+- If a work branch accidentally tracks a protected base branch, run
+  `git branch --unset-upstream` before any push.
+- When pushing is explicitly requested, publish the work branch to a same-named remote branch, for example
+  `git push -u origin <prefix>/<task-name>`, never to a protected base branch.
 - When a task explicitly names a branch, verify and use that branch instead of creating an additional one.
 - Inspect actual files and relevant tests before proposing code.
 - Compare the feature branch against the base before changing it.
