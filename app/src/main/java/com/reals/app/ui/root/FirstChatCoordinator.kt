@@ -11,6 +11,7 @@ import com.reals.app.domain.model.ChatDecisionState
 import com.reals.app.domain.model.ChatExitOutcome
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequestStatus
+import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.FirstChatSnapshot
 import com.reals.app.domain.model.MatchState
@@ -94,7 +95,9 @@ internal class FirstChatCoordinator(
                 chatId = chat.id,
                 match = match,
                 chat = chat,
-                messages = (messagesResult as? ApiResult.Success)?.value.orEmpty(),
+                messages = emptyList<ChatMessage>().appendUnique(
+                    (messagesResult as? ApiResult.Success)?.value.orEmpty()
+                ),
                 exitRequests = (exitsResult as? ApiResult.Success)?.value.orEmpty(),
                 serverClockSnapshot = firstChatSnapshot.serverClockSnapshot,
                 dismissedUnansweredPeriodReference =

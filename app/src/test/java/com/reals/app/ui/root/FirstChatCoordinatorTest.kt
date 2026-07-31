@@ -1183,6 +1183,79 @@ class FirstChatCoordinatorTest {
     }
 
     @Test
+    fun `second chat text send deduplicates post result also returned by incremental refresh`() = runBlocking {
+        val api = FakeRealsApi().apply {
+            chatMessageResponse = Response.success(TestDtos.chatMessage(id = "message-1"))
+            chatMessagesResponse = Response.success(
+                TestDtos.chatMessagesArrayPayload(listOf(TestDtos.chatMessage(id = "message-1")))
+            )
+            chatResponse = Response.success(
+                TestDtos.chat(status = "ACTIVE").copy(chatType = "SECOND_CHAT")
+            )
+        }
+        val secondCoordinator = SecondChatCoordinator(secondChatDependencies(api))
+        val optimistic = newOptimisticOutgoingMessage(
+            chatId = "chat-1",
+            senderId = "user-1",
+            content = "hola",
+            localId = "local-1",
+            createdAtMillis = 123L,
+        )
+
+        val result = secondCoordinator.sendMessage(
+            current = secondChatState().copy(
+                optimisticMessages = listOf(optimistic),
+                sending = true,
+            ),
+            cleanContent = "hola",
+            localId = "local-1",
+        )
+
+        assertEquals(1, result.messages.count { it.id == "message-1" })
+        assertTrue(result.optimisticMessages.isEmpty())
+    }
+
+    @Test
+    fun `second chat audio send deduplicates post result also returned by incremental refresh`() = runBlocking {
+        val api = FakeRealsApi().apply {
+            chatAudioMessageResponse = Response.success(
+                TestDtos.audioChatMessage(id = "audio-message-1", url = "https://sent.test/audio")
+            )
+            chatMessagesResponse = Response.success(
+                TestDtos.chatMessagesArrayPayload(
+                    listOf(TestDtos.audioChatMessage(id = "audio-message-1", url = "https://stale.test/audio"))
+                )
+            )
+            chatResponse = Response.success(
+                TestDtos.chat(status = "ACTIVE").copy(chatType = "SECOND_CHAT")
+            )
+        }
+        val secondCoordinator = SecondChatCoordinator(secondChatDependencies(api))
+        val file = tempAudioFile()
+        val optimistic = newOptimisticOutgoingAudioMessage(
+            chatId = "chat-1",
+            senderId = "user-1",
+            clientMessageId = "client-1",
+            durationMillis = 2_000L,
+        )
+
+        val result = secondCoordinator.sendAudioMessage(
+            current = secondChatState().copy(
+                audioDraft = audioDraft(file),
+                audioUpload = ChatAudioUploadUiState(uploading = true),
+                optimisticMessages = listOf(optimistic),
+            ),
+            file = file,
+            clientMessageId = "client-1",
+        )
+
+        assertEquals(1, result.messages.count { it.id == "audio-message-1" })
+        assertEquals("https://sent.test/audio", result.messages.single { it.id == "audio-message-1" }.audio?.url)
+        assertTrue(result.optimisticMessages.isEmpty())
+        assertEquals("client-1", result.audioUpload.completedClientMessageId)
+    }
+
+    @Test
     fun `first chat audio success removes optimistic audio message`() = runBlocking {
         api.chatAudioMessageResponse = Response.success(
             TestDtos.audioChatMessage(clientMessageId = "client-1")

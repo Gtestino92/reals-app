@@ -22,15 +22,17 @@ internal fun List<ChatMessage>.lastMessageCursor(): String? =
     ).lastOrNull()?.id
 
 internal fun List<ChatMessage>.appendUnique(newMessages: List<ChatMessage>): List<ChatMessage> {
-    val incomingById = newMessages.associateBy { it.id }
-    return (
-        map { message -> incomingById[message.id] ?: message } +
-            newMessages.filterNot { incoming -> any { it.id == incoming.id } }
-        )
-        .sortedWith(
-            compareBy<ChatMessage> { it.sentAt }
-                .thenBy { it.id }
-        )
+    val mergedById = LinkedHashMap<String, ChatMessage>()
+    forEach { message ->
+        mergedById[message.id] = message
+    }
+    newMessages.forEach { message ->
+        mergedById[message.id] = message
+    }
+    return mergedById.values.sortedWith(
+        compareBy<ChatMessage> { it.sentAt }
+            .thenBy { it.id }
+    )
 }
 
 internal fun List<ChatExitRequest>.latestExitRequest(): ChatExitRequest? =
