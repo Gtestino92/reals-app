@@ -26,12 +26,8 @@ import com.reals.app.domain.model.SecondChatCompletionDecision
 import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.UpdateProfileInput
 import com.reals.app.domain.model.VisualDecision
-import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_AVAILABLE
-import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_AVAILABLE
-import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_CONFIRMED
-import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_PROPOSALS_RECEIVED
-import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_REMINDER
-import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_REMINDER
+import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_STARTED
+import com.reals.app.notifications.PushNotificationOpenContract
 import com.reals.app.ui.chat.firstChatUnansweredPeriodReference
 import java.io.File
 import kotlinx.coroutines.Job
@@ -221,20 +217,15 @@ class RealsRootViewModel(
     }
 
     fun handleExternalNotificationOpened(type: String?) {
-        if (
-            type != TYPE_VISUAL_REVIEW_AVAILABLE &&
-            type != TYPE_VISUAL_REVIEW_REMINDER &&
-            type != TYPE_SCHEDULING_AVAILABLE &&
-            type != TYPE_SCHEDULING_PROPOSALS_RECEIVED &&
-            type != TYPE_SCHEDULING_CONFIRMED &&
-            type != TYPE_SECOND_CHAT_REMINDER
-        ) return
+        if (!PushNotificationOpenContract.shouldHandleExternalOpen(type)) return
 
         when (val current = _uiState.value) {
             is RealsRootUiState.Ready -> refreshHomeState()
             is RealsRootUiState.FirstChat -> returnHomeFromExternalNotification(current.session)
             is RealsRootUiState.SecondChat -> {
-                if (current.isJoinedActiveSecondChat()) {
+                if (type?.trim() == TYPE_SECOND_CHAT_STARTED) {
+                    returnHomeFromExternalNotification(current.session)
+                } else if (current.isJoinedActiveSecondChat()) {
                     refreshSecondChat(silent = true)
                 } else {
                     returnHomeFromExternalNotification(current.session)

@@ -33,9 +33,27 @@ class NotificationHelperTest {
     @Test
     fun `second chat reminder contract refreshes home instead of deep linking`() {
         assertEquals("SECOND_CHAT_REMINDER", PushNotificationContract.TYPE_SECOND_CHAT_REMINDER)
+        assertEquals("SECOND_CHAT_STARTED", PushNotificationContract.TYPE_SECOND_CHAT_STARTED)
         assertEquals("connection_id", PushNotificationContract.EXTRA_CONNECTION_ID)
         assertEquals("available_at", PushNotificationContract.EXTRA_AVAILABLE_AT)
         assertEquals(20_000, PushNotificationContract.SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE)
+    }
+
+    @Test
+    fun `second chat started copy uses expected foreground text`() {
+        assertEquals(
+            "Tu segunda charla ya empezó" to "Entrá ahora a Reals para sumarte.",
+            NotificationHelper.secondChatStartedNotificationCopy(),
+        )
+    }
+
+    @Test
+    fun `second chat started and reminder share notification identity`() {
+        assertEquals(
+            PushNotificationContract.SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE +
+                NotificationHelper.notificationSuffix("connection-1"),
+            NotificationHelper.secondChatNotificationId("connection-1"),
+        )
     }
 
     @Test

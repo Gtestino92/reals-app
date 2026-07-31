@@ -12,7 +12,7 @@ class HomeCardsTest {
     private val nowMillis = Instant.parse("2026-07-15T12:00:00Z").toEpochMilli()
 
     @Test
-    fun `initial expanded section uses global priority when most urgent has one item`() {
+    fun `initial expanded section uses pending actions before next steps when single`() {
         val visualReview = HomeActionItem.VisualReview(
             matchId = "match-1",
             partnerDisplayName = "Alex",
@@ -24,7 +24,7 @@ class HomeCardsTest {
         )
 
         assertEquals(
-            HomeSectionKey.VisualReview,
+            HomeSectionKey.PendingActions,
             initiallyExpandedHomeSection(
                 actions = listOf(visualReview),
                 nextSteps = listOf(scheduling),
@@ -33,7 +33,7 @@ class HomeCardsTest {
     }
 
     @Test
-    fun `initial expanded section stays collapsed when most urgent section has multiple items`() {
+    fun `initial expanded section stays collapsed when pending actions have multiple items`() {
         val visualReviews = listOf(
             HomeActionItem.VisualReview(
                 matchId = "match-1",
@@ -78,7 +78,7 @@ class HomeCardsTest {
         )
 
         assertEquals(
-            HomeSectionKey.Scheduling,
+            null,
             initiallyExpandedHomeSection(
                 actions = emptyList(),
                 nextSteps = listOf(scheduling, secondChat),
@@ -86,11 +86,23 @@ class HomeCardsTest {
         )
 
         assertEquals(
-            HomeSectionKey.SecondChat,
+            HomeSectionKey.NextSteps,
             initiallyExpandedHomeSection(
                 actions = emptyList(),
                 nextSteps = listOf(secondChat),
             ),
+        )
+    }
+
+    @Test
+    fun `collapsible state keys use order-preserving top level sections`() {
+        assertEquals(
+            "home-section:Próximos pasos",
+            homeCollapsibleSectionStateKey("Próximos pasos"),
+        )
+        assertEquals(
+            "home-section:Acciones pendientes",
+            homeCollapsibleSectionStateKey("Acciones pendientes"),
         )
     }
 
@@ -146,12 +158,12 @@ class HomeCardsTest {
     @Test
     fun `collapsible section state key is stable across count changes`() {
         assertEquals(
-            "home-section:Segundos chats",
-            homeCollapsibleSectionStateKey("Segundos chats"),
+            "home-section:Próximos pasos",
+            homeCollapsibleSectionStateKey("Próximos pasos"),
         )
         assertEquals(
-            homeCollapsibleSectionStateKey("Segundos chats"),
-            homeCollapsibleSectionStateKey("Segundos chats"),
+            homeCollapsibleSectionStateKey("Próximos pasos"),
+            homeCollapsibleSectionStateKey("Próximos pasos"),
         )
     }
 

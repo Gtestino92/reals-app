@@ -9,14 +9,19 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.reals.app.core.network.ErrorContext
@@ -25,6 +30,7 @@ import com.reals.app.domain.model.ChatContinueDecision
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.VisualDecision
+import com.reals.app.foreground.ForegroundDestinationLifecyclePublisher
 import com.reals.app.ui.account.AccountDeletionRecoveryScreen
 import com.reals.app.ui.auth.LoginScreen
 import com.reals.app.ui.chat.ChatScreen
@@ -50,6 +56,10 @@ fun RealsApp(
         factory = RealsRootViewModelFactory(appContainer),
     )
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    PublishForegroundDestination(
+        appContainer = appContainer,
+        state = state,
+    )
 
     LaunchedEffect(notificationOpenNonce) {
         if (notificationOpenNonce != 0L) {
@@ -441,6 +451,40 @@ fun RealsApp(
                 onRetry = viewModel::refreshSession,
                 onDismiss = viewModel::signOut,
             )
+        }
+    }
+}
+
+@Composable
+private fun PublishForegroundDestination(
+    appContainer: AppContainer,
+    state: RealsRootUiState,
+) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val registration = remember(appContainer) {
+        appContainer.foregroundDestinationTracker.register()
+    }
+    val publisher = remember(registration) {
+        ForegroundDestinationLifecyclePublisher(registration)
+    }
+
+    LaunchedEffect(state) {
+        publisher.onDestinationChanged(state.foregroundDestination())
+    }
+
+    DisposableEffect(lifecycleOwner, publisher) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> publisher.onResume()
+                Lifecycle.Event.ON_PAUSE -> publisher.onPause()
+                Lifecycle.Event.ON_STOP -> publisher.onStop()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            publisher.onDispose()
         }
     }
 }

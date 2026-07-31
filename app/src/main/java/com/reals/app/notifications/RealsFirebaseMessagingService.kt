@@ -8,6 +8,7 @@ import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_AVAI
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_CONFIRMED
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_PROPOSALS_RECEIVED
 import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_REMINDER
+import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_STARTED
 import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_AVAILABLE
 import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_REMINDER
 import kotlinx.coroutines.CoroutineScope
@@ -35,32 +36,46 @@ class RealsFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         NotificationHelper.ensureChannels(this)
+        val notification = remoteMessage.data.incomingNotificationContext()
+        val appContainer = (application as? RealsApplication)?.appContainer
+        val foregroundDestination = appContainer?.foregroundDestinationTracker?.current()
+        val presentationPolicy = appContainer?.notificationPresentationPolicy ?: NotificationPresentationPolicy()
 
-        when (remoteMessage.data["type"]) {
+        if (!isKnownForegroundNotificationType(notification.type)) {
+            // Unknown push types are intentionally ignored.
+            return
+        }
+
+        if (!presentationPolicy.shouldPresent(notification, foregroundDestination)) return
+
+        when (notification.type) {
             TYPE_VISUAL_REVIEW_REMINDER,
             TYPE_VISUAL_REVIEW_AVAILABLE -> NotificationHelper.showVisualReviewReminder(
                 context = this,
-                matchId = remoteMessage.data["matchId"],
+                matchId = notification.matchId,
             )
 
             TYPE_SCHEDULING_AVAILABLE,
             TYPE_SCHEDULING_PROPOSALS_RECEIVED,
             TYPE_SCHEDULING_CONFIRMED -> NotificationHelper.showSchedulingAvailable(
                 context = this,
-                type = remoteMessage.data["type"] ?: TYPE_SCHEDULING_AVAILABLE,
-                connectionId = remoteMessage.data["connectionId"],
-                matchId = remoteMessage.data["matchId"],
+                type = notification.type ?: TYPE_SCHEDULING_AVAILABLE,
+                connectionId = notification.connectionId,
+                matchId = notification.matchId,
             )
 
             TYPE_SECOND_CHAT_REMINDER -> NotificationHelper.showSecondChatReminder(
                 context = this,
-                connectionId = remoteMessage.data["connectionId"],
-                availableAt = remoteMessage.data["availableAt"],
+                connectionId = notification.connectionId,
+                availableAt = notification.availableAt,
             )
 
-            else -> {
-                // Unknown push types are intentionally ignored.
-            }
+            TYPE_SECOND_CHAT_STARTED -> NotificationHelper.showSecondChatStarted(
+                context = this,
+                connectionId = notification.connectionId,
+                matchId = notification.matchId,
+                availableAt = notification.availableAt,
+            )
         }
     }
 
@@ -72,4 +87,23 @@ class RealsFirebaseMessagingService : FirebaseMessagingService() {
     private companion object {
         const val TAG = "RealsMessagingService"
     }
+}
+
+internal fun Map<String, String>.incomingNotificationContext(): IncomingNotificationContext =
+    IncomingNotificationContext(
+        type = this["type"].trimToNonBlank(),
+        connectionId = this["connectionId"].trimToNonBlank(),
+        matchId = this["matchId"].trimToNonBlank(),
+        availableAt = this["availableAt"].trimToNonBlank(),
+    )
+
+internal fun isKnownForegroundNotificationType(type: String?): Boolean = when (type?.trim()) {
+    TYPE_VISUAL_REVIEW_REMINDER,
+    TYPE_VISUAL_REVIEW_AVAILABLE,
+    TYPE_SCHEDULING_AVAILABLE,
+    TYPE_SCHEDULING_PROPOSALS_RECEIVED,
+    TYPE_SCHEDULING_CONFIRMED,
+    TYPE_SECOND_CHAT_REMINDER,
+    TYPE_SECOND_CHAT_STARTED -> true
+    else -> false
 }

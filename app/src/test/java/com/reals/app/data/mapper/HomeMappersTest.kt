@@ -116,6 +116,150 @@ class HomeMappersTest {
     }
 
     @Test
+    fun `Home DTO preserves backend pending action next step and notice order`() {
+        val home = minimalHome(
+            pendingActions = listOf(
+                HomePendingActionResponseDto(type = "VISUAL_REVIEW", matchId = "match-visual-a"),
+                HomePendingActionResponseDto(type = "FIRST_CHAT", matchId = "match-first", chatId = "chat-first"),
+                HomePendingActionResponseDto(type = "VISUAL_REVIEW", matchId = "match-visual-b"),
+                HomePendingActionResponseDto(
+                    type = "VISUAL_REVIEW",
+                    matchId = "match-visual-equal-a",
+                    visualExpiresAt = "2026-07-31T19:00:00Z",
+                ),
+                HomePendingActionResponseDto(
+                    type = "VISUAL_REVIEW",
+                    matchId = "match-visual-equal-b",
+                    visualExpiresAt = "2026-07-31T19:00:00Z",
+                ),
+            ),
+            nextSteps = listOf(
+                secondChatStep("SECOND_CHAT_AVAILABLE", "connection-active-new", "2026-07-31T21:00:00Z"),
+                secondChatStep("SECOND_CHAT_AVAILABLE", "connection-active-old", "2026-07-31T20:00:00Z"),
+                secondChatStep("SECOND_CHAT_SCHEDULED", "connection-future-near", "2026-08-01T20:00:00Z"),
+                secondChatStep("SECOND_CHAT_SCHEDULED", "connection-future-equal-a", "2026-08-01T20:00:00Z"),
+                secondChatStep("SECOND_CHAT_SCHEDULED", "connection-future-equal-b", "2026-08-01T20:00:00Z"),
+                secondChatStep("SECOND_CHAT_SCHEDULED", "connection-future-far", "2026-08-02T20:00:00Z"),
+                secondChatStep("SECOND_CHAT_READ_ONLY", "connection-read-only", "2026-07-30T20:00:00Z"),
+                HomeNextStepResponseDto(
+                    type = "SCHEDULING",
+                    connectionId = "connection-scheduling",
+                    matchId = "match-scheduling",
+                ),
+            ),
+            passiveNotices = listOf(
+                HomePassiveNoticeResponseDto(type = "NEW_NOTICE_A"),
+                HomePassiveNoticeResponseDto(type = "SCHEDULING_PREPARING"),
+                HomePassiveNoticeResponseDto(type = "NEW_NOTICE_B"),
+            ),
+        ).toDomain()
+
+        assertEquals(
+            listOf(
+                "match-visual-a",
+                "match-first",
+                "match-visual-b",
+                "match-visual-equal-a",
+                "match-visual-equal-b",
+            ),
+            home.pendingActions.map {
+                when (it) {
+                    is HomePendingAction.FirstChat -> it.matchId
+                    is HomePendingAction.VisualReview -> it.matchId
+                    is HomePendingAction.Unknown -> it.rawType
+                }
+            },
+        )
+        assertEquals(
+            listOf(
+                "connection-active-new",
+                "connection-active-old",
+                "connection-future-near",
+                "connection-future-equal-a",
+                "connection-future-equal-b",
+                "connection-future-far",
+                "connection-read-only",
+                "connection-scheduling",
+            ),
+            home.nextSteps.map {
+                when (it) {
+                    is HomeNextStep.Scheduling -> it.connectionId
+                    is HomeNextStep.SecondChatScheduled -> it.connectionId
+                    is HomeNextStep.SecondChatAvailable -> it.connectionId
+                    is HomeNextStep.SecondChatReadOnly -> it.connectionId
+                    is HomeNextStep.Unknown -> it.connectionId
+                }
+            },
+        )
+        assertTrue(home.passiveNotices[0] is HomePassiveNotice.Unknown)
+        assertEquals(HomePassiveNotice.SchedulingPreparing, home.passiveNotices[1])
+        assertTrue(home.passiveNotices[2] is HomePassiveNotice.Unknown)
+    }
+
+    @Test
+    fun `Home pending state preserves backend order including malformed second chat metadata last`() {
+        val pending = HomePendingStateResponseDto(
+            version = 15,
+            pendingActions = listOf(
+                HomePendingActionLiteResponseDto(
+                    type = "VISUAL_REVIEW",
+                    matchId = "match-visual",
+                    visualExpiresAt = "2026-07-31T19:00:00Z",
+                ),
+                HomePendingActionLiteResponseDto(
+                    type = "FIRST_CHAT",
+                    matchId = "match-first",
+                    chatId = "chat-first",
+                ),
+            ),
+            nextSteps = listOf(
+                secondChatLiteStep("SECOND_CHAT_AVAILABLE", "connection-active-new", "2026-07-31T21:00:00Z"),
+                secondChatLiteStep("SECOND_CHAT_AVAILABLE", "connection-active-old", "2026-07-31T20:00:00Z"),
+                secondChatLiteStep("SECOND_CHAT_SCHEDULED", "connection-future-near", "2026-08-01T20:00:00Z"),
+                secondChatLiteStep("SECOND_CHAT_READ_ONLY", "connection-read-only", "2026-07-30T20:00:00Z"),
+                HomeNextStepLiteResponseDto(
+                    type = "SECOND_CHAT_AVAILABLE",
+                    connectionId = "connection-missing-date",
+                    matchId = "match-connection-missing-date",
+                    secondChat = HomePendingSecondChatLiteResponseDto(chatId = "chat-missing-date"),
+                ),
+            ),
+            serverTime = "2026-07-31T21:00:00Z",
+        ).toDomain()
+
+        assertEquals(
+            listOf("match-visual", "match-first"),
+            pending.pendingActions.map {
+                when (it) {
+                    is HomePendingAction.FirstChat -> it.matchId
+                    is HomePendingAction.VisualReview -> it.matchId
+                    is HomePendingAction.Unknown -> it.rawType
+                }
+            },
+        )
+        assertEquals(
+            listOf(
+                "connection-active-new",
+                "connection-active-old",
+                "connection-future-near",
+                "connection-read-only",
+                "connection-missing-date",
+            ),
+            pending.nextSteps.map {
+                when (it) {
+                    is HomeNextStep.Scheduling -> it.connectionId
+                    is HomeNextStep.SecondChatScheduled -> it.connectionId
+                    is HomeNextStep.SecondChatAvailable -> it.connectionId
+                    is HomeNextStep.SecondChatReadOnly -> it.connectionId
+                    is HomeNextStep.Unknown -> it.connectionId
+                }
+            },
+        )
+        val missingDate = pending.nextSteps.last() as HomeNextStep.SecondChatAvailable
+        assertEquals(null, missingDate.secondChat)
+    }
+
+    @Test
     fun `Home summary DTO maps pending scheduling boolean`() {
         val summary = HomeActiveInteractionsSummaryResponseDto(
             activeInitialCount = 0,
@@ -414,6 +558,45 @@ class HomeMappersTest {
         pendingActions = pendingActions,
         nextSteps = nextSteps,
         passiveNotices = passiveNotices,
+    )
+
+    private fun secondChatStep(
+        type: String,
+        connectionId: String,
+        availableAt: String,
+    ): HomeNextStepResponseDto = HomeNextStepResponseDto(
+        type = type,
+        connectionId = connectionId,
+        matchId = "match-$connectionId",
+        secondChat = HomeChatResponseDto(
+            chatId = "chat-$connectionId",
+            chatType = "SECOND_CHAT",
+            chatStatus = when (type) {
+                "SECOND_CHAT_READ_ONLY" -> "EXPIRED"
+                else -> "ACTIVE"
+            },
+            availableAt = availableAt,
+            expiresAt = "2026-08-03T20:00:00Z",
+            readOnlyUntil = "2026-08-04T20:00:00Z",
+            durationMinutes = 120,
+        ),
+    )
+
+    private fun secondChatLiteStep(
+        type: String,
+        connectionId: String,
+        availableAt: String,
+    ): HomeNextStepLiteResponseDto = HomeNextStepLiteResponseDto(
+        type = type,
+        connectionId = connectionId,
+        matchId = "match-$connectionId",
+        secondChat = HomePendingSecondChatLiteResponseDto(
+            chatId = "chat-$connectionId",
+            availableAt = availableAt,
+            expiresAt = "2026-08-03T20:00:00Z",
+            readOnlyUntil = "2026-08-04T20:00:00Z",
+            durationMinutes = 120,
+        ),
     )
 
     private fun partnerDto(name: String): ChatPartnerResponseDto = ChatPartnerResponseDto(

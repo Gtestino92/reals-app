@@ -139,6 +139,54 @@ class HomeUiMapperTest {
     }
 
     @Test
+    fun `pending actions and next steps preserve backend domain order after filtering`() {
+        val hiddenFirstChat = HomePendingAction.FirstChat(
+            matchId = "match-hidden",
+            chatId = "chat-hidden",
+            partner = partner("Hidden"),
+        )
+        val visual = HomePendingAction.VisualReview(
+            matchId = "match-visual",
+            partner = partner("Visual"),
+            visualExpiresAt = "2026-07-31T19:00:00Z",
+        )
+        val firstChat = HomePendingAction.FirstChat(
+            matchId = "match-first",
+            chatId = "chat-first",
+            partner = partner("First"),
+        )
+        val secondChat = HomeNextStep.SecondChatAvailable(
+            connectionId = "connection-second",
+            matchId = "match-second",
+            partner = null,
+            secondChat = homeChat("chat-second", ChatStatus.Available, "Second"),
+        )
+        val scheduling = HomeNextStep.Scheduling(
+            connectionId = "connection-scheduling",
+            matchId = "match-scheduling",
+            partner = partner("Scheduling"),
+        )
+
+        val model = mapper.toScreenModel(
+            home = homeState(
+                pendingActions = listOf(hiddenFirstChat, visual, firstChat),
+                nextSteps = listOf(secondChat, scheduling),
+            ),
+            localHidden = LocalHiddenInteractions(
+                hiddenFirstChatMatchIds = setOf("match-hidden"),
+                hiddenVisualMatchIds = emptySet(),
+            ),
+            localMatchmakingBlockedReason = null,
+        )
+
+        assertEquals(listOf("match-visual", "match-first"), model.pendingActions.map { it.matchIdForTest() })
+        assertEquals(
+            listOf("connection-second", "connection-scheduling"),
+            model.nextSteps.map { it.connectionIdForTest() },
+        )
+    }
+
+    @Test
     fun `closed and cancelled interactions do not appear as action`() {
         val model = mapper.toScreenModel(
             home = homeState(
@@ -313,4 +361,17 @@ class HomeUiMapperTest {
         profileId = "profile-$displayName",
         displayName = displayName,
     )
+
+    private fun HomeActionItem.matchIdForTest(): String = when (this) {
+        is HomeActionItem.FirstChat -> matchId
+        is HomeActionItem.VisualReview -> matchId
+    }
+
+    private fun HomeNextStepItem.connectionIdForTest(): String = when (this) {
+        is HomeNextStepItem.Scheduling -> connectionId
+        is HomeNextStepItem.SecondChatScheduled -> connectionId
+        is HomeNextStepItem.SecondChatAvailable -> connectionId
+        is HomeNextStepItem.SecondChatReadOnly -> connectionId
+        is HomeNextStepItem.Unknown -> connectionId
+    }
 }
