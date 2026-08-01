@@ -3,6 +3,7 @@ package com.reals.app.ui.root
 import com.reals.app.data.repository.ChatRepository
 import com.reals.app.data.repository.MatchmakingRepository
 import com.reals.app.data.repository.MeRepository
+import com.reals.app.data.dto.HomeNextStepResponseDto
 import com.reals.app.di.HomeFeatureDependencies
 import com.reals.app.domain.model.HomeActiveInteractionsSummary
 import com.reals.app.domain.model.HomeMatchmaking
@@ -23,6 +24,7 @@ import com.reals.app.testutil.testApiExecutor
 import com.reals.app.testutil.testJson
 import com.reals.app.ui.matchmaking.HomeUiMapper
 import com.reals.app.ui.matchmaking.LocalHiddenInteractions
+import com.reals.app.ui.matchmaking.HomeNextStepItem
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -215,6 +217,41 @@ class HomeCoordinatorCancelTest {
         assertEquals(listOf("getHome"), api.calls)
         val ready = state.value as RealsRootUiState.Ready
         assertEquals(8L, ready.home.homeStatusVersion)
+    }
+
+    @Test
+    fun `explicit refresh updates next step positions to latest backend order`() = runBlocking {
+        val api = FakeRealsApi().apply {
+            homeResponse = Response.success(
+                TestDtos.home().copy(
+                    pendingActions = emptyList(),
+                    nextSteps = listOf(
+                        HomeNextStepResponseDto(
+                            type = "SCHEDULING",
+                            connectionId = "connection-new-first",
+                            matchId = "match-new-first",
+                        ),
+                        HomeNextStepResponseDto(
+                            type = "SCHEDULING",
+                            connectionId = "connection-new-second",
+                            matchId = "match-new-second",
+                        ),
+                    ),
+                ),
+            )
+        }
+        val state = MutableStateFlow<RealsRootUiState>(
+            ready(phase = MatchmakingSearchUiPhase.Idle, inQueue = false, homeStatusVersion = 8),
+        )
+
+        coordinator(api, state, this).refreshHomeState()
+        yield()
+
+        val ready = state.value as RealsRootUiState.Ready
+        assertEquals(
+            listOf("connection-new-first", "connection-new-second"),
+            ready.home.screenModel?.nextSteps?.map { (it as HomeNextStepItem.Scheduling).connectionId },
+        )
     }
 
     @Test

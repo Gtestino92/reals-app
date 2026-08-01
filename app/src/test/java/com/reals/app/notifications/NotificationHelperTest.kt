@@ -33,9 +33,54 @@ class NotificationHelperTest {
     @Test
     fun `second chat reminder contract refreshes home instead of deep linking`() {
         assertEquals("SECOND_CHAT_REMINDER", PushNotificationContract.TYPE_SECOND_CHAT_REMINDER)
+        assertEquals("SECOND_CHAT_STARTED", PushNotificationContract.TYPE_SECOND_CHAT_STARTED)
         assertEquals("connection_id", PushNotificationContract.EXTRA_CONNECTION_ID)
         assertEquals("available_at", PushNotificationContract.EXTRA_AVAILABLE_AT)
         assertEquals(20_000, PushNotificationContract.SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE)
+    }
+
+    @Test
+    fun `second chat started copy uses expected foreground text`() {
+        assertEquals(
+            "Tu segunda charla ya empezó" to "Entrá ahora a Reals para sumarte.",
+            NotificationHelper.secondChatStartedNotificationCopy(),
+        )
+    }
+
+    @Test
+    fun `second chat started and reminder share notification identity`() {
+        assertEquals(
+            NotificationDisplayIdentity(tag = "second-chat-connection-1", id = 0),
+            NotificationHelper.secondChatNotificationDisplayIdentity("connection-1"),
+        )
+        assertEquals(
+            NotificationHelper.secondChatNotificationDisplayIdentity("connection-1"),
+            NotificationHelper.secondChatNotificationDisplayIdentity(" connection-1 "),
+        )
+    }
+
+    @Test
+    fun `second chat tag matches backend replacement contract`() {
+        assertEquals("second-chat-connection-1", NotificationHelper.secondChatNotificationTag("connection-1"))
+        assertEquals("second-chat-connection-1", NotificationHelper.secondChatNotificationTag(" connection-1 "))
+    }
+
+    @Test
+    fun `missing second chat connection uses deterministic untagged fallback identity`() {
+        val fallback = NotificationDisplayIdentity(
+            tag = null,
+            id = PushNotificationContract.SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE,
+        )
+
+        assertEquals(null, NotificationHelper.secondChatNotificationTag(null))
+        assertEquals(null, NotificationHelper.secondChatNotificationTag(""))
+        assertEquals(null, NotificationHelper.secondChatNotificationTag("   "))
+        assertEquals(fallback, NotificationHelper.secondChatNotificationDisplayIdentity(null))
+        assertEquals(fallback, NotificationHelper.secondChatNotificationDisplayIdentity("   "))
+        assertEquals(
+            PushNotificationContract.SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE,
+            NotificationHelper.secondChatNotificationId("   "),
+        )
     }
 
     @Test

@@ -7,6 +7,7 @@ object PushNotificationContract {
     const val TYPE_SCHEDULING_PROPOSALS_RECEIVED = "SCHEDULING_PROPOSALS_RECEIVED"
     const val TYPE_SCHEDULING_CONFIRMED = "SCHEDULING_CONFIRMED"
     const val TYPE_SECOND_CHAT_REMINDER = "SECOND_CHAT_REMINDER"
+    const val TYPE_SECOND_CHAT_STARTED = "SECOND_CHAT_STARTED"
 
     const val EXTRA_PUSH_TYPE = "push_type"
     const val EXTRA_MATCH_ID = "match_id"

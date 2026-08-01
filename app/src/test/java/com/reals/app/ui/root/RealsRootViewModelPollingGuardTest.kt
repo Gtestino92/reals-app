@@ -1055,11 +1055,12 @@ internal fun rootViewModelTestDependencies(
     api: FakeRealsApi,
     firstChatDismissalStore: com.reals.app.data.preferences.InMemoryFirstChatUnansweredSuggestionDismissalStore =
         com.reals.app.data.preferences.InMemoryFirstChatUnansweredSuggestionDismissalStore(),
+    authRepositoryOverride: FirebaseAuthRepository? = null,
 ): RealsRootDependencies {
         val context = ContextWrapper(null)
         val tokenProvider = FakeAuthTokenProvider()
         val apiExecutor = testApiExecutor()
-        val authRepository = FirebaseAuthRepository(context)
+        val authRepository = authRepositoryOverride ?: FirebaseAuthRepository(context)
         val meRepository = MeRepository(api, tokenProvider, apiExecutor)
         val profileRepository = ProfileRepository(context, api, tokenProvider, apiExecutor)
         val matchmakingRepository = MatchmakingRepository(api, tokenProvider, apiExecutor)

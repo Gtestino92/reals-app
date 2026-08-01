@@ -12,7 +12,7 @@ class HomeCardsTest {
     private val nowMillis = Instant.parse("2026-07-15T12:00:00Z").toEpochMilli()
 
     @Test
-    fun `initial expanded section uses global priority when most urgent has one item`() {
+    fun `initial expanded section uses pending actions before next steps when single`() {
         val visualReview = HomeActionItem.VisualReview(
             matchId = "match-1",
             partnerDisplayName = "Alex",
@@ -24,7 +24,7 @@ class HomeCardsTest {
         )
 
         assertEquals(
-            HomeSectionKey.VisualReview,
+            HomeSectionKey.PendingActions,
             initiallyExpandedHomeSection(
                 actions = listOf(visualReview),
                 nextSteps = listOf(scheduling),
@@ -33,7 +33,7 @@ class HomeCardsTest {
     }
 
     @Test
-    fun `initial expanded section stays collapsed when most urgent section has multiple items`() {
+    fun `initial expanded section stays collapsed when pending actions have multiple items`() {
         val visualReviews = listOf(
             HomeActionItem.VisualReview(
                 matchId = "match-1",
@@ -78,7 +78,7 @@ class HomeCardsTest {
         )
 
         assertEquals(
-            HomeSectionKey.Scheduling,
+            null,
             initiallyExpandedHomeSection(
                 actions = emptyList(),
                 nextSteps = listOf(scheduling, secondChat),
@@ -86,7 +86,7 @@ class HomeCardsTest {
         )
 
         assertEquals(
-            HomeSectionKey.SecondChat,
+            HomeSectionKey.NextSteps,
             initiallyExpandedHomeSection(
                 actions = emptyList(),
                 nextSteps = listOf(secondChat),
@@ -95,7 +95,19 @@ class HomeCardsTest {
     }
 
     @Test
-    fun `home actions are grouped by section`() {
+    fun `collapsible state keys use order-preserving top level sections`() {
+        assertEquals(
+            "home-section:Próximos pasos",
+            homeCollapsibleSectionStateKey("Próximos pasos"),
+        )
+        assertEquals(
+            "home-section:Acciones pendientes",
+            homeCollapsibleSectionStateKey("Acciones pendientes"),
+        )
+    }
+
+    @Test
+    fun `pending actions top level section preserves caller order`() {
         val firstChat = HomeActionItem.FirstChat(
             matchId = "match-1",
             chatId = "chat-1",
@@ -106,14 +118,11 @@ class HomeCardsTest {
             partnerDisplayName = "Sam",
         )
 
-        val sections = homeActionSections(listOf(firstChat, visualReview))
-
-        assertEquals(listOf(firstChat), sections.firstChats)
-        assertEquals(listOf(visualReview), sections.visualReviews)
+        assertEquals(listOf("match-1", "match-2"), listOf(firstChat, visualReview).map { it.matchIdForTest() })
     }
 
     @Test
-    fun `home next steps are grouped by section`() {
+    fun `next steps top level section preserves caller order across categories`() {
         val scheduling = HomeNextStepItem.Scheduling(
             connectionId = "connection-1",
             matchId = "match-1",
@@ -136,22 +145,21 @@ class HomeCardsTest {
             partnerDisplayName = "Taylor",
         )
 
-        val sections = homeNextStepSections(listOf(scheduling, scheduledSecondChat, unknown))
-
-        assertEquals(listOf(scheduling), sections.schedulingItems)
-        assertEquals(listOf(scheduledSecondChat), sections.secondChatItems)
-        assertEquals(listOf(unknown), sections.unknownItems)
+        assertEquals(
+            listOf("connection-2", "connection-1", "connection-3"),
+            listOf(scheduledSecondChat, scheduling, unknown).map { it.connectionIdForTest() },
+        )
     }
 
     @Test
     fun `collapsible section state key is stable across count changes`() {
         assertEquals(
-            "home-section:Segundos chats",
-            homeCollapsibleSectionStateKey("Segundos chats"),
+            "home-section:Próximos pasos",
+            homeCollapsibleSectionStateKey("Próximos pasos"),
         )
         assertEquals(
-            homeCollapsibleSectionStateKey("Segundos chats"),
-            homeCollapsibleSectionStateKey("Segundos chats"),
+            homeCollapsibleSectionStateKey("Próximos pasos"),
+            homeCollapsibleSectionStateKey("Próximos pasos"),
         )
     }
 
@@ -235,5 +243,18 @@ class HomeCardsTest {
                 locale,
             ),
         )
+    }
+
+    private fun HomeActionItem.matchIdForTest(): String = when (this) {
+        is HomeActionItem.FirstChat -> matchId
+        is HomeActionItem.VisualReview -> matchId
+    }
+
+    private fun HomeNextStepItem.connectionIdForTest(): String = when (this) {
+        is HomeNextStepItem.Scheduling -> connectionId
+        is HomeNextStepItem.SecondChatScheduled -> connectionId
+        is HomeNextStepItem.SecondChatAvailable -> connectionId
+        is HomeNextStepItem.SecondChatReadOnly -> connectionId
+        is HomeNextStepItem.Unknown -> connectionId
     }
 }

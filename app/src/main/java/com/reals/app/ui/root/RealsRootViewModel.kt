@@ -26,12 +26,8 @@ import com.reals.app.domain.model.SecondChatCompletionDecision
 import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.UpdateProfileInput
 import com.reals.app.domain.model.VisualDecision
-import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_AVAILABLE
-import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_AVAILABLE
-import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_CONFIRMED
-import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_PROPOSALS_RECEIVED
-import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_REMINDER
-import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_REMINDER
+import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_STARTED
+import com.reals.app.notifications.PushNotificationOpenContract
 import com.reals.app.ui.chat.firstChatUnansweredPeriodReference
 import java.io.File
 import kotlinx.coroutines.Job
@@ -86,6 +82,7 @@ class RealsRootViewModel(
     private var manualBlockJob: Job? = null
     private var pendingSecondChatLocalExpiryKey: SecondChatExpiryKey? = null
     private var completedSecondChatLocalExpiryKey: SecondChatExpiryKey? = null
+    private var pendingSecondChatStartedHomeOpen = false
     private val homeCoordinator = HomeCoordinator(
         uiState = _uiState,
         dependencies = dependencies.home,
@@ -112,6 +109,7 @@ class RealsRootViewModel(
         observeTerminalAuthFailure()
         observeLegalActionRequired()
         observeUserPairBlocked()
+        observePendingSecondChatStartedHomeOpenInvalidation()
         if (autoRefreshSession) {
             refreshSession()
         }
@@ -127,9 +125,15 @@ class RealsRootViewModel(
 
     fun currentUserHasPasswordProvider(): Boolean = authRepository.currentUserHasPasswordProvider()
 
-    fun signOut() = sessionCoordinator.signOut()
+    fun signOut() {
+        pendingSecondChatStartedHomeOpen = false
+        sessionCoordinator.signOut()
+    }
 
-    fun deleteAccount() = sessionCoordinator.deleteAccount()
+    fun deleteAccount() {
+        pendingSecondChatStartedHomeOpen = false
+        sessionCoordinator.deleteAccount()
+    }
 
     fun retryLegalRequirements() {
         val current = _uiState.value as? RealsRootUiState.LegalRequirements ?: return
@@ -171,8 +175,13 @@ class RealsRootViewModel(
                 LegalResumeContext.PostSession,
                 LegalResumeContext.PostReactivation -> continueReadySession(current.session)
 
-                is LegalResumeContext.ExistingState ->
-                    _uiState.value = resume.state.clearLegalActionRequiredForResume()
+                is LegalResumeContext.ExistingState -> {
+                    if (pendingSecondChatStartedHomeOpen) {
+                        loadHomeForPendingSecondChatStartedOpen(current.session)
+                    } else {
+                        _uiState.value = resume.state.clearLegalActionRequiredForResume()
+                    }
+                }
             }
         }
     }
@@ -221,14 +230,12 @@ class RealsRootViewModel(
     }
 
     fun handleExternalNotificationOpened(type: String?) {
-        if (
-            type != TYPE_VISUAL_REVIEW_AVAILABLE &&
-            type != TYPE_VISUAL_REVIEW_REMINDER &&
-            type != TYPE_SCHEDULING_AVAILABLE &&
-            type != TYPE_SCHEDULING_PROPOSALS_RECEIVED &&
-            type != TYPE_SCHEDULING_CONFIRMED &&
-            type != TYPE_SECOND_CHAT_REMINDER
-        ) return
+        val normalizedType = type?.trim()
+        if (!PushNotificationOpenContract.shouldHandleExternalOpen(normalizedType)) return
+        if (normalizedType == TYPE_SECOND_CHAT_STARTED) {
+            handleSecondChatStartedNotificationOpened()
+            return
+        }
 
         when (val current = _uiState.value) {
             is RealsRootUiState.Ready -> refreshHomeState()
@@ -253,6 +260,58 @@ class RealsRootViewModel(
             is RealsRootUiState.Failure,
             is RealsRootUiState.Login,
             is RealsRootUiState.MissingFirebase -> Unit
+        }
+    }
+
+    private fun handleSecondChatStartedNotificationOpened() {
+        when (val current = _uiState.value) {
+            is RealsRootUiState.Ready -> {
+                pendingSecondChatStartedHomeOpen = false
+                returnHomeFromExternalNotification(current.session)
+            }
+            is RealsRootUiState.FirstChat -> {
+                pendingSecondChatStartedHomeOpen = false
+                returnHomeFromExternalNotification(current.session)
+            }
+            is RealsRootUiState.SecondChat -> {
+                pendingSecondChatStartedHomeOpen = false
+                returnHomeFromExternalNotification(current.session)
+            }
+            is RealsRootUiState.VisualApproval -> {
+                pendingSecondChatStartedHomeOpen = false
+                returnHomeFromExternalNotification(current.session)
+            }
+            is RealsRootUiState.Scheduling -> {
+                pendingSecondChatStartedHomeOpen = false
+                returnHomeFromExternalNotification(current.session)
+            }
+            is RealsRootUiState.PartnerProfile -> {
+                pendingSecondChatStartedHomeOpen = false
+                returnHomeFromExternalNotification(current.session)
+            }
+            is RealsRootUiState.PendingEngagement -> {
+                pendingSecondChatStartedHomeOpen = false
+                returnHomeFromExternalNotification(current.session)
+            }
+            is RealsRootUiState.ActivationComplete -> {
+                pendingSecondChatStartedHomeOpen = false
+                returnHomeFromExternalNotification(current.session)
+            }
+            is RealsRootUiState.LegalRequirements -> {
+                pendingSecondChatStartedHomeOpen = true
+            }
+            is RealsRootUiState.LoadingSession,
+            RealsRootUiState.Checking -> {
+                pendingSecondChatStartedHomeOpen = true
+                refreshSession()
+            }
+            is RealsRootUiState.AccountDeletionPending,
+            is RealsRootUiState.AccountDeletionScheduled,
+            is RealsRootUiState.Failure,
+            is RealsRootUiState.Login,
+            is RealsRootUiState.MissingFirebase -> {
+                pendingSecondChatStartedHomeOpen = false
+            }
         }
     }
 
@@ -1593,17 +1652,25 @@ class RealsRootViewModel(
                 onPending = { _uiState.value = it.state },
             )
         ) {
-            is ProfileEntryResult.LoadHome -> homeCoordinator.loadHomeForReady(
-                ready = result.ready,
-                publishLoadingState = result.publishLoadingState,
-                autoNavigateEngagements = result.autoNavigateEngagements,
-                preloadedHome = result.preloadedHome,
-            )
+            is ProfileEntryResult.LoadHome -> {
+                val forceHomeOnly = consumePendingSecondChatStartedHomeOpen()
+                homeCoordinator.loadHomeForReady(
+                    ready = result.ready,
+                    publishLoadingState = result.publishLoadingState,
+                    autoNavigateEngagements = if (forceHomeOnly) false else result.autoNavigateEngagements,
+                    preloadedHome = result.preloadedHome,
+                )
+            }
 
-            is ProfileEntryResult.ShowReady -> _uiState.value = result.state
+            is ProfileEntryResult.ShowReady -> {
+                pendingSecondChatStartedHomeOpen = false
+                _uiState.value = result.state
+            }
 
-            ProfileEntryResult.AccountDeletionPendingFromBackend ->
+            ProfileEntryResult.AccountDeletionPendingFromBackend -> {
+                pendingSecondChatStartedHomeOpen = false
                 sessionCoordinator.showAccountDeletionPendingFromBackend()
+            }
         }
     }
 
@@ -1632,11 +1699,21 @@ class RealsRootViewModel(
             is LegalCoordinatorResult.Show -> _uiState.value = result.state
             is LegalCoordinatorResult.Satisfied -> when (val resume = result.resumeContext) {
                 LegalResumeContext.PostSession -> continueReadySession(result.session)
-                LegalResumeContext.PostReactivation ->
-                    homeCoordinator.reenterMatchmakingOrLoadHome(result.session)
+                LegalResumeContext.PostReactivation -> {
+                    if (pendingSecondChatStartedHomeOpen) {
+                        loadHomeForPendingSecondChatStartedOpen(result.session)
+                    } else {
+                        homeCoordinator.reenterMatchmakingOrLoadHome(result.session)
+                    }
+                }
 
-                is LegalResumeContext.ExistingState ->
-                    _uiState.value = resume.state.clearLegalActionRequiredForResume()
+                is LegalResumeContext.ExistingState -> {
+                    if (pendingSecondChatStartedHomeOpen) {
+                        loadHomeForPendingSecondChatStartedOpen(result.session)
+                    } else {
+                        _uiState.value = resume.state.clearLegalActionRequiredForResume()
+                    }
+                }
             }
         }
     }
@@ -1664,8 +1741,19 @@ class RealsRootViewModel(
                 if (sessionInvalidationJob?.isActive == true) return@collect
                 if (!current.hasTerminalAuthFailure()) return@collect
                 cancelSilentRefreshFor(current)
+                pendingSecondChatStartedHomeOpen = false
                 sessionInvalidationJob = launch {
                     sessionCoordinator.invalidateTerminalSession()
+                }
+            }
+        }
+    }
+
+    private fun observePendingSecondChatStartedHomeOpenInvalidation() {
+        viewModelScope.launch {
+            uiState.collect { current ->
+                if (current.clearsPendingSecondChatStartedHomeOpen()) {
+                    pendingSecondChatStartedHomeOpen = false
                 }
             }
         }
@@ -1743,6 +1831,25 @@ class RealsRootViewModel(
         viewModelScope.launch {
             homeCoordinator.returnHome(session)
         }
+    }
+
+    private suspend fun loadHomeForPendingSecondChatStartedOpen(session: ProvisionedSession) {
+        if (!consumePendingSecondChatStartedHomeOpen()) return
+        homeCoordinator.loadHomeForReady(
+            ready = RealsRootUiState.Ready(
+                session = session,
+                home = HomeUiState(homeLoading = true),
+            ),
+            publishLoadingState = true,
+            autoNavigateEngagements = false,
+            allowDraftHomeWithoutInteractions = true,
+        )
+    }
+
+    private fun consumePendingSecondChatStartedHomeOpen(): Boolean {
+        val pending = pendingSecondChatStartedHomeOpen
+        pendingSecondChatStartedHomeOpen = false
+        return pending
     }
 }
 
@@ -1849,6 +1956,26 @@ private fun RealsRootUiState.blockedPairSession(): ProvisionedSession? = when (t
     is RealsRootUiState.VisualApproval -> session
     is RealsRootUiState.Scheduling -> session
     else -> null
+}
+
+private fun RealsRootUiState.clearsPendingSecondChatStartedHomeOpen(): Boolean = when (this) {
+    is RealsRootUiState.AccountDeletionPending,
+    is RealsRootUiState.AccountDeletionScheduled,
+    is RealsRootUiState.Failure,
+    is RealsRootUiState.Login,
+    is RealsRootUiState.MissingFirebase -> true
+
+    RealsRootUiState.Checking,
+    is RealsRootUiState.LoadingSession,
+    is RealsRootUiState.LegalRequirements,
+    is RealsRootUiState.Ready,
+    is RealsRootUiState.FirstChat,
+    is RealsRootUiState.SecondChat,
+    is RealsRootUiState.VisualApproval,
+    is RealsRootUiState.Scheduling,
+    is RealsRootUiState.PartnerProfile,
+    is RealsRootUiState.PendingEngagement,
+    is RealsRootUiState.ActivationComplete -> false
 }
 
 private fun ApiError?.isUserPairBlockedError(): Boolean =

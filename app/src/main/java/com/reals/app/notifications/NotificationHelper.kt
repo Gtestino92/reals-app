@@ -18,6 +18,7 @@ import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_AVAI
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_CONFIRMED
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_PROPOSALS_RECEIVED
 import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_REMINDER
+import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_STARTED
 import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_REMINDER
 import com.reals.app.notifications.PushNotificationContract.VISUAL_REVIEW_CHANNEL_ID
 import com.reals.app.notifications.PushNotificationContract.VISUAL_REVIEW_NOTIFICATION_ID_BASE
@@ -90,14 +91,53 @@ object NotificationHelper {
             .build()
 
         try {
+            val identity = secondChatNotificationDisplayIdentity(connectionId)
             NotificationManagerCompat.from(context).notify(
-                SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE + notificationSuffix(connectionId),
+                identity.tag,
+                identity.id,
                 notification,
             )
         } catch (exception: SecurityException) {
             Log.w(
                 TAG,
                 "Could not show second chat reminder because permission was denied.",
+                exception
+            )
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun showSecondChatStarted(
+        context: Context,
+        connectionId: String?,
+        matchId: String?,
+        availableAt: String? = null,
+    ) {
+        if (!canPostNotifications(context)) return
+
+        val (title, body) = secondChatStartedNotificationCopy()
+        val notification = NotificationCompat.Builder(context, VISUAL_REVIEW_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(VISUAL_REVIEW_NOTIFICATION_PRIORITY)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setAutoCancel(true)
+            .setContentIntent(secondChatStartedPendingIntent(context, connectionId, matchId, availableAt))
+            .build()
+
+        try {
+            val identity = secondChatNotificationDisplayIdentity(connectionId)
+            NotificationManagerCompat.from(context).notify(
+                identity.tag,
+                identity.id,
+                notification,
+            )
+        } catch (exception: SecurityException) {
+            Log.w(
+                TAG,
+                "Could not show second chat started notification because permission was denied.",
                 exception
             )
         }
@@ -151,10 +191,24 @@ object NotificationHelper {
         availableAt: String?,
     ) = NotificationPendingIntents.mainActivity(
         context,
-        SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE + notificationSuffix(connectionId),
+        secondChatNotificationId(connectionId),
         TYPE_SECOND_CHAT_REMINDER,
         connectionId,
         null,
+        availableAt,
+    )
+
+    private fun secondChatStartedPendingIntent(
+        context: Context,
+        connectionId: String?,
+        matchId: String?,
+        availableAt: String?,
+    ) = NotificationPendingIntents.mainActivity(
+        context,
+        secondChatNotificationId(connectionId),
+        TYPE_SECOND_CHAT_STARTED,
+        connectionId,
+        matchId,
         availableAt,
     )
 
@@ -181,8 +235,31 @@ object NotificationHelper {
                 "Ya pod\u00e9s coordinar horarios en Reals."
     }
 
-    private fun notificationSuffix(matchId: String?): Int =
+    internal fun secondChatStartedNotificationCopy(): Pair<String, String> =
+        "Tu segunda charla ya empezó" to "Entrá ahora a Reals para sumarte."
+
+    internal fun secondChatNotificationTag(connectionId: String?): String? =
+        normalizedNotificationTargetId(connectionId)?.let { "second-chat-$it" }
+
+    internal fun secondChatNotificationDisplayIdentity(connectionId: String?): NotificationDisplayIdentity {
+        val tag = secondChatNotificationTag(connectionId)
+        return if (tag != null) {
+            NotificationDisplayIdentity(tag = tag, id = 0)
+        } else {
+            NotificationDisplayIdentity(tag = null, id = secondChatNotificationId(connectionId))
+        }
+    }
+
+    internal fun secondChatNotificationId(connectionId: String?): Int =
+        SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE + notificationSuffix(
+            normalizedNotificationTargetId(connectionId),
+        )
+
+    internal fun notificationSuffix(matchId: String?): Int =
         matchId?.hashCode()?.floorMod(9000) ?: 0
+
+    private fun normalizedNotificationTargetId(value: String?): String? =
+        value?.trim()?.takeIf { it.isNotEmpty() }
 
     private fun Int.floorMod(modulus: Int): Int = ((this % modulus) + modulus) % modulus
 
@@ -194,3 +271,8 @@ object NotificationHelper {
         ) == PackageManager.PERMISSION_GRANTED
     }
 }
+
+internal data class NotificationDisplayIdentity(
+    val tag: String?,
+    val id: Int,
+)

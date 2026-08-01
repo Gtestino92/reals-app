@@ -75,6 +75,8 @@ import com.reals.app.domain.usecase.SubmitVisualDecisionUseCase
 import com.reals.app.domain.usecase.TimeoutChatExitRequestUseCase
 import com.reals.app.domain.usecase.UpdateMatchFiltersUseCase
 import com.reals.app.domain.usecase.UpdateProfileUseCase
+import com.reals.app.foreground.AtomicForegroundDestinationTracker
+import com.reals.app.notifications.NotificationPresentationPolicy
 import com.reals.app.notifications.registration.PushTokenRegistrationService
 import com.reals.app.ui.root.LocalFirebaseEmailVerificationCoordinator
 import kotlinx.serialization.json.Json
@@ -95,6 +97,8 @@ class AppContainer(context: Context) {
     private val api = RealsApiClient.create(BuildConfig.REALS_BASE_URL, json, appCheckTokenProvider)
 
     val authRepository = FirebaseAuthRepository(appContext)
+    val foregroundDestinationTracker = AtomicForegroundDestinationTracker()
+    val notificationPresentationPolicy = NotificationPresentationPolicy()
     private val meRepository = MeRepository(api, tokenProvider, apiExecutor)
     private val profileRepository = ProfileRepository(appContext, api, tokenProvider, apiExecutor)
     private val matchmakingRepository = MatchmakingRepository(api, tokenProvider, apiExecutor)

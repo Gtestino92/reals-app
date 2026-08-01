@@ -11,12 +11,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.reals.app.notifications.PushNotificationContract.EXTRA_PUSH_TYPE
 import com.reals.app.notifications.PushNotificationContract.EXTRA_REFRESH_HOME
-import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_AVAILABLE
-import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_CONFIRMED
-import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_PROPOSALS_RECEIVED
-import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_REMINDER
-import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_AVAILABLE
-import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_REMINDER
+import com.reals.app.notifications.PushNotificationOpenContract
 import com.reals.app.ui.root.RealsApp
 import com.reals.app.ui.theme.RealsAppTheme
 
@@ -49,17 +44,19 @@ class MainActivity : ComponentActivity() {
     private fun handleNotificationIntent(intent: Intent?) {
         if (intent == null) return
 
-        val pushType = intent.getStringExtra(EXTRA_PUSH_TYPE)
+        val pushType = PushNotificationOpenContract.resolveType(
+            internalPushType = intent.getStringExtra(EXTRA_PUSH_TYPE),
+            rawFcmType = intent.getStringExtra(RAW_FCM_TYPE),
+        )
         val shouldRefreshHome = intent.getBooleanExtra(EXTRA_REFRESH_HOME, false) ||
-            pushType == TYPE_VISUAL_REVIEW_AVAILABLE ||
-            pushType == TYPE_VISUAL_REVIEW_REMINDER ||
-            pushType == TYPE_SCHEDULING_AVAILABLE ||
-            pushType == TYPE_SCHEDULING_PROPOSALS_RECEIVED ||
-            pushType == TYPE_SCHEDULING_CONFIRMED ||
-            pushType == TYPE_SECOND_CHAT_REMINDER
+            PushNotificationOpenContract.shouldHandleExternalOpen(pushType)
         if (!shouldRefreshHome) return
 
         notificationOpenType = pushType
         notificationOpenNonce = System.currentTimeMillis()
+    }
+
+    private companion object {
+        const val RAW_FCM_TYPE = "type"
     }
 }

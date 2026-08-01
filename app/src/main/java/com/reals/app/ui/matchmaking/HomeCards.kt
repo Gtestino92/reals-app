@@ -59,8 +59,9 @@ internal fun PendingActionsCard(
     onOpenVisualApproval: (matchId: String) -> Unit,
 ) {
     if (actions.isEmpty()) return
-    val sections = homeActionSections(actions)
-    val visualNowMillis = rememberVisualReviewNowMillis(sections.visualReviews.isNotEmpty())
+    val visualNowMillis = rememberVisualReviewNowMillis(
+        actions.any { it is HomeActionItem.VisualReview },
+    )
 
     Card(
         modifier = Modifier
@@ -75,32 +76,26 @@ internal fun PendingActionsCard(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             HomeCollapsibleSection(
-                title = "Chats iniciales",
-                count = sections.firstChats.size,
-                visible = sections.firstChats.isNotEmpty(),
-                initiallyExpanded = false,
+                title = "Acciones pendientes",
+                count = actions.size,
+                visible = actions.isNotEmpty(),
+                initiallyExpanded = initiallyExpandedSection == HomeSectionKey.PendingActions,
             ) {
-                sections.firstChats.forEach { action ->
-                    FirstChatItem(
-                        action = action,
-                        busy = busy,
-                        onOpenFirstChat = onOpenFirstChat,
-                    )
-                }
-            }
-            HomeCollapsibleSection(
-                title = "Revisión visual",
-                count = sections.visualReviews.size,
-                visible = sections.visualReviews.isNotEmpty(),
-                initiallyExpanded = initiallyExpandedSection == HomeSectionKey.VisualReview,
-            ) {
-                sections.visualReviews.forEach { action ->
-                    VisualApprovalItem(
-                        action = action,
-                        busy = busy,
-                        nowMillis = visualNowMillis,
-                        onOpenVisualApproval = onOpenVisualApproval,
-                    )
+                actions.forEach { action ->
+                    when (action) {
+                        is HomeActionItem.FirstChat -> FirstChatItem(
+                            action = action,
+                            busy = busy,
+                            onOpenFirstChat = onOpenFirstChat,
+                        )
+
+                        is HomeActionItem.VisualReview -> VisualApprovalItem(
+                            action = action,
+                            busy = busy,
+                            nowMillis = visualNowMillis,
+                            onOpenVisualApproval = onOpenVisualApproval,
+                        )
+                    }
                 }
             }
         }
@@ -119,7 +114,6 @@ internal fun NextStepCard(
     onDismissSecondChat: (connectionId: String) -> Unit,
 ) {
     if (nextSteps.isEmpty()) return
-    val sections = homeNextStepSections(nextSteps)
 
     Card(
         modifier = Modifier
@@ -134,48 +128,12 @@ internal fun NextStepCard(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             HomeCollapsibleSection(
-                title = "Coordinación",
-                count = sections.schedulingItems.size,
-                visible = sections.schedulingItems.isNotEmpty(),
-                initiallyExpanded = initiallyExpandedSection == HomeSectionKey.Scheduling,
+                title = "Próximos pasos",
+                count = nextSteps.size,
+                visible = nextSteps.isNotEmpty(),
+                initiallyExpanded = initiallyExpandedSection == HomeSectionKey.NextSteps,
             ) {
-                sections.schedulingItems.forEach { nextStep ->
-                    NextStepItem(
-                        item = nextStep,
-                        busy = busy,
-                        nowMillis = nowMillis,
-                        onOpenScheduling = onOpenScheduling,
-                        onOpenSecondChat = onOpenSecondChat,
-                        onOpenPartnerProfile = onOpenPartnerProfile,
-                        onDismissSecondChat = onDismissSecondChat,
-                    )
-                }
-            }
-            HomeCollapsibleSection(
-                title = "Segundos chats",
-                count = sections.secondChatItems.size,
-                visible = sections.secondChatItems.isNotEmpty(),
-                initiallyExpanded = initiallyExpandedSection == HomeSectionKey.SecondChat,
-            ) {
-                sections.secondChatItems.forEach { nextStep ->
-                    NextStepItem(
-                        item = nextStep,
-                        busy = busy,
-                        nowMillis = nowMillis,
-                        onOpenScheduling = onOpenScheduling,
-                        onOpenSecondChat = onOpenSecondChat,
-                        onOpenPartnerProfile = onOpenPartnerProfile,
-                        onDismissSecondChat = onDismissSecondChat,
-                    )
-                }
-            }
-            HomeCollapsibleSection(
-                title = "Otros estados",
-                count = sections.unknownItems.size,
-                visible = sections.unknownItems.isNotEmpty(),
-                initiallyExpanded = false,
-            ) {
-                sections.unknownItems.forEach { nextStep ->
+                nextSteps.forEach { nextStep ->
                     NextStepItem(
                         item = nextStep,
                         busy = busy,
@@ -191,53 +149,18 @@ internal fun NextStepCard(
     }
 }
 
-internal data class HomeActionSections(
-    val firstChats: List<HomeActionItem.FirstChat>,
-    val visualReviews: List<HomeActionItem.VisualReview>,
-)
-
-internal fun homeActionSections(actions: List<HomeActionItem>): HomeActionSections =
-    HomeActionSections(
-        firstChats = actions.filterIsInstance<HomeActionItem.FirstChat>(),
-        visualReviews = actions.filterIsInstance<HomeActionItem.VisualReview>(),
-    )
-
-internal data class HomeNextStepSections(
-    val schedulingItems: List<HomeNextStepItem.Scheduling>,
-    val secondChatItems: List<HomeNextStepItem>,
-    val unknownItems: List<HomeNextStepItem.Unknown>,
-)
-
-internal fun homeNextStepSections(nextSteps: List<HomeNextStepItem>): HomeNextStepSections =
-    HomeNextStepSections(
-        schedulingItems = nextSteps.filterIsInstance<HomeNextStepItem.Scheduling>(),
-        secondChatItems = nextSteps.filter {
-            it is HomeNextStepItem.SecondChatScheduled ||
-                it is HomeNextStepItem.SecondChatAvailable ||
-                it is HomeNextStepItem.SecondChatReadOnly
-        },
-        unknownItems = nextSteps.filterIsInstance<HomeNextStepItem.Unknown>(),
-    )
-
 internal enum class HomeSectionKey {
-    VisualReview,
-    Scheduling,
-    SecondChat,
+    PendingActions,
+    NextSteps,
 }
 
 internal fun initiallyExpandedHomeSection(
     actions: List<HomeActionItem>,
     nextSteps: List<HomeNextStepItem>,
 ): HomeSectionKey? {
-    val actionSections = homeActionSections(actions)
-    val nextStepSections = homeNextStepSections(nextSteps)
     return when {
-        actionSections.visualReviews.isNotEmpty() ->
-            HomeSectionKey.VisualReview.takeIf { actionSections.visualReviews.size == 1 }
-        nextStepSections.schedulingItems.isNotEmpty() ->
-            HomeSectionKey.Scheduling.takeIf { nextStepSections.schedulingItems.size == 1 }
-        nextStepSections.secondChatItems.isNotEmpty() ->
-            HomeSectionKey.SecondChat.takeIf { nextStepSections.secondChatItems.size == 1 }
+        actions.isNotEmpty() -> HomeSectionKey.PendingActions.takeIf { actions.size == 1 }
+        nextSteps.isNotEmpty() -> HomeSectionKey.NextSteps.takeIf { nextSteps.size == 1 }
         else -> null
     }
 }
