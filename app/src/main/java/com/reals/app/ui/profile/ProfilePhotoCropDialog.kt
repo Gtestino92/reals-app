@@ -19,10 +19,13 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -46,6 +49,8 @@ import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -128,13 +133,72 @@ internal fun ProfilePhotoCropDialog(
             dismissOnBackPress = false,
         ),
     ) {
+        ProfilePhotoCropDialogContent(
+            bitmap = bitmap,
+            transform = transform,
+            loading = loading,
+            processing = processing,
+            errorText = errorText,
+            onCancel = onCancel,
+            onReset = { transform = transform?.reset() },
+            onConfirm = { exportRequest = transform?.sourceCropRect() },
+            onViewportSizeChanged = { newSize ->
+                viewportSize = newSize
+                val currentBitmap = bitmap
+                if (currentBitmap != null && newSize.width > 0 && newSize.height > 0) {
+                    transform = transform
+                        ?.resized(newSize.width.toFloat(), newSize.height.toFloat())
+                        ?: centeredCropTransform(
+                            sourceWidth = currentBitmap.width,
+                            sourceHeight = currentBitmap.height,
+                            viewportWidth = newSize.width.toFloat(),
+                            viewportHeight = newSize.height.toFloat(),
+                        )
+                }
+            },
+            onGestureTransform = { pan, zoom ->
+                transform = transform
+                    ?.zoomBy(zoom)
+                    ?.panBy(pan.x, pan.y)
+            },
+        )
+    }
+}
+
+@Composable
+internal fun ProfilePhotoCropDialogContent(
+    bitmap: Bitmap?,
+    transform: ProfilePhotoCropTransform?,
+    loading: Boolean,
+    processing: Boolean,
+    errorText: String?,
+    onCancel: () -> Unit,
+    onReset: () -> Unit,
+    onConfirm: () -> Unit,
+    onViewportSizeChanged: (IntSize) -> Unit,
+    onGestureTransform: (pan: Offset, zoom: Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .safeDrawingPadding(),
+    ) {
+        val density = LocalDensity.current
+        val layoutSpec = remember(maxWidth, maxHeight, density.fontScale, errorText) {
+            profilePhotoCropLayoutSpec(
+                maxWidth = maxWidth,
+                maxHeight = maxHeight,
+                fontScale = density.fontScale,
+                hasError = errorText != null,
+            )
+        }
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black)
-                .safeDrawingPadding()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(layoutSpec.outerPadding),
+            verticalArrangement = Arrangement.spacedBy(layoutSpec.verticalSpacing),
         ) {
             Text(
                 text = "Ajustar foto",
@@ -146,71 +210,18 @@ internal fun ProfilePhotoCropDialog(
                 color = Color.White.copy(alpha = 0.78f),
                 style = MaterialTheme.typography.bodyMedium,
             )
-            BoxWithConstraints(
+            CropViewport(
+                bitmap = bitmap,
+                transform = transform,
+                loading = loading,
+                processing = processing,
+                minViewportHeight = layoutSpec.minViewportHeight,
+                onViewportSizeChanged = onViewportSizeChanged,
+                onGestureTransform = onGestureTransform,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                contentAlignment = Alignment.Center,
-            ) {
-                val maxViewportWidth = maxWidth
-                val maxViewportHeight = maxHeight
-                val viewportModifier = if (maxViewportWidth / ProfilePhotoPresentationAspectRatio <= maxViewportHeight) {
-                    Modifier.fillMaxWidth()
-                } else {
-                    Modifier.height(maxViewportHeight)
-                }
-                Box(
-                    modifier = viewportModifier
-                        .aspectRatio(ProfilePhotoPresentationAspectRatio)
-                        .clipToBounds()
-                        .background(Color.DarkGray)
-                        .border(2.dp, Color.White.copy(alpha = 0.86f))
-                        .onSizeChanged { newSize ->
-                            viewportSize = newSize
-                            val currentBitmap = bitmap
-                            if (currentBitmap != null && newSize.width > 0 && newSize.height > 0) {
-                                transform = transform
-                                    ?.resized(newSize.width.toFloat(), newSize.height.toFloat())
-                                    ?: centeredCropTransform(
-                                        sourceWidth = currentBitmap.width,
-                                        sourceHeight = currentBitmap.height,
-                                        viewportWidth = newSize.width.toFloat(),
-                                        viewportHeight = newSize.height.toFloat(),
-                                    )
-                            }
-                        }
-                        .pointerInput(bitmap, processing) {
-                            if (bitmap == null || processing) return@pointerInput
-                            awaitEachGesture {
-                                while (true) {
-                                    val event = awaitPointerEvent()
-                                    val pressedPointers = event.changes.count { it.pressed }
-                                    if (pressedPointers == 0) break
-                                    val pan = event.calculatePan()
-                                    val zoom = if (pressedPointers >= 2) event.calculateZoom() else 1f
-                                    if (pan != Offset.Zero || zoom != 1f) {
-                                        transform = transform
-                                            ?.zoomBy(zoom)
-                                            ?.panBy(pan.x, pan.y)
-                                        event.changes.forEach { change ->
-                                            if (change.positionChanged()) change.consume()
-                                        }
-                                    }
-                                }
-                            }
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    val currentBitmap = bitmap
-                    val currentTransform = transform
-                    if (currentBitmap != null && currentTransform != null) {
-                        CropPreviewImage(currentBitmap, currentTransform)
-                    }
-                    if (loading || processing) {
-                        CircularProgressIndicator(color = Color.White)
-                    }
-                }
-            }
+            )
             errorText?.let {
                 Text(
                     text = it,
@@ -218,31 +229,212 @@ internal fun ProfilePhotoCropDialog(
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
+            ProfilePhotoCropActions(
+                actionLayout = layoutSpec.actionLayout,
+                processing = processing,
+                canReset = !processing && bitmap != null,
+                canConfirm = !processing && !loading && bitmap != null && transform != null,
+                onCancel = onCancel,
+                onReset = onReset,
+                onConfirm = onConfirm,
+            )
+            Spacer(Modifier.height(layoutSpec.bottomSpacerHeight))
+        }
+    }
+}
+
+@Composable
+private fun CropViewport(
+    bitmap: Bitmap?,
+    transform: ProfilePhotoCropTransform?,
+    loading: Boolean,
+    processing: Boolean,
+    minViewportHeight: Dp,
+    onViewportSizeChanged: (IntSize) -> Unit,
+    onGestureTransform: (pan: Offset, zoom: Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    BoxWithConstraints(
+        modifier = modifier,
+        contentAlignment = Alignment.Center,
+    ) {
+        val maxViewportWidth = maxWidth
+        val maxViewportHeight = maxHeight
+        val viewportModifier = if (maxViewportWidth / ProfilePhotoPresentationAspectRatio <= maxViewportHeight) {
+            Modifier.fillMaxWidth()
+        } else {
+            Modifier.height(maxViewportHeight)
+        }
+        Box(
+            modifier = viewportModifier
+                .heightIn(min = minOf(minViewportHeight, maxViewportHeight))
+                .aspectRatio(ProfilePhotoPresentationAspectRatio)
+                .testTag(ProfilePhotoCropViewportTag)
+                .clipToBounds()
+                .background(Color.DarkGray)
+                .border(2.dp, Color.White.copy(alpha = 0.86f))
+                .onSizeChanged(onViewportSizeChanged)
+                .pointerInput(bitmap, processing) {
+                    if (bitmap == null || processing) return@pointerInput
+                    awaitEachGesture {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val pressedPointers = event.changes.count { it.pressed }
+                            if (pressedPointers == 0) break
+                            val pan = event.calculatePan()
+                            val zoom = if (pressedPointers >= 2) event.calculateZoom() else 1f
+                            if (pan != Offset.Zero || zoom != 1f) {
+                                onGestureTransform(pan, zoom)
+                                event.changes.forEach { change ->
+                                    if (change.positionChanged()) change.consume()
+                                }
+                            }
+                        }
+                    }
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            if (bitmap != null && transform != null) {
+                CropPreviewImage(bitmap, transform)
+            }
+            if (loading || processing) {
+                CircularProgressIndicator(color = Color.White)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfilePhotoCropActions(
+    actionLayout: ProfilePhotoCropActionLayout,
+    processing: Boolean,
+    canReset: Boolean,
+    canConfirm: Boolean,
+    onCancel: () -> Unit,
+    onReset: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    when (actionLayout) {
+        ProfilePhotoCropActionLayout.Normal -> {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(ProfilePhotoCropActionsNormalTag),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TextButton(onClick = onCancel, enabled = !processing) {
-                    Text("Cancelar", color = Color.White)
-                }
-                OutlinedButton(
-                    onClick = { transform = transform?.reset() },
-                    enabled = !processing && bitmap != null,
+                CancelAction(onCancel = onCancel, enabled = !processing)
+                ResetAction(onReset = onReset, enabled = canReset)
+                ConfirmAction(onConfirm = onConfirm, enabled = canConfirm)
+            }
+        }
+
+        ProfilePhotoCropActionLayout.ConstrainedRow -> {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(ProfilePhotoCropActionsConstrainedTag),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ConfirmAction(
+                    onConfirm = onConfirm,
+                    enabled = canConfirm,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Restablecer")
-                }
-                OutlinedButton(
-                    onClick = {
-                        exportRequest = transform?.sourceCropRect()
-                    },
-                    enabled = !processing && !loading && bitmap != null && transform != null,
-                ) {
-                    Text("Usar foto")
+                    CancelAction(
+                        onCancel = onCancel,
+                        enabled = !processing,
+                        modifier = Modifier.weight(1f),
+                    )
+                    ResetAction(
+                        onReset = onReset,
+                        enabled = canReset,
+                        modifier = Modifier.weight(1f),
+                    )
                 }
             }
-            Spacer(Modifier.height(2.dp))
         }
+
+        ProfilePhotoCropActionLayout.ConstrainedStacked -> {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(ProfilePhotoCropActionsConstrainedTag),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ConfirmAction(
+                    onConfirm = onConfirm,
+                    enabled = canConfirm,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                CancelAction(
+                    onCancel = onCancel,
+                    enabled = !processing,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                ResetAction(
+                    onReset = onReset,
+                    enabled = canReset,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CancelAction(
+    onCancel: () -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    TextButton(
+        onClick = onCancel,
+        enabled = enabled,
+        modifier = modifier
+            .widthIn(min = ProfilePhotoCropSecondaryActionMinWidth)
+            .testTag(ProfilePhotoCropCancelActionTag),
+    ) {
+        Text("Cancelar", color = Color.White)
+    }
+}
+
+@Composable
+private fun ResetAction(
+    onReset: () -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    OutlinedButton(
+        onClick = onReset,
+        enabled = enabled,
+        modifier = modifier
+            .widthIn(min = ProfilePhotoCropSecondaryActionMinWidth)
+            .testTag(ProfilePhotoCropResetActionTag),
+    ) {
+        Text("Restablecer")
+    }
+}
+
+@Composable
+private fun ConfirmAction(
+    onConfirm: () -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    OutlinedButton(
+        onClick = onConfirm,
+        enabled = enabled,
+        modifier = modifier
+            .sizeIn(minWidth = ProfilePhotoCropPrimaryActionMinWidth)
+            .testTag(ProfilePhotoCropConfirmActionTag),
+    ) {
+        Text("Usar foto")
     }
 }
 
@@ -264,3 +456,63 @@ private fun CropPreviewImage(bitmap: Bitmap, transform: ProfilePhotoCropTransfor
             },
     )
 }
+
+internal enum class ProfilePhotoCropActionLayout {
+    Normal,
+    ConstrainedRow,
+    ConstrainedStacked,
+}
+
+internal data class ProfilePhotoCropLayoutSpec(
+    val actionLayout: ProfilePhotoCropActionLayout,
+    val outerPadding: Dp,
+    val verticalSpacing: Dp,
+    val minViewportHeight: Dp,
+    val bottomSpacerHeight: Dp,
+)
+
+internal fun profilePhotoCropLayoutSpec(
+    maxWidth: Dp,
+    maxHeight: Dp,
+    fontScale: Float,
+    hasError: Boolean,
+): ProfilePhotoCropLayoutSpec {
+    val compactHeight = maxHeight < 560.dp
+    val narrowWidth = maxWidth < 340.dp
+    val largeText = fontScale >= 1.45f
+    val errorConsumesVerticalSpace = hasError && maxHeight < 640.dp
+    val constrained = narrowWidth || compactHeight || largeText || errorConsumesVerticalSpace
+    val stackSecondaryActions = maxWidth < 340.dp || fontScale >= 1.9f || maxHeight < 500.dp
+    return if (!constrained) {
+        ProfilePhotoCropLayoutSpec(
+            actionLayout = ProfilePhotoCropActionLayout.Normal,
+            outerPadding = 20.dp,
+            verticalSpacing = 16.dp,
+            minViewportHeight = 240.dp,
+            bottomSpacerHeight = 2.dp,
+        )
+    } else {
+        ProfilePhotoCropLayoutSpec(
+            actionLayout = if (stackSecondaryActions) {
+                ProfilePhotoCropActionLayout.ConstrainedStacked
+            } else {
+                ProfilePhotoCropActionLayout.ConstrainedRow
+            },
+            outerPadding = if (maxHeight < 500.dp || maxWidth < 340.dp) 12.dp else 16.dp,
+            verticalSpacing = if (maxHeight < 500.dp) 8.dp else 10.dp,
+            minViewportHeight = if (maxHeight < 500.dp) 128.dp else 160.dp,
+            bottomSpacerHeight = 0.dp,
+        )
+    }
+}
+
+internal const val ProfilePhotoCropRootTag = "profile_photo_crop_root"
+internal const val ProfilePhotoCropViewportTag = "profile_photo_crop_viewport"
+internal const val ProfilePhotoCropActionsNormalTag = "profile_photo_crop_actions_normal"
+internal const val ProfilePhotoCropActionsConstrainedTag = "profile_photo_crop_actions_constrained"
+internal const val ProfilePhotoCropCancelActionTag = "profile_photo_crop_cancel"
+internal const val ProfilePhotoCropResetActionTag = "profile_photo_crop_reset"
+internal const val ProfilePhotoCropConfirmActionTag = "profile_photo_crop_confirm"
+
+private val ProfilePhotoCropPrimaryActionMinWidth = 112.dp
+private val ProfilePhotoCropSecondaryActionMinWidth = 88.dp
