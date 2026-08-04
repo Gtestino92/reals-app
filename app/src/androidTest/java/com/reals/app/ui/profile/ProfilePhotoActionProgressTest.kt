@@ -126,6 +126,41 @@ class ProfilePhotoActionProgressTest {
     }
 
     @Test
+    fun addProgressShowsLocalPreviewOnlyInTargetEmptySlot() {
+        val action = ProfilePhotoActionPresentation(ProfilePhotoActionKind.Add, position = 4)
+        setProgressContent(
+            loading = true,
+            action = action,
+            previewState = startProfilePhotoPreview(action, "file:///tmp/crop-add.jpg", "generation-add", 10L, null),
+        )
+
+        composeRule.onNodeWithTag(profilePhotoLocalPreviewTag(4), useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithTag(profilePhotoActionTargetIndicatorTag(4)).assertIsDisplayed()
+        ProfilePhotoGridPositions
+            .filterNot { it == 4 }
+            .forEach { position ->
+                composeRule.onAllNodesWithTag(profilePhotoLocalPreviewTag(position), useUnmergedTree = true)
+                    .assertCountEquals(0)
+            }
+        assertProgressCard(title = "Subiendo foto...")
+        composeRule.runOnIdle { assertEquals(emptyList<String>(), events) }
+    }
+
+    @Test
+    fun replaceProgressShowsLocalPreviewOverTargetPhoto() {
+        val action = ProfilePhotoActionPresentation(ProfilePhotoActionKind.Replace, position = 2, photoId = "photo-2")
+        setProgressContent(
+            loading = true,
+            action = action,
+            previewState = startProfilePhotoPreview(action, "file:///tmp/crop-replace.jpg", "generation-replace", 10L, "old-key"),
+        )
+
+        composeRule.onNodeWithTag(profilePhotoLocalPreviewTag(2), useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithTag(profilePhotoActionTargetIndicatorTag(2)).assertIsDisplayed()
+        composeRule.onNodeWithTag(profilePhotoReplaceTag(2)).assertIsNotEnabled()
+    }
+
+    @Test
     fun successFeedbackAppearsAfterLoadingCompletes() {
         setProgressContent(
             loading = false,
@@ -186,6 +221,7 @@ class ProfilePhotoActionProgressTest {
         fontScale: Float = 1f,
         loading: Boolean,
         action: ProfilePhotoActionPresentation?,
+        previewState: ProfilePhotoPreviewState = ProfilePhotoPreviewState.None,
         message: String? = null,
         error: ApiError? = null,
     ) {
@@ -206,6 +242,7 @@ class ProfilePhotoActionProgressTest {
                                 photos = testPhotos,
                                 busy = loading,
                                 pendingAction = action.takeIf { loading },
+                                previewState = previewState,
                                 onPickNewFile = { events += "add-$it" },
                                 onPickReplacementFile = { photoId, position ->
                                     events += "replace-$photoId-$position"

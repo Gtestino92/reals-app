@@ -21,7 +21,7 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 interface ProfilePhotoUploadPreprocessor {
-    suspend fun prepare(sourceUri: Uri): Result<PreparedProfilePhotoUpload>
+    suspend fun prepare(sourceUri: Uri?): Result<PreparedProfilePhotoUpload>
 }
 
 data class PreparedProfilePhotoUpload(
@@ -31,7 +31,14 @@ data class PreparedProfilePhotoUpload(
     val width: Int,
     val height: Int,
     val fileSizeBytes: Long,
+    val fileOwnership: PreparedUploadFileOwnership = PreparedUploadFileOwnership.RepositoryOwned,
+    val usedTrustedCropFastPath: Boolean = false,
 )
+
+enum class PreparedUploadFileOwnership {
+    RepositoryOwned,
+    CallerOwned,
+}
 
 enum class ProfilePhotoPreprocessingFailure {
     UndecodableSource,
@@ -50,10 +57,13 @@ class ProfilePhotoPreprocessor(
 ) : ProfilePhotoUploadPreprocessor {
     private val appContext = context.applicationContext
 
-    override suspend fun prepare(sourceUri: Uri): Result<PreparedProfilePhotoUpload> =
+    override suspend fun prepare(sourceUri: Uri?): Result<PreparedProfilePhotoUpload> =
         withContext(dispatcher) {
             var outputFile: File? = null
             try {
+                if (sourceUri == null) {
+                    throw ProfilePhotoPreprocessingException(ProfilePhotoPreprocessingFailure.UndecodableSource)
+                }
                 val bounds = decodeBounds(sourceUri)
                 if (bounds.width.toLong() * bounds.height.toLong() > MaxSourcePixels) {
                     throw ProfilePhotoPreprocessingException(ProfilePhotoPreprocessingFailure.SourceTooLarge)
@@ -220,6 +230,7 @@ internal data class ImageBounds(
 )
 
 internal const val PreparedUploadMimeType: String = "image/jpeg"
+internal const val MaxPreparedUploadFileSizeBytes: Long = 5L * 1024L * 1024L
 internal const val MaxOutputDimensionPx: Int = 2048
 internal const val PreparedUploadJpegQuality: Int = 88
 internal const val ProfilePhotoPreparedUploadCacheDirectoryName: String = "profile-photo-prepared-uploads"

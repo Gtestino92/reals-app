@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -47,9 +48,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -75,8 +78,14 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import coil3.SingletonImageLoader
 import coil3.compose.AsyncImage
+import coil3.memory.MemoryCache
+import coil3.request.CachePolicy
 import coil3.request.ImageRequest
+import com.reals.app.core.media.ProfilePhotoPipelineTiming
+import com.reals.app.core.media.ProfilePhotoTimingFields
+import com.reals.app.core.media.deleteOwnedProfilePhotoCropFile
 import com.reals.app.core.media.deleteStaleProfilePhotoCropFiles
 import com.reals.app.core.media.profilePhotoCropCacheDirectory
 import com.reals.app.core.network.ApiError
@@ -96,7 +105,9 @@ import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.UpdateProfileInput
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
@@ -1040,6 +1051,10 @@ private fun PhotoManagerActions(
     var photoActionKindName by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
     var photoActionPosition by rememberSaveable(profile.id) { mutableStateOf<Int?>(null) }
     var photoActionPhotoId by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
+    var previewGenerationCounter by rememberSaveable(profile.id) { mutableIntStateOf(0) }
+    var previewState by rememberSaveable(profile.id, stateSaver = ProfilePhotoPreviewStateSaver) {
+        mutableStateOf<ProfilePhotoPreviewState>(ProfilePhotoPreviewState.None)
+    }
     val pendingTarget = remember(pendingTargetKind, pendingTargetPosition, pendingTargetPhotoId) {
         profilePhotoSelectionTarget(pendingTargetKind, pendingTargetPosition, pendingTargetPhotoId)
     }
@@ -1047,6 +1062,7 @@ private fun PhotoManagerActions(
         profilePhotoActionPresentation(photoActionKindName, photoActionPosition, photoActionPhotoId)
     }
     val visiblePhotoAction = pendingPhotoAction.takeIf { photoActionLoading }
+    val imageLoader = remember(context) { SingletonImageLoader.get(context) }
     val cropRequest = remember(cropSourceUriString, pendingTarget) {
         val sourceUri = cropSourceUriString?.let(Uri::parse)
         val target = pendingTarget
@@ -1069,6 +1085,58 @@ private fun PhotoManagerActions(
             maxAgeMillis = 24.hours.inWholeMilliseconds,
         )
     }
+    LaunchedEffect(photoActionLoading, photoActionMessage, photoActionError, photos) {
+        if (photoActionLoading) return@LaunchedEffect
+        when {
+            photoActionError != null -> {
+                val previewToDelete = previewState.preview
+                previewToDelete?.let {
+                    ProfilePhotoPipelineTiming.log(
+                        ProfilePhotoTimingFields(
+                            phase = "crop_confirm_to_upload_response",
+                            durationMs = ProfilePhotoPipelineTiming.nowMillis() - it.cropConfirmedAtElapsedMillis,
+                        ),
+                    )
+                }
+                previewState = previewState.onUploadFailed()
+                previewToDelete?.let { deleteOwnedProfilePhotoCropFile(Uri.parse(it.uriString), profilePhotoCropCacheDirectory(context)) }
+            }
+            photoActionMessage != null -> {
+                val uploading = previewState as? ProfilePhotoPreviewState.Uploading ?: return@LaunchedEffect
+                val uploadResponseAt = ProfilePhotoPipelineTiming.nowMillis()
+                ProfilePhotoPipelineTiming.log(
+                    ProfilePhotoTimingFields(
+                        phase = "crop_confirm_to_upload_response",
+                        durationMs = uploadResponseAt - uploading.preview.cropConfirmedAtElapsedMillis,
+                    ),
+                )
+                val awaiting = uploading.onUploadSucceeded(
+                    photos = photos,
+                    uploadResponseAtElapsedMillis = uploadResponseAt,
+                ) as? ProfilePhotoPreviewState.AwaitingRemote ?: run {
+                    previewState = ProfilePhotoPreviewState.None
+                    deleteOwnedProfilePhotoCropFile(Uri.parse(uploading.preview.uriString), profilePhotoCropCacheDirectory(context))
+                    return@LaunchedEffect
+                }
+                when (
+                    val decision = profilePhotoReplacementCacheRefreshDecision(
+                        action = awaiting.preview.action,
+                        oldCanonicalCacheKey = awaiting.preview.oldCanonicalCacheKey,
+                        newUrl = awaiting.remoteUrl,
+                    )
+                ) {
+                    is ProfilePhotoCacheRefreshDecision.Evict -> {
+                        imageLoader.memoryCache?.remove(MemoryCache.Key(decision.canonicalCacheKey))
+                        withContext(Dispatchers.IO) {
+                            imageLoader.diskCache?.remove(decision.canonicalCacheKey)
+                        }
+                    }
+                    ProfilePhotoCacheRefreshDecision.None -> Unit
+                }
+                previewState = awaiting
+            }
+        }
+    }
     LaunchedEffect(photoActionLoading, photoActionMessage, photoActionError) {
         if (!photoActionLoading && (photoActionMessage != null || photoActionError != null)) {
             pendingTargetKind = null
@@ -1078,6 +1146,18 @@ private fun PhotoManagerActions(
             photoActionKindName = null
             photoActionPosition = null
             photoActionPhotoId = null
+        }
+    }
+    val latestPreviewState by rememberUpdatedState(previewState)
+    DisposableEffect(Unit) {
+        onDispose {
+            val currentPreview = latestPreviewState
+            if (currentPreview is ProfilePhotoPreviewState.AwaitingRemote) {
+                deleteOwnedProfilePhotoCropFile(
+                    Uri.parse(currentPreview.preview.uriString),
+                    profilePhotoCropCacheDirectory(context),
+                )
+            }
         }
     }
 
@@ -1108,6 +1188,26 @@ private fun PhotoManagerActions(
                 photos = photos,
                 busy = busy,
                 pendingAction = visiblePhotoAction,
+                previewState = previewState,
+                imageLoader = imageLoader,
+                onRemotePreviewDisplayed = { generation ->
+                    val awaiting = previewState as? ProfilePhotoPreviewState.AwaitingRemote
+                    if (awaiting?.preview?.generation == generation) {
+                        ProfilePhotoPipelineTiming.log(
+                            ProfilePhotoTimingFields(
+                                phase = "remote_handoff",
+                                durationMs = ProfilePhotoPipelineTiming.nowMillis() -
+                                    awaiting.uploadResponseAtElapsedMillis,
+                            ),
+                        )
+                        val previewToDelete = awaiting.preview
+                        previewState = previewState.onRemoteSucceeded(generation)
+                        deleteOwnedProfilePhotoCropFile(
+                            Uri.parse(previewToDelete.uriString),
+                            profilePhotoCropCacheDirectory(context),
+                        )
+                    }
+                },
                 onPickNewFile = { position ->
                     localError = null
                     pendingTargetKind = ProfilePhotoAddTargetKind
@@ -1148,6 +1248,24 @@ private fun PhotoManagerActions(
                     },
                     onCropped = { croppedUri ->
                         val action = request.target.toProfilePhotoActionPresentation()
+                        previewState.preview?.let {
+                            deleteOwnedProfilePhotoCropFile(Uri.parse(it.uriString), profilePhotoCropCacheDirectory(context))
+                        }
+                        previewGenerationCounter += 1
+                        val oldCanonicalCacheKey = when (request.target) {
+                            is ProfilePhotoSelectionTarget.Add -> null
+                            is ProfilePhotoSelectionTarget.Replace -> photos
+                                .firstOrNull { it.id == request.target.photoId || it.position == request.target.position }
+                                ?.url
+                                ?.stableProfilePhotoCacheKey()
+                        }
+                        previewState = startProfilePhotoPreview(
+                            action = action,
+                            uriString = croppedUri.toString(),
+                            generation = "local-$previewGenerationCounter",
+                            cropConfirmedAtElapsedMillis = ProfilePhotoPipelineTiming.nowMillis(),
+                            oldCanonicalCacheKey = oldCanonicalCacheKey,
+                        )
                         photoActionKindName = action.kind.name
                         photoActionPosition = action.position
                         photoActionPhotoId = action.photoId
@@ -1338,11 +1456,15 @@ internal fun PhotoGrid(
     photos: List<ProfilePhoto>,
     busy: Boolean,
     pendingAction: ProfilePhotoActionPresentation? = null,
+    previewState: ProfilePhotoPreviewState = ProfilePhotoPreviewState.None,
+    imageLoader: coil3.ImageLoader? = null,
+    onRemotePreviewDisplayed: (generation: String) -> Unit = {},
     onPickNewFile: (position: Int) -> Unit,
     onPickReplacementFile: (photoId: String, position: Int) -> Unit,
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
     onMovePhoto: (photoId: String, targetPosition: Int) -> Unit,
 ) {
+    val resolvedImageLoader = imageLoader ?: SingletonImageLoader.get(LocalContext.current)
     val photosByPosition = photos.profilePhotosByGridPosition()
     val slotBoundsByPosition = remember { mutableStateMapOf<Int, Rect>() }
     var gridBounds by remember { mutableStateOf<Rect?>(null) }
@@ -1370,6 +1492,9 @@ internal fun PhotoGrid(
                             photo = photosByPosition[position],
                             busy = busy,
                             pendingAction = pendingAction?.takeIf { it.targetsPosition(position) },
+                            pendingPreview = previewState.previewForPosition(position),
+                            awaitingRemote = photosByPosition[position]?.let { previewState.awaitingRemoteForPhoto(it.id) },
+                            imageLoader = resolvedImageLoader,
                             isDragTarget = currentDragState?.targetPosition == position,
                             isDraggingSource = currentDragState?.sourcePosition == position,
                             modifier = Modifier.weight(1f),
@@ -1379,6 +1504,7 @@ internal fun PhotoGrid(
                         onPickNewFile = onPickNewFile,
                         onPickReplacementFile = onPickReplacementFile,
                         onDeletePhoto = onDeletePhoto,
+                        onRemotePreviewDisplayed = onRemotePreviewDisplayed,
                         onDragStart = { photoId, sourcePosition, pointerPosition ->
                                 dragState = PhotoGridDragState(
                                     photoId = photoId,
@@ -1443,6 +1569,9 @@ internal fun PhotoSlot(
     photo: ProfilePhoto?,
     busy: Boolean,
     pendingAction: ProfilePhotoActionPresentation? = null,
+    pendingPreview: PendingProfilePhotoPreview? = null,
+    awaitingRemote: ProfilePhotoPreviewState.AwaitingRemote? = null,
+    imageLoader: coil3.ImageLoader? = null,
     isDragTarget: Boolean,
     isDraggingSource: Boolean,
     modifier: Modifier = Modifier,
@@ -1450,11 +1579,13 @@ internal fun PhotoSlot(
     onPickNewFile: (position: Int) -> Unit,
     onPickReplacementFile: (photoId: String, position: Int) -> Unit,
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
+    onRemotePreviewDisplayed: (generation: String) -> Unit,
     onDragStart: (photoId: String, sourcePosition: Int, pointerPosition: Offset) -> Unit,
     onDrag: (dragAmount: Offset) -> Unit,
     onDragEnd: () -> Unit,
     onDragCancel: () -> Unit,
 ) {
+    val resolvedImageLoader = imageLoader ?: SingletonImageLoader.get(LocalContext.current)
     var slotBounds by remember { mutableStateOf<Rect?>(null) }
     val positionedModifier = modifier
         .testTag(profilePhotoSlotTag(position))
@@ -1468,6 +1599,8 @@ internal fun PhotoSlot(
             position = position,
             busy = busy,
             pendingAction = pendingAction,
+            pendingPreview = pendingPreview,
+            imageLoader = resolvedImageLoader,
             isDragTarget = isDragTarget,
             modifier = positionedModifier,
             onPickNewFile = onPickNewFile,
@@ -1477,12 +1610,16 @@ internal fun PhotoSlot(
             photo = photo,
             busy = busy,
             pendingAction = pendingAction,
+            pendingPreview = pendingPreview,
+            awaitingRemote = awaitingRemote,
+            imageLoader = resolvedImageLoader,
             isDragTarget = isDragTarget,
             isDraggingSource = isDraggingSource,
             slotBounds = slotBounds,
             modifier = positionedModifier,
             onPickReplacementFile = onPickReplacementFile,
             onDeletePhoto = onDeletePhoto,
+            onRemotePreviewDisplayed = onRemotePreviewDisplayed,
             onDragStart = onDragStart,
             onDrag = onDrag,
             onDragEnd = onDragEnd,
@@ -1496,12 +1633,16 @@ internal fun FilledPhotoSlot(
     photo: ProfilePhoto,
     busy: Boolean,
     pendingAction: ProfilePhotoActionPresentation? = null,
+    pendingPreview: PendingProfilePhotoPreview? = null,
+    awaitingRemote: ProfilePhotoPreviewState.AwaitingRemote? = null,
+    imageLoader: coil3.ImageLoader,
     isDragTarget: Boolean,
     isDraggingSource: Boolean,
     slotBounds: Rect?,
     modifier: Modifier = Modifier,
     onPickReplacementFile: (photoId: String, position: Int) -> Unit,
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
+    onRemotePreviewDisplayed: (generation: String) -> Unit,
     onDragStart: (photoId: String, sourcePosition: Int, pointerPosition: Offset) -> Unit,
     onDrag: (dragAmount: Offset) -> Unit,
     onDragEnd: () -> Unit,
@@ -1563,10 +1704,23 @@ internal fun FilledPhotoSlot(
             ProfilePhotoImage(
                 photo = photo,
                 contentDescription = "Foto de perfil ${photo.position}",
+                imageLoader = imageLoader,
+                remoteHandoffGeneration = awaitingRemote?.preview?.generation,
+                onRemoteHandoffSuccess = onRemotePreviewDisplayed,
                 modifier = Modifier
                     .fillMaxSize()
                     .then(dragModifier),
             )
+            pendingPreview?.let {
+                LocalProfilePhotoPreviewImage(
+                    preview = it,
+                    contentDescription = "Foto de perfil ${photo.position}",
+                    imageLoader = imageLoader,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .testTag(profilePhotoLocalPreviewTag(photo.position)),
+                )
+            }
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -1667,6 +1821,8 @@ internal fun EmptyPhotoSlot(
     position: Int,
     busy: Boolean,
     pendingAction: ProfilePhotoActionPresentation? = null,
+    pendingPreview: PendingProfilePhotoPreview? = null,
+    imageLoader: coil3.ImageLoader,
     isDragTarget: Boolean,
     modifier: Modifier = Modifier,
     onPickNewFile: (position: Int) -> Unit,
@@ -1700,25 +1856,36 @@ internal fun EmptyPhotoSlot(
             .semantics { contentDescription = "Agregar foto $position" }
             .testTag(profilePhotoAddTag(position)),
     ) {
-        Column(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .padding(6.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                text = "+",
-                modifier = Modifier.testTag(profilePhotoAddPlusTag(position)),
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.primary,
+        if (pendingPreview != null) {
+            LocalProfilePhotoPreviewImage(
+                preview = pendingPreview,
+                contentDescription = "Foto de perfil $position",
+                imageLoader = imageLoader,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .testTag(profilePhotoLocalPreviewTag(position)),
             )
-            Text(
-                text = "Agregar",
-                modifier = Modifier.testTag(profilePhotoAddLabelTag(position)),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        } else {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = "+",
+                    modifier = Modifier.testTag(profilePhotoAddPlusTag(position)),
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = "Agregar",
+                    modifier = Modifier.testTag(profilePhotoAddLabelTag(position)),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         if (busy) {
             Box(
@@ -1779,24 +1946,59 @@ internal fun DraggedPhotoGhost(
         ProfilePhotoImage(
             photo = photo,
             contentDescription = null,
+            imageLoader = SingletonImageLoader.get(LocalContext.current),
             modifier = Modifier.fillMaxSize(),
         )
     }
 }
 
 @Composable
+internal fun LocalProfilePhotoPreviewImage(
+    preview: PendingProfilePhotoPreview,
+    contentDescription: String?,
+    imageLoader: coil3.ImageLoader,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val previewUri = remember(preview.uriString) { Uri.parse(preview.uriString) }
+    val imageRequest = remember(context, preview.uriString, preview.generation) {
+        ImageRequest.Builder(context)
+            .data(previewUri)
+            .memoryCacheKey("profile-photo-preview-${preview.generation}")
+            .memoryCachePolicy(CachePolicy.DISABLED)
+            .diskCachePolicy(CachePolicy.DISABLED)
+            .build()
+    }
+    AsyncImage(
+        model = imageRequest,
+        contentDescription = contentDescription,
+        imageLoader = imageLoader,
+        contentScale = ContentScale.Crop,
+        modifier = modifier,
+    )
+}
+
+@Composable
 internal fun ProfilePhotoImage(
     photo: ProfilePhoto,
     contentDescription: String?,
+    imageLoader: coil3.ImageLoader,
+    remoteHandoffGeneration: String? = null,
+    onRemoteHandoffSuccess: (generation: String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val displayUrl = photo.url.toEmulatorReachableUrl()
     val context = LocalContext.current
-    val imageRequest = remember(context, displayUrl) {
+    val imageRequest = remember(context, displayUrl, remoteHandoffGeneration) {
         ImageRequest.Builder(context)
             .data(displayUrl)
-            .memoryCacheKey(displayUrl.stablePhotoCacheKey())
-            .diskCacheKey(displayUrl.stablePhotoCacheKey())
+            .memoryCacheKey(displayUrl.stableProfilePhotoCacheKey())
+            .diskCacheKey(displayUrl.stableProfilePhotoCacheKey())
+            .listener(
+                onSuccess = { _, _ ->
+                    remoteHandoffGeneration?.let(onRemoteHandoffSuccess)
+                },
+            )
             .build()
     }
     when {
@@ -1804,6 +2006,7 @@ internal fun ProfilePhotoImage(
             AsyncImage(
                 model = imageRequest,
                 contentDescription = contentDescription,
+                imageLoader = imageLoader,
                 contentScale = ContentScale.Crop,
                 modifier = modifier,
             )
@@ -1835,6 +2038,7 @@ internal fun profilePhotoSlotTag(position: Int): String = "profile_photo_slot_$p
 internal fun profilePhotoActionTargetTag(position: Int): String = "profile_photo_action_target_$position"
 internal fun profilePhotoActionTargetIndicatorTag(position: Int): String =
     "profile_photo_action_target_indicator_$position"
+internal fun profilePhotoLocalPreviewTag(position: Int): String = "profile_photo_local_preview_$position"
 internal fun profilePhotoDeleteTag(position: Int): String = "profile_photo_delete_$position"
 internal fun profilePhotoDeleteVisualTag(position: Int): String = "profile_photo_delete_visual_$position"
 internal fun profilePhotoReplaceTag(position: Int): String = "profile_photo_replace_$position"
@@ -1880,8 +2084,6 @@ internal fun String.toEmulatorReachableUrl(): String {
     return replace("http://localhost:", "http://10.0.2.2:")
         .replace("http://127.0.0.1:", "http://10.0.2.2:")
 }
-
-private fun String.stablePhotoCacheKey(): String = substringBefore("?")
 
 internal fun String.isRenderableImageUrl(): Boolean {
     return startsWith("http://") || startsWith("https://")

@@ -2,13 +2,17 @@ package com.reals.app.data.repository
 
 import android.content.Context
 import android.net.Uri
-import com.reals.app.core.media.deleteOwnedProfilePhotoCropFile
+import com.reals.app.core.media.DefaultRealsCropUploadInspector
 import com.reals.app.core.media.PreparedProfilePhotoUpload
+import com.reals.app.core.media.ProfilePhotoPipelineTiming
+import com.reals.app.core.media.ProfilePhotoTimingFields
 import com.reals.app.core.media.ProfilePhotoPreprocessingException
 import com.reals.app.core.media.ProfilePhotoPreprocessingFailure
 import com.reals.app.core.media.ProfilePhotoPreprocessor
+import com.reals.app.core.media.ProfilePhotoUploadPipelinePreprocessor
 import com.reals.app.core.media.ProfilePhotoUploadPreprocessor
 import com.reals.app.core.media.profilePhotoCropCacheDirectory
+import com.reals.app.core.media.profilePhotoPreparedUploadCacheDirectory
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ApiExecutor
 import com.reals.app.core.network.ApiResult
@@ -32,12 +36,18 @@ import com.reals.app.domain.model.UpdateProfileInput
 import retrofit2.Response
 
 class ProfileRepository(
-    private val context: Context?,
+    context: Context?,
     private val api: RealsApi,
     tokenProvider: AuthTokenProvider,
     apiExecutor: ApiExecutor,
     private val photoPreprocessor: ProfilePhotoUploadPreprocessor? =
-        context?.let { ProfilePhotoPreprocessor(it) },
+        context?.let {
+            ProfilePhotoUploadPipelinePreprocessor(
+                fallbackPreprocessor = ProfilePhotoPreprocessor(it),
+                cropInspector = DefaultRealsCropUploadInspector(profilePhotoCropCacheDirectory(it)),
+                preparedCacheDir = profilePhotoPreparedUploadCacheDirectory(it),
+            )
+        },
 ) : AuthenticatedRepository(tokenProvider, apiExecutor) {
     suspend fun getMyProfileSnapshot(): ApiResult<ProfileSnapshot> {
         return when (val result = authorizedCall { authorization -> api.getMyProfile(authorization) }) {
@@ -91,7 +101,7 @@ class ProfileRepository(
         }.map { photos -> photos.map { it.toDomain() } }
 
     suspend fun addMyProfilePhotoFile(
-        fileUri: Uri,
+        fileUri: Uri?,
         position: Int,
     ): ApiResult<ProfilePhoto> =
         uploadPreparedProfilePhoto(fileUri) { authorization, prepared ->
@@ -108,7 +118,7 @@ class ProfileRepository(
 
     suspend fun replaceMyProfilePhotoFile(
         photoId: String,
-        fileUri: Uri,
+        fileUri: Uri?,
     ): ApiResult<ProfilePhoto> =
         uploadPreparedProfilePhoto(fileUri) { authorization, prepared ->
             api.replaceMyProfilePhotoFile(
@@ -123,27 +133,44 @@ class ProfileRepository(
             .map { it.toDomain() }
 
     private suspend fun uploadPreparedProfilePhoto(
-        sourceUri: Uri,
+        sourceUri: Uri?,
         call: suspend (authorization: String, prepared: PreparedProfilePhotoUpload) -> Response<PhotoResponseDto>,
     ): ApiResult<PhotoResponseDto> {
         val preprocessor = photoPreprocessor ?: return ApiResult.Failure(photoPreparationError())
-        return try {
-            val preparation = preprocessor.prepare(sourceUri)
-            if (preparation.isFailure) {
-                return ApiResult.Failure(photoPreparationError(preparation.exceptionOrNull()))
-            }
-            val upload = preparation.getOrThrow()
-            upload.useDeletingFile { prepared ->
-                authorizedCall { authorization -> call(authorization, prepared) }
-            }
-        } finally {
-            deleteOwnedSourceCropFile(sourceUri)
+        val preparationStartedAt = ProfilePhotoPipelineTiming.nowMillis()
+        val preparation = preprocessor.prepare(sourceUri)
+        if (preparation.isFailure) {
+            ProfilePhotoPipelineTiming.log(
+                ProfilePhotoTimingFields(
+                    phase = "upload_prepare",
+                    durationMs = ProfilePhotoPipelineTiming.nowMillis() - preparationStartedAt,
+                    fastPath = false,
+                ),
+            )
+            return ApiResult.Failure(photoPreparationError(preparation.exceptionOrNull()))
         }
-    }
-
-    private fun deleteOwnedSourceCropFile(sourceUri: Uri) {
-        val uploadContext = context ?: return
-        deleteOwnedProfilePhotoCropFile(sourceUri, profilePhotoCropCacheDirectory(uploadContext))
+        val upload = preparation.getOrThrow()
+        ProfilePhotoPipelineTiming.log(
+            ProfilePhotoTimingFields(
+                phase = "upload_prepare",
+                durationMs = ProfilePhotoPipelineTiming.nowMillis() - preparationStartedAt,
+                bytes = upload.fileSizeBytes,
+                fastPath = upload.usedTrustedCropFastPath,
+            ),
+        )
+        return upload.useDeletingFile { prepared ->
+            val requestStartedAt = ProfilePhotoPipelineTiming.nowMillis()
+            try {
+                authorizedCall { authorization -> call(authorization, prepared) }
+            } finally {
+                ProfilePhotoPipelineTiming.log(
+                    ProfilePhotoTimingFields(
+                        phase = "authenticated_request",
+                        durationMs = ProfilePhotoPipelineTiming.nowMillis() - requestStartedAt,
+                    ),
+                )
+            }
+        }
     }
 
     private fun photoPreparationError(cause: Throwable? = null): ApiError.PhotoPreparation {
