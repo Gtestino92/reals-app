@@ -6,7 +6,6 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -52,7 +51,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -1171,16 +1169,6 @@ private fun PhotoManagerActions(
             photoActionPhotoId = null
         }
     }
-    val latestPreviewState by rememberUpdatedState(previewState)
-    DisposableEffect(Unit) {
-        onDispose {
-            val currentPreview = latestPreviewState
-            if (currentPreview is ProfilePhotoPreviewState.AwaitingRemote) {
-                deleteLocalPreviewFile(currentPreview.preview.uriString)
-            }
-        }
-    }
-
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
                 text = "Subí, reemplaza o borra fotos. Las miniaturas se muestran cuadradas; la foto se publica en formato vertical 4:5. Para reordenarlas, mantené presionada una foto y arrastrala.",

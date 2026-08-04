@@ -208,6 +208,20 @@ class ProfilePhotoPreviewStateTest {
     }
 
     @Test
+    fun sameProcessSaverRestorePreservesAwaitingRemote() {
+        val awaiting = awaiting("generation-1")
+
+        val restored = restoreProfilePhotoPreviewState(
+            saveProfilePhotoPreviewState(awaiting, processSessionId = "session-a"),
+            currentProcessSessionId = "session-a",
+        )
+
+        assertEquals(awaiting, restored)
+        restored as ProfilePhotoPreviewState.AwaitingRemote
+        assertEquals("file:///crop.jpg", restored.preview.uriString)
+    }
+
+    @Test
     fun differentProcessRestoreBecomesOrphaned() {
         val uploading = startProfilePhotoPreview(addAction, "file:///crop.jpg", "generation-1", 10L, null)
 
@@ -217,6 +231,29 @@ class ProfilePhotoPreviewStateTest {
         )
 
         assertEquals(ProfilePhotoPreviewState.Orphaned("file:///crop.jpg"), restored)
+    }
+
+    @Test
+    fun differentProcessAwaitingRestoreBecomesOrphaned() {
+        val awaiting = awaiting("generation-1")
+
+        val restored = restoreProfilePhotoPreviewState(
+            saveProfilePhotoPreviewState(awaiting, processSessionId = "session-a"),
+            currentProcessSessionId = "session-b",
+        )
+
+        assertEquals(ProfilePhotoPreviewState.Orphaned("file:///crop.jpg"), restored)
+    }
+
+    @Test
+    fun orphanedCleanupReturnsUriExactlyOnce() {
+        val first = ProfilePhotoPreviewState.Orphaned("file:///crop.jpg").clearForNewPhotoMutation()
+        val second = first.state.clearForNewPhotoMutation()
+
+        assertEquals(ProfilePhotoPreviewState.None, first.state)
+        assertEquals("file:///crop.jpg", first.cleanupUriString)
+        assertEquals(ProfilePhotoPreviewState.None, second.state)
+        assertNull(second.cleanupUriString)
     }
 
     @Test

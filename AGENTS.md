@@ -46,6 +46,12 @@ Examples of coupled state:
 - optimistic item plus delivery state;
 - backend page/cursor plus accumulated list.
 
+## Compose State And Resource Cleanup
+- For `rememberSaveable` or otherwise restorable UI state that references owned files, sockets, listeners, or cache entries, do not clean the resource from a generic `DisposableEffect` merely because the composable leaves composition.
+- Treat composition disposal, configuration change, navigation, process death, and terminal business state as distinct events; cleanup must be tied to an explicit terminal transition or a restore path that proves the state is orphaned.
+- When adding optimistic UI backed by local resources, test same-process save/restore and process-death restore behavior before relying on cleanup effects.
+- If a cleanup operation is required, centralize it behind one state transition helper that first removes the UI reference and returns the resource to clean exactly once.
+
 ## Adversarial Review Checklist
 Explicitly review for:
 - stale UI state;

@@ -6,7 +6,10 @@ import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -20,6 +23,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -260,6 +264,51 @@ class ProfilePhotoActionProgressTest {
             assertEquals(currentPreview, harness.previewState.value)
             assertEquals(emptyList<String>(), cleanupRequests)
         }
+    }
+
+    @Test
+    fun sameProcessRestoreKeepsAwaitingPreviewUntilRemoteSuccess() {
+        val restorationTester = StateRestorationTester(composeRule)
+        val cleanupRequests = mutableListOf<String>()
+        lateinit var remoteSuccess: () -> Unit
+
+        restorationTester.setContent {
+            var previewState by rememberSaveable(stateSaver = ProfilePhotoPreviewStateSaver) {
+                mutableStateOf<ProfilePhotoPreviewState>(awaitingPreview())
+            }
+            remoteSuccess = {
+                val result = previewState.onMatchingRemoteSucceeded(
+                    remotePhotoId = "photo-2",
+                    generation = "awaiting-generation",
+                )
+                previewState = result.state
+                result.cleanupUriString?.let(cleanupRequests::add)
+            }
+            MaterialTheme {
+                PhotoGrid(
+                    photos = testPhotos,
+                    busy = false,
+                    previewState = previewState,
+                    onPickNewFile = { events += "add-$it" },
+                    onPickReplacementFile = { photoId, position -> events += "replace-$photoId-$position" },
+                    onDeletePhoto = { photoId, position -> events += "delete-$photoId-$position" },
+                    onMovePhoto = { photoId, targetPosition -> events += "move-$photoId-$targetPosition" },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(profilePhotoLocalPreviewTag(2), useUnmergedTree = true).assertIsDisplayed()
+        composeRule.runOnIdle { assertEquals(emptyList<String>(), cleanupRequests) }
+
+        restorationTester.emulateSavedInstanceStateRestore()
+
+        composeRule.onNodeWithTag(profilePhotoLocalPreviewTag(2), useUnmergedTree = true).assertIsDisplayed()
+        composeRule.runOnIdle { assertEquals(emptyList<String>(), cleanupRequests) }
+
+        composeRule.runOnIdle { remoteSuccess() }
+
+        composeRule.onAllNodesWithTag(profilePhotoLocalPreviewTag(2), useUnmergedTree = true).assertCountEquals(0)
+        composeRule.runOnIdle { assertEquals(listOf("file:///tmp/crop-awaiting.jpg"), cleanupRequests) }
     }
 
     @Test
