@@ -196,6 +196,9 @@ The following are not MVP blockers:
   only maps the stable authenticity-verification error codes.
 - Advanced onboarding experiments.
 - Full production telemetry dashboards.
-- Drag-and-drop profile-photo reordering.
 - Generated photo thumbnails/previews.
 - Direct Android-to-storage photo upload.
+
+Drag-and-drop profile-photo reordering is implemented for Android profile management. Users reorder slots 1 through 9
+with long-press drag-and-drop, and Android submits the resulting placement order through the existing reorder flow.
+Responsiveness changes to the photo grid must preserve drag source/target identity and slot positions.

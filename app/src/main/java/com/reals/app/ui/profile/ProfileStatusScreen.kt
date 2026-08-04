@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -64,9 +65,11 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -1237,7 +1240,7 @@ private fun EmailVerificationActions(
 }
 
 @Composable
-private fun PhotoGrid(
+internal fun PhotoGrid(
     photos: List<ProfilePhoto>,
     busy: Boolean,
     onPickNewFile: (position: Int) -> Unit,
@@ -1256,9 +1259,11 @@ private fun PhotoGrid(
         }?.key
 
     Box(
-        modifier = Modifier.onGloballyPositioned { coordinates ->
-            gridBounds = coordinates.boundsInRoot()
-        },
+        modifier = Modifier
+            .testTag(ProfilePhotoGridRootTag)
+            .onGloballyPositioned { coordinates ->
+                gridBounds = coordinates.boundsInRoot()
+            },
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             ProfilePhotoGridPositions.chunked(3).forEach { rowPositions ->
@@ -1337,7 +1342,7 @@ private fun PhotoGrid(
 }
 
 @Composable
-private fun PhotoSlot(
+internal fun PhotoSlot(
     position: Int,
     photo: ProfilePhoto?,
     busy: Boolean,
@@ -1354,11 +1359,13 @@ private fun PhotoSlot(
     onDragCancel: () -> Unit,
 ) {
     var slotBounds by remember { mutableStateOf<Rect?>(null) }
-    val positionedModifier = modifier.onGloballyPositioned { coordinates ->
-        val bounds = coordinates.boundsInRoot()
-        slotBounds = bounds
-        onSlotBoundsChanged(position, bounds)
-    }
+    val positionedModifier = modifier
+        .testTag(profilePhotoSlotTag(position))
+        .onGloballyPositioned { coordinates ->
+            val bounds = coordinates.boundsInRoot()
+            slotBounds = bounds
+            onSlotBoundsChanged(position, bounds)
+        }
     if (photo == null) {
         EmptyPhotoSlot(
             position = position,
@@ -1386,7 +1393,7 @@ private fun PhotoSlot(
 }
 
 @Composable
-private fun FilledPhotoSlot(
+internal fun FilledPhotoSlot(
     photo: ProfilePhoto,
     busy: Boolean,
     isDragTarget: Boolean,
@@ -1426,7 +1433,6 @@ private fun FilledPhotoSlot(
     }
     Column(
         modifier = modifier
-            .then(dragModifier)
             .alpha(if (isDraggingSource) 0.42f else 1f)
             .semantics {
                 when {
@@ -1455,27 +1461,37 @@ private fun FilledPhotoSlot(
             ProfilePhotoImage(
                 photo = photo,
                 contentDescription = "Foto de perfil ${photo.position}",
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(dragModifier),
             )
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(4.dp)
-                    .size(24.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color.Black.copy(alpha = 0.52f))
+                    .size(ProfilePhotoDeleteTouchTargetSize)
                     .clickable(
                         enabled = !busy,
                         onClickLabel = "Borrar foto ${photo.position}",
                     ) { onDeletePhoto(photo.id, photo.position) }
-                    .semantics { contentDescription = "Borrar foto ${photo.position}" },
+                    .semantics { contentDescription = "Borrar foto ${photo.position}" }
+                    .testTag(profilePhotoDeleteTag(photo.position)),
             ) {
-                Text(
-                    text = "x",
-                    modifier = Modifier.align(Alignment.Center),
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelMedium,
-                )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .size(ProfilePhotoDeleteVisualSize)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color.Black.copy(alpha = 0.52f))
+                        .testTag(profilePhotoDeleteVisualTag(photo.position)),
+                ) {
+                    Text(
+                        text = "x",
+                        modifier = Modifier.align(Alignment.Center),
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
             }
             if (busy) {
                 Box(
@@ -1488,12 +1504,12 @@ private fun FilledPhotoSlot(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(32.dp),
+                .heightIn(min = ProfilePhotoReplaceActionMinHeight),
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .fillMaxSize()
+                    .heightIn(min = ProfilePhotoReplaceActionMinHeight)
                     .clip(actionShape)
                     .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                     .border(
@@ -1505,13 +1521,17 @@ private fun FilledPhotoSlot(
                         enabled = !busy,
                         onClickLabel = "Reemplazar foto ${photo.position}",
                     ) { onPickReplacementFile(photo.id, photo.position) }
-                    .semantics { contentDescription = "Reemplazar foto ${photo.position}" },
+                    .semantics { contentDescription = "Reemplazar foto ${photo.position}" }
+                    .testTag(profilePhotoReplaceTag(photo.position)),
             ) {
                 Text(
                     text = "Cambiar",
-                    modifier = Modifier.align(Alignment.Center),
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
                     color = MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.labelMedium,
+                    textAlign = TextAlign.Center,
                 )
             }
         }
@@ -1519,7 +1539,7 @@ private fun FilledPhotoSlot(
 }
 
 @Composable
-private fun EmptyPhotoSlot(
+internal fun EmptyPhotoSlot(
     position: Int,
     busy: Boolean,
     isDragTarget: Boolean,
@@ -1548,20 +1568,25 @@ private fun EmptyPhotoSlot(
                 enabled = !busy,
                 onClickLabel = "Agregar foto $position",
             ) { onPickNewFile(position) }
-            .semantics { contentDescription = "Agregar foto $position" },
+            .semantics { contentDescription = "Agregar foto $position" }
+            .testTag(profilePhotoAddTag(position)),
     ) {
         Column(
-            modifier = Modifier.align(Alignment.Center),
+            modifier = Modifier
+                .align(Alignment.Center)
+                .padding(6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Text(
                 text = "+",
+                modifier = Modifier.testTag(profilePhotoAddPlusTag(position)),
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.primary,
             )
             Text(
                 text = "Agregar",
+                modifier = Modifier.testTag(profilePhotoAddLabelTag(position)),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1577,7 +1602,7 @@ private fun EmptyPhotoSlot(
 }
 
 @Composable
-private fun DraggedPhotoGhost(
+internal fun DraggedPhotoGhost(
     photo: ProfilePhoto,
     pointerPosition: Offset,
     sourceBounds: Rect,
@@ -1609,7 +1634,7 @@ private fun DraggedPhotoGhost(
 }
 
 @Composable
-private fun ProfilePhotoImage(
+internal fun ProfilePhotoImage(
     photo: ProfilePhoto,
     contentDescription: String?,
     modifier: Modifier = Modifier,
@@ -1645,6 +1670,19 @@ private fun ProfilePhotoImage(
 }
 
 internal val ProfilePhotoGridPositions: IntRange = 1..9
+
+internal val ProfilePhotoDeleteTouchTargetSize = 48.dp
+internal val ProfilePhotoDeleteVisualSize = 24.dp
+internal val ProfilePhotoReplaceActionMinHeight = 48.dp
+
+internal const val ProfilePhotoGridRootTag = "profile_photo_grid"
+internal fun profilePhotoSlotTag(position: Int): String = "profile_photo_slot_$position"
+internal fun profilePhotoDeleteTag(position: Int): String = "profile_photo_delete_$position"
+internal fun profilePhotoDeleteVisualTag(position: Int): String = "profile_photo_delete_visual_$position"
+internal fun profilePhotoReplaceTag(position: Int): String = "profile_photo_replace_$position"
+internal fun profilePhotoAddTag(position: Int): String = "profile_photo_add_$position"
+internal fun profilePhotoAddPlusTag(position: Int): String = "profile_photo_add_plus_$position"
+internal fun profilePhotoAddLabelTag(position: Int): String = "profile_photo_add_label_$position"
 
 internal fun List<ProfilePhoto>.profilePhotosByGridPosition(): Map<Int, ProfilePhoto> =
     filter { it.position in ProfilePhotoGridPositions }
