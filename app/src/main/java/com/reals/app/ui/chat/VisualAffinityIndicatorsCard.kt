@@ -35,8 +35,7 @@ internal fun VisualAffinityIndicatorsCard(
     indicators: List<VisualAffinityIndicator>,
     modifier: Modifier = Modifier,
 ) {
-    val visibleIndicators = affinityIndicatorsForDisplay(indicators)
-    if (visibleIndicators.isEmpty()) return
+    if (indicators.isEmpty()) return
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -55,7 +54,7 @@ internal fun VisualAffinityIndicatorsCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                visibleIndicators.forEach { indicator ->
+                indicators.forEach { indicator ->
                     VisualAffinityIndicatorPill(indicator)
                 }
             }
