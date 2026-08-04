@@ -62,6 +62,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.reals.app.core.media.ProfilePhotoCropProcessor
+import com.reals.app.core.media.ProfilePhotoPipelineTiming
+import com.reals.app.core.media.ProfilePhotoTimingFields
+import java.io.File
 import kotlin.math.roundToInt
 
 @Composable
@@ -83,8 +86,15 @@ internal fun ProfilePhotoCropDialog(
     LaunchedEffect(request.sourceUri) {
         loading = true
         errorText = null
+        val decodeStartedAt = ProfilePhotoPipelineTiming.nowMillis()
         processor.decodeUprightBitmap(request.sourceUri)
             .onSuccess { decoded ->
+                ProfilePhotoPipelineTiming.log(
+                    ProfilePhotoTimingFields(
+                        phase = "crop_decode",
+                        durationMs = ProfilePhotoPipelineTiming.nowMillis() - decodeStartedAt,
+                    ),
+                )
                 bitmap = decoded
                 transform = if (viewportSize.width > 0 && viewportSize.height > 0) {
                     centeredCropTransform(
@@ -98,6 +108,12 @@ internal fun ProfilePhotoCropDialog(
                 }
             }
             .onFailure {
+                ProfilePhotoPipelineTiming.log(
+                    ProfilePhotoTimingFields(
+                        phase = "crop_decode",
+                        durationMs = ProfilePhotoPipelineTiming.nowMillis() - decodeStartedAt,
+                    ),
+                )
                 errorText = "No pudimos abrir ésta imagen.\nElegí otra foto o volvé a intentarlo."
             }
         loading = false
@@ -119,9 +135,25 @@ internal fun ProfilePhotoCropDialog(
         val currentBitmap = bitmap ?: return@LaunchedEffect
         processing = true
         errorText = null
+        val exportStartedAt = ProfilePhotoPipelineTiming.nowMillis()
         processor.exportCroppedJpeg(currentBitmap, cropRect)
-            .onSuccess(onCropped)
+            .onSuccess { croppedUri ->
+                ProfilePhotoPipelineTiming.log(
+                    ProfilePhotoTimingFields(
+                        phase = "crop_export",
+                        durationMs = ProfilePhotoPipelineTiming.nowMillis() - exportStartedAt,
+                        bytes = croppedUri.path?.let(::File)?.length(),
+                    ),
+                )
+                onCropped(croppedUri)
+            }
             .onFailure {
+                ProfilePhotoPipelineTiming.log(
+                    ProfilePhotoTimingFields(
+                        phase = "crop_export",
+                        durationMs = ProfilePhotoPipelineTiming.nowMillis() - exportStartedAt,
+                    ),
+                )
                 errorText = "No pudimos preparar la foto.\nVolvé a intentarlo."
             }
         processing = false

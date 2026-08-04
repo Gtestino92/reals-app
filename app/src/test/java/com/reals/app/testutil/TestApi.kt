@@ -144,6 +144,8 @@ class FakeRealsApi : RealsApi {
     var beforeGetPartnerPersonalMessageResponse: suspend () -> Unit = {}
     var beforeGetProfilePhotosResponse: suspend () -> Unit = {}
     var beforeReorderPhotosResponse: suspend () -> Unit = {}
+    var beforeAddPhotoResponse: suspend () -> Unit = {}
+    var beforeReplacePhotoResponse: suspend () -> Unit = {}
 
     var pingResponse: Response<PingResponseDto> = Response.success(PingResponseDto("ok"))
     var userResponse: Response<UserResponseDto> = Response.success(TestDtos.user())
@@ -302,7 +304,7 @@ class FakeRealsApi : RealsApi {
         file: MultipartBody.Part,
         position: RequestBody,
     ): Response<PhotoResponseDto> =
-        record("addMyProfilePhotoFile", authorization) { photoResponse }
+        record("addMyProfilePhotoFile", authorization, beforeResponse = beforeAddPhotoResponse) { photoResponse }
 
     override suspend fun deleteMyProfilePhoto(
         authorization: String,
@@ -315,7 +317,9 @@ class FakeRealsApi : RealsApi {
         photoId: String,
         file: MultipartBody.Part,
     ): Response<PhotoResponseDto> =
-        record("replaceMyProfilePhotoFile", authorization, photoId) { photoResponse }
+        record("replaceMyProfilePhotoFile", authorization, photoId, beforeResponse = beforeReplacePhotoResponse) {
+            photoResponse
+        }
 
     override suspend fun activateMyProfile(authorization: String): Response<ProfileResponseDto> =
         record("activateMyProfile", authorization) { profileResponse }
