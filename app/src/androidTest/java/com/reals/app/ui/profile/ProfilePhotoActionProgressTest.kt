@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -22,6 +24,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.Density
@@ -161,6 +164,105 @@ class ProfilePhotoActionProgressTest {
     }
 
     @Test
+    fun deleteAfterUploadSuccessClearsAwaitingPreviewAndLeavesEmptySlot() {
+        val cleanupRequests = mutableListOf<String>()
+        lateinit var harness: InteractiveGridHarness
+
+        harness = setInteractiveGridContent(
+            photos = testPhotos,
+            previewState = awaitingPreview(),
+            cleanupRequests = cleanupRequests,
+            onDelete = { _, _ -> harness.photos.value = testPhotos.filterNot { it.id == "photo-2" } },
+        )
+
+        composeRule.onNodeWithTag(profilePhotoLocalPreviewTag(2), useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithTag(profilePhotoDeleteTag(2)).performClick()
+
+        composeRule.onAllNodesWithTag(profilePhotoLocalPreviewTag(2), useUnmergedTree = true).assertCountEquals(0)
+        composeRule.onNodeWithTag(profilePhotoAddTag(2), useUnmergedTree = true).assertIsDisplayed()
+        composeRule.runOnIdle {
+            assertEquals(listOf("delete-photo-2-2"), events)
+            assertEquals(listOf("file:///tmp/crop-awaiting.jpg"), cleanupRequests)
+            assertEquals(ProfilePhotoPreviewState.None, harness.previewState.value)
+        }
+    }
+
+    @Test
+    fun deleteFailureClearsPreviewAndKeepsAuthoritativePhoto() {
+        val cleanupRequests = mutableListOf<String>()
+
+        val harness = setInteractiveGridContent(
+            photos = testPhotos,
+            previewState = awaitingPreview(),
+            cleanupRequests = cleanupRequests,
+            error = ApiError.Network("Sin conexión"),
+        )
+
+        composeRule.onNodeWithTag(profilePhotoDeleteTag(2)).performClick()
+
+        composeRule.onAllNodesWithTag(profilePhotoLocalPreviewTag(2), useUnmergedTree = true).assertCountEquals(0)
+        composeRule.onNodeWithTag(profilePhotoReplaceTag(2)).assertIsDisplayed()
+        composeRule.onNodeWithText("No pudimos subir la foto").assertIsDisplayed()
+        composeRule.runOnIdle {
+            assertEquals(listOf("delete-photo-2-2"), events)
+            assertEquals(listOf("file:///tmp/crop-awaiting.jpg"), cleanupRequests)
+            assertEquals(ProfilePhotoPreviewState.None, harness.previewState.value)
+        }
+    }
+
+    @Test
+    fun reorderBeforeRemoteHandoffClearsAwaitingPreviewOnce() {
+        val cleanupRequests = mutableListOf<String>()
+
+        val harness = setInteractiveGridContent(
+            photos = testPhotos,
+            previewState = awaitingPreview(),
+            cleanupRequests = cleanupRequests,
+        )
+
+        composeRule.runOnIdle { harness.move() }
+
+        composeRule.onAllNodesWithTag(profilePhotoLocalPreviewTag(2), useUnmergedTree = true).assertCountEquals(0)
+        composeRule.runOnIdle {
+            assertEquals(listOf("move-photo-2-3"), events)
+            assertEquals(listOf("file:///tmp/crop-awaiting.jpg"), cleanupRequests)
+            assertEquals(ProfilePhotoPreviewState.None, harness.previewState.value)
+        }
+    }
+
+    @Test
+    fun staleTerminalResultDoesNotRemoveCurrentPreviewGeneration() {
+        val currentAction = ProfilePhotoActionPresentation(ProfilePhotoActionKind.Add, position = 4)
+        val staleAction = ProfilePhotoActionPresentation(ProfilePhotoActionKind.Replace, position = 2, photoId = "photo-2")
+        val currentPreview = startProfilePhotoPreview(
+            action = currentAction,
+            uriString = "file:///tmp/crop-current.jpg",
+            generation = "current-generation",
+            cropConfirmedAtElapsedMillis = 10L,
+            oldCanonicalCacheKey = null,
+        )
+        val cleanupRequests = mutableListOf<String>()
+
+        val harness = setInteractiveGridContent(
+            photos = testPhotos,
+            previewState = currentPreview,
+            cleanupRequests = cleanupRequests,
+        )
+
+        composeRule.runOnIdle {
+            val result = harness.previewState.value.onMatchingUploadFailed(staleAction)
+            harness.previewState.value = result.state
+            result.cleanupUriString?.let(cleanupRequests::add)
+        }
+
+        composeRule.onNodeWithTag(profilePhotoLocalPreviewTag(4), useUnmergedTree = true).assertIsDisplayed()
+        composeRule.runOnIdle {
+            assertEquals(currentPreview, harness.previewState.value)
+            assertEquals(emptyList<String>(), cleanupRequests)
+        }
+    }
+
+    @Test
     fun successFeedbackAppearsAfterLoadingCompletes() {
         setProgressContent(
             loading = false,
@@ -262,6 +364,60 @@ class ProfilePhotoActionProgressTest {
         }
     }
 
+    private fun setInteractiveGridContent(
+        photos: List<ProfilePhoto>,
+        previewState: ProfilePhotoPreviewState,
+        cleanupRequests: MutableList<String>,
+        error: ApiError? = null,
+        onDelete: (photoId: String, position: Int) -> Unit = { _, _ -> },
+    ): InteractiveGridHarness {
+        events.clear()
+        val harness = InteractiveGridHarness(
+            photos = mutableStateOf(photos),
+            previewState = mutableStateOf(previewState),
+            cleanupRequests = cleanupRequests,
+        )
+        fun clearPreview() {
+            val result = harness.previewState.value.clearForNewPhotoMutation()
+            harness.previewState.value = result.state
+            result.cleanupUriString?.let(cleanupRequests::add)
+        }
+        harness.move = {
+            clearPreview()
+            events += "move-photo-2-3"
+        }
+        composeRule.setContent {
+            MaterialTheme {
+                Column {
+                    PhotoGrid(
+                        photos = harness.photos.value,
+                        busy = false,
+                        previewState = harness.previewState.value,
+                        onPickNewFile = { events += "add-$it" },
+                        onPickReplacementFile = { photoId, position ->
+                            events += "replace-$photoId-$position"
+                        },
+                        onDeletePhoto = { photoId, position ->
+                            clearPreview()
+                            events += "delete-$photoId-$position"
+                            onDelete(photoId, position)
+                        },
+                        onMovePhoto = { photoId, targetPosition ->
+                            clearPreview()
+                            events += "move-$photoId-$targetPosition"
+                        },
+                    )
+                    ProfilePhotoActionFeedback(
+                        photoActionLoading = false,
+                        photoActionError = error,
+                        photoActionMessage = null,
+                    )
+                }
+            }
+        }
+        return harness
+    }
+
     private fun assertProgressCard(title: String) {
         composeRule.onNodeWithTag(ProfilePhotoActionProgressTag).assertIsDisplayed()
         composeRule.onNodeWithTag(ProfilePhotoActionProgressIndicatorTag).assertIsDisplayed()
@@ -303,6 +459,27 @@ class ProfilePhotoActionProgressTest {
             validationStatus = "APPROVED",
             moderationStatus = "APPROVED",
         )
+
+    private fun awaitingPreview(): ProfilePhotoPreviewState.AwaitingRemote =
+        ProfilePhotoPreviewState.AwaitingRemote(
+            preview = PendingProfilePhotoPreview(
+                action = ProfilePhotoActionPresentation(ProfilePhotoActionKind.Replace, position = 2, photoId = "photo-2"),
+                uriString = "file:///tmp/crop-awaiting.jpg",
+                generation = "awaiting-generation",
+                cropConfirmedAtElapsedMillis = 10L,
+                oldCanonicalCacheKey = "old-key",
+            ),
+            remotePhotoId = "photo-2",
+            remoteUrl = "https://static.reals.local/photo-2.jpg",
+            uploadResponseAtElapsedMillis = 42L,
+        )
+
+    private class InteractiveGridHarness(
+        val photos: MutableState<List<ProfilePhoto>>,
+        val previewState: MutableState<ProfilePhotoPreviewState>,
+        val cleanupRequests: MutableList<String>,
+        var move: () -> Unit = {},
+    )
 }
 
 private const val ProfilePhotoActionProgressRootTag = "profile_photo_action_progress_root"

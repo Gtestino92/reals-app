@@ -66,3 +66,9 @@ internal fun ProfilePhotoActionPresentation?.slotStateDescription(): String =
 
 internal fun ProfilePhotoActionPresentation?.targetsPosition(position: Int): Boolean =
     this?.position == position
+
+internal fun ProfilePhotoActionPresentation.matches(other: ProfilePhotoActionPresentation?): Boolean =
+    other != null &&
+        kind == other.kind &&
+        position == other.position &&
+        photoId == other.photoId

@@ -2,6 +2,7 @@ package com.reals.app.ui.profile
 
 import com.reals.app.domain.model.ProfilePhoto
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -26,48 +27,157 @@ class ProfilePhotoPreviewStateTest {
     }
 
     @Test
-    fun uploadSuccessTransitionsToAwaitingRemote() {
-        val uploading = startProfilePhotoPreview(addAction, "file:///crop.jpg", "generation-1", 10L, null)
+    fun awaitingRemoteDeleteStartClearsPreview() {
+        val result = awaiting("generation-1").clearForNewPhotoMutation()
 
-        val state = uploading.onUploadSucceeded(listOf(photo("photo-new", 4)), uploadResponseAtElapsedMillis = 42L)
-
-        assertTrue(state is ProfilePhotoPreviewState.AwaitingRemote)
-        state as ProfilePhotoPreviewState.AwaitingRemote
-        assertEquals("photo-new", state.remotePhotoId)
-        assertEquals(42L, state.uploadResponseAtElapsedMillis)
+        assertEquals(ProfilePhotoPreviewState.None, result.state)
+        assertEquals("file:///crop.jpg", result.cleanupUriString)
     }
 
     @Test
-    fun remoteSuccessWithMatchingGenerationClearsPreview() {
+    fun priorPreviewCleanupReturnsCorrectUriOnce() {
+        val first = awaiting("generation-1").clearForNewPhotoMutation()
+        val second = first.state.clearForNewPhotoMutation()
+
+        assertEquals("file:///crop.jpg", first.cleanupUriString)
+        assertEquals(ProfilePhotoPreviewState.None, first.state)
+        assertNull(second.cleanupUriString)
+        assertEquals(ProfilePhotoPreviewState.None, second.state)
+    }
+
+    @Test
+    fun awaitingRemoteReorderStartClearsPreview() {
+        val result = awaiting("generation-1").clearForNewPhotoMutation()
+
+        assertEquals(ProfilePhotoPreviewState.None, result.state)
+        assertEquals("file:///crop.jpg", result.cleanupUriString)
+    }
+
+    @Test
+    fun deleteSuccessCannotPreserveOldAwaitingPreview() {
+        val result = awaiting("generation-1").clearForNewPhotoMutation()
+        val photosAfterDelete = emptyList<ProfilePhoto>()
+
+        assertEquals(ProfilePhotoPreviewState.None, result.state)
+        assertTrue(photosAfterDelete.none { it.id == "photo-new" })
+    }
+
+    @Test
+    fun deleteFailureCannotPreserveStatePointingToDeletedFile() {
+        val oldPhoto = photo("photo-new", 4)
+        val result = awaiting("generation-1").clearForNewPhotoMutation()
+
+        assertEquals(ProfilePhotoPreviewState.None, result.state)
+        assertEquals("file:///crop.jpg", result.cleanupUriString)
+        assertEquals(oldPhoto, listOf(oldPhoto).first())
+    }
+
+    @Test
+    fun staleTerminalErrorDoesNotClearUnrelatedAwaitingPreview() {
         val awaiting = awaiting("generation-1")
 
-        assertEquals(ProfilePhotoPreviewState.None, awaiting.onRemoteSucceeded("generation-1"))
+        val result = awaiting.onMatchingUploadFailed(addAction)
+
+        assertSame(awaiting, result.state)
+        assertNull(result.cleanupUriString)
     }
 
     @Test
-    fun remoteSuccessWithStaleGenerationDoesNotClearPreview() {
-        val awaiting = awaiting("generation-2")
-
-        assertSame(awaiting, awaiting.onRemoteSucceeded("generation-1"))
-    }
-
-    @Test
-    fun uploadFailureClearsUploadingPreview() {
+    fun staleTerminalSuccessDoesNotTransitionUnrelatedUploadingPreview() {
         val uploading = startProfilePhotoPreview(addAction, "file:///crop.jpg", "generation-1", 10L, null)
 
-        assertEquals(ProfilePhotoPreviewState.None, uploading.onUploadFailed())
+        val result = uploading.onMatchingUploadSucceeded(replaceAction, listOf(photo("photo-new", 4)), 42L)
+
+        assertSame(uploading, result.state)
+        assertNull(result.cleanupUriString)
+    }
+
+    @Test
+    fun matchingAddSuccessTransitionsToAwaitingRemote() {
+        val uploading = startProfilePhotoPreview(addAction, "file:///crop.jpg", "generation-1", 10L, null)
+
+        val result = uploading.onMatchingUploadSucceeded(addAction, listOf(photo("photo-new", 4)), 42L)
+
+        val state = result.state as ProfilePhotoPreviewState.AwaitingRemote
+        assertEquals("photo-new", state.remotePhotoId)
+        assertEquals(42L, state.uploadResponseAtElapsedMillis)
+        assertNull(result.cleanupUriString)
+    }
+
+    @Test
+    fun matchingReplaceSuccessTransitionsToAwaitingRemote() {
+        val uploading = startProfilePhotoPreview(replaceAction, "file:///crop.jpg", "generation-1", 10L, "old-key")
+
+        val result = uploading.onMatchingUploadSucceeded(replaceAction, listOf(photo("photo-2", 2)), 42L)
+
+        val state = result.state as ProfilePhotoPreviewState.AwaitingRemote
+        assertEquals("photo-2", state.remotePhotoId)
+        assertEquals("old-key", state.preview.oldCanonicalCacheKey)
+        assertNull(result.cleanupUriString)
+    }
+
+    @Test
+    fun replaceSuccessRequiresMatchingBackendPhotoId() {
+        val uploading = startProfilePhotoPreview(replaceAction, "file:///crop.jpg", "generation-1", 10L, "old-key")
+
+        val result = uploading.onMatchingUploadSucceeded(replaceAction, listOf(photo("photo-other", 2)), 42L)
+
+        assertEquals(ProfilePhotoPreviewState.None, result.state)
+        assertEquals("file:///crop.jpg", result.cleanupUriString)
+    }
+
+    @Test
+    fun mismatchedActionKindIsIgnored() {
+        val replaceAtSamePosition = ProfilePhotoActionPresentation(ProfilePhotoActionKind.Replace, 4, "photo-4")
+        val uploading = startProfilePhotoPreview(addAction, "file:///crop.jpg", "generation-1", 10L, null)
+
+        val result = uploading.onMatchingUploadFailed(replaceAtSamePosition)
+
+        assertSame(uploading, result.state)
+        assertNull(result.cleanupUriString)
+    }
+
+    @Test
+    fun mismatchedPositionIsIgnored() {
+        val otherPosition = ProfilePhotoActionPresentation(ProfilePhotoActionKind.Add, 5)
+        val uploading = startProfilePhotoPreview(addAction, "file:///crop.jpg", "generation-1", 10L, null)
+
+        val result = uploading.onMatchingUploadFailed(otherPosition)
+
+        assertSame(uploading, result.state)
+        assertNull(result.cleanupUriString)
+    }
+
+    @Test
+    fun mismatchedPhotoIdIsIgnored() {
+        val otherPhoto = ProfilePhotoActionPresentation(ProfilePhotoActionKind.Replace, 2, "photo-other")
+        val uploading = startProfilePhotoPreview(replaceAction, "file:///crop.jpg", "generation-1", 10L, null)
+
+        val result = uploading.onMatchingUploadFailed(otherPhoto)
+
+        assertSame(uploading, result.state)
+        assertNull(result.cleanupUriString)
+    }
+
+    @Test
+    fun uploadFailureClearsMatchingUploadingPreview() {
+        val uploading = startProfilePhotoPreview(addAction, "file:///crop.jpg", "generation-1", 10L, null)
+
+        val result = uploading.onMatchingUploadFailed(addAction)
+
+        assertEquals(ProfilePhotoPreviewState.None, result.state)
+        assertEquals("file:///crop.jpg", result.cleanupUriString)
     }
 
     @Test
     fun replaceFailureLeavesAuthoritativeOldPhotoToPresentation() {
         val oldPhoto = photo("photo-2", 2, "https://static.reals.local/old.jpg")
-        val photos = listOf(oldPhoto)
         val uploading = startProfilePhotoPreview(replaceAction, "file:///crop.jpg", "generation-1", 10L, "old-key")
 
-        val state = uploading.onUploadFailed()
+        val result = uploading.onMatchingUploadFailed(replaceAction)
 
-        assertEquals(ProfilePhotoPreviewState.None, state)
-        assertEquals(oldPhoto, photos.first())
+        assertEquals(ProfilePhotoPreviewState.None, result.state)
+        assertEquals(oldPhoto, listOf(oldPhoto).first())
     }
 
     @Test
@@ -86,44 +196,73 @@ class ProfilePhotoPreviewStateTest {
     }
 
     @Test
-    fun sameCanonicalReplacementRequiresCacheEviction() {
-        val decision = profilePhotoReplacementCacheRefreshDecision(
-            action = replaceAction,
-            oldCanonicalCacheKey = "https://cdn.reals.local/photos/photo-2.jpg",
-            newUrl = "https://cdn.reals.local/photos/photo-2.jpg?X-Amz-Signature=new",
+    fun sameProcessSaverRestorePreservesUploading() {
+        val uploading = startProfilePhotoPreview(addAction, "file:///crop.jpg", "generation-1", 10L, null)
+
+        val restored = restoreProfilePhotoPreviewState(
+            saveProfilePhotoPreviewState(uploading, processSessionId = "session-a"),
+            currentProcessSessionId = "session-a",
         )
 
+        assertEquals(uploading, restored)
+    }
+
+    @Test
+    fun differentProcessRestoreBecomesOrphaned() {
+        val uploading = startProfilePhotoPreview(addAction, "file:///crop.jpg", "generation-1", 10L, null)
+
+        val restored = restoreProfilePhotoPreviewState(
+            saveProfilePhotoPreviewState(uploading, processSessionId = "session-a"),
+            currentProcessSessionId = "session-b",
+        )
+
+        assertEquals(ProfilePhotoPreviewState.Orphaned("file:///crop.jpg"), restored)
+    }
+
+    @Test
+    fun unknownSaverPhaseRestoresNone() {
+        assertEquals(ProfilePhotoPreviewState.None, restoreProfilePhotoPreviewState(listOf("unknown")))
+    }
+
+    @Test
+    fun malformedSaverPayloadRestoresNone() {
+        assertEquals(ProfilePhotoPreviewState.None, restoreProfilePhotoPreviewState(listOf("uploading", "session-a")))
         assertEquals(
-            ProfilePhotoCacheRefreshDecision.Evict("https://cdn.reals.local/photos/photo-2.jpg"),
-            decision,
+            ProfilePhotoPreviewState.None,
+            restoreProfilePhotoPreviewState(
+                listOf("awaiting", "session-a", "Add", 4, null, "file:///crop.jpg", "generation-1", 10L),
+            ),
         )
     }
 
     @Test
-    fun addDoesNotRequireCacheEviction() {
-        val decision = profilePhotoReplacementCacheRefreshDecision(
-            action = addAction,
-            oldCanonicalCacheKey = null,
-            newUrl = "https://cdn.reals.local/photos/photo-new.jpg?X-Amz-Signature=new",
-        )
+    fun staleRemoteGenerationDoesNotClearCurrentPreview() {
+        val awaiting = awaiting("generation-2")
 
-        assertEquals(ProfilePhotoCacheRefreshDecision.None, decision)
+        val result = awaiting.onMatchingRemoteSucceeded("photo-new", "generation-1")
+
+        assertSame(awaiting, result.state)
+        assertNull(result.cleanupUriString)
     }
 
     @Test
-    fun stableCacheKeyRemovesOnlyQueryParameters() {
-        assertEquals(
-            "https://cdn.reals.local/photos/photo.jpg",
-            "https://cdn.reals.local/photos/photo.jpg?X-Amz-Signature=a".stableProfilePhotoCacheKey(),
-        )
-        assertEquals(
-            "https://cdn.reals.local/photos/photo.jpg",
-            "https://cdn.reals.local/photos/photo.jpg?X-Amz-Signature=b".stableProfilePhotoCacheKey(),
-        )
-        assertTrue(
-            "https://cdn.reals.local/photos/photo-a.jpg".stableProfilePhotoCacheKey() !=
-                "https://cdn.reals.local/photos/photo-b.jpg".stableProfilePhotoCacheKey(),
-        )
+    fun matchingRemoteSuccessClearsOnlyMatchingPhotoAndGeneration() {
+        val awaiting = awaiting("generation-1")
+
+        val result = awaiting.onMatchingRemoteSucceeded("photo-new", "generation-1")
+
+        assertEquals(ProfilePhotoPreviewState.None, result.state)
+        assertEquals("file:///crop.jpg", result.cleanupUriString)
+    }
+
+    @Test
+    fun staleRemotePhotoIdDoesNotClearCurrentPreview() {
+        val awaiting = awaiting("generation-1")
+
+        val result = awaiting.onMatchingRemoteSucceeded("photo-other", "generation-1")
+
+        assertSame(awaiting, result.state)
+        assertNull(result.cleanupUriString)
     }
 
     private fun previewStateForAction(action: ProfilePhotoActionPresentation): ProfilePhotoPreviewState =
