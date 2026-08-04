@@ -35,6 +35,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
@@ -67,6 +68,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
@@ -1034,9 +1037,16 @@ private fun PhotoManagerActions(
     var pendingTargetPosition by rememberSaveable(profile.id) { mutableStateOf<Int?>(null) }
     var pendingTargetPhotoId by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
     var cropSourceUriString by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
+    var photoActionKindName by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
+    var photoActionPosition by rememberSaveable(profile.id) { mutableStateOf<Int?>(null) }
+    var photoActionPhotoId by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
     val pendingTarget = remember(pendingTargetKind, pendingTargetPosition, pendingTargetPhotoId) {
         profilePhotoSelectionTarget(pendingTargetKind, pendingTargetPosition, pendingTargetPhotoId)
     }
+    val pendingPhotoAction = remember(photoActionKindName, photoActionPosition, photoActionPhotoId) {
+        profilePhotoActionPresentation(photoActionKindName, photoActionPosition, photoActionPhotoId)
+    }
+    val visiblePhotoAction = pendingPhotoAction.takeIf { photoActionLoading }
     val cropRequest = remember(cropSourceUriString, pendingTarget) {
         val sourceUri = cropSourceUriString?.let(Uri::parse)
         val target = pendingTarget
@@ -1059,18 +1069,15 @@ private fun PhotoManagerActions(
             maxAgeMillis = 24.hours.inWholeMilliseconds,
         )
     }
-    LaunchedEffect(photoActionLoading, photoActionMessage) {
-        if (!photoActionLoading && photoActionMessage != null && pendingTarget != null) {
+    LaunchedEffect(photoActionLoading, photoActionMessage, photoActionError) {
+        if (!photoActionLoading && (photoActionMessage != null || photoActionError != null)) {
             pendingTargetKind = null
             pendingTargetPosition = null
             pendingTargetPhotoId = null
             cropSourceUriString = null
-        }
-        if (!photoActionLoading && photoActionError != null) {
-            pendingTargetKind = null
-            pendingTargetPosition = null
-            pendingTargetPhotoId = null
-            cropSourceUriString = null
+            photoActionKindName = null
+            photoActionPosition = null
+            photoActionPhotoId = null
         }
     }
 
@@ -1094,9 +1101,13 @@ private fun PhotoManagerActions(
                 )
             }
             photoReorderError?.let { ApiErrorFeedbackCard(it, ErrorContext.PhotoUpload) }
+            if (photoActionLoading) {
+                ProfilePhotoActionProgressCard(action = visiblePhotoAction)
+            }
             PhotoGrid(
                 photos = photos,
                 busy = busy,
+                pendingAction = visiblePhotoAction,
                 onPickNewFile = { position ->
                     localError = null
                     pendingTargetKind = ProfilePhotoAddTargetKind
@@ -1117,7 +1128,13 @@ private fun PhotoManagerActions(
                         PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                     )
                 },
-                onDeletePhoto = onDeletePhoto,
+                onDeletePhoto = { photoId, position ->
+                    localError = null
+                    photoActionKindName = ProfilePhotoActionKind.Delete.name
+                    photoActionPosition = position
+                    photoActionPhotoId = photoId
+                    onDeletePhoto(photoId, position)
+                },
                 onMovePhoto = onMovePhoto,
             )
             cropRequest?.let { request ->
@@ -1130,6 +1147,10 @@ private fun PhotoManagerActions(
                         cropSourceUriString = null
                     },
                     onCropped = { croppedUri ->
+                        val action = request.target.toProfilePhotoActionPresentation()
+                        photoActionKindName = action.kind.name
+                        photoActionPosition = action.position
+                        photoActionPhotoId = action.photoId
                         dispatchCroppedProfilePhoto(
                             target = request.target,
                             croppedUri = croppedUri,
@@ -1141,7 +1162,11 @@ private fun PhotoManagerActions(
                 )
             }
             localError?.let { ErrorFeedback("Revisá las fotos", it) }
-            photoActionError?.let { ApiErrorFeedbackCard(it, ErrorContext.PhotoUpload) }
+            ProfilePhotoActionFeedback(
+                photoActionLoading = photoActionLoading,
+                photoActionError = photoActionError,
+                photoActionMessage = photoActionMessage,
+            )
             activationError?.let { ApiErrorFeedbackCard(it, ErrorContext.ProfileActivation) }
             val showEmailVerificationActions = shouldShowEmailVerificationActions(
                 emailVerificationLocallyVerified = emailVerificationLocallyVerified,
@@ -1240,9 +1265,79 @@ private fun EmailVerificationActions(
 }
 
 @Composable
+internal fun ProfilePhotoActionFeedback(
+    photoActionLoading: Boolean,
+    photoActionError: ApiError?,
+    photoActionMessage: String?,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        photoActionError?.let { ApiErrorFeedbackCard(it, ErrorContext.PhotoUpload) }
+        if (!photoActionLoading && photoActionError == null) {
+            photoActionMessage?.let { SuccessFeedback(it) }
+        }
+    }
+}
+
+@Composable
+internal fun ProfilePhotoActionProgressCard(
+    action: ProfilePhotoActionPresentation?,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .semantics {
+                liveRegion = LiveRegionMode.Polite
+                stateDescription = action.slotStateDescription()
+            }
+            .testTag(ProfilePhotoActionProgressTag),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        ),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier
+                    .size(24.dp)
+                    .testTag(ProfilePhotoActionProgressIndicatorTag),
+                strokeWidth = 2.5.dp,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = action.progressTitle(),
+                    modifier = Modifier.testTag(ProfilePhotoActionProgressTitleTag),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+                Text(
+                    text = action.progressMessage(),
+                    modifier = Modifier.testTag(ProfilePhotoActionProgressMessageTag),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+        }
+    }
+}
+
+@Composable
 internal fun PhotoGrid(
     photos: List<ProfilePhoto>,
     busy: Boolean,
+    pendingAction: ProfilePhotoActionPresentation? = null,
     onPickNewFile: (position: Int) -> Unit,
     onPickReplacementFile: (photoId: String, position: Int) -> Unit,
     onDeletePhoto: (photoId: String, position: Int) -> Unit,
@@ -1274,6 +1369,7 @@ internal fun PhotoGrid(
                             position = position,
                             photo = photosByPosition[position],
                             busy = busy,
+                            pendingAction = pendingAction?.takeIf { it.targetsPosition(position) },
                             isDragTarget = currentDragState?.targetPosition == position,
                             isDraggingSource = currentDragState?.sourcePosition == position,
                             modifier = Modifier.weight(1f),
@@ -1346,6 +1442,7 @@ internal fun PhotoSlot(
     position: Int,
     photo: ProfilePhoto?,
     busy: Boolean,
+    pendingAction: ProfilePhotoActionPresentation? = null,
     isDragTarget: Boolean,
     isDraggingSource: Boolean,
     modifier: Modifier = Modifier,
@@ -1370,6 +1467,7 @@ internal fun PhotoSlot(
         EmptyPhotoSlot(
             position = position,
             busy = busy,
+            pendingAction = pendingAction,
             isDragTarget = isDragTarget,
             modifier = positionedModifier,
             onPickNewFile = onPickNewFile,
@@ -1378,6 +1476,7 @@ internal fun PhotoSlot(
         FilledPhotoSlot(
             photo = photo,
             busy = busy,
+            pendingAction = pendingAction,
             isDragTarget = isDragTarget,
             isDraggingSource = isDraggingSource,
             slotBounds = slotBounds,
@@ -1396,6 +1495,7 @@ internal fun PhotoSlot(
 internal fun FilledPhotoSlot(
     photo: ProfilePhoto,
     busy: Boolean,
+    pendingAction: ProfilePhotoActionPresentation? = null,
     isDragTarget: Boolean,
     isDraggingSource: Boolean,
     slotBounds: Rect?,
@@ -1431,11 +1531,13 @@ internal fun FilledPhotoSlot(
     } else {
         Modifier
     }
+    val actionStateDescription = pendingAction.slotStateDescription()
     Column(
         modifier = modifier
             .alpha(if (isDraggingSource) 0.42f else 1f)
             .semantics {
                 when {
+                    pendingAction != null -> stateDescription = actionStateDescription
                     isDraggingSource -> stateDescription = "Dragging"
                     isDragTarget -> stateDescription = "Drop target"
                 }
@@ -1497,8 +1599,30 @@ internal fun FilledPhotoSlot(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.34f)),
-                )
+                        .background(
+                            MaterialTheme.colorScheme.surface.copy(
+                                alpha = if (pendingAction != null) 0.58f else 0.34f,
+                            ),
+                        )
+                        .then(
+                            if (pendingAction != null) {
+                                Modifier.testTag(profilePhotoActionTargetTag(photo.position))
+                            } else {
+                                Modifier
+                            },
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (pendingAction != null) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .testTag(profilePhotoActionTargetIndicatorTag(photo.position)),
+                            strokeWidth = 2.5.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
             }
         }
         Row(
@@ -1542,16 +1666,21 @@ internal fun FilledPhotoSlot(
 internal fun EmptyPhotoSlot(
     position: Int,
     busy: Boolean,
+    pendingAction: ProfilePhotoActionPresentation? = null,
     isDragTarget: Boolean,
     modifier: Modifier = Modifier,
     onPickNewFile: (position: Int) -> Unit,
 ) {
     val shape = RoundedCornerShape(8.dp)
+    val actionStateDescription = pendingAction.slotStateDescription()
     Box(
         modifier = modifier
             .aspectRatio(1f)
             .semantics {
-                if (isDragTarget) stateDescription = "Drop target"
+                when {
+                    pendingAction != null -> stateDescription = actionStateDescription
+                    isDragTarget -> stateDescription = "Drop target"
+                }
             }
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceContainer)
@@ -1595,8 +1724,30 @@ internal fun EmptyPhotoSlot(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.34f)),
-            )
+                    .background(
+                        MaterialTheme.colorScheme.surface.copy(
+                            alpha = if (pendingAction != null) 0.58f else 0.34f,
+                        ),
+                    )
+                    .then(
+                        if (pendingAction != null) {
+                            Modifier.testTag(profilePhotoActionTargetTag(position))
+                        } else {
+                            Modifier
+                        },
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (pendingAction != null) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .testTag(profilePhotoActionTargetIndicatorTag(position)),
+                        strokeWidth = 2.5.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
         }
     }
 }
@@ -1676,7 +1827,14 @@ internal val ProfilePhotoDeleteVisualSize = 24.dp
 internal val ProfilePhotoReplaceActionMinHeight = 48.dp
 
 internal const val ProfilePhotoGridRootTag = "profile_photo_grid"
+internal const val ProfilePhotoActionProgressTag = "profile_photo_action_progress"
+internal const val ProfilePhotoActionProgressIndicatorTag = "profile_photo_action_progress_indicator"
+internal const val ProfilePhotoActionProgressTitleTag = "profile_photo_action_progress_title"
+internal const val ProfilePhotoActionProgressMessageTag = "profile_photo_action_progress_message"
 internal fun profilePhotoSlotTag(position: Int): String = "profile_photo_slot_$position"
+internal fun profilePhotoActionTargetTag(position: Int): String = "profile_photo_action_target_$position"
+internal fun profilePhotoActionTargetIndicatorTag(position: Int): String =
+    "profile_photo_action_target_indicator_$position"
 internal fun profilePhotoDeleteTag(position: Int): String = "profile_photo_delete_$position"
 internal fun profilePhotoDeleteVisualTag(position: Int): String = "profile_photo_delete_visual_$position"
 internal fun profilePhotoReplaceTag(position: Int): String = "profile_photo_replace_$position"

@@ -35,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -50,6 +51,10 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.SemanticsPropertyReceiver
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -320,7 +325,7 @@ private fun ProfilePhotoCropActions(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag(ProfilePhotoCropActionsNormalTag),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 CancelAction(onCancel = onCancel, enabled = !processing)
@@ -427,14 +432,25 @@ private fun ConfirmAction(
     enabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    var labelLineCount by remember { mutableIntStateOf(1) }
     OutlinedButton(
         onClick = onConfirm,
         enabled = enabled,
         modifier = modifier
+            .heightIn(min = 48.dp)
             .sizeIn(minWidth = ProfilePhotoCropPrimaryActionMinWidth)
             .testTag(ProfilePhotoCropConfirmActionTag),
     ) {
-        Text("Usar foto")
+        Text(
+            text = "Usar foto",
+            modifier = Modifier
+                .testTag(ProfilePhotoCropConfirmLabelTag)
+                .semantics { profilePhotoCropConfirmLineCount = labelLineCount },
+            maxLines = 1,
+            softWrap = false,
+            textAlign = TextAlign.Center,
+            onTextLayout = { labelLineCount = it.lineCount },
+        )
     }
 }
 
@@ -479,9 +495,14 @@ internal fun profilePhotoCropLayoutSpec(
 ): ProfilePhotoCropLayoutSpec {
     val compactHeight = maxHeight < 560.dp
     val narrowWidth = maxWidth < 340.dp
+    val mediumLargeTextNeedsReflow = fontScale >= 1.25f && maxWidth < 400.dp
     val largeText = fontScale >= 1.45f
     val errorConsumesVerticalSpace = hasError && maxHeight < 640.dp
-    val constrained = narrowWidth || compactHeight || largeText || errorConsumesVerticalSpace
+    val constrained = narrowWidth ||
+        compactHeight ||
+        mediumLargeTextNeedsReflow ||
+        largeText ||
+        errorConsumesVerticalSpace
     val stackSecondaryActions = maxWidth < 340.dp || fontScale >= 1.9f || maxHeight < 500.dp
     return if (!constrained) {
         ProfilePhotoCropLayoutSpec(
@@ -513,6 +534,11 @@ internal const val ProfilePhotoCropActionsConstrainedTag = "profile_photo_crop_a
 internal const val ProfilePhotoCropCancelActionTag = "profile_photo_crop_cancel"
 internal const val ProfilePhotoCropResetActionTag = "profile_photo_crop_reset"
 internal const val ProfilePhotoCropConfirmActionTag = "profile_photo_crop_confirm"
+internal const val ProfilePhotoCropConfirmLabelTag = "profile_photo_crop_confirm_label"
 
-private val ProfilePhotoCropPrimaryActionMinWidth = 112.dp
+internal val ProfilePhotoCropConfirmLineCountKey =
+    SemanticsPropertyKey<Int>("ProfilePhotoCropConfirmLineCount")
+internal var SemanticsPropertyReceiver.profilePhotoCropConfirmLineCount by ProfilePhotoCropConfirmLineCountKey
+
+private val ProfilePhotoCropPrimaryActionMinWidth = 124.dp
 private val ProfilePhotoCropSecondaryActionMinWidth = 88.dp
