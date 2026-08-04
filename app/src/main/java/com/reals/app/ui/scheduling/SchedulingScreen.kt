@@ -3,6 +3,7 @@ package com.reals.app.ui.scheduling
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -38,6 +40,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.reals.app.BuildConfig
@@ -61,8 +66,8 @@ import java.time.ZoneId
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 
-private val PickerControlSlotHeight = 48.dp
-private val PickerOptionSlotHeight = 156.dp
+private val PickerControlMinHeight = 48.dp
+private val PickerOptionMinHeight = 48.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -329,7 +334,7 @@ private fun LoadingCard() {
 }
 
 @Composable
-private fun ProposalSelectorCard(
+internal fun ProposalSelectorCard(
     submitting: Boolean,
     actionsDisabled: Boolean,
     submittingLabel: String?,
@@ -419,10 +424,15 @@ private fun ProposalSelectorCard(
         ?.let { validateCurrentSelectedSlots(it, now, availability) }
     val visibleValidationError = validationError ?: currentSelectedValidation
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-    ) {
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val pickerLayoutSpec = schedulingPickerLayoutSpec(
+            maxWidth = maxWidth,
+            fontScale = LocalDensity.current.fontScale,
+        )
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Elegir horarios", style = MaterialTheme.typography.titleMedium)
             Text(
@@ -435,7 +445,7 @@ private fun ProposalSelectorCard(
             }
 
             WheelPickerColumn(
-                title = "Dia",
+                title = "Día",
                 options = dayOptions,
                 selected = dayOptions.firstOrNull { it.date == selectedLocalDate },
                 enabled = !submitting && !actionsDisabled,
@@ -467,14 +477,12 @@ private fun ProposalSelectorCard(
                     validationError = null
                 },
                 modifier = Modifier.fillMaxWidth(),
-                pickerHeight = 132.dp,
+                pickerHeight = pickerLayoutSpec.dayViewportHeight,
+                controlMinHeight = pickerLayoutSpec.controlMinHeight,
+                tagPrefix = SchedulingDayPickerTag,
             )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.Top,
-            ) {
+            val hourPicker: @Composable (Modifier) -> Unit = { pickerModifier ->
                 WheelPickerColumn(
                     title = "Hora",
                     options = visibleHours,
@@ -497,8 +505,13 @@ private fun ProposalSelectorCard(
                             ?: selectedMinute
                         validationError = null
                     },
-                    modifier = Modifier.weight(1f),
+                    modifier = pickerModifier,
+                    pickerHeight = pickerLayoutSpec.optionViewportHeight,
+                    controlMinHeight = pickerLayoutSpec.controlMinHeight,
+                    tagPrefix = SchedulingHourPickerTag,
                 )
+            }
+            val minutePicker: @Composable (Modifier) -> Unit = { pickerModifier ->
                 MinutePickerColumn(
                     minutes = listOf(0, 30),
                     selected = selectedMinute.takeIf { it in availableMinutes },
@@ -509,9 +522,16 @@ private fun ProposalSelectorCard(
                         selectedMinute = minute
                         validationError = null
                     },
-                    modifier = Modifier.weight(1f),
+                    modifier = pickerModifier,
+                    minOptionsHeight = pickerLayoutSpec.optionViewportHeight,
+                    controlMinHeight = pickerLayoutSpec.controlMinHeight,
                 )
             }
+            SchedulingHourMinutePickerLayout(
+                layout = pickerLayoutSpec.hourMinuteArrangement,
+                hourPicker = hourPicker,
+                minutePicker = minutePicker,
+            )
 
             Button(
                 onClick = {
@@ -529,7 +549,9 @@ private fun ProposalSelectorCard(
                     }
                 },
                 enabled = !submitting && !actionsDisabled && selected.size < 3 && candidateValue != null,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(SchedulingAddOptionTag),
             ) {
                 Text("Agregar opción")
             }
@@ -610,6 +632,7 @@ private fun ProposalSelectorCard(
                 }
             }
         }
+        }
     }
 }
 
@@ -685,7 +708,76 @@ internal fun schedulingProposalDraftScope(
     )
 
 @Composable
-private fun <T> WheelPickerColumn(
+internal fun SchedulingHourMinutePickerLayout(
+    layout: SchedulingHourMinuteArrangement,
+    hourPicker: @Composable (Modifier) -> Unit,
+    minutePicker: @Composable (Modifier) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    when (layout) {
+        SchedulingHourMinuteArrangement.SideBySide -> {
+            Row(
+                modifier = modifier
+                    .fillMaxWidth()
+                    .testTag(SchedulingHourMinuteSideBySideTag),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                hourPicker(Modifier.weight(1f))
+                minutePicker(Modifier.weight(1f))
+            }
+        }
+
+        SchedulingHourMinuteArrangement.Stacked -> {
+            Column(
+                modifier = modifier
+                    .fillMaxWidth()
+                    .testTag(SchedulingHourMinuteStackedTag),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                hourPicker(Modifier.fillMaxWidth())
+                minutePicker(Modifier.fillMaxWidth())
+            }
+        }
+    }
+}
+
+internal enum class SchedulingHourMinuteArrangement {
+    SideBySide,
+    Stacked,
+}
+
+internal data class SchedulingPickerLayoutSpec(
+    val controlMinHeight: Dp,
+    val dayViewportHeight: Dp,
+    val optionViewportHeight: Dp,
+    val hourMinuteArrangement: SchedulingHourMinuteArrangement,
+)
+
+internal fun schedulingPickerLayoutSpec(maxWidth: Dp, fontScale: Float): SchedulingPickerLayoutSpec {
+    val constrainedWidth = maxWidth < 300.dp
+    val moderateWidthWithLargeText = maxWidth < 340.dp && fontScale >= 1.3f
+    val veryLargeText = fontScale >= 1.8f
+    val stacked = constrainedWidth || moderateWidthWithLargeText || veryLargeText
+    val optionViewportHeight = when {
+        fontScale >= 1.8f -> 224.dp
+        fontScale >= 1.5f -> 196.dp
+        else -> 156.dp
+    }
+    return SchedulingPickerLayoutSpec(
+        controlMinHeight = PickerControlMinHeight,
+        dayViewportHeight = if (fontScale >= 1.5f) 168.dp else 132.dp,
+        optionViewportHeight = optionViewportHeight,
+        hourMinuteArrangement = if (stacked) {
+            SchedulingHourMinuteArrangement.Stacked
+        } else {
+            SchedulingHourMinuteArrangement.SideBySide
+        },
+    )
+}
+
+@Composable
+internal fun <T> WheelPickerColumn(
     title: String,
     options: List<T>,
     selected: T?,
@@ -693,7 +785,9 @@ private fun <T> WheelPickerColumn(
     optionLabel: (T) -> String,
     onSelected: (T) -> Unit,
     modifier: Modifier = Modifier,
-    pickerHeight: Dp = PickerOptionSlotHeight,
+    pickerHeight: Dp,
+    controlMinHeight: Dp,
+    tagPrefix: String,
     isOptionEnabled: (T) -> Boolean = { true },
     isOptionBlocked: (T) -> Boolean = { false },
 ) {
@@ -714,7 +808,7 @@ private fun <T> WheelPickerColumn(
     )?.let(options::get)
 
     Column(
-        modifier = modifier,
+        modifier = modifier.testTag(tagPrefix),
         verticalArrangement = Arrangement.spacedBy(6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -722,17 +816,21 @@ private fun <T> WheelPickerColumn(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(PickerControlSlotHeight),
+                .heightIn(min = controlMinHeight),
             contentAlignment = Alignment.Center,
         ) {
             TextButton(
                 onClick = { previousOption?.let(onSelected) },
                 enabled = enabled && previousOption != null,
+                modifier = Modifier
+                    .heightIn(min = controlMinHeight)
+                    .testTag(schedulingPickerPreviousTag(tagPrefix)),
             ) {
                 Text(
                     text = "^",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.labelMedium,
+                    textAlign = TextAlign.Center,
                 )
             }
         }
@@ -743,7 +841,8 @@ private fun <T> WheelPickerColumn(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(pickerHeight),
+                    .height(pickerHeight)
+                    .testTag(schedulingPickerOptionsTag(tagPrefix)),
                 state = listState,
                 contentPadding = PaddingValues(vertical = 0.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -756,9 +855,11 @@ private fun <T> WheelPickerColumn(
                         Button(
                             onClick = { onSelected(option) },
                             enabled = optionEnabled,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = PickerOptionMinHeight),
                         ) {
-                            Text(optionLabel(option))
+                            Text(optionLabel(option), textAlign = TextAlign.Center)
                         }
                     } else {
                         OutlinedButton(
@@ -769,7 +870,9 @@ private fun <T> WheelPickerColumn(
                             } else {
                                 null
                             },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = PickerOptionMinHeight),
                         ) {
                             Text(
                                 text = optionLabel(option),
@@ -778,6 +881,7 @@ private fun <T> WheelPickerColumn(
                                 } else {
                                     MaterialTheme.colorScheme.onSurface
                                 },
+                                textAlign = TextAlign.Center,
                             )
                         }
                     }
@@ -787,25 +891,42 @@ private fun <T> WheelPickerColumn(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(PickerControlSlotHeight),
+                .heightIn(min = controlMinHeight),
             contentAlignment = Alignment.Center,
         ) {
             TextButton(
                 onClick = { nextOption?.let(onSelected) },
                 enabled = enabled && nextOption != null,
+                modifier = Modifier
+                    .heightIn(min = controlMinHeight)
+                    .testTag(schedulingPickerNextTag(tagPrefix)),
             ) {
                 Text(
                     text = "v",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.labelMedium,
+                    textAlign = TextAlign.Center,
                 )
             }
         }
     }
 }
 
+internal const val SchedulingDayPickerTag = "scheduling_picker_day"
+internal const val SchedulingHourPickerTag = "scheduling_picker_hour"
+internal const val SchedulingMinutePickerTag = "scheduling_picker_minute"
+internal const val SchedulingMinuteOptionsTag = "scheduling_picker_minute_options"
+internal const val SchedulingMinuteUnavailableTag = "scheduling_picker_minute_unavailable"
+internal const val SchedulingHourMinuteSideBySideTag = "scheduling_hour_minute_side_by_side"
+internal const val SchedulingHourMinuteStackedTag = "scheduling_hour_minute_stacked"
+internal const val SchedulingAddOptionTag = "scheduling_add_option"
+internal fun schedulingPickerPreviousTag(prefix: String): String = "${prefix}_previous"
+internal fun schedulingPickerNextTag(prefix: String): String = "${prefix}_next"
+internal fun schedulingPickerOptionsTag(prefix: String): String = "${prefix}_options"
+internal fun schedulingMinuteOptionTag(minute: Int): String = "scheduling_minute_option_$minute"
+
 @Composable
-private fun MinutePickerColumn(
+internal fun MinutePickerColumn(
     minutes: List<Int>,
     selected: Int?,
     enabled: Boolean,
@@ -813,16 +934,20 @@ private fun MinutePickerColumn(
     conflictingMinutes: Set<Int>,
     onSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    minOptionsHeight: Dp,
+    controlMinHeight: Dp,
 ) {
     Column(
-        modifier = modifier,
+        modifier = modifier.testTag(SchedulingMinutePickerTag),
         verticalArrangement = Arrangement.spacedBy(6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text("Min", style = MaterialTheme.typography.titleSmall)
-        Spacer(modifier = Modifier.height(PickerControlSlotHeight))
+        Spacer(modifier = Modifier.height(controlMinHeight))
         Column(
-            modifier = Modifier.height(PickerOptionSlotHeight),
+            modifier = Modifier
+                .heightIn(min = minOptionsHeight)
+                .testTag(SchedulingMinuteOptionsTag),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             minutes.forEach { minute ->
@@ -833,9 +958,12 @@ private fun MinutePickerColumn(
                     Button(
                         onClick = { onSelected(minute) },
                         enabled = optionEnabled,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = PickerOptionMinHeight)
+                            .testTag(schedulingMinuteOptionTag(minute)),
                     ) {
-                        Text(label)
+                        Text(label, textAlign = TextAlign.Center)
                     }
                 } else {
                     OutlinedButton(
@@ -846,7 +974,10 @@ private fun MinutePickerColumn(
                         } else {
                             null
                         },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = PickerOptionMinHeight)
+                            .testTag(schedulingMinuteOptionTag(minute)),
                     ) {
                         Text(
                             text = label,
@@ -855,6 +986,7 @@ private fun MinutePickerColumn(
                             } else {
                                 MaterialTheme.colorScheme.onSurface
                             },
+                            textAlign = TextAlign.Center,
                         )
                     }
                 }
@@ -862,12 +994,14 @@ private fun MinutePickerColumn(
             if (conflictingMinutes.isNotEmpty()) {
                 Text(
                     text = "No disponible",
+                    modifier = Modifier.testTag(SchedulingMinuteUnavailableTag),
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center,
                 )
             }
         }
-        Spacer(modifier = Modifier.height(PickerControlSlotHeight))
+        Spacer(modifier = Modifier.height(controlMinHeight))
     }
 }
 

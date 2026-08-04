@@ -1,12 +1,14 @@
 package com.reals.app.ui.chat
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -26,7 +28,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.reals.app.R
 import com.reals.app.core.network.ApiError
@@ -358,22 +364,13 @@ fun VisualApprovalScreen(
                     text = "Si aprobás y la otra persona también aprueba, se crea la conexión para la siguiente etapa.",
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(
-                        onClick = onApprove,
-                        enabled = canMakeVisualDecision,
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text(if (deciding) decidingLabel ?: "Procesando..." else "Aprobar")
-                    }
-                    OutlinedButton(
-                        onClick = onReject,
-                        enabled = canMakeVisualDecision,
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text(if (deciding) decidingLabel ?: "Procesando..." else "Rechazar")
-                    }
-                }
+                VisualDecisionActions(
+                    deciding = deciding,
+                    decidingLabel = decidingLabel,
+                    enabled = canMakeVisualDecision,
+                    onApprove = onApprove,
+                    onReject = onReject,
+                )
             }
         }
         Spacer(modifier = Modifier.height(24.dp))
@@ -397,6 +394,121 @@ fun VisualApprovalScreen(
         )
     }
 }
+
+@Composable
+internal fun VisualDecisionActions(
+    deciding: Boolean,
+    decidingLabel: String?,
+    enabled: Boolean,
+    onApprove: () -> Unit,
+    onReject: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val actionLayout = visualDecisionActionsLayout(maxWidth, LocalDensity.current.fontScale)
+        val approveLabel = if (deciding) decidingLabel ?: "Procesando..." else "Aprobar"
+        val rejectLabel = if (deciding) decidingLabel ?: "Procesando..." else "Rechazar"
+        when (actionLayout) {
+            VisualDecisionActionsLayout.Row -> {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag(VisualDecisionActionsRowTag),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    VisualApproveButton(
+                        label = approveLabel,
+                        enabled = enabled,
+                        onApprove = onApprove,
+                        modifier = Modifier.weight(1f),
+                    )
+                    VisualRejectButton(
+                        label = rejectLabel,
+                        enabled = enabled,
+                        onReject = onReject,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+
+            VisualDecisionActionsLayout.Stacked -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag(VisualDecisionActionsStackedTag),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    VisualApproveButton(
+                        label = approveLabel,
+                        enabled = enabled,
+                        onApprove = onApprove,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    VisualRejectButton(
+                        label = rejectLabel,
+                        enabled = enabled,
+                        onReject = onReject,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun VisualApproveButton(
+    label: String,
+    enabled: Boolean,
+    onApprove: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Button(
+        onClick = onApprove,
+        enabled = enabled,
+        modifier = modifier
+            .heightIn(min = VisualDecisionActionMinHeight)
+            .testTag(VisualDecisionApproveTag),
+    ) {
+        Text(label, textAlign = TextAlign.Center)
+    }
+}
+
+@Composable
+private fun VisualRejectButton(
+    label: String,
+    enabled: Boolean,
+    onReject: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    OutlinedButton(
+        onClick = onReject,
+        enabled = enabled,
+        modifier = modifier
+            .heightIn(min = VisualDecisionActionMinHeight)
+            .testTag(VisualDecisionRejectTag),
+    ) {
+        Text(label, textAlign = TextAlign.Center)
+    }
+}
+
+internal enum class VisualDecisionActionsLayout {
+    Row,
+    Stacked,
+}
+
+internal fun visualDecisionActionsLayout(maxWidth: Dp, fontScale: Float): VisualDecisionActionsLayout {
+    val constrained = maxWidth < 300.dp ||
+        (maxWidth < 340.dp && fontScale >= 1.3f) ||
+        fontScale >= 1.8f
+    return if (constrained) VisualDecisionActionsLayout.Stacked else VisualDecisionActionsLayout.Row
+}
+
+internal val VisualDecisionActionMinHeight = 48.dp
+internal const val VisualDecisionActionsRowTag = "visual_decision_actions_row"
+internal const val VisualDecisionActionsStackedTag = "visual_decision_actions_stacked"
+internal const val VisualDecisionApproveTag = "visual_decision_approve"
+internal const val VisualDecisionRejectTag = "visual_decision_reject"
 
 @Composable
 private fun VisualApprovalInitialLoadingCard() {

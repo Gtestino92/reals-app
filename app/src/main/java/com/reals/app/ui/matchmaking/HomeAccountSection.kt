@@ -1,9 +1,11 @@
 package com.reals.app.ui.matchmaking
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
@@ -24,6 +26,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -149,23 +155,11 @@ internal fun AccountSection(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
     ) {
         Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column {
-                    Text("Cuenta", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        text = "Sesión y acciones sensibles.",
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-                TextButton(onClick = { onExpandedChange(!expanded) }, enabled = !busy) {
-                    Text(if (expanded) "Ocultar" else "Abrir")
-                }
-            }
+            AccountSectionHeader(
+                expanded = expanded,
+                enabled = !busy,
+                onToggle = { onExpandedChange(!expanded) },
+            )
             if (expanded) {
                 OutlinedButton(onClick = onSignOut, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
                     Text("Cerrar sesión")
@@ -202,6 +196,107 @@ internal fun AccountSection(
         }
     }
 }
+
+@Composable
+internal fun AccountSectionHeader(
+    expanded: Boolean,
+    enabled: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val fontScale = LocalDensity.current.fontScale
+        when (accountSectionHeaderLayout(maxWidth, fontScale)) {
+            AccountSectionHeaderLayout.Normal -> {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag(AccountSectionHeaderNormalTag),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    AccountSectionHeaderText(modifier = Modifier.weight(1f))
+                    AccountSectionToggleButton(
+                        expanded = expanded,
+                        enabled = enabled,
+                        onToggle = onToggle,
+                    )
+                }
+            }
+
+            AccountSectionHeaderLayout.Constrained -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag(AccountSectionHeaderConstrainedTag),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    AccountSectionHeaderText(modifier = Modifier.fillMaxWidth())
+                    AccountSectionToggleButton(
+                        expanded = expanded,
+                        enabled = enabled,
+                        onToggle = onToggle,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccountSectionHeaderText(
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.testTag(AccountSectionHeaderTextTag)) {
+        Text("Cuenta", style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = "Sesión y acciones sensibles.",
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+}
+
+@Composable
+private fun AccountSectionToggleButton(
+    expanded: Boolean,
+    enabled: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    TextButton(
+        onClick = onToggle,
+        enabled = enabled,
+        modifier = modifier
+            .heightIn(min = AccountSectionToggleMinHeight)
+            .testTag(AccountSectionToggleTag),
+    ) {
+        Text(
+            text = if (expanded) "Ocultar" else "Abrir",
+            softWrap = false,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+internal enum class AccountSectionHeaderLayout {
+    Normal,
+    Constrained,
+}
+
+internal fun accountSectionHeaderLayout(maxWidth: Dp, fontScale: Float): AccountSectionHeaderLayout {
+    val constrained = maxWidth < 300.dp ||
+        (maxWidth < 340.dp && fontScale >= 1.3f) ||
+        fontScale >= 1.8f
+    return if (constrained) AccountSectionHeaderLayout.Constrained else AccountSectionHeaderLayout.Normal
+}
+
+internal val AccountSectionToggleMinHeight = 48.dp
+internal const val AccountSectionHeaderNormalTag = "account_section_header_normal"
+internal const val AccountSectionHeaderConstrainedTag = "account_section_header_constrained"
+internal const val AccountSectionHeaderTextTag = "account_section_header_text"
+internal const val AccountSectionToggleTag = "account_section_toggle"
 
 @Composable
 private fun ChangePasswordDialog(
