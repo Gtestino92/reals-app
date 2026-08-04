@@ -15,6 +15,13 @@ data class VisualProfileResponseDto(
     val partnerPersonalMessageRead: Boolean = true,
     val decisionRequiresPartnerPersonalMessageRead: Boolean? = null,
     val approvalRequiresPartnerPersonalMessageRead: Boolean? = null,
+    val affinityIndicators: List<VisualAffinityIndicatorResponseDto> = emptyList(),
+)
+
+@Serializable
+data class VisualAffinityIndicatorResponseDto(
+    val categoryId: String,
+    val title: String,
 )
 
 @Serializable

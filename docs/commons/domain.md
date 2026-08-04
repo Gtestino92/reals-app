@@ -7,6 +7,7 @@ The domain is state-driven and anonymous-first. Business transitions are validat
 - `User`
 - `Profile`
 - `ProfilePhoto`
+- `AffinityQuestionAnswer`
 - `MatchmakingQueueEntry`
 - `Match`
 - `Chat`
@@ -36,6 +37,14 @@ Profile:
 - `Intention`: `DATE`, `FRIENDSHIP`, `CASUAL`
 - `ProfileStatus`: `DRAFT`, `ACTIVE`, `INACTIVE`
 - `ProfileAuthenticityVerificationStatus`: `NOT_STARTED`, `PENDING`, `VERIFIED`, `REJECTED`, `NEEDS_REVIEW`, `STALE`
+
+Affinity questions:
+
+- `AffinityAnswerType`: `SINGLE_CHOICE`, `ORDINAL_SCALE`
+- `AffinityQuestionStatus`: `ACTIVE`, `DEPRECATED`
+- `AffinityConstruct`: `DOMAIN_ENGAGEMENT`, `TASTE_PREFERENCE`, `SHARED_ACTIVITY_ORIENTATION`, `VALUES_ALIGNMENT`, `LIFESTYLE_ALIGNMENT`, `RELATIONAL_EXPECTATION`, `DIFFERENCE_TOLERANCE`, `SALIENCE_ALIGNMENT`, `CONVERSATION_ONLY`
+- `AffinitySensitivity`: `STANDARD`, `SENSITIVE_LOW_RANKING`
+- `ConversationKind`: `SHARED_AFFINITY`, `CONSTRUCTIVE_CONTRAST`, `NEUTRAL`, `NOT_ELIGIBLE`
 
 Matching and chat:
 
@@ -106,9 +115,11 @@ Push notifications:
 
 - A `User` may have one `Profile`.
 - A `Profile` has many `ProfilePhoto` records.
+- A `Profile` has many private `AffinityQuestionAnswer` records, unique by `(profileId, questionId)`. Answers are owned by the current user's profile and are never exposed through counterpart-facing profile, match, visual-review, first-chat, Home or partner-summary responses.
 - A `Match` has `userAId` and `userBId`.
 - A `Chat` belongs to a `Match`; `SECOND_CHAT` also has `connectionId`.
-- `FirstChatGuidance` belongs to one `FIRST_CHAT` through a unique `chatId`. It stores the active question id/text snapshot, ordinal, activation timestamp, per-participant next-question request timestamps and optional completion timestamp. It does not store message counters or the full selected sequence.
+- `FirstChatGuidance` belongs to one `FIRST_CHAT` through a unique `chatId`. It stores the active question id/text snapshot, ordinal, activation timestamp, per-participant next-question request timestamps and optional completion timestamp. It does not store message counters.
+- `ConversationPromptSnapshot` belongs to one first chat and stores the complete immutable prompt sequence by `(chatId, ordinal)`. Affinity rows snapshot source question id, semantic version, prompt text, category and conversation kind; generic rows snapshot only generic source id/text. No answer code, answer label, ranking contribution, score, percentage, confidence or affinity factor is stored.
 - `ChatDecision` belongs to a chat and match.
 - `ChatExitRequest` records mutual cancellation requests, unilateral cancellations and safety-report chat closures.
 - `SafetyReport` is the moderation source of truth for reported safety incidents. It stores an explicit source, context type and context id; chat safety cancellation uses `CHAT` with the chat id, visual profile and personal message reports use the match id, profile photo reports use the photo id, and admin-only general user reports use `USER` with the reported user id.
@@ -117,6 +128,7 @@ Push notifications:
 - `AuditEvent` records safety-relevant operational events with minimal metadata. It must not store raw IP addresses, raw user agents, chat message contents, report details, emails, Firebase UIDs, photo URLs, storage keys or other sensitive payloads.
 - `UserBlock` records directional blocks. Matchmaking treats a block in either direction between two users as a bidirectional exclusion.
 - `VisualReview` belongs to a match.
+- `VisualReviewAffinityIndicator` belongs to a match and stores at most three positive shared category id/title snapshots for visual review. Indicator rows may exist before `VisualReview`, are exposed only through visual-profile access, and never store question ids, answers, scores, kinds or evidence counts.
 - `Connection` belongs to a match.
 - `ScheduleNegotiation` belongs to a connection.
 - `ScheduleProposal` belongs to a connection and user.
@@ -132,6 +144,96 @@ Matchmaking pair eligibility distinguishes active interactions, temporary histor
 - When `matchmaking.exclude-previous-pairing` is enabled, previous terminal outcomes create temporary exclusions calculated from existing history: 30 days for explicit first-chat rejection, visual rejection, visual-review expiration and closed connections; 7 days for first-chat absolute timeout or inactivity abandonment.
 - `MatchState.EXPIRED` is classified from persisted phase evidence. An expired match with no `VisualReview` is treated as first-chat expiration; an expired match with a `VisualReview` is treated as visual-review expiration. First-chat `Chat.endedAt` is preferred for timeout/abandonment timestamps, with `Match.updatedAt` as legacy fallback.
 - A cooldown expires naturally when its cutoff elapses. No cleanup job, derived cooldown table, new match state or automatic `UserBlock` is created for normal product outcomes.
+
+## Affinity Questions
+
+Affinity questions are closed, private profile-owned answers used as
+compatibility evidence and as input to answer-free first-chat/visual snapshots.
+They are separate from free-text profile prompts. Raw affinity answers remain
+private: counterpart-facing responses receive only snapshotted prompt text in
+first chat and positive shared category labels during visual review.
+
+The static catalog lives in `src/main/resources/affinity-questions.es-AR.json`
+and is loaded once at application startup. The top-level catalog contains a
+catalog version, ordered visible categories and ordered question definitions.
+Categories are catalog-driven UI reference data; labels are not hardcoded in
+controllers.
+
+Each question, including retained deprecated definitions, has one category, one
+primary topic, one primary construct, one answer type, ordered options, explicit
+ranking and conversation comparison policies, sensitivity classification, and
+independent `rankingEnabled` / `conversationEnabled` flags. Enabled flags must
+exactly match non-`NONE` comparison policies. Supported answer types are
+`SINGLE_CHOICE` and `ORDINAL_SCALE`; both accept exactly one stored option code.
+
+Catalog validation fails startup for empty catalogs, duplicate category ids or
+display orders, duplicate question ids, invalid category references, blank
+Spanish text, unsupported answer types, duplicate option codes or display
+orders, invalid versions, invalid sensitivity values, incomplete/range-unsafe
+policies, enabled-flag/policy contradictions, asymmetric custom matrices,
+custom matrices with missing or extra option rows/columns, and questions that
+reference missing categories or options.
+
+Stored answers persist only `profileId`, `questionId`, the current
+`questionSemanticVersion`, `answerCode` and timestamps. Catalog questions are
+not stored in the database. `semanticVersion` changes represent answer meaning
+or comparison-semantics changes; stale stored answers are excluded from pair
+evaluation until the user answers the current semantic version. `contentVersion`
+changes are wording-only and do not invalidate stored answers.
+
+Answer writes serialize on the owning profile row. `PATCH` accepts only active
+current-catalog questions and current option codes. `DELETE` normalizes the path
+question id, deletes only the authenticated profile's matching answer, and does
+not require the question to remain active or present in the current catalog.
+Deleting a nonexistent owned answer is an idempotent no-op.
+
+`AffinityQuestionPairEvaluator` is pure and performs no repository access. It
+compares only questions answered by both users and valid under the current
+semantic catalog definition. Missing or unshared answers are neutral and never
+count as incompatibility. The evaluator returns `PairAffinityEvidence` with
+question-level signals and category evidence only; it does not perform final
+multidimensional aggregation or repository reads. Probabilistic matchmaking may
+aggregate ranking-enabled evidence internally under
+`matchmaking.ranking.affinity`, but affinity is never a hard eligibility filter
+and is not exposed through public APIs.
+
+When `ChatService.startFirstChat` creates a first chat, the backend loads both
+profiles' affinity answers in one bounded batch, evaluates them with the current
+catalog and persists immutable output snapshots. Conversation prompt selection
+uses only `STANDARD` sensitivity signals with `conversationPotential > 0` and
+kind `SHARED_AFFINITY` or `CONSTRUCTIVE_CONTRAST`. Eligible signals sort by
+conversation potential descending, category display order ascending, catalog
+question order ascending and question id ascending. The first pass takes at most
+one question per category; the second pass fills remaining slots with the best
+unselected eligible signals; any remaining slots use the deterministic generic
+first-chat catalog sequence. Affinity prompts precede generic fallback prompts,
+sources are not duplicated, and the persisted sequence has exactly the
+configured `maxQuestions` when the generic catalog is valid. Later answer edits,
+answer deletions or catalog wording changes do not alter that first chat.
+
+Visual-review affinity indicators are generated from the same initialization
+evidence. Only `STANDARD` shared-affinity signals with positive conversation
+potential are eligible; constructive contrast, neutral/not-eligible, sensitive,
+negative and one-sided evidence never create indicators. Eligible signals are
+aggregated by category, ordered by maximum internal conversation potential
+descending, category display order ascending and category id ascending, then
+capped at three. Only catalog category id/title are snapshotted and exposed.
+
+Current policy families are explicit and test-covered:
+
+- no ranking contribution;
+- shared engagement;
+- ordinal alignment;
+- same answer or neutral difference;
+- custom symmetric ranking matrix;
+- shared-affinity conversation potential;
+- constructive-contrast conversation potential;
+- custom symmetric conversation matrix.
+
+Sensitive public-life and belief/spirituality questions ask only about salience,
+discussion comfort or respectful differences. They do not ask for orientation,
+affiliation, denomination or doctrine, and their ranking contribution is capped
+low and explicit.
 
 ## Legal Documents
 

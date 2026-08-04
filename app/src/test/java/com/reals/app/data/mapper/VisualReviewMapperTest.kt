@@ -1,6 +1,7 @@
 package com.reals.app.data.mapper
 
 import com.reals.app.data.dto.PhotoResponseDto
+import com.reals.app.data.dto.VisualAffinityIndicatorResponseDto
 import com.reals.app.data.dto.VisualProfileResponseDto
 import com.reals.app.testutil.testJson
 import org.junit.Assert.assertEquals
@@ -55,6 +56,37 @@ class VisualReviewMapperTest {
     }
 
     @Test
+    fun `VisualProfileResponseDto maps affinity indicators in backend order`() {
+        val dto = VisualProfileResponseDto(
+            profileId = "profile-1",
+            displayName = "Alex",
+            age = 29,
+            bio = null,
+            photos = emptyList(),
+            affinityIndicators = listOf(
+                VisualAffinityIndicatorResponseDto(
+                    categoryId = "MUSIC",
+                    title = "Música",
+                ),
+                VisualAffinityIndicatorResponseDto(
+                    categoryId = "CINEMA_SERIES_AND_STORIES",
+                    title = "Cine, series y relatos",
+                ),
+            ),
+        )
+
+        val domain = dto.toDomain()
+
+        assertEquals(
+            listOf(
+                "MUSIC" to "Música",
+                "CINEMA_SERIES_AND_STORIES" to "Cine, series y relatos",
+            ),
+            domain.affinityIndicators.map { it.categoryId to it.title },
+        )
+    }
+
+    @Test
     fun `VisualProfileResponseDto defaults optional message metadata`() {
         val dto = testJson.decodeFromString<VisualProfileResponseDto>(
             """
@@ -74,6 +106,7 @@ class VisualReviewMapperTest {
         assertEquals(false, domain.partnerPersonalMessageSubmitted)
         assertEquals(true, domain.partnerPersonalMessageRead)
         assertEquals(false, domain.decisionRequiresPartnerPersonalMessageRead)
+        assertEquals(0, domain.affinityIndicators.size)
     }
 
     @Test
@@ -90,5 +123,40 @@ class VisualReviewMapperTest {
         val domain = dto.toDomain()
 
         assertEquals(true, domain.decisionRequiresPartnerPersonalMessageRead)
+    }
+
+    @Test
+    fun `VisualProfileResponseDto decodes affinity indicators from payload`() {
+        val dto = testJson.decodeFromString<VisualProfileResponseDto>(
+            """
+            {
+              "profileId": "profile-1",
+              "displayName": "Alex",
+              "age": 29,
+              "bio": null,
+              "photos": [],
+              "affinityIndicators": [
+                {
+                  "categoryId": "MUSIC",
+                  "title": "Música"
+                },
+                {
+                  "categoryId": "SPORTS_AND_MOVEMENT",
+                  "title": "Deportes y movimiento"
+                }
+              ]
+            }
+            """.trimIndent()
+        )
+
+        val domain = dto.toDomain()
+
+        assertEquals(
+            listOf(
+                "MUSIC" to "Música",
+                "SPORTS_AND_MOVEMENT" to "Deportes y movimiento",
+            ),
+            domain.affinityIndicators.map { it.categoryId to it.title },
+        )
     }
 }

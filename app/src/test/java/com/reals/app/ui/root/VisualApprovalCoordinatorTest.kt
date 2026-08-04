@@ -1,6 +1,7 @@
 package com.reals.app.ui.root
 
 import com.reals.app.core.network.ApiError
+import com.reals.app.data.dto.VisualAffinityIndicatorResponseDto
 import com.reals.app.data.mapper.toDomain
 import com.reals.app.di.VisualApprovalFeatureDependencies
 import com.reals.app.domain.model.VisualDecision
@@ -83,6 +84,43 @@ class VisualApprovalCoordinatorTest {
         assertEquals(null, state.partnerMessage)
         assertEquals(false, state.partnerMessageLoaded)
         assertFalse(api.calls.contains("getPartnerPersonalMessage"))
+    }
+
+    @Test
+    fun `load keeps affinity indicators inside loaded visual profile`() = runBlocking {
+        api.matchResponse = Response.success(TestDtos.match("VISUAL_PHASE"))
+        api.visualProfileResponse = Response.success(
+            TestDtos.visualProfile(
+                affinityIndicators = listOf(
+                    VisualAffinityIndicatorResponseDto(
+                        categoryId = "MUSIC",
+                        title = "Música",
+                    ),
+                    VisualAffinityIndicatorResponseDto(
+                        categoryId = "CINEMA_SERIES_AND_STORIES",
+                        title = "Cine, series y relatos",
+                    ),
+                ),
+            )
+        )
+
+        val result = coordinator.load(
+            session = TestDomain.session(),
+            matchId = "match-1",
+            initialMatch = null,
+            previous = null,
+            locallyHidden = false,
+        )
+
+        val state = (result as VisualApprovalLoadResult.Show).state
+        val profile = requireNotNull(state.profile)
+        assertEquals(
+            listOf(
+                "MUSIC" to "Música",
+                "CINEMA_SERIES_AND_STORIES" to "Cine, series y relatos",
+            ),
+            profile.affinityIndicators.map { it.categoryId to it.title },
+        )
     }
 
     @Test

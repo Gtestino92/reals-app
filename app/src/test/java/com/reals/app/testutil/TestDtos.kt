@@ -41,6 +41,7 @@ import com.reals.app.data.dto.SecondChatAttendanceResponseDto
 import com.reals.app.data.dto.SecondChatResolutionRequestResponseDto
 import com.reals.app.data.dto.UserResponseDto
 import com.reals.app.data.dto.UserBlockResponseDto
+import com.reals.app.data.dto.VisualAffinityIndicatorResponseDto
 import com.reals.app.data.dto.VisualProfileResponseDto
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.JsonElement
@@ -381,6 +382,7 @@ object TestDtos {
         partnerPersonalMessageSubmitted: Boolean = false,
         partnerPersonalMessageRead: Boolean = true,
         decisionRequiresPartnerPersonalMessageRead: Boolean = false,
+        affinityIndicators: List<VisualAffinityIndicatorResponseDto> = emptyList(),
     ) = VisualProfileResponseDto(
         profileId = "visual-profile-1",
         displayName = "Taylor",
@@ -392,6 +394,7 @@ object TestDtos {
         partnerPersonalMessageSubmitted = partnerPersonalMessageSubmitted,
         partnerPersonalMessageRead = partnerPersonalMessageRead,
         decisionRequiresPartnerPersonalMessageRead = decisionRequiresPartnerPersonalMessageRead,
+        affinityIndicators = affinityIndicators,
     )
 
     fun queueStatus(inQueue: Boolean = true) = QueueStatusResponseDto(

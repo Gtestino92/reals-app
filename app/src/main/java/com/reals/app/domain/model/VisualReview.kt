@@ -11,6 +11,12 @@ data class VisualProfile(
     val partnerPersonalMessageSubmitted: Boolean,
     val partnerPersonalMessageRead: Boolean,
     val decisionRequiresPartnerPersonalMessageRead: Boolean,
+    val affinityIndicators: List<VisualAffinityIndicator> = emptyList(),
+)
+
+data class VisualAffinityIndicator(
+    val categoryId: String,
+    val title: String,
 )
 
 enum class VisualDecision(val backendValue: String) {

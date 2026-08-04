@@ -1,6 +1,7 @@
 package com.reals.app.data.mapper
 
 import com.reals.app.data.dto.VisualProfileResponseDto
+import com.reals.app.domain.model.VisualAffinityIndicator
 import com.reals.app.domain.model.VisualProfile
 
 fun VisualProfileResponseDto.toDomain(): VisualProfile = VisualProfile(
@@ -16,4 +17,10 @@ fun VisualProfileResponseDto.toDomain(): VisualProfile = VisualProfile(
     decisionRequiresPartnerPersonalMessageRead = decisionRequiresPartnerPersonalMessageRead
         ?: approvalRequiresPartnerPersonalMessageRead
         ?: false,
+    affinityIndicators = affinityIndicators.map { indicator ->
+        VisualAffinityIndicator(
+            categoryId = indicator.categoryId,
+            title = indicator.title,
+        )
+    },
 )

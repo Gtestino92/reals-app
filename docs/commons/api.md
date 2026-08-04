@@ -70,10 +70,11 @@ actions without a stored content SHA-256 and historical actions with a different
 content SHA-256 also do not satisfy the current configured document.
 
 The gate applies to profile creation/editing/activation/match filters/profile
-authenticity verification/photo upload/photo reorder/photo replacement, entering
-matchmaking, sending chat messages, first-chat guidance next requests, visual
-personal-message writes, positive first-chat and visual decisions, and
-scheduling proposal submission/acceptance/partner proposal rejection.
+authenticity verification/private affinity-answer writes/photo upload/photo
+reorder/photo replacement, entering matchmaking, sending chat messages,
+first-chat guidance next requests, visual personal-message writes, positive
+first-chat and visual decisions, and scheduling proposal
+submission/acceptance/partner proposal rejection.
 
 Reads remain available. Account deletion/reactivation, legal endpoints, chat
 exit/cancellation/safety operations, safety reports, queue inspection/leaving,
@@ -81,9 +82,10 @@ push-token registration, admin endpoints, actuator endpoints and local-dev
 tooling are not gated. `REJECTED` first-chat and visual decisions remain
 available; only `APPROVED` requires current legal compliance.
 
-Reference-data reads such as `GET /api/reference/countries` are authenticated
-under the normal `/api/** -> ROLE_USER` rule, but are not legal-compliance
-gated and do not require an existing profile.
+Reference-data reads such as `GET /api/reference/countries` and `GET
+/api/reference/affinity-questions` are authenticated under the normal `/api/**`
+-> `ROLE_USER` rule, but are not legal-compliance gated and do not require an
+existing profile.
 
 For first-chat navigation, `GET /api/me/home` exposes a
 `pendingActions[]` item with `type = FIRST_CHAT` only while the match remains in
@@ -143,12 +145,11 @@ participants who have not joined. The default window is
 runs skip stale starts. The job runs every 4 minutes by default so normal
 fixed-delay execution has slack inside the five-minute window. The provider
 payload includes `type`, `connectionId`, `matchId` and `availableAt`. The
-backend title is `Tu segunda charla ya empezó` and the body is `Entrá ahora a
+backend title is `Tu segunda charla ya empez?` and the body is `Entr? ahora a
 Reals para sumarte.` Android FCM uses `second-chat-<connectionId>` as the same
 replacement tag as the second-chat reminder, and transport TTL is capped at the
 configured second-chat on-time cutoff. Delivery is deduplicated per user,
-notification type and a deterministic aggregate derived from
-`second-chat-started:<connectionId>`.
+notification type and `secondChatStartedAggregateId(connectionId)`.
 
 Home returns `matchmaking` for search UX:
 
@@ -195,15 +196,6 @@ prepared. Pending scheduling still occupies internal capacity through
 connection locks, but Home surfaces only this generic preparation state until
 scheduling is activated.
 
-Home ordering is backend-canonical. `pendingActions[]` orders actionable items
-by earliest authoritative expiration first across item types, including visual
-reviews by `visualExpiresAt` and first chats by backend `timeoutAt`, with a
-stable backend tie-breaker. `nextSteps[]` orders current or available second
-chats first by most recent `availableAt`, then scheduled second chats by nearest
-future `availableAt`, then scheduling items by earliest `schedulingExpiresAt`,
-then read-only second chats by earliest `readOnlyUntil`, then fallback or
-unknown entries. Clients should preserve this section-local order.
-
 `SCHEDULING_PENDING` is advanced by `SchedulingActivationJob`, not by user
 actions and not by `SchedulingNegotiationTimeoutJob`. The scheduling timeout is
 actionable only after the connection reaches `SCHEDULING_PHASE`; activation
@@ -247,6 +239,10 @@ these values as text, not HTML.
 - `POST /api/me/profile/activation`: activate authenticated user's profile. Requires the current Firebase ID token to have `emailVerified=true`; otherwise returns `409 EMAIL_NOT_VERIFIED` with message `Verificá tu email antes de activar el perfil.` Email verification is not required for profile creation, editing, photo deletion, photo reorder or match-filter configuration.
 - `PUT /api/me/profile/match-filters`: replace matchmaking preferences. Body: `intention`, `lookingForGenders`, `preferredMinAge`, `preferredMaxAge`, `maxDistanceKm`.
 - `POST /api/me/profile/authenticity-verification`: optionally run profile authenticity verification for the authenticated user's profile. Profile Authenticity Verification is not legal identity verification. With provider `none` outside `prod`, the MVP compatibility path may mark the profile `VERIFIED`; this does not represent liveness, face comparison, legal identity, document verification or age assurance. With provider `none` in `prod`, verification is unavailable and returns `409 AUTHENTICITY_VERIFICATION_NOT_CONFIGURED`; no `VERIFIED` state is persisted.
+- `GET /api/reference/affinity-questions`: list the server-authoritative Spanish affinity-question catalog, including catalog version, visible categories, active questions, prompt text, answer type and ordered answer options. The response intentionally omits ranking policies, conversation policies, matrices, weights and hidden scoring configuration.
+- `GET /api/me/profile/affinity-answers`: list only the authenticated user's private affinity answers.
+- `PATCH /api/me/profile/affinity-answers`: partial idempotent upsert for private affinity answers. Only included question ids are modified; omitted answers remain unchanged. Duplicate question ids return `400 DUPLICATE_AFFINITY_QUESTION`; missing, inactive, deprecated or unsupported questions return `400 INVALID_AFFINITY_QUESTION`; invalid options return `400 INVALID_AFFINITY_ANSWER`. The current catalog semantic version is stored with each answer. Requires current legal requirements and an existing `DRAFT` or `ACTIVE` profile; verified email is not required.
+- `DELETE /api/me/profile/affinity-answers/{questionId}`: delete only the authenticated profile's answer for one normalized question id. Unlike `PATCH`, deletion does not require the question to be active or present in the current catalog, so stale, deprecated or removed private answers can be cleared. Deleting a nonexistent owned answer is an idempotent no-op. Requires current legal requirements and returns the complete remaining answer list.
 - `POST /api/me/profile/photos`: add a profile photo using multipart file upload with `file` and `position`.
 - `GET /api/me/profile/photos`: list profile photos.
 - `PUT /api/me/profile/photos/reorder`: reorder authenticated user's existing profile photos. The JSON body must include every current photo exactly once with final positions from 1 to 9; holes are allowed. This only changes `position`, does not reupload files, does not re-run validation or moderation, and does not move an active profile back to draft.
@@ -285,6 +281,28 @@ country list, uses `Locale.forLanguageTag("es")` for display names, sorts by
 Spanish display name with country code as tie-breaker, and keeps immutable
 in-memory list/set state. It does not call an external country API, GeoNames,
 Redis or Caffeine for this data.
+
+Affinity answers are always private. They are returned only through the
+authenticated current-profile endpoints and are not exposed through another
+user's profile, match responses, visual review, first-chat responses, Home,
+partner summaries or counterpart-facing endpoints. New first chats may derive
+immutable prompt-text snapshots, and visual review may expose positive shared
+category indicators. Neither output includes answer codes, answer labels,
+question ids in visual review, semantic versions, conversation kinds,
+conversation potential, scores, percentages, shared-question counts, confidence
+or affinity factors. Matchmaking ranking and eligibility behavior are unchanged.
+
+Private affinity write operations serialize on the authenticated user's profile
+row. `PATCH` and `DELETE` use the same lock order: resolve current profile,
+acquire a pessimistic write lock on that profile, then read and mutate
+`affinity_question_answers`. Reads do not acquire this lock.
+
+Affinity question `semanticVersion` changes represent answer meaning or
+comparison-semantics changes. A stored answer whose semantic version no longer
+matches the current catalog is excluded from pairwise affinity evaluation until
+the user answers the current semantic version. `contentVersion` changes are
+wording-only and do not invalidate stored answers. Missing answers are neutral
+and never count as incompatibility.
 
 Photo response `url` values are renderable read URLs generated by the backend
 from each photo's stored object key. Storage keys and bucket names are never
@@ -387,7 +405,7 @@ queue entry has become an active match. Do not infer match/chat ids locally.
 
 - `GET /api/matches/{matchId}`: fetch match details and linked connection id if present. Includes `visualExpiresAt` when a visual review deadline exists for the match.
 - `GET /api/matches/{matchId}/chat`: fetch active first chat for match. Includes `partner`, `myDecision`, `partnerDecision`, `expiresAt`, `inactivityExpiresAt`, `serverTime` and nullable `guidance` metadata. New first chats initialize guidance; legacy rows may return `guidance = null`. Clients may use `serverTime` as an advisory backend clock snapshot for first-chat countdown and suggestion UX; the backend remains authoritative for mutations and expiration decisions, and does not own suggestion visibility or local dismissal.
-- `GET /api/matches/{matchId}/visual-profile`: fetch partner profile only while visual content is available. During `VISUAL_PHASE`, the visual review must exist and its `visualExpiresAt` deadline must still be in the future by server time. After `VISUAL_APPROVED`, a non-closed connection for the same match must exist and include the requester. Blocked pairs, unrelated users, `CHAT_ACTIVE`, `CHAT_REJECTED`, `VISUAL_REJECTED` and `EXPIRED` matches are denied. The response includes partner photos with freshly generated read URLs, `visualExpiresAt`, `myPersonalMessageSubmitted`, partner personal-message submitted/read flags for client emphasis, and `decisionRequiresPartnerPersonalMessageRead`, which is retained temporarily for response compatibility and is always `false`.
+- `GET /api/matches/{matchId}/visual-profile`: fetch partner profile only while visual content is available. During `VISUAL_PHASE`, the visual review must exist and its `visualExpiresAt` deadline must still be in the future by server time. After `VISUAL_APPROVED`, a non-closed connection for the same match must exist and include the requester. Blocked pairs, unrelated users, `CHAT_ACTIVE`, `CHAT_REJECTED`, `VISUAL_REJECTED` and `EXPIRED` matches are denied. The response includes partner photos with freshly generated read URLs, `visualExpiresAt`, `myPersonalMessageSubmitted`, partner personal-message submitted/read flags for client emphasis, `decisionRequiresPartnerPersonalMessageRead` retained temporarily as always `false`, and required `affinityIndicators: [] | [{ categoryId, title }]` containing at most three positive shared category snapshots.
 - `POST /api/matches/{matchId}/chat-decision`: submit first-chat continuation decision. `APPROVED` is individual and requires both users to move the match to `VISUAL_PHASE`. `REJECTED` is unilateral cancellation: it closes the first chat, moves the match to `CHAT_REJECTED`, releases locks and applies cancellation penalty policy. If the first-chat deadline already passed, the backend rejects with `CHAT_EXPIRED`; if the inactivity deadline already passed, it rejects with `CHAT_ABANDONED`.
 - `POST /api/matches/{matchId}/visual-decision`: submit visual decision. The current user's visual review disappears after deciding and that user's match lock is released. A repeated identical decision is idempotent; a contradictory decision is rejected. Reading an optional partner personal message is encouraged but is not required before `APPROVED` or `REJECTED`. A rejection is not immediately surfaced to the other participant through Home while their own visual decision is still pending. New decisions after the visual deadline are rejected with `VISUAL_REVIEW_EXPIRED`.
 - `PUT /api/matches/{matchId}/personal-messages/me`: store the authenticated user's personal visual-review message while visual content is available. Personal messages are write-once; a second submission returns `409 Conflict` and does not overwrite the first message.
@@ -416,9 +434,11 @@ Audio creation is feature-flagged. Local profiles and tests enable it. Shared `d
 
 First-chat guidance is backend-owned for MVP:
 
-- The question catalog is a static Spanish resource loaded from `first-chat-guided-questions.es.json`.
+- The generic fallback catalog is a static Spanish resource loaded from `first-chat-guided-questions.es.json`; affinity-derived prompts use the active Spanish prompt text from `affinity-questions.es-AR.json` at first-chat initialization time.
 - Each first chat has one active question shared by both participants.
-- The sequence is deterministic from the chat id and catalog order; changing or reordering the catalog may affect not-yet-selected future questions for an already-active first chat, but the active question id/text are persisted as a snapshot.
+- New first chats persist the complete prompt sequence in `conversation_prompt_snapshots` before guidance is initialized. Advancement reads the next persisted `(chatId, ordinal)` row and never rereads affinity answers, affinity prompt text or category titles.
+- Affinity prompt selection uses positive `STANDARD` shared-affinity or constructive-contrast conversation signals, sorted by potential, category display order, catalog question order and question id. It takes one per category first, fills from remaining eligible signals second, then fills from the deterministic generic catalog. Affinity prompts appear before generic fallback prompts and source questions are not duplicated.
+- Later affinity-answer edits/deletions and later catalog wording changes do not alter active or future prompts in that first chat. Legacy first chats without prompt snapshots keep their persisted active guidance question authoritative and advance with generic deterministic fallback.
 - Chat remains free-form. The backend does not semantically evaluate whether a user answered the prompt.
 - A participant must have sent at least `chat.first-chat.guidance.required-characters` persisted characters since the current question was activated before requesting another question. One long message can satisfy the threshold; multiple messages accumulate.
 - Advancement requires both participants to independently request the next question. The API exposes only `myNextRequested`, `canRequestNext`, `completed`, current question, ordinal, `maxQuestions` and `requiredCharacters`; it does not expose partner readiness, partner request timestamp or partner character count.
