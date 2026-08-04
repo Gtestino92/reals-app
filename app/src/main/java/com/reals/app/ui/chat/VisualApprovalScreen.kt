@@ -306,6 +306,11 @@ fun VisualApprovalScreen(
                 }
             }
         } else {
+            val visibleAffinityIndicators = affinityIndicatorsForDisplay(profile.affinityIndicators)
+            if (visibleAffinityIndicators.isNotEmpty()) {
+                VisualAffinityIndicatorsCard(visibleAffinityIndicators)
+                Spacer(modifier = Modifier.height(16.dp))
+            }
             VisualProfileCard(profile)
         }
         Spacer(modifier = Modifier.height(16.dp))
