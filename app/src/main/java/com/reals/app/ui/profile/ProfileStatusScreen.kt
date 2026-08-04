@@ -1203,6 +1203,12 @@ private fun PhotoManagerActions(
             photoReorderError?.let { ApiErrorFeedbackCard(it, ErrorContext.PhotoUpload) }
             if (photoActionLoading) {
                 ProfilePhotoActionProgressCard(action = visiblePhotoAction)
+            } else if (photoActionError != null || photoActionMessage != null) {
+                ProfilePhotoActionFeedback(
+                    photoActionLoading = false,
+                    photoActionError = photoActionError,
+                    photoActionMessage = photoActionMessage,
+                )
             }
             PhotoGrid(
                 photos = photos,
@@ -1297,11 +1303,6 @@ private fun PhotoManagerActions(
                 )
             }
             localError?.let { ErrorFeedback("Revisá las fotos", it) }
-            ProfilePhotoActionFeedback(
-                photoActionLoading = photoActionLoading,
-                photoActionError = photoActionError,
-                photoActionMessage = photoActionMessage,
-            )
             activationError?.let { ApiErrorFeedbackCard(it, ErrorContext.ProfileActivation) }
             val showEmailVerificationActions = shouldShowEmailVerificationActions(
                 emailVerificationLocallyVerified = emailVerificationLocallyVerified,

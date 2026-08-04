@@ -275,6 +275,20 @@ class ProfilePhotoActionProgressTest {
     }
 
     @Test
+    fun successFeedbackAppearsAboveGridToAvoidCompletionJump() {
+        setProgressContent(
+            loading = false,
+            action = null,
+            message = "Foto subida correctamente.",
+        )
+
+        val feedback = composeRule.onNodeWithText("Foto subida correctamente.").getUnclippedBoundsInRoot()
+        val grid = composeRule.onNodeWithTag(ProfilePhotoGridRootTag).getUnclippedBoundsInRoot()
+
+        assertTrue(feedback.bottom <= grid.top)
+    }
+
+    @Test
     fun errorFeedbackReplacesProgressAndSuppressesStaleSuccess() {
         setProgressContent(
             loading = false,
@@ -339,6 +353,12 @@ class ProfilePhotoActionProgressTest {
                         Column {
                             if (loading) {
                                 ProfilePhotoActionProgressCard(action = action)
+                            } else if (error != null || message != null) {
+                                ProfilePhotoActionFeedback(
+                                    photoActionLoading = false,
+                                    photoActionError = error,
+                                    photoActionMessage = message,
+                                )
                             }
                             PhotoGrid(
                                 photos = testPhotos,
@@ -351,11 +371,6 @@ class ProfilePhotoActionProgressTest {
                                 },
                                 onDeletePhoto = { photoId, position -> events += "delete-$photoId-$position" },
                                 onMovePhoto = { photoId, targetPosition -> events += "move-$photoId-$targetPosition" },
-                            )
-                            ProfilePhotoActionFeedback(
-                                photoActionLoading = loading,
-                                photoActionError = error,
-                                photoActionMessage = message,
                             )
                         }
                     }
