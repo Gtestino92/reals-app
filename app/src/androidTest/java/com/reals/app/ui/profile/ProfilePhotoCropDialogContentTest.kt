@@ -15,10 +15,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -48,15 +50,27 @@ class ProfilePhotoCropDialogContentTest {
 
         composeRule.onNodeWithTag(ProfilePhotoCropActionsNormalTag).assertIsDisplayed()
         composeRule.onNodeWithTag(ProfilePhotoCropConfirmActionTag).assertIsDisplayed().assertHasClickAction()
+        assertPrimaryLabelReadableSingleLine()
         assertActionsVisibleAndSeparate()
         assertViewportUsable(minHeight = 240.dp)
     }
 
     @Test
-    fun mediumFontScaleKeepsActionsReachableWithoutForcedReflow() {
+    fun mediumFontScaleUsesConstrainedPrimaryFirstArrangementBeforeLabelCompression() {
         setCropContent(width = 360.dp, height = 640.dp, fontScale = 1.3f)
 
-        composeRule.onNodeWithTag(ProfilePhotoCropActionsNormalTag).assertIsDisplayed()
+        composeRule.onNodeWithTag(ProfilePhotoCropActionsConstrainedTag).assertIsDisplayed()
+        assertPrimaryActionFullWidth()
+        assertPrimaryLabelReadableSingleLine()
+        assertActionsVisibleAndSeparate()
+        assertViewportUsable(minHeight = 160.dp)
+    }
+
+    @Test
+    fun largerScreenAtMediumFontScaleKeepsPrimaryLabelReadableInChosenLayout() {
+        setCropContent(width = 411.dp, height = 720.dp, fontScale = 1.3f)
+
+        assertPrimaryLabelReadableSingleLine()
         assertActionsVisibleAndSeparate()
         assertViewportUsable(minHeight = 220.dp)
     }
@@ -67,6 +81,7 @@ class ProfilePhotoCropDialogContentTest {
 
         composeRule.onNodeWithTag(ProfilePhotoCropActionsConstrainedTag).assertIsDisplayed()
         assertPrimaryActionFullWidth()
+        assertPrimaryLabelReadableSingleLine()
         assertActionsVisibleAndSeparate()
         assertViewportUsable(minHeight = 160.dp)
     }
@@ -77,6 +92,7 @@ class ProfilePhotoCropDialogContentTest {
 
         composeRule.onNodeWithTag(ProfilePhotoCropActionsConstrainedTag).assertIsDisplayed()
         assertPrimaryActionFullWidth()
+        assertPrimaryLabelReadableSingleLine()
         assertActionsVisibleAndSeparate()
         assertViewportUsable(minHeight = 160.dp)
     }
@@ -87,6 +103,7 @@ class ProfilePhotoCropDialogContentTest {
 
         composeRule.onNodeWithTag(ProfilePhotoCropActionsConstrainedTag).assertIsDisplayed()
         assertPrimaryActionFullWidth()
+        assertPrimaryLabelReadableSingleLine()
         assertActionsVisibleAndSeparate()
         assertViewportUsable(minHeight = 128.dp)
     }
@@ -96,6 +113,7 @@ class ProfilePhotoCropDialogContentTest {
         setCropContent(width = 360.dp, height = 560.dp, fontScale = 1.5f)
 
         composeRule.onNodeWithTag(ProfilePhotoCropActionsConstrainedTag).assertIsDisplayed()
+        assertPrimaryLabelReadableSingleLine()
         assertActionsVisibleAndSeparate()
         assertViewportUsable(minHeight = 128.dp)
     }
@@ -106,6 +124,7 @@ class ProfilePhotoCropDialogContentTest {
 
         composeRule.onNodeWithTag(ProfilePhotoCropActionsConstrainedTag).assertIsDisplayed()
         assertPrimaryActionFullWidth()
+        assertPrimaryLabelReadableSingleLine()
         assertActionsVisibleAndSeparate()
         assertViewportUsable(minHeight = 128.dp)
     }
@@ -277,6 +296,17 @@ class ProfilePhotoCropDialogContentTest {
         assertTrue(confirmWidth >= rootWidth - 40.dp)
     }
 
+    private fun assertPrimaryLabelReadableSingleLine() {
+        val confirm = composeRule.onNodeWithTag(ProfilePhotoCropConfirmActionTag).getUnclippedBoundsInRoot()
+        val label = composeRule.onNodeWithTag(ProfilePhotoCropConfirmLabelTag, useUnmergedTree = true)
+            .assertIsDisplayed()
+            .assert(SemanticsMatcher.expectValue(ProfilePhotoCropConfirmLineCountKey, 1))
+            .getUnclippedBoundsInRoot()
+
+        assertWithinRoot(confirm, label)
+        assertTrue(confirm.height >= 48.dp)
+    }
+
     private fun assertWithinRoot(root: DpRect, bounds: DpRect) {
         assertTrue(bounds.left >= root.left)
         assertTrue(bounds.top >= root.top)
@@ -286,4 +316,6 @@ class ProfilePhotoCropDialogContentTest {
 
     private fun DpRect.overlaps(other: DpRect): Boolean =
         left < other.right && right > other.left && top < other.bottom && bottom > other.top
+
+    private val DpRect.height: Dp get() = bottom - top
 }
