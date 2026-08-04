@@ -1479,7 +1479,7 @@ internal fun FilledPhotoSlot(
             ) {
                 Box(
                     modifier = Modifier
-                        .align(Alignment.Center)
+                        .align(Alignment.TopEnd)
                         .size(ProfilePhotoDeleteVisualSize)
                         .clip(RoundedCornerShape(12.dp))
                         .background(Color.Black.copy(alpha = 0.52f))

@@ -183,6 +183,8 @@ class ProfilePhotoGridAccessibilityTest {
         assertTrue(delete.height >= ProfilePhotoDeleteTouchTargetSize)
         assertTrue(deleteVisual.width < delete.width)
         assertTrue(deleteVisual.height < delete.height)
+        assertClose(deleteVisual.top, delete.top)
+        assertClose(deleteVisual.right, delete.right)
         assertTrue(replace.height >= ProfilePhotoReplaceActionMinHeight)
         assertFalse(delete.overlaps(replace))
     }
