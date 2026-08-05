@@ -407,6 +407,7 @@ class AffinityQuestionnaireOperationHandler(
         val current = uiState.value as? RealsRootUiState.Ready ?: return
         val questionnaire = current.affinityQuestionnaire
         val catalog = questionnaire.catalog ?: return
+
         if (
             !questionnaire.open ||
             questionnaire.mutation != null ||
@@ -416,9 +417,20 @@ class AffinityQuestionnaireOperationHandler(
         ) {
             return
         }
-        val question = catalog.questions.firstOrNull { it.id == questionId } ?: return
+
+        val question = catalog.questions
+            .firstOrNull { it.id == questionId }
+            ?: return
+
         if (!question.canSelectAnswerCode(answerCode)) return
-        if (question.currentValidAnswer(questionnaire.answers)?.answerCode == answerCode) return
+
+        val presentedAnswerCode =
+            questionnaire.draftAnswerCode
+                .takeIf { questionnaire.draftQuestionId == question.id }
+                ?: question.currentValidAnswer(questionnaire.answers)?.answerCode
+
+        if (presentedAnswerCode == answerCode) return
+
         uiState.value = current.copy(
             affinityQuestionnaire = questionnaire.copy(
                 draftQuestionId = question.id,
@@ -456,20 +468,14 @@ class AffinityQuestionnaireOperationHandler(
             pendingAnswerCode = null,
             requestId = requestId,
         )
-        uiState.value = current.copy(
-            affinityQuestionnaire = questionnaire.copy(
-                mutation = mutation,
-                mutationError = null,
-                mutationFeedbackQuestionId = null,
-                message = null,
-            ),
-        )
+
         activeMutation = ActiveAffinityAnswerMutation(
             requestId = requestId,
             profileId = profileId,
             userId = userId,
             mutation = mutation,
         )
+
         uiState.value = current.copy(
             affinityQuestionnaire = questionnaire.copy(
                 mutation = mutation,
@@ -478,6 +484,7 @@ class AffinityQuestionnaireOperationHandler(
                 message = null,
             ),
         )
+
         mutationJob = scope.launch {
             val completion = installMutationResult(
                 profileId = profileId,

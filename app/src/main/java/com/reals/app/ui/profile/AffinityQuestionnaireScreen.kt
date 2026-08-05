@@ -487,10 +487,10 @@ private fun AffinitySingleQuestionScreen(
                         }
                         Button(
                             onClick = onNextQuestion,
-                            enabled = currentAnswer != null && !mutationActive,
+                            enabled = selectedCode != null && !mutationActive,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("Siguiente")
+                            Text(if (mutationActive) "Guardando..." else "Siguiente")
                         }
                     }
                 }
