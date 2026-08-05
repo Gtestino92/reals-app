@@ -159,6 +159,18 @@ class RealsRootSystemBackTest {
                 photos = PhotoManagementUiState(reorderingPhotos = true),
                 affinityQuestionnaire = AffinityQuestionnaireUiState(open = true, profileId = "profile-1"),
             ),
+            RealsRootUiState.Ready(
+                session = TestDomain.session(),
+                affinityQuestionnaire = AffinityQuestionnaireUiState(
+                    open = true,
+                    profileId = "profile-1",
+                    mutation = AffinityAnswerMutationUiState(
+                        questionId = "MUSIC_DISCOVERY_001",
+                        pendingAnswerCode = "LOW",
+                        requestId = 1L,
+                    ),
+                ),
+            ),
         ).forEach { state ->
             assertTrue(state.canHandleSystemBack())
         }

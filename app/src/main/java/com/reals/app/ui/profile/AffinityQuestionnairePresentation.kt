@@ -32,6 +32,38 @@ data class AffinityQuestionReviewRowPresentation(
     val selectedOptionLabel: String,
 )
 
+data class AffinityOverviewActionPolicy(
+    val primaryAction: AffinityOverviewPrimaryAction?,
+    val showExploreCategories: Boolean,
+    val showSecondaryReview: Boolean,
+    val showEmptyReviewText: Boolean,
+)
+
+enum class AffinityOverviewPrimaryAction {
+    Start,
+    Continue,
+    Review,
+}
+
+fun AffinityQuestionnaireProgress.overviewActionPolicy(
+    hasReviewRows: Boolean,
+): AffinityOverviewActionPolicy {
+    val hasQuestions = totalQuestionCount > 0
+    val allAnswered = hasQuestions && answeredCount == totalQuestionCount
+    val primaryAction = when {
+        !hasQuestions -> null
+        answeredCount == 0 -> AffinityOverviewPrimaryAction.Start
+        allAnswered -> AffinityOverviewPrimaryAction.Review
+        else -> AffinityOverviewPrimaryAction.Continue
+    }
+    return AffinityOverviewActionPolicy(
+        primaryAction = primaryAction,
+        showExploreCategories = hasQuestions,
+        showSecondaryReview = hasReviewRows && !allAnswered,
+        showEmptyReviewText = !hasReviewRows,
+    )
+}
+
 fun AffinityQuestionCatalog.groupQuestionsForPresentation(
     answers: List<AffinityAnswer>,
 ): List<AffinityQuestionCategoryPresentation> {

@@ -331,6 +331,7 @@ data class AffinityQuestionnaireUiState(
     val mutation: AffinityAnswerMutationUiState? = null,
     val error: ApiError? = null,
     val mutationError: ApiError? = null,
+    val mutationFeedbackQuestionId: String? = null,
     val message: String? = null,
 )
 
@@ -519,6 +520,11 @@ fun RealsRootUiState.clearLegalActionRequiredForResume(): RealsRootUiState = whe
             },
             error = affinityQuestionnaire.error.takeUnless { it.isLegalActionRequired() },
             mutationError = affinityQuestionnaire.mutationError.takeUnless { it.isLegalActionRequired() },
+            mutationFeedbackQuestionId = if (affinityQuestionnaire.mutationError.isLegalActionRequired()) {
+                null
+            } else {
+                affinityQuestionnaire.mutationFeedbackQuestionId
+            },
         ),
     )
 

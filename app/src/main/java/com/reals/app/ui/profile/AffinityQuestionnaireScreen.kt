@@ -123,12 +123,13 @@ private fun AffinityQuestionnaireOverview(
 ) {
     val progress = catalog.progress(state.answers)
     val reviewRows = catalog.reviewRows(state.answers)
-    val hasUnanswered = progress.answeredCount < progress.totalQuestionCount
-    val primaryLabel = when {
-        progress.totalQuestionCount == 0 -> null
-        hasUnanswered && progress.answeredCount == 0 -> "Empezar a responder"
-        hasUnanswered -> "Continuar respondiendo"
-        else -> "Revisar mis respuestas"
+    val actionPolicy = progress.overviewActionPolicy(hasReviewRows = reviewRows.isNotEmpty())
+    val actionsEnabled = state.mutation == null && !state.loading && !state.refreshing
+    val primaryLabel = when (actionPolicy.primaryAction) {
+        AffinityOverviewPrimaryAction.Start -> "Empezar a responder"
+        AffinityOverviewPrimaryAction.Continue -> "Continuar respondiendo"
+        AffinityOverviewPrimaryAction.Review -> "Revisar mis respuestas"
+        null -> null
     }
 
     AffinityQuestionnaireLazySurface(
@@ -142,15 +143,19 @@ private fun AffinityQuestionnaireOverview(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                AffinityRefreshAndError(state, onRetry)
+                AffinityQuestionnaireStatus(state, onRetry)
                 Text(
                     text = "${progress.answeredCount} de ${progress.totalQuestionCount} respondidas",
                     style = MaterialTheme.typography.titleMedium,
                 )
                 if (primaryLabel != null) {
                     Button(
-                        onClick = if (hasUnanswered) onStartContinue else onOpenReview,
-                        enabled = !state.loading && !state.refreshing,
+                        onClick = if (actionPolicy.primaryAction == AffinityOverviewPrimaryAction.Review) {
+                            onOpenReview
+                        } else {
+                            onStartContinue
+                        },
+                        enabled = actionsEnabled,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(primaryLabel)
@@ -162,22 +167,26 @@ private fun AffinityQuestionnaireOverview(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                OutlinedButton(
-                    onClick = onOpenCategories,
-                    enabled = progress.totalQuestionCount > 0,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Explorar por categoría")
+                if (actionPolicy.showExploreCategories) {
+                    OutlinedButton(
+                        onClick = onOpenCategories,
+                        enabled = actionsEnabled,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Explorar por categoría")
+                    }
                 }
-                if (reviewRows.isEmpty()) {
+                if (actionPolicy.showEmptyReviewText) {
                     Text(
                         text = "Todavía no hay respuestas para revisar.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                } else {
+                }
+                if (actionPolicy.showSecondaryReview) {
                     OutlinedButton(
                         onClick = onOpenReview,
+                        enabled = actionsEnabled,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text("Revisar mis respuestas")
@@ -197,12 +206,13 @@ private fun AffinityQuestionnaireCategories(
     onOpenCategory: (categoryId: String) -> Unit,
 ) {
     val groups = catalog.groupQuestionsForPresentation(state.answers)
+    val actionsEnabled = state.mutation == null
     AffinityQuestionnaireLazySurface(
         title = "Explorar por categoría",
         onBack = onBack,
     ) {
         item {
-            AffinityRefreshAndError(state, onRetry)
+            AffinityQuestionnaireStatus(state, onRetry)
         }
         if (groups.isEmpty()) {
             item {
@@ -214,7 +224,11 @@ private fun AffinityQuestionnaireCategories(
             }
         } else {
             items(groups, key = { it.category.id }) { group ->
-                AffinityCategoryRow(group = group, onOpenCategory = onOpenCategory)
+                AffinityCategoryRow(
+                    group = group,
+                    actionsEnabled = actionsEnabled,
+                    onOpenCategory = onOpenCategory,
+                )
             }
         }
     }
@@ -223,6 +237,7 @@ private fun AffinityQuestionnaireCategories(
 @Composable
 private fun AffinityCategoryRow(
     group: AffinityQuestionCategoryPresentation,
+    actionsEnabled: Boolean,
     onOpenCategory: (categoryId: String) -> Unit,
 ) {
     val actionLabel = when (group.validAnsweredCount) {
@@ -256,6 +271,7 @@ private fun AffinityCategoryRow(
             )
             Button(
                 onClick = { onOpenCategory(group.category.id) },
+                enabled = actionsEnabled,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(actionLabel)
@@ -275,12 +291,13 @@ private fun AffinityQuestionnaireReview(
 ) {
     val reviewGroups = catalog.reviewRows(state.answers)
     val progress = catalog.progress(state.answers)
+    val actionsEnabled = state.mutation == null
     AffinityQuestionnaireLazySurface(
         title = "Revisar mis respuestas",
         onBack = onBack,
     ) {
         item {
-            AffinityRefreshAndError(state, onRetry)
+            AffinityQuestionnaireStatus(state, onRetry)
         }
         if (reviewGroups.isEmpty()) {
             item {
@@ -293,6 +310,7 @@ private fun AffinityQuestionnaireReview(
                     if (progress.totalQuestionCount > 0) {
                         Button(
                             onClick = onStartContinue,
+                            enabled = actionsEnabled,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Text("Empezar a responder")
@@ -312,6 +330,7 @@ private fun AffinityQuestionnaireReview(
                 items(group.rows, key = { it.question.id }) { row ->
                     AffinityReviewRow(
                         row = row,
+                        enabled = actionsEnabled,
                         onOpenReviewedAnswer = onOpenReviewedAnswer,
                     )
                 }
@@ -323,12 +342,13 @@ private fun AffinityQuestionnaireReview(
 @Composable
 private fun AffinityReviewRow(
     row: AffinityQuestionReviewRowPresentation,
+    enabled: Boolean,
     onOpenReviewedAnswer: (questionId: String) -> Unit,
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onOpenReviewedAnswer(row.question.id) },
+            .clickable(enabled = enabled) { onOpenReviewedAnswer(row.question.id) },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
         Column(
@@ -389,7 +409,7 @@ private fun AffinitySingleQuestionScreen(
     ) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                AffinityRefreshAndError(state, onRetry)
+                AffinityQuestionnaireStatus(state, onRetry)
                 positionLabel?.let {
                     Text(
                         text = it,
@@ -407,8 +427,10 @@ private fun AffinitySingleQuestionScreen(
                     currentAnswerExists = currentAnswer != null,
                     mutationsEnabled = mutationsEnabled,
                     questionSaving = questionSaving,
-                    mutationError = state.mutationError,
-                    message = state.message,
+                    mutationError = state.mutationError
+                        ?.takeIf { state.mutationFeedbackQuestionId == question.id },
+                    message = state.message
+                        ?.takeIf { state.mutationFeedbackQuestionId == question.id },
                     onSelectAnswer = onSelectAnswer,
                     onDeleteAnswer = onDeleteAnswer,
                 )
@@ -416,7 +438,6 @@ private fun AffinitySingleQuestionScreen(
                     if (isReviewQuestion) {
                         Button(
                             onClick = onBack,
-                            enabled = !mutationActive,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Text("Volver a mis respuestas")
@@ -566,7 +587,7 @@ private fun AffinityQuestionnaireLazySurface(
 }
 
 @Composable
-private fun AffinityRefreshAndError(
+private fun AffinityQuestionnaireStatus(
     state: AffinityQuestionnaireUiState,
     onRetry: () -> Unit,
 ) {
@@ -577,6 +598,19 @@ private fun AffinityRefreshAndError(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+        if (state.mutation != null) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator()
+                Text(
+                    text = "Guardando respuesta...",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         state.error?.let {
             ApiErrorFeedbackCard(it, ErrorContext.AffinityQuestions)

@@ -138,6 +138,12 @@ class AffinityQuestionnaireOperationHandlerTest {
     fun `skip and next advance through local source sequences`() = runTest {
         val harness = harness(initialState = ready(questionnaire = loadedQuestionnaire(answers = emptyList())))
         harness.handler.openContinue()
+        harness.state.value = harness.ready().copy(
+            affinityQuestionnaire = harness.ready().affinityQuestionnaire.copy(
+                message = "Respuesta guardada",
+                mutationFeedbackQuestionId = "MUSIC_DISCOVERY_001",
+            ),
+        )
         harness.handler.skipQuestion()
         assertEquals(
             AffinityQuestionnaireDestination.Question(
@@ -146,14 +152,20 @@ class AffinityQuestionnaireOperationHandlerTest {
             ),
             harness.ready().affinityQuestionnaire.destination,
         )
+        assertNull(harness.ready().affinityQuestionnaire.message)
+        assertNull(harness.ready().affinityQuestionnaire.mutationFeedbackQuestionId)
 
         harness.state.value = harness.ready().copy(
             affinityQuestionnaire = harness.ready().affinityQuestionnaire.copy(
                 answers = listOf(TestDtos.affinityAnswer("PLANS_WEEKEND_001", 1, "VERY_HIGH").toDomain()),
+                message = "Respuesta guardada",
+                mutationFeedbackQuestionId = "PLANS_WEEKEND_001",
             ),
         )
         harness.handler.nextQuestion()
         assertEquals(AffinityQuestionnaireDestination.Overview, harness.ready().affinityQuestionnaire.destination)
+        assertNull(harness.ready().affinityQuestionnaire.message)
+        assertNull(harness.ready().affinityQuestionnaire.mutationFeedbackQuestionId)
     }
 
     @Test
@@ -162,6 +174,9 @@ class AffinityQuestionnaireOperationHandlerTest {
             initialState = ready(
                 questionnaire = loadedQuestionnaire(
                     destination = AffinityQuestionnaireDestination.Review,
+                ).copy(
+                    message = "Respuesta guardada",
+                    mutationFeedbackQuestionId = "MUSIC_DISCOVERY_001",
                 ),
             ),
         )
@@ -172,6 +187,8 @@ class AffinityQuestionnaireOperationHandlerTest {
         assertEquals(AffinityQuestionnaireDestination.Overview, harness.ready().affinityQuestionnaire.destination)
         assertEquals("catalog-1", harness.ready().affinityQuestionnaire.catalog?.catalogVersion)
         assertEquals(listOf("MUSIC_DISCOVERY_001"), harness.ready().affinityQuestionnaire.answers.map { it.questionId })
+        assertNull(harness.ready().affinityQuestionnaire.message)
+        assertNull(harness.ready().affinityQuestionnaire.mutationFeedbackQuestionId)
     }
 
     @Test
@@ -213,6 +230,187 @@ class AffinityQuestionnaireOperationHandlerTest {
 
         assertEquals(AffinityQuestionnaireDestination.Review, harness.ready().affinityQuestionnaire.destination)
         assertEquals(listOf("LOW"), harness.ready().affinityQuestionnaire.answers.map { it.answerCode })
+        assertNull(harness.ready().affinityQuestionnaire.message)
+        assertNull(harness.ready().affinityQuestionnaire.mutationFeedbackQuestionId)
+    }
+
+    @Test
+    fun `successful mutation on same question owns feedback by question`() = runTest {
+        val api = FakeRealsApi().apply {
+            affinityAnswersResponse = Response.success(
+                TestDtos.affinityAnswers(listOf(TestDtos.affinityAnswer(answerCode = "LOW")))
+            )
+        }
+        val harness = harness(
+            api = api,
+            initialState = ready(
+                questionnaire = loadedQuestionnaire(
+                    destination = AffinityQuestionnaireDestination.Question(
+                        questionId = "MUSIC_DISCOVERY_001",
+                        source = AffinityQuestionSource.Continue,
+                    ),
+                ),
+            ),
+        )
+
+        harness.handler.selectAnswer("MUSIC_DISCOVERY_001", "LOW")
+        advanceUntilIdle()
+
+        assertEquals("Respuesta guardada", harness.ready().affinityQuestionnaire.message)
+        assertEquals("MUSIC_DISCOVERY_001", harness.ready().affinityQuestionnaire.mutationFeedbackQuestionId)
+    }
+
+    @Test
+    fun `navigating to another question clears previous success feedback`() = runTest {
+        val harness = harness(
+            initialState = ready(
+                questionnaire = loadedQuestionnaire(
+                    destination = AffinityQuestionnaireDestination.Question(
+                        questionId = "MUSIC_DISCOVERY_001",
+                        source = AffinityQuestionSource.Continue,
+                    ),
+                    answers = listOf(
+                        TestDtos.affinityAnswer("MUSIC_DISCOVERY_001", 1, "VERY_HIGH").toDomain(),
+                    ),
+                ).copy(
+                    message = "Respuesta guardada",
+                    mutationFeedbackQuestionId = "MUSIC_DISCOVERY_001",
+                ),
+            ),
+        )
+
+        harness.handler.nextQuestion()
+
+        assertEquals(
+            AffinityQuestionnaireDestination.Question(
+                questionId = "PLANS_WEEKEND_001",
+                source = AffinityQuestionSource.Continue,
+            ),
+            harness.ready().affinityQuestionnaire.destination,
+        )
+        assertNull(harness.ready().affinityQuestionnaire.message)
+        assertNull(harness.ready().affinityQuestionnaire.mutationError)
+        assertNull(harness.ready().affinityQuestionnaire.mutationFeedbackQuestionId)
+    }
+
+    @Test
+    fun `late success after navigating Back updates answers without parent feedback`() = runTest {
+        val requestStarted = CompletableDeferred<Unit>()
+        val releaseResponse = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforePatchMyAffinityAnswersResponse = {
+                requestStarted.complete(Unit)
+                releaseResponse.await()
+            }
+            affinityAnswersResponse = Response.success(
+                TestDtos.affinityAnswers(listOf(TestDtos.affinityAnswer(answerCode = "LOW")))
+            )
+        }
+        val harness = harness(
+            api = api,
+            initialState = ready(
+                questionnaire = loadedQuestionnaire(
+                    destination = AffinityQuestionnaireDestination.Question(
+                        questionId = "MUSIC_DISCOVERY_001",
+                        source = AffinityQuestionSource.Continue,
+                    ),
+                ),
+            ),
+        )
+
+        harness.handler.selectAnswer("MUSIC_DISCOVERY_001", "LOW")
+        runCurrent()
+        requestStarted.await()
+        harness.handler.navigateBack()
+        assertEquals(AffinityQuestionnaireDestination.Overview, harness.ready().affinityQuestionnaire.destination)
+
+        releaseResponse.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(listOf("LOW"), harness.ready().affinityQuestionnaire.answers.map { it.answerCode })
+        assertNull(harness.ready().affinityQuestionnaire.mutation)
+        assertEquals(AffinityQuestionnaireDestination.Overview, harness.ready().affinityQuestionnaire.destination)
+        assertNull(harness.ready().affinityQuestionnaire.message)
+        assertNull(harness.ready().affinityQuestionnaire.mutationFeedbackQuestionId)
+    }
+
+    @Test
+    fun `late ordinary failure after navigating Back preserves answers without parent feedback ownership`() = runTest {
+        val requestStarted = CompletableDeferred<Unit>()
+        val releaseResponse = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforePatchMyAffinityAnswersResponse = {
+                requestStarted.complete(Unit)
+                releaseResponse.await()
+            }
+            affinityAnswersResponse = backendErrorResponse(500, "SERVER_ERROR")
+        }
+        val harness = harness(
+            api = api,
+            initialState = ready(
+                questionnaire = loadedQuestionnaire(
+                    destination = AffinityQuestionnaireDestination.Question(
+                        questionId = "MUSIC_DISCOVERY_001",
+                        source = AffinityQuestionSource.Continue,
+                    ),
+                ),
+            ),
+        )
+        val confirmedAnswers = harness.ready().affinityQuestionnaire.answers
+
+        harness.handler.selectAnswer("MUSIC_DISCOVERY_001", "LOW")
+        runCurrent()
+        requestStarted.await()
+        harness.handler.navigateBack()
+        releaseResponse.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(confirmedAnswers, harness.ready().affinityQuestionnaire.answers)
+        assertNull(harness.ready().affinityQuestionnaire.mutation)
+        assertEquals(AffinityQuestionnaireDestination.Overview, harness.ready().affinityQuestionnaire.destination)
+        assertTrue(harness.ready().affinityQuestionnaire.mutationError is ApiError.Backend)
+        assertNull(harness.ready().affinityQuestionnaire.mutationFeedbackQuestionId)
+    }
+
+    @Test
+    fun `starting new mutation clears old feedback`() = runTest {
+        val requestStarted = CompletableDeferred<Unit>()
+        val releaseResponse = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforePatchMyAffinityAnswersResponse = {
+                requestStarted.complete(Unit)
+                releaseResponse.await()
+            }
+            affinityAnswersResponse = Response.success(
+                TestDtos.affinityAnswers(listOf(TestDtos.affinityAnswer(answerCode = "LOW")))
+            )
+        }
+        val harness = harness(
+            api = api,
+            initialState = ready(
+                questionnaire = loadedQuestionnaire(
+                    destination = AffinityQuestionnaireDestination.Question(
+                        questionId = "MUSIC_DISCOVERY_001",
+                        source = AffinityQuestionSource.Continue,
+                    ),
+                ).copy(
+                    message = "Respuesta guardada",
+                    mutationError = ApiError.Unexpected("old"),
+                    mutationFeedbackQuestionId = "MUSIC_DISCOVERY_001",
+                ),
+            ),
+        )
+
+        harness.handler.selectAnswer("MUSIC_DISCOVERY_001", "LOW")
+        runCurrent()
+        requestStarted.await()
+
+        assertNull(harness.ready().affinityQuestionnaire.message)
+        assertNull(harness.ready().affinityQuestionnaire.mutationError)
+        assertNull(harness.ready().affinityQuestionnaire.mutationFeedbackQuestionId)
+
+        releaseResponse.complete(Unit)
+        advanceUntilIdle()
     }
 
     @Test

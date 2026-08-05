@@ -96,6 +96,7 @@ class AffinityQuestionnaireOperationHandler(
                 mutation = null,
                 error = null,
                 mutationError = null,
+                mutationFeedbackQuestionId = null,
                 message = null,
             ),
         )
@@ -113,6 +114,7 @@ class AffinityQuestionnaireOperationHandler(
                 refreshing = questionnaire.catalog != null,
                 error = null,
                 mutationError = null,
+                mutationFeedbackQuestionId = null,
                 message = null,
             ),
         )
@@ -269,6 +271,9 @@ class AffinityQuestionnaireOperationHandler(
             affinityQuestionnaire = latest.affinityQuestionnaire.copy(
                 destination = destination,
                 error = null,
+                mutationError = null,
+                mutationFeedbackQuestionId = null,
+                message = null,
             ),
         )
     }
@@ -308,6 +313,7 @@ class AffinityQuestionnaireOperationHandler(
             affinityQuestionnaire = questionnaire.copy(
                 mutation = mutation,
                 mutationError = null,
+                mutationFeedbackQuestionId = null,
                 message = null,
             ),
         )
@@ -359,6 +365,7 @@ class AffinityQuestionnaireOperationHandler(
             affinityQuestionnaire = questionnaire.copy(
                 mutation = mutation,
                 mutationError = null,
+                mutationFeedbackQuestionId = null,
                 message = null,
             ),
         )
@@ -421,6 +428,7 @@ class AffinityQuestionnaireOperationHandler(
                     refreshing = false,
                     error = null,
                     mutationError = null,
+                    mutationFeedbackQuestionId = null,
                 ),
             )
 
@@ -455,6 +463,9 @@ class AffinityQuestionnaireOperationHandler(
         val shouldReloadAfterMutation = questionnaire.open &&
             (questionnaire.loading || questionnaire.refreshing) &&
             result is ApiResult.Success
+        val showQuestionFeedback = questionnaire.open &&
+            (questionnaire.destination as? AffinityQuestionnaireDestination.Question)
+                ?.questionId == mutation.questionId
         uiState.value = when (result) {
             is ApiResult.Success -> latest.copy(
                 affinityQuestionnaire = questionnaire.copy(
@@ -463,7 +474,8 @@ class AffinityQuestionnaireOperationHandler(
                     refreshing = false,
                     mutation = null,
                     mutationError = null,
-                    message = if (questionnaire.open) "Respuesta guardada" else null,
+                    mutationFeedbackQuestionId = if (showQuestionFeedback) mutation.questionId else null,
+                    message = if (showQuestionFeedback) "Respuesta guardada" else null,
                 ),
             )
 
@@ -473,6 +485,7 @@ class AffinityQuestionnaireOperationHandler(
                     refreshing = false,
                     mutation = null,
                     mutationError = result.error,
+                    mutationFeedbackQuestionId = if (showQuestionFeedback) mutation.questionId else null,
                     message = null,
                 ),
             )
@@ -505,6 +518,7 @@ class AffinityQuestionnaireOperationHandler(
                 refreshing = questionnaire.catalog != null,
                 error = null,
                 mutationError = null,
+                mutationFeedbackQuestionId = null,
                 message = null,
             ),
         )

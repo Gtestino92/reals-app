@@ -14,6 +14,58 @@ import org.junit.Test
 
 class AffinityQuestionnairePresentationTest {
     @Test
+    fun `overview action policy for zero answered shows start and no review button`() {
+        val policy = AffinityQuestionnaireProgress(
+            answeredCount = 0,
+            totalQuestionCount = 2,
+        ).overviewActionPolicy(hasReviewRows = false)
+
+        assertEquals(AffinityOverviewPrimaryAction.Start, policy.primaryAction)
+        assertTrue(policy.showExploreCategories)
+        assertFalse(policy.showSecondaryReview)
+        assertTrue(policy.showEmptyReviewText)
+    }
+
+    @Test
+    fun `overview action policy for partially answered shows continue explore and review`() {
+        val policy = AffinityQuestionnaireProgress(
+            answeredCount = 1,
+            totalQuestionCount = 2,
+        ).overviewActionPolicy(hasReviewRows = true)
+
+        assertEquals(AffinityOverviewPrimaryAction.Continue, policy.primaryAction)
+        assertTrue(policy.showExploreCategories)
+        assertTrue(policy.showSecondaryReview)
+        assertFalse(policy.showEmptyReviewText)
+    }
+
+    @Test
+    fun `overview action policy for all answered has one review action`() {
+        val policy = AffinityQuestionnaireProgress(
+            answeredCount = 2,
+            totalQuestionCount = 2,
+        ).overviewActionPolicy(hasReviewRows = true)
+
+        assertEquals(AffinityOverviewPrimaryAction.Review, policy.primaryAction)
+        assertTrue(policy.showExploreCategories)
+        assertFalse(policy.showSecondaryReview)
+        assertFalse(policy.showEmptyReviewText)
+    }
+
+    @Test
+    fun `overview action policy for no answerable questions has no unusable actions`() {
+        val policy = AffinityQuestionnaireProgress(
+            answeredCount = 0,
+            totalQuestionCount = 0,
+        ).overviewActionPolicy(hasReviewRows = false)
+
+        assertNull(policy.primaryAction)
+        assertFalse(policy.showExploreCategories)
+        assertFalse(policy.showSecondaryReview)
+        assertTrue(policy.showEmptyReviewText)
+    }
+
+    @Test
     fun `answerable filtering excludes unsupported types and malformed option lists`() {
         val catalog = catalogWithExtraQuestions(
             TestDtos.affinityQuestion("UNKNOWN_001", categoryId = "MUSIC", answerType = "FUTURE_TYPE"),
