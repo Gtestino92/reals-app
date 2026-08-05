@@ -16,6 +16,7 @@ import com.reals.app.data.repository.MatchRepository
 import com.reals.app.data.repository.MatchmakingRepository
 import com.reals.app.data.repository.MeRepository
 import com.reals.app.data.repository.ProfileRepository
+import com.reals.app.data.repository.ProfileQuestionRepository
 import com.reals.app.data.repository.SchedulingRepository
 import com.reals.app.domain.usecase.AcceptChatExitRequestUseCase
 import com.reals.app.domain.usecase.AcceptSchedulingProposalUseCase
@@ -29,6 +30,7 @@ import com.reals.app.domain.usecase.CreateSecondChatInactivityClaimUseCase
 import com.reals.app.domain.usecase.CreateSecondChatNoShowClaimUseCase
 import com.reals.app.domain.usecase.DeleteAccountUseCase
 import com.reals.app.domain.usecase.DeleteMyAffinityAnswerUseCase
+import com.reals.app.domain.usecase.DeleteMyProfileQuestionAnswerUseCase
 import com.reals.app.domain.usecase.DeleteProfilePhotoUseCase
 import com.reals.app.domain.usecase.DecideSecondChatCompletionRequestUseCase
 import com.reals.app.domain.usecase.DismissSecondChatForConnectionUseCase
@@ -47,8 +49,10 @@ import com.reals.app.domain.usecase.GetLegalStatusUseCase
 import com.reals.app.domain.usecase.GetMatchUseCase
 import com.reals.app.domain.usecase.GetMeUseCase
 import com.reals.app.domain.usecase.GetMyAffinityAnswersUseCase
+import com.reals.app.domain.usecase.GetMyProfileQuestionAnswersUseCase
 import com.reals.app.domain.usecase.GetPartnerPersonalMessageUseCase
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
+import com.reals.app.domain.usecase.GetProfileQuestionCatalogUseCase
 import com.reals.app.domain.usecase.GetQueueStatusUseCase
 import com.reals.app.domain.usecase.GetSchedulingAvailabilityUseCase
 import com.reals.app.domain.usecase.GetSchedulingNegotiationUseCase
@@ -68,6 +72,7 @@ import com.reals.app.domain.usecase.RejectPartnerSchedulingProposalsUseCase
 import com.reals.app.domain.usecase.RegisterPushTokenUseCase
 import com.reals.app.domain.usecase.ReorderProfilePhotosUseCase
 import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
+import com.reals.app.domain.usecase.ReplaceMyProfileQuestionSelectionsUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
 import com.reals.app.domain.usecase.RequestNextFirstChatGuidanceQuestionUseCase
 import com.reals.app.domain.usecase.RecordLegalDocumentActionUseCase
@@ -80,6 +85,7 @@ import com.reals.app.domain.usecase.SubmitVisualDecisionUseCase
 import com.reals.app.domain.usecase.TimeoutChatExitRequestUseCase
 import com.reals.app.domain.usecase.UpdateMatchFiltersUseCase
 import com.reals.app.domain.usecase.UpdateProfileUseCase
+import com.reals.app.domain.usecase.UpsertMyProfileQuestionAnswerUseCase
 import com.reals.app.foreground.AtomicForegroundDestinationTracker
 import com.reals.app.notifications.NotificationPresentationPolicy
 import com.reals.app.notifications.registration.PushTokenRegistrationService
@@ -115,6 +121,7 @@ class AppContainer(context: Context) {
     private val schedulingRepository = SchedulingRepository(api, tokenProvider, apiExecutor)
     private val legalRepository = LegalRepository(api, tokenProvider, apiExecutor)
     private val affinityQuestionRepository = AffinityQuestionRepository(api, tokenProvider, apiExecutor)
+    private val profileQuestionRepository = ProfileQuestionRepository(api, tokenProvider, apiExecutor)
     val provisionAndLoadProfileUseCase = ProvisionAndLoadProfileUseCase(
         meRepository = meRepository,
         profileRepository = profileRepository,
@@ -187,6 +194,12 @@ class AppContainer(context: Context) {
     val getMyAffinityAnswersUseCase = GetMyAffinityAnswersUseCase(affinityQuestionRepository)
     val patchMyAffinityAnswerUseCase = PatchMyAffinityAnswerUseCase(affinityQuestionRepository)
     val deleteMyAffinityAnswerUseCase = DeleteMyAffinityAnswerUseCase(affinityQuestionRepository)
+    val getProfileQuestionCatalogUseCase = GetProfileQuestionCatalogUseCase(profileQuestionRepository)
+    val getMyProfileQuestionAnswersUseCase = GetMyProfileQuestionAnswersUseCase(profileQuestionRepository)
+    val upsertMyProfileQuestionAnswerUseCase = UpsertMyProfileQuestionAnswerUseCase(profileQuestionRepository)
+    val deleteMyProfileQuestionAnswerUseCase = DeleteMyProfileQuestionAnswerUseCase(profileQuestionRepository)
+    val replaceMyProfileQuestionSelectionsUseCase =
+        ReplaceMyProfileQuestionSelectionsUseCase(profileQuestionRepository)
 
     val rootDependencies = RealsRootDependencies(
         session = SessionFeatureDependencies(
@@ -282,6 +295,13 @@ class AppContainer(context: Context) {
             getMyAnswers = getMyAffinityAnswersUseCase,
             patchAnswer = patchMyAffinityAnswerUseCase,
             deleteAnswer = deleteMyAffinityAnswerUseCase,
+        ),
+        profileQuestions = ProfileQuestionFeatureDependencies(
+            getCatalog = getProfileQuestionCatalogUseCase,
+            getMyAnswers = getMyProfileQuestionAnswersUseCase,
+            upsertAnswer = upsertMyProfileQuestionAnswerUseCase,
+            deleteAnswer = deleteMyProfileQuestionAnswerUseCase,
+            replaceSelections = replaceMyProfileQuestionSelectionsUseCase,
         ),
     )
 }

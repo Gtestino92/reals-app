@@ -16,6 +16,8 @@ import com.reals.app.domain.model.LegalDocumentType
 import com.reals.app.domain.model.Match
 import com.reals.app.domain.model.ProfileActivationResult
 import com.reals.app.domain.model.ProfilePhoto
+import com.reals.app.domain.model.ProfileQuestionAnswer
+import com.reals.app.domain.model.ProfileQuestionCatalog
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.SchedulingNegotiation
@@ -70,6 +72,7 @@ sealed interface RealsRootUiState {
         val account: AccountUiState = AccountUiState(),
         val editingActiveProfile: Boolean = false,
         val affinityQuestionnaire: AffinityQuestionnaireUiState = AffinityQuestionnaireUiState(),
+        val profileQuestions: ProfileQuestionUiState = ProfileQuestionUiState(),
     ) : RealsRootUiState {
         val creatingProfile: Boolean get() = profileOp.creatingProfile
         val profileCreateError: ApiError? get() = profileOp.profileCreateError
@@ -363,6 +366,46 @@ data class AffinityAnswerMutationUiState(
     val requestId: Long = 0L,
 )
 
+data class ProfileQuestionUiState(
+    val open: Boolean = false,
+    val profileId: String? = null,
+    val destination: ProfileQuestionDestination = ProfileQuestionDestination.Overview,
+    val catalog: ProfileQuestionCatalog? = null,
+    val answers: List<ProfileQuestionAnswer> = emptyList(),
+    val loading: Boolean = false,
+    val refreshing: Boolean = false,
+    val mutation: ProfileQuestionMutationUiState? = null,
+    val error: ApiError? = null,
+    val mutationError: ApiError? = null,
+    val feedback: ProfileQuestionFeedback? = null,
+    val selectionDraftQuestionIds: List<String> = emptyList(),
+)
+
+sealed interface ProfileQuestionDestination {
+    data object Overview : ProfileQuestionDestination
+    data object Questions : ProfileQuestionDestination
+    data object Selection : ProfileQuestionDestination
+    data class Editor(val questionId: String) : ProfileQuestionDestination
+}
+
+sealed interface ProfileQuestionMutationKind {
+    data object Upsert : ProfileQuestionMutationKind
+    data object Delete : ProfileQuestionMutationKind
+    data object Selection : ProfileQuestionMutationKind
+}
+
+data class ProfileQuestionMutationUiState(
+    val kind: ProfileQuestionMutationKind,
+    val requestId: Long,
+    val questionId: String? = null,
+)
+
+data class ProfileQuestionFeedback(
+    val destination: ProfileQuestionDestination,
+    val questionId: String?,
+    val message: String,
+)
+
 sealed interface LegalResumeContext {
     data object PostSession : LegalResumeContext
     data object PostReactivation : LegalResumeContext
@@ -526,6 +569,28 @@ fun RealsRootUiState.clearLegalActionRequiredForResume(): RealsRootUiState = whe
                 affinityQuestionnaire.mutationFeedbackQuestionId
             },
         ),
+        profileQuestions = profileQuestions.copy(
+            loading = if (profileQuestions.error.isLegalActionRequired()) {
+                false
+            } else {
+                profileQuestions.loading
+            },
+            refreshing = if (profileQuestions.error.isLegalActionRequired()) {
+                false
+            } else {
+                profileQuestions.refreshing
+            },
+            mutation = if (profileQuestions.mutationError.isLegalActionRequired()) {
+                null
+            } else {
+                profileQuestions.mutation
+            },
+            error = profileQuestions.error.takeUnless { it.isLegalActionRequired() },
+            mutationError = profileQuestions.mutationError.takeUnless { it.isLegalActionRequired() },
+            feedback = profileQuestions.feedback.takeUnless {
+                profileQuestions.mutationError.isLegalActionRequired()
+            },
+        ),
     )
 
     is RealsRootUiState.FirstChat -> copy(error = error.takeUnless { it.isLegalActionRequired() })
@@ -540,6 +605,7 @@ private fun ApiError?.isLegalActionRequired(): Boolean = this?.isLegalActionRequ
 fun RealsRootUiState.canHandleSystemBack(): Boolean = when (this) {
     is RealsRootUiState.Ready ->
         affinityQuestionnaire.open ||
+            profileQuestions.open ||
             editingActiveProfile &&
             session.profileSnapshot is ProfileSnapshot.Found &&
             !photos.reorderingPhotos

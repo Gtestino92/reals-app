@@ -44,6 +44,7 @@ import com.reals.app.ui.matchmaking.MatchmakingHomeScreen
 import com.reals.app.ui.profile.AffinityQuestionnaireScreen
 import com.reals.app.ui.profile.CreateProfileScreen
 import com.reals.app.ui.profile.ProfileActivationResultScreen
+import com.reals.app.ui.profile.ProfileQuestionScreen
 import com.reals.app.ui.profile.ProfileStatusScreen
 import com.reals.app.ui.scheduling.SchedulingScreen
 
@@ -171,6 +172,19 @@ fun RealsApp(
                             onSelectAnswer = viewModel::selectAffinityAnswer,
                             onDeleteAnswer = viewModel::deleteAffinityAnswer,
                         )
+                    } else if (current.profileQuestions.open) {
+                        ProfileQuestionScreen(
+                            state = current.profileQuestions,
+                            onBack = viewModel::navigateBackProfileQuestions,
+                            onRetry = viewModel::refreshProfileQuestions,
+                            onOpenQuestions = viewModel::openProfileQuestionList,
+                            onOpenEditor = viewModel::openProfileQuestionEditor,
+                            onOpenSelection = viewModel::openProfileQuestionSelection,
+                            onSelectionDraftChange = viewModel::updateProfileQuestionSelectionDraft,
+                            onSaveSelection = viewModel::saveProfileQuestionSelection,
+                            onSaveAnswer = viewModel::saveProfileQuestionAnswer,
+                            onDeleteAnswer = viewModel::deleteProfileQuestionAnswer,
+                        )
                     } else if (current.editingActiveProfile || !homeAvailable) {
                         ProfileStatusScreen(
                             session = current.session,
@@ -218,6 +232,7 @@ fun RealsApp(
                             onResendEmailVerification = viewModel::resendEmailVerification,
                             onCheckEmailVerification = viewModel::checkEmailVerification,
                             onOpenAffinityQuestions = viewModel::openAffinityQuestionnaire,
+                            onOpenProfileQuestions = viewModel::openProfileQuestions,
                             onRefresh = viewModel::refreshSession,
                             onSignOut = viewModel::signOut,
                             accountDeleteLoading = current.deletingAccount,

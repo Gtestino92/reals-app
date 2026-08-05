@@ -12,6 +12,7 @@ data class VisualProfile(
     val partnerPersonalMessageRead: Boolean,
     val decisionRequiresPartnerPersonalMessageRead: Boolean,
     val affinityIndicators: List<VisualAffinityIndicator> = emptyList(),
+    val profileQuestions: List<PublicProfileQuestion> = emptyList(),
 )
 
 data class VisualAffinityIndicator(

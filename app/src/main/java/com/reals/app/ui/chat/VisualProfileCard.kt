@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.reals.app.domain.model.PublicProfileQuestion
 import com.reals.app.core.security.TextSafety
 import com.reals.app.domain.model.VisualProfile
 import com.reals.app.ui.profile.ProfilePhotoPresentationAspectRatio
@@ -39,6 +40,7 @@ fun VisualProfileCard(
             profile.bio?.takeIf { it.isNotBlank() }?.let {
                 Text(TextSafety.safeDisplay(it, maxLength = 1_000))
             }
+            VisualProfileQuestionsSection(profile.profileQuestions)
             if (profile.photos.isEmpty()) {
                 Text("No hay fotos para revisar.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
@@ -59,6 +61,45 @@ fun VisualProfileCard(
                             )
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+internal fun publicProfileQuestionsForDisplay(
+    questions: List<PublicProfileQuestion>,
+): List<PublicProfileQuestion> =
+    questions
+        .filter { it.questionId.isNotBlank() && it.prompt.isNotBlank() && it.answer.isNotBlank() }
+        .sortedBy { it.position }
+
+@Composable
+private fun VisualProfileQuestionsSection(
+    questions: List<PublicProfileQuestion>,
+) {
+    val visibleQuestions = publicProfileQuestionsForDisplay(questions)
+    if (visibleQuestions.isEmpty()) return
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("Preguntas del perfil", style = MaterialTheme.typography.titleMedium)
+        visibleQuestions.forEach { question ->
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = TextSafety.safeDisplay(question.prompt, maxLength = 180),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = TextSafety.safeDisplay(question.answer, maxLength = 160),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
                 }
             }
         }

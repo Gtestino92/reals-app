@@ -14,6 +14,7 @@ import com.reals.app.domain.usecase.CreateSecondChatInactivityClaimUseCase
 import com.reals.app.domain.usecase.CreateSecondChatNoShowClaimUseCase
 import com.reals.app.domain.usecase.DeleteAccountUseCase
 import com.reals.app.domain.usecase.DeleteMyAffinityAnswerUseCase
+import com.reals.app.domain.usecase.DeleteMyProfileQuestionAnswerUseCase
 import com.reals.app.domain.usecase.DeleteProfilePhotoUseCase
 import com.reals.app.domain.usecase.DecideSecondChatCompletionRequestUseCase
 import com.reals.app.domain.usecase.DismissSecondChatForConnectionUseCase
@@ -32,8 +33,10 @@ import com.reals.app.domain.usecase.GetLegalStatusUseCase
 import com.reals.app.domain.usecase.GetMatchUseCase
 import com.reals.app.domain.usecase.GetMeUseCase
 import com.reals.app.domain.usecase.GetMyAffinityAnswersUseCase
+import com.reals.app.domain.usecase.GetMyProfileQuestionAnswersUseCase
 import com.reals.app.domain.usecase.GetPartnerPersonalMessageUseCase
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
+import com.reals.app.domain.usecase.GetProfileQuestionCatalogUseCase
 import com.reals.app.domain.usecase.GetSchedulingAvailabilityUseCase
 import com.reals.app.domain.usecase.GetSchedulingNegotiationUseCase
 import com.reals.app.domain.usecase.GetSchedulingProposalsUseCase
@@ -52,6 +55,7 @@ import com.reals.app.domain.usecase.RejectPartnerSchedulingProposalsUseCase
 import com.reals.app.domain.usecase.RecordLegalDocumentActionUseCase
 import com.reals.app.domain.usecase.ReorderProfilePhotosUseCase
 import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
+import com.reals.app.domain.usecase.ReplaceMyProfileQuestionSelectionsUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
 import com.reals.app.domain.usecase.RequestNextFirstChatGuidanceQuestionUseCase
 import com.reals.app.domain.usecase.SafetyCancelChatUseCase
@@ -63,6 +67,7 @@ import com.reals.app.domain.usecase.SubmitVisualDecisionUseCase
 import com.reals.app.domain.usecase.TimeoutChatExitRequestUseCase
 import com.reals.app.domain.usecase.UpdateMatchFiltersUseCase
 import com.reals.app.domain.usecase.UpdateProfileUseCase
+import com.reals.app.domain.usecase.UpsertMyProfileQuestionAnswerUseCase
 import com.reals.app.notifications.registration.PushTokenRegistrationService
 import com.reals.app.ui.root.LocalFirebaseEmailVerificationCoordinator
 
@@ -78,6 +83,7 @@ data class RealsRootDependencies(
     val visualApproval: VisualApprovalFeatureDependencies,
     val scheduling: SchedulingFeatureDependencies,
     val affinity: AffinityFeatureDependencies,
+    val profileQuestions: ProfileQuestionFeatureDependencies,
 )
 
 data class ManualBlockFeatureDependencies(
@@ -188,4 +194,12 @@ data class AffinityFeatureDependencies(
     val getMyAnswers: GetMyAffinityAnswersUseCase,
     val patchAnswer: PatchMyAffinityAnswerUseCase,
     val deleteAnswer: DeleteMyAffinityAnswerUseCase,
+)
+
+data class ProfileQuestionFeatureDependencies(
+    val getCatalog: GetProfileQuestionCatalogUseCase,
+    val getMyAnswers: GetMyProfileQuestionAnswersUseCase,
+    val upsertAnswer: UpsertMyProfileQuestionAnswerUseCase,
+    val deleteAnswer: DeleteMyProfileQuestionAnswerUseCase,
+    val replaceSelections: ReplaceMyProfileQuestionSelectionsUseCase,
 )

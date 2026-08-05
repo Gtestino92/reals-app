@@ -29,10 +29,13 @@ import com.reals.app.data.dto.PhotoResponseDto
 import com.reals.app.data.dto.PingResponseDto
 import com.reals.app.data.dto.PatchAffinityAnswersRequestDto
 import com.reals.app.data.dto.ProfileResponseDto
+import com.reals.app.data.dto.ProfileQuestionAnswersResponseDto
+import com.reals.app.data.dto.ProfileQuestionCatalogResponseDto
 import com.reals.app.data.dto.QueueStatusResponseDto
 import com.reals.app.data.dto.RegisterPushTokenRequestDto
 import com.reals.app.data.dto.RegisterPushTokenResponseDto
 import com.reals.app.data.dto.RecordLegalDocumentActionRequestDto
+import com.reals.app.data.dto.ReplaceProfileQuestionSelectionsRequestDto
 import com.reals.app.data.dto.ReorderProfilePhotosRequestDto
 import com.reals.app.data.dto.RejectPartnerProposalsRequestDto
 import com.reals.app.data.dto.ScheduleProposalResponseDto
@@ -42,6 +45,7 @@ import com.reals.app.data.dto.SecondChatAttendanceResponseDto
 import com.reals.app.data.dto.SecondChatCompletionDecisionRequestDto
 import com.reals.app.data.dto.UpdateMatchFiltersRequestDto
 import com.reals.app.data.dto.UpdateProfileRequestDto
+import com.reals.app.data.dto.UpsertProfileQuestionAnswerRequestDto
 import com.reals.app.data.dto.UserResponseDto
 import com.reals.app.data.dto.UserBlockResponseDto
 import com.reals.app.data.dto.VisualDecisionRequestDto
@@ -213,6 +217,35 @@ interface RealsApi {
         @Header("Authorization") authorization: String,
         @Path("questionId") questionId: String,
     ): Response<AffinityAnswersResponseDto>
+
+    @GET("api/reference/profile-questions")
+    suspend fun getProfileQuestionCatalog(
+        @Header("Authorization") authorization: String,
+    ): Response<ProfileQuestionCatalogResponseDto>
+
+    @GET("api/me/profile/question-answers")
+    suspend fun getMyProfileQuestionAnswers(
+        @Header("Authorization") authorization: String,
+    ): Response<ProfileQuestionAnswersResponseDto>
+
+    @PUT("api/me/profile/question-answers/{questionId}")
+    suspend fun upsertMyProfileQuestionAnswer(
+        @Header("Authorization") authorization: String,
+        @Path("questionId") questionId: String,
+        @Body body: UpsertProfileQuestionAnswerRequestDto,
+    ): Response<ProfileQuestionAnswersResponseDto>
+
+    @DELETE("api/me/profile/question-answers/{questionId}")
+    suspend fun deleteMyProfileQuestionAnswer(
+        @Header("Authorization") authorization: String,
+        @Path("questionId") questionId: String,
+    ): Response<ProfileQuestionAnswersResponseDto>
+
+    @PUT("api/me/profile/question-selections")
+    suspend fun replaceMyProfileQuestionSelections(
+        @Header("Authorization") authorization: String,
+        @Body body: ReplaceProfileQuestionSelectionsRequestDto,
+    ): Response<ProfileQuestionAnswersResponseDto>
 
     @POST("api/matchmaking/queue")
     suspend fun enqueueMatchmaking(

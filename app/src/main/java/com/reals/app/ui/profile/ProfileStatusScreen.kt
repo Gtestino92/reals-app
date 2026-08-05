@@ -158,6 +158,7 @@ fun ProfileStatusScreen(
     onResendEmailVerification: () -> Unit,
     onCheckEmailVerification: () -> Unit,
     onOpenAffinityQuestions: () -> Unit,
+    onOpenProfileQuestions: () -> Unit,
     onRefresh: () -> Unit,
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit,
@@ -271,6 +272,7 @@ fun ProfileStatusScreen(
                 onResendEmailVerification = onResendEmailVerification,
                 onCheckEmailVerification = onCheckEmailVerification,
                 onOpenAffinityQuestions = onOpenAffinityQuestions,
+                onOpenProfileQuestions = onOpenProfileQuestions,
             )
         }
         if (onBackHome != null) {
@@ -365,6 +367,7 @@ private fun ProfileCard(
     onResendEmailVerification: () -> Unit,
     onCheckEmailVerification: () -> Unit,
     onOpenAffinityQuestions: () -> Unit,
+    onOpenProfileQuestions: () -> Unit,
 ) {
     var expandedSection by rememberSaveable(profile.id) {
         mutableStateOf(if (profile.status == ProfileStatus.Draft) ProfileSection.Photos else null)
@@ -452,6 +455,10 @@ private fun ProfileCard(
             busy = busy,
             onOpenAffinityQuestions = onOpenAffinityQuestions,
         )
+        ProfileQuestionsEntryCard(
+            busy = busy,
+            onOpenProfileQuestions = onOpenProfileQuestions,
+        )
         PhotosCard(
             profile = profile,
             photosLoading = photosLoading,
@@ -520,6 +527,39 @@ private fun AffinityQuestionsEntryCard(
             )
             OutlinedButton(
                 onClick = onOpenAffinityQuestions,
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Responder o editar")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileQuestionsEntryCard(
+    busy: Boolean,
+    onOpenProfileQuestions: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = "Preguntas del perfil",
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Text(
+                text = "Son opcionales y públicas. Podés responder varias y elegir hasta tres para mostrar en tu perfil.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedButton(
+                onClick = onOpenProfileQuestions,
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),
             ) {

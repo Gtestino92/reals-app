@@ -29,11 +29,14 @@ import com.reals.app.data.dto.PartnerPersonalMessageResponseDto
 import com.reals.app.data.dto.PhotoResponseDto
 import com.reals.app.data.dto.PingResponseDto
 import com.reals.app.data.dto.PatchAffinityAnswersRequestDto
+import com.reals.app.data.dto.ProfileQuestionAnswersResponseDto
+import com.reals.app.data.dto.ProfileQuestionCatalogResponseDto
 import com.reals.app.data.dto.ProfileResponseDto
 import com.reals.app.data.dto.QueueStatusResponseDto
 import com.reals.app.data.dto.RegisterPushTokenRequestDto
 import com.reals.app.data.dto.RegisterPushTokenResponseDto
 import com.reals.app.data.dto.RecordLegalDocumentActionRequestDto
+import com.reals.app.data.dto.ReplaceProfileQuestionSelectionsRequestDto
 import com.reals.app.data.dto.ReorderProfilePhotosRequestDto
 import com.reals.app.data.dto.RejectPartnerProposalsRequestDto
 import com.reals.app.data.dto.ScheduleProposalResponseDto
@@ -43,6 +46,7 @@ import com.reals.app.data.dto.SecondChatCompletionDecisionRequestDto
 import com.reals.app.data.dto.SendMessageRequestDto
 import com.reals.app.data.dto.UpdateMatchFiltersRequestDto
 import com.reals.app.data.dto.UpdateProfileRequestDto
+import com.reals.app.data.dto.UpsertProfileQuestionAnswerRequestDto
 import com.reals.app.data.dto.UserResponseDto
 import com.reals.app.data.dto.UserBlockResponseDto
 import com.reals.app.data.dto.VisualDecisionRequestDto
@@ -128,6 +132,10 @@ class FakeRealsApi : RealsApi {
         private set
     var patchAffinityAnswersBody: PatchAffinityAnswersRequestDto? = null
         private set
+    var upsertProfileQuestionAnswerBody: UpsertProfileQuestionAnswerRequestDto? = null
+        private set
+    var replaceProfileQuestionSelectionsBody: ReplaceProfileQuestionSelectionsRequestDto? = null
+        private set
     var blockMatchIds: List<String> = emptyList()
         private set
 
@@ -155,6 +163,11 @@ class FakeRealsApi : RealsApi {
     var beforeGetMyAffinityAnswersResponse: suspend () -> Unit = {}
     var beforePatchMyAffinityAnswersResponse: suspend () -> Unit = {}
     var beforeDeleteMyAffinityAnswerResponse: suspend () -> Unit = {}
+    var beforeGetProfileQuestionCatalogResponse: suspend () -> Unit = {}
+    var beforeGetMyProfileQuestionAnswersResponse: suspend () -> Unit = {}
+    var beforeUpsertMyProfileQuestionAnswerResponse: suspend () -> Unit = {}
+    var beforeDeleteMyProfileQuestionAnswerResponse: suspend () -> Unit = {}
+    var beforeReplaceMyProfileQuestionSelectionsResponse: suspend () -> Unit = {}
 
     var pingResponse: Response<PingResponseDto> = Response.success(PingResponseDto("ok"))
     var userResponse: Response<UserResponseDto> = Response.success(TestDtos.user())
@@ -212,6 +225,10 @@ class FakeRealsApi : RealsApi {
         Response.success(TestDtos.affinityQuestionCatalog())
     var affinityAnswersResponse: Response<AffinityAnswersResponseDto> =
         Response.success(TestDtos.affinityAnswers())
+    var profileQuestionCatalogResponse: Response<ProfileQuestionCatalogResponseDto> =
+        Response.success(TestDtos.profileQuestionCatalog())
+    var profileQuestionAnswersResponse: Response<ProfileQuestionAnswersResponseDto> =
+        Response.success(TestDtos.profileQuestionAnswers())
 
     override suspend fun ping(): Response<PingResponseDto> = record("ping", null) { pingResponse }
 
@@ -383,6 +400,69 @@ class FakeRealsApi : RealsApi {
             beforeResponse = beforeDeleteMyAffinityAnswerResponse,
         ) {
             affinityAnswersResponse
+        }
+
+    override suspend fun getProfileQuestionCatalog(
+        authorization: String,
+    ): Response<ProfileQuestionCatalogResponseDto> =
+        record(
+            "getProfileQuestionCatalog",
+            authorization,
+            beforeResponse = beforeGetProfileQuestionCatalogResponse,
+        ) {
+            profileQuestionCatalogResponse
+        }
+
+    override suspend fun getMyProfileQuestionAnswers(
+        authorization: String,
+    ): Response<ProfileQuestionAnswersResponseDto> =
+        record(
+            "getMyProfileQuestionAnswers",
+            authorization,
+            beforeResponse = beforeGetMyProfileQuestionAnswersResponse,
+        ) {
+            profileQuestionAnswersResponse
+        }
+
+    override suspend fun upsertMyProfileQuestionAnswer(
+        authorization: String,
+        questionId: String,
+        body: UpsertProfileQuestionAnswerRequestDto,
+    ): Response<ProfileQuestionAnswersResponseDto> =
+        record(
+            "upsertMyProfileQuestionAnswer",
+            authorization,
+            questionId,
+            beforeResponse = beforeUpsertMyProfileQuestionAnswerResponse,
+        ) {
+            upsertProfileQuestionAnswerBody = body
+            profileQuestionAnswersResponse
+        }
+
+    override suspend fun deleteMyProfileQuestionAnswer(
+        authorization: String,
+        questionId: String,
+    ): Response<ProfileQuestionAnswersResponseDto> =
+        record(
+            "deleteMyProfileQuestionAnswer",
+            authorization,
+            questionId,
+            beforeResponse = beforeDeleteMyProfileQuestionAnswerResponse,
+        ) {
+            profileQuestionAnswersResponse
+        }
+
+    override suspend fun replaceMyProfileQuestionSelections(
+        authorization: String,
+        body: ReplaceProfileQuestionSelectionsRequestDto,
+    ): Response<ProfileQuestionAnswersResponseDto> =
+        record(
+            "replaceMyProfileQuestionSelections",
+            authorization,
+            beforeResponse = beforeReplaceMyProfileQuestionSelectionsResponse,
+        ) {
+            replaceProfileQuestionSelectionsBody = body
+            profileQuestionAnswersResponse
         }
 
     override suspend fun enqueueMatchmaking(
