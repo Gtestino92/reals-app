@@ -35,16 +35,26 @@ data class ProfileQuestionAnswerValidation(
 
 fun validateProfileQuestionAnswer(input: String): ProfileQuestionAnswerValidation {
     val normalized = input.trim()
+    val containsLineBreak = input.contains('\n') || input.contains('\r')
+
+    val error = when {
+        containsLineBreak ->
+            "La respuesta debe escribirse en una sola línea."
+
+        normalized.isBlank() ->
+            "Escribí una respuesta para guardar."
+
+        normalized.length > ProfileQuestionAnswerMaxLength ->
+            "La respuesta puede tener hasta $ProfileQuestionAnswerMaxLength caracteres."
+
+        else -> null
+    }
+
     return ProfileQuestionAnswerValidation(
         normalizedAnswer = normalized,
         characterCount = normalized.length,
-        valid = normalized.isNotBlank() && normalized.length <= ProfileQuestionAnswerMaxLength,
-        error = when {
-            normalized.isBlank() -> "Escribí una respuesta para guardar."
-            normalized.length > ProfileQuestionAnswerMaxLength ->
-                "La respuesta puede tener hasta $ProfileQuestionAnswerMaxLength caracteres."
-            else -> null
-        },
+        valid = error == null,
+        error = error,
     )
 }
 
@@ -107,4 +117,19 @@ fun profileQuestionSelectionDraftIsValid(
     return draftQuestionIds.size <= ProfileQuestionMaxPublicSelections &&
         draftQuestionIds.distinct().size == draftQuestionIds.size &&
         draftQuestionIds.all { it in selectableIds }
+}
+
+fun canSaveProfileQuestionAnswer(
+    input: String,
+    savedAnswer: ProfileQuestionAnswer?,
+    mutationActive: Boolean,
+): Boolean {
+    if (mutationActive) return false
+
+    val validation = validateProfileQuestionAnswer(input)
+    if (!validation.valid) return false
+
+    return savedAnswer == null ||
+            !savedAnswer.current ||
+            validation.normalizedAnswer != savedAnswer.answer.trim()
 }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
@@ -55,7 +56,12 @@ fun ProfileQuestionScreen(
     val catalog = state.catalog
     when {
         state.loading && catalog == null -> ProfileQuestionLoading(onBack)
-        catalog == null && state.error != null -> ProfileQuestionInitialFailure(state, onRetry, onBack)
+        catalog == null && state.error != null -> ProfileQuestionInitialFailure(
+            state,
+            onRetry,
+            onBack
+        )
+
         catalog == null -> ProfileQuestionLoading(onBack)
         else -> when (val destination = state.destination) {
             ProfileQuestionDestination.Overview -> ProfileQuestionOverview(
@@ -66,6 +72,7 @@ fun ProfileQuestionScreen(
                 onOpenQuestions = onOpenQuestions,
                 onOpenSelection = onOpenSelection,
             )
+
             ProfileQuestionDestination.Questions -> ProfileQuestionList(
                 state = state,
                 catalog = catalog,
@@ -73,6 +80,7 @@ fun ProfileQuestionScreen(
                 onRetry = onRetry,
                 onOpenEditor = onOpenEditor,
             )
+
             is ProfileQuestionDestination.Editor -> ProfileQuestionEditor(
                 state = state,
                 catalog = catalog,
@@ -82,6 +90,7 @@ fun ProfileQuestionScreen(
                 onSaveAnswer = onSaveAnswer,
                 onDeleteAnswer = onDeleteAnswer,
             )
+
             ProfileQuestionDestination.Selection -> ProfileQuestionSelectionEditor(
                 state = state,
                 catalog = catalog,
@@ -154,7 +163,10 @@ private fun ProfileQuestionList(
         item { ProfileQuestionStatus(state, onRetry) }
         if (rows.isEmpty()) {
             item {
-                Text("No hay preguntas disponibles por ahora.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "No hay preguntas disponibles por ahora.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         } else {
             items(rows, key = { it.question.id }) { row ->
@@ -171,7 +183,10 @@ private fun ProfileQuestionList(
                         Text(TextSafety.safeDisplay(row.question.prompt, maxLength = 180))
                         row.answer?.let { answer ->
                             Text(
-                                text = TextSafety.safeDisplay(answer.answer, maxLength = ProfileQuestionAnswerMaxLength),
+                                text = TextSafety.safeDisplay(
+                                    answer.answer,
+                                    maxLength = ProfileQuestionAnswerMaxLength
+                                ),
                                 color = MaterialTheme.colorScheme.primary,
                             )
                             if (!answer.current) {
@@ -179,7 +194,10 @@ private fun ProfileQuestionList(
                             } else if (row.selectedPosition != null) {
                                 Text("Visible en posición ${row.selectedPosition}")
                             }
-                        } ?: Text("Sin responder", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } ?: Text(
+                            "Sin responder",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         TextButton(onClick = { onOpenEditor(row.question.id) }, enabled = enabled) {
                             Text("Abrir")
                         }
@@ -208,11 +226,20 @@ private fun ProfileQuestionEditor(
     val validation = validateProfileQuestionAnswer(text)
     val mutationActive = state.mutation != null
     val savingThisQuestion = state.mutation?.questionId == questionId
-    val canSave = !mutationActive &&
-        validation.valid &&
-        validation.normalizedAnswer != savedAnswer?.answer.orEmpty().trim()
+    val canSave = canSaveProfileQuestionAnswer(
+        input = text,
+        savedAnswer = savedAnswer,
+        mutationActive = mutationActive,
+    )
     ProfileQuestionLazySurface("Editar respuesta", onBack) {
-        item { ProfileQuestionStatus(state, onRetry, showMutationStatus = false) }
+        item {
+            ProfileQuestionStatus(
+                state = state,
+                onRetry = onRetry,
+                showMutationStatus = false,
+                showFeedback = false,
+            )
+        }
         item {
             ProfileQuestionEditorCard(
                 prompt = question.prompt,
@@ -262,8 +289,14 @@ private fun ProfileQuestionEditorCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
-        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(TextSafety.safeDisplay(prompt, maxLength = 180), style = MaterialTheme.typography.titleLarge)
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                TextSafety.safeDisplay(prompt, maxLength = 180),
+                style = MaterialTheme.typography.titleLarge
+            )
             OutlinedTextField(
                 value = text,
                 onValueChange = onTextChange,
@@ -280,16 +313,25 @@ private fun ProfileQuestionEditorCard(
                 Button(onClick = onSave, enabled = canSave) { Text("Guardar") }
                 OutlinedButton(onClick = onDelete, enabled = canDelete) { Text("Eliminar") }
             }
-            Column(modifier = Modifier.heightIn(min = 32.dp), verticalArrangement = Arrangement.Center) {
+            Column(
+                modifier = Modifier.heightIn(min = 32.dp),
+                verticalArrangement = Arrangement.Center
+            ) {
                 when {
                     saving && showSaving -> Row(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        CircularProgressIndicator()
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                        )
                         Text("Guardando...", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    feedbackMessage != null -> Text(feedbackMessage, color = MaterialTheme.colorScheme.primary)
+
+                    feedbackMessage != null -> Text(
+                        feedbackMessage,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
         }
@@ -330,10 +372,21 @@ private fun ProfileQuestionSelectionEditor(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                 ) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         Text(TextSafety.safeDisplay(row.question.prompt, maxLength = 180))
-                        Text(TextSafety.safeDisplay(row.answer.answer, maxLength = ProfileQuestionAnswerMaxLength))
-                        if (selected) Text("Posición ${selectedIndex + 1}", color = MaterialTheme.colorScheme.primary)
+                        Text(
+                            TextSafety.safeDisplay(
+                                row.answer.answer,
+                                maxLength = ProfileQuestionAnswerMaxLength
+                            )
+                        )
+                        if (selected) Text(
+                            "Posición ${selectedIndex + 1}",
+                            color = MaterialTheme.colorScheme.primary
+                        )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(
                                 onClick = {
@@ -342,18 +395,32 @@ private fun ProfileQuestionSelectionEditor(
                                     )
                                 },
                                 enabled = state.mutation == null &&
-                                    (selected || draft.size < ProfileQuestionMaxPublicSelections),
+                                        (selected || draft.size < ProfileQuestionMaxPublicSelections),
                             ) {
                                 Text(if (selected) "Quitar" else "Agregar")
                             }
                             OutlinedButton(
-                                onClick = { onSelectionDraftChange(draft.move(selectedIndex, selectedIndex - 1)) },
+                                onClick = {
+                                    onSelectionDraftChange(
+                                        draft.move(
+                                            selectedIndex,
+                                            selectedIndex - 1
+                                        )
+                                    )
+                                },
                                 enabled = state.mutation == null && selectedIndex > 0,
                             ) {
                                 Text("Subir")
                             }
                             OutlinedButton(
-                                onClick = { onSelectionDraftChange(draft.move(selectedIndex, selectedIndex + 1)) },
+                                onClick = {
+                                    onSelectionDraftChange(
+                                        draft.move(
+                                            selectedIndex,
+                                            selectedIndex + 1
+                                        )
+                                    )
+                                },
                                 enabled = state.mutation == null && selected && selectedIndex < draft.lastIndex,
                             ) {
                                 Text("Bajar")
@@ -373,7 +440,11 @@ private fun ProfileQuestionSelectionEditor(
             }
         }
         item {
-            Button(onClick = onSaveSelection, enabled = canSave, modifier = Modifier.fillMaxWidth()) {
+            Button(
+                onClick = onSaveSelection,
+                enabled = canSave,
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Text("Guardar selección")
             }
         }
@@ -416,9 +487,13 @@ private fun ProfileQuestionStatus(
     state: ProfileQuestionUiState,
     onRetry: () -> Unit,
     showMutationStatus: Boolean = true,
+    showFeedback: Boolean = true,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (state.refreshing) Text("Actualizando...", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (state.refreshing) Text(
+            "Actualizando...",
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         if (showMutationStatus && state.mutation != null) {
             Text(
                 text = when (state.mutation.kind) {
@@ -440,8 +515,12 @@ private fun ProfileQuestionStatus(
             }
         }
         state.mutationError?.let { ApiErrorFeedbackCard(it, ErrorContext.ProfileQuestions) }
-        state.feedback?.takeIf { it.destination == state.destination }?.let {
-            Text(it.message, color = MaterialTheme.colorScheme.primary)
+        if (showFeedback) {
+            state.feedback
+                ?.takeIf { it.destination == state.destination }
+                ?.let {
+                    Text(it.message, color = MaterialTheme.colorScheme.primary)
+                }
         }
     }
 }
@@ -455,7 +534,9 @@ private fun ProfileQuestionLoading(onBack: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text("Preguntas del perfil", style = MaterialTheme.typography.headlineMedium)
-        CircularProgressIndicator()
+        CircularProgressIndicator(
+            modifier = Modifier.size(18.dp),
+        )
         Text("Cargando preguntas...", color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedButton(onClick = onBack) { Text("Volver") }
     }
@@ -475,7 +556,11 @@ private fun ProfileQuestionInitialFailure(
     ) {
         Text("Preguntas del perfil", style = MaterialTheme.typography.headlineMedium)
         state.error?.let { ApiErrorFeedbackCard(it, ErrorContext.ProfileQuestions) }
-        Button(onClick = onRetry, enabled = !state.loading, modifier = Modifier.fillMaxWidth()) { Text("Reintentar") }
+        Button(
+            onClick = onRetry,
+            enabled = !state.loading,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("Reintentar") }
         OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Volver") }
     }
 }

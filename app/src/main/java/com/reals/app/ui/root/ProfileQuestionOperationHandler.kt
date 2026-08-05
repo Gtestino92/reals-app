@@ -41,8 +41,8 @@ class ProfileQuestionOperationHandler(
         val activeMutationForProfile = activeMutation
             ?.takeIf {
                 mutationJob?.isActive == true &&
-                    it.profileId == profile.id &&
-                    it.userId == current.session.user.id
+                        it.profileId == profile.id &&
+                        it.userId == current.session.user.id
             }
         if (activeMutationForProfile != null) {
             uiState.value = current.copy(
@@ -55,7 +55,8 @@ class ProfileQuestionOperationHandler(
                     loading = retained == null,
                     refreshing = retained != null,
                     mutation = activeMutationForProfile.mutation,
-                    selectionDraftQuestionIds = retained?.answers?.let(::selectedProfileQuestionIds).orEmpty(),
+                    selectionDraftQuestionIds = retained?.answers?.let(::selectedProfileQuestionIds)
+                        .orEmpty(),
                 ),
             )
             return
@@ -71,7 +72,8 @@ class ProfileQuestionOperationHandler(
                 answers = retained?.answers.orEmpty(),
                 loading = retained == null,
                 refreshing = retained != null,
-                selectionDraftQuestionIds = retained?.answers?.let(::selectedProfileQuestionIds).orEmpty(),
+                selectionDraftQuestionIds = retained?.answers?.let(::selectedProfileQuestionIds)
+                    .orEmpty(),
             ),
         )
         uiState.value = opening
@@ -168,6 +170,7 @@ class ProfileQuestionOperationHandler(
             ProfileQuestionDestination.Overview -> close()
             ProfileQuestionDestination.Questions,
             ProfileQuestionDestination.Selection -> setDestination(ProfileQuestionDestination.Overview)
+
             is ProfileQuestionDestination.Editor -> setDestination(ProfileQuestionDestination.Questions)
         }
     }
@@ -211,7 +214,11 @@ class ProfileQuestionOperationHandler(
         val currentSelection = selectedProfileQuestionIds(state.answers)
         val draft = state.selectionDraftQuestionIds
         if (draft == currentSelection || draft.size > ProfileQuestionMaxPublicSelections) return
-        if (!profileQuestionSelectionDraftIsValid(draft, catalog.selectionRows(state.answers))) return
+        if (!profileQuestionSelectionDraftIsValid(
+                draft,
+                catalog.selectionRows(state.answers)
+            )
+        ) return
         startMutation(
             current = current,
             mutation = ProfileQuestionMutationUiState(
@@ -229,7 +236,14 @@ class ProfileQuestionOperationHandler(
         val state = current.profileQuestions
         val profileId = state.profileId ?: return
         val userId = current.session.user.id
-        activeMutation = ActiveProfileQuestionMutation(mutation.requestId, profileId, userId, mutation)
+        val originDestination = state.destination
+        activeMutation = ActiveProfileQuestionMutation(
+            requestId = mutation.requestId,
+            profileId = profileId,
+            userId = userId,
+            mutation = mutation,
+            originDestination = originDestination,
+        )
         uiState.value = current.copy(
             profileQuestions = state.copy(
                 mutation = mutation,
@@ -242,6 +256,7 @@ class ProfileQuestionOperationHandler(
                 profileId = profileId,
                 userId = userId,
                 mutation = mutation,
+                originDestination = originDestination,
                 result = call(),
             )
             clearActiveMutationIfCurrent(mutation.requestId)
@@ -255,7 +270,10 @@ class ProfileQuestionOperationHandler(
             is ApiResult.Failure -> ProfileQuestionLoadResult.Failure(catalogResult.error)
             is ApiResult.Success -> when (val answersResult = answers.await()) {
                 is ApiResult.Failure -> ProfileQuestionLoadResult.Failure(answersResult.error)
-                is ApiResult.Success -> ProfileQuestionLoadResult.Success(catalogResult.value, answersResult.value)
+                is ApiResult.Success -> ProfileQuestionLoadResult.Success(
+                    catalogResult.value,
+                    answersResult.value
+                )
             }
         }
     }
@@ -291,6 +309,7 @@ class ProfileQuestionOperationHandler(
                     selectionDraftQuestionIds = selectedProfileQuestionIds(result.answers),
                 ),
             )
+
             is ProfileQuestionLoadResult.Failure -> latest.copy(
                 profileQuestions = state.copy(
                     loading = false,
@@ -305,6 +324,7 @@ class ProfileQuestionOperationHandler(
         profileId: String,
         userId: String,
         mutation: ProfileQuestionMutationUiState,
+        originDestination: ProfileQuestionDestination,
         result: ApiResult<List<ProfileQuestionAnswer>>,
     ) {
         val latest = uiState.value as? RealsRootUiState.Ready ?: return
@@ -317,8 +337,8 @@ class ProfileQuestionOperationHandler(
             return
         }
         if (state.open && state.mutation?.requestId != mutation.requestId) return
-        val feedbackDestination = state.destination
-        val feedback = mutation.successFeedback(feedbackDestination)
+        val localResultStillRelevant =
+            state.open && state.destination == originDestination
         uiState.value = when (result) {
             is ApiResult.Success -> latest.copy(
                 profileQuestions = state.copy(
@@ -327,19 +347,34 @@ class ProfileQuestionOperationHandler(
                     refreshing = false,
                     mutation = null,
                     mutationError = null,
-                    feedback = if (state.open && feedback.matches(feedbackDestination)) feedback else null,
+                    feedback = if (localResultStillRelevant) {
+                        mutation.successFeedback(originDestination)
+                    } else {
+                        null
+                    },
                     selectionDraftQuestionIds = selectedProfileQuestionIds(result.value),
                 ),
             )
-            is ApiResult.Failure -> latest.copy(
-                profileQuestions = state.copy(
-                    loading = false,
-                    refreshing = false,
-                    mutation = null,
-                    mutationError = result.error,
-                    feedback = null,
-                ),
-            )
+
+            is ApiResult.Failure -> {
+                val mustRemainObservable =
+                    result.error.isLegalActionRequired() ||
+                            result.error.isTerminalAuthFailure()
+
+                latest.copy(
+                    profileQuestions = state.copy(
+                        loading = false,
+                        refreshing = false,
+                        mutation = null,
+                        mutationError = when {
+                            mustRemainObservable -> result.error
+                            localResultStillRelevant -> result.error
+                            else -> null
+                        },
+                        feedback = null,
+                    ),
+                )
+            }
         }
     }
 
@@ -358,7 +393,8 @@ class ProfileQuestionOperationHandler(
                 error = null,
                 mutationError = retainedMutationError,
                 feedback = null,
-                selectionDraftQuestionIds = selectionDraftQuestionIds ?: state.selectionDraftQuestionIds,
+                selectionDraftQuestionIds = selectionDraftQuestionIds
+                    ?: state.selectionDraftQuestionIds,
             ),
         )
     }
@@ -378,6 +414,7 @@ private fun ProfileQuestionCatalog.reconciledDestination(
 ): ProfileQuestionDestination = when (destination) {
     is ProfileQuestionDestination.Editor ->
         if (questions.any { it.id == destination.questionId }) destination else ProfileQuestionDestination.Questions
+
     ProfileQuestionDestination.Selection,
     ProfileQuestionDestination.Questions,
     ProfileQuestionDestination.Overview -> destination
@@ -395,14 +432,12 @@ private fun ProfileQuestionMutationUiState.successFeedback(
     },
 )
 
-private fun ProfileQuestionFeedback.matches(destination: ProfileQuestionDestination): Boolean =
-    this.destination == destination
-
 private data class ActiveProfileQuestionMutation(
     val requestId: Long,
     val profileId: String,
     val userId: String,
     val mutation: ProfileQuestionMutationUiState,
+    val originDestination: ProfileQuestionDestination,
 )
 
 private sealed interface ProfileQuestionLoadResult {

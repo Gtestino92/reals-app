@@ -191,6 +191,71 @@ class ProfileQuestionOperationHandlerTest {
         assertTrue(terminalHarness.ready().profileQuestions.mutationError is ApiError.Auth)
     }
 
+    @Test
+    fun `completion after internal navigation installs answers without unrelated feedback`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeUpsertMyProfileQuestionAnswerResponse = { gate.await() }
+            profileQuestionAnswersResponse = Response.success(
+                TestDtos.profileQuestionAnswers(
+                    listOf(TestDtos.profileQuestionAnswer(answer = "Guardada")),
+                ),
+            )
+        }
+        val harness = harness(
+            api = api,
+            initialState = ready(profileQuestions = loadedState()),
+        )
+
+        harness.handler.saveAnswer("PERFECT_SUNDAY_001", "Guardada")
+        runCurrent()
+
+        harness.handler.navigateBack()
+
+        assertEquals(
+            ProfileQuestionDestination.Questions,
+            harness.ready().profileQuestions.destination,
+        )
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        val state = harness.ready().profileQuestions
+        assertEquals(listOf("Guardada"), state.answers.map { it.answer })
+        assertEquals(ProfileQuestionDestination.Questions, state.destination)
+        assertNull(state.feedback)
+        assertNull(state.mutationError)
+    }
+
+    @Test
+    fun `ordinary mutation error is not shown after internal navigation`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeUpsertMyProfileQuestionAnswerResponse = { gate.await() }
+            profileQuestionAnswersResponse = backendErrorResponse(
+                statusCode = 400,
+                code = "INVALID_PROFILE_QUESTION_ANSWER",
+            )
+        }
+        val harness = harness(
+            api = api,
+            initialState = ready(profileQuestions = loadedState()),
+        )
+
+        harness.handler.saveAnswer("PERFECT_SUNDAY_001", "Respuesta")
+        runCurrent()
+        harness.handler.navigateBack()
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(
+            ProfileQuestionDestination.Questions,
+            harness.ready().profileQuestions.destination,
+        )
+        assertNull(harness.ready().profileQuestions.mutationError)
+    }
+
     private fun loadedState(
         destination: ProfileQuestionDestination = ProfileQuestionDestination.Editor("PERFECT_SUNDAY_001"),
         answers: List<com.reals.app.domain.model.ProfileQuestionAnswer> = listOf(

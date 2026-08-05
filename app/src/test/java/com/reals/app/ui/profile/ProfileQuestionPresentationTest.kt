@@ -51,7 +51,14 @@ class ProfileQuestionPresentationTest {
 
         assertTrue(profileQuestionSelectionDraftIsValid(rows.take(3).map { it.question.id }, rows))
         assertFalse(profileQuestionSelectionDraftIsValid(rows.map { it.question.id }, rows))
-        assertFalse(profileQuestionSelectionDraftIsValid(listOf("PERFECT_SUNDAY_001", "PERFECT_SUNDAY_001"), rows))
+        assertFalse(
+            profileQuestionSelectionDraftIsValid(
+                listOf(
+                    "PERFECT_SUNDAY_001",
+                    "PERFECT_SUNDAY_001"
+                ), rows
+            )
+        )
         assertFalse(profileQuestionSelectionDraftIsValid(listOf("STALE_001"), rows))
     }
 
@@ -61,5 +68,50 @@ class ProfileQuestionPresentationTest {
         assertTrue(validateProfileQuestionAnswer("  Café  ").valid)
         assertFalse(validateProfileQuestionAnswer("   ").valid)
         assertFalse(validateProfileQuestionAnswer("a".repeat(ProfileQuestionAnswerMaxLength + 1)).valid)
+    }
+
+    @Test
+    fun `stale answer can be saved without changing its text`() {
+        val staleAnswer = TestDtos.profileQuestionAnswer(
+            questionId = "PERFECT_SUNDAY_001",
+            answer = "Café y caminata",
+            current = false,
+        ).toDomain()
+
+        assertTrue(
+            canSaveProfileQuestionAnswer(
+                input = "Café y caminata",
+                savedAnswer = staleAnswer,
+                mutationActive = false,
+            )
+        )
+    }
+
+    @Test
+    fun `current answer with unchanged text cannot be saved again`() {
+        val currentAnswer = TestDtos.profileQuestionAnswer(
+            questionId = "PERFECT_SUNDAY_001",
+            answer = "Café y caminata",
+            current = true,
+        ).toDomain()
+
+        assertFalse(
+            canSaveProfileQuestionAnswer(
+                input = "Café y caminata",
+                savedAnswer = currentAnswer,
+                mutationActive = false,
+            )
+        )
+    }
+
+    @Test
+    fun `answer validation rejects multiline text`() {
+        val validation = validateProfileQuestionAnswer("Primera línea\nSegunda línea")
+
+        assertFalse(validation.valid)
+        assertEquals(
+            "La respuesta debe escribirse en una sola línea.",
+            validation.error,
+        )
     }
 }
