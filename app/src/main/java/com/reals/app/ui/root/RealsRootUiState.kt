@@ -336,6 +336,7 @@ data class AffinityQuestionnaireUiState(
 data class AffinityAnswerMutationUiState(
     val questionId: String,
     val pendingAnswerCode: String?,
+    val requestId: Long = 0L,
 )
 
 sealed interface LegalResumeContext {

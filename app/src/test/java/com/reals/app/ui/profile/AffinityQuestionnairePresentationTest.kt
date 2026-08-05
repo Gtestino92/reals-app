@@ -89,4 +89,25 @@ class AffinityQuestionnairePresentationTest {
         assertFalse(unknown.answerType.isSupported())
         assertEquals(null, unknown.currentValidAnswer(answers))
     }
+
+    @Test
+    fun `expanded category helpers support initial expand collapse and invalid ids`() {
+        val catalog = TestDtos.affinityQuestionCatalog().toDomain()
+        val groups = catalog.groupQuestionsForPresentation(emptyList())
+
+        val initial = initialExpandedAffinityCategoryId(groups)
+        assertEquals("MUSIC", initial)
+
+        val collapsedFirst = toggledExpandedAffinityCategoryId(initial, "MUSIC")
+        assertEquals(null, collapsedFirst)
+        assertEquals(null, resolvedExpandedAffinityCategoryId(collapsedFirst, groups))
+
+        val expandedSecond = toggledExpandedAffinityCategoryId(collapsedFirst, "PLANS")
+        assertEquals("PLANS", expandedSecond)
+        assertEquals("PLANS", resolvedExpandedAffinityCategoryId(expandedSecond, groups))
+
+        val collapsedSecond = toggledExpandedAffinityCategoryId(expandedSecond, "PLANS")
+        assertEquals(null, collapsedSecond)
+        assertEquals(null, resolvedExpandedAffinityCategoryId("MISSING", groups))
+    }
 }

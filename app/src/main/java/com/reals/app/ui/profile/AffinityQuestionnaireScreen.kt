@@ -1,6 +1,5 @@
 package com.reals.app.ui.profile
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ErrorContext
 import com.reals.app.domain.model.AffinityQuestion
@@ -63,12 +63,9 @@ fun AffinityQuestionnaireScreen(
     val groups = contentCatalog?.groupQuestionsForPresentation(state.answers).orEmpty()
     val progress = contentCatalog?.progress(state.answers)
     var expandedCategoryId by rememberSaveable(state.profileId, contentCatalog?.catalogVersion) {
-        mutableStateOf(groups.firstOrNull()?.category?.id)
+        mutableStateOf(initialExpandedAffinityCategoryId(groups))
     }
-    val availableCategoryIds = groups.map { it.category.id }.toSet()
-    val activeExpandedCategoryId = expandedCategoryId
-        ?.takeIf { it in availableCategoryIds }
-        ?: groups.firstOrNull()?.category?.id
+    val activeExpandedCategoryId = resolvedExpandedAffinityCategoryId(expandedCategoryId, groups)
 
     LazyColumn(
         modifier = Modifier
@@ -140,11 +137,10 @@ fun AffinityQuestionnaireScreen(
                 expanded = activeExpandedCategoryId == group.category.id,
                 state = state,
                 onToggleExpanded = {
-                    expandedCategoryId = if (activeExpandedCategoryId == group.category.id) {
-                        null
-                    } else {
-                        group.category.id
-                    }
+                    expandedCategoryId = toggledExpandedAffinityCategoryId(
+                        currentCategoryId = activeExpandedCategoryId,
+                        selectedCategoryId = group.category.id,
+                    )
                 },
                 onSelectAnswer = onSelectAnswer,
                 onDeleteAnswer = onDeleteAnswer,
@@ -238,9 +234,7 @@ private fun AffinityCategoryCard(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onToggleExpanded),
+                modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
@@ -317,6 +311,7 @@ private fun AffinityQuestionCard(
                         .selectable(
                             selected = selected,
                             enabled = mutationsEnabled,
+                            role = Role.RadioButton,
                             onClick = { onSelectAnswer(question.id, option.code) },
                         )
                         .semantics {
@@ -329,7 +324,7 @@ private fun AffinityQuestionCard(
                     RadioButton(
                         selected = selected,
                         enabled = mutationsEnabled,
-                        onClick = { onSelectAnswer(question.id, option.code) },
+                        onClick = null,
                     )
                     Text(
                         text = option.label,

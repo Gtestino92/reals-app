@@ -46,6 +46,22 @@ fun AffinityQuestionCatalog.progress(answers: List<AffinityAnswer>): AffinityQue
         totalQuestionCount = questions.size,
     )
 
+fun initialExpandedAffinityCategoryId(
+    groups: List<AffinityQuestionCategoryPresentation>,
+): String? = groups.firstOrNull()?.category?.id
+
+fun resolvedExpandedAffinityCategoryId(
+    rememberedCategoryId: String?,
+    groups: List<AffinityQuestionCategoryPresentation>,
+): String? = rememberedCategoryId?.takeIf { categoryId ->
+    groups.any { it.category.id == categoryId }
+}
+
+fun toggledExpandedAffinityCategoryId(
+    currentCategoryId: String?,
+    selectedCategoryId: String,
+): String? = if (currentCategoryId == selectedCategoryId) null else selectedCategoryId
+
 fun AffinityQuestion.currentValidAnswer(answers: List<AffinityAnswer>): AffinityAnswer? {
     if (!answerType.isSupported()) return null
     return answers.firstOrNull { answer ->
