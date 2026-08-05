@@ -66,6 +66,11 @@ class RealsRootViewModel(
         dependencies.visualApproval.getPartnerPersonalMessage,
     )
     private val schedulingCoordinator = SchedulingCoordinator(dependencies.scheduling)
+    private val affinityQuestionnaireHandler = AffinityQuestionnaireOperationHandler(
+        uiState = _uiState,
+        dependencies = dependencies.affinity,
+        scope = viewModelScope,
+    )
     private val manualBlockCoordinator = ManualBlockCoordinator(
         dependencies.manualBlock.blockMatchParticipant,
     )
@@ -197,7 +202,9 @@ class RealsRootViewModel(
 
         when (current) {
             is RealsRootUiState.Ready -> {
-                if (current.editingActiveProfile) {
+                if (current.affinityQuestionnaire.open) {
+                    navigateBackAffinityQuestionnaire()
+                } else if (current.editingActiveProfile) {
                     closeProfileManagement()
                 }
             }
@@ -353,6 +360,36 @@ class RealsRootViewModel(
         val current = _uiState.value as? RealsRootUiState.Ready ?: return
         closeProfileManagement(current)
     }
+
+    fun openAffinityQuestionnaire() = affinityQuestionnaireHandler.open()
+
+    fun closeAffinityQuestionnaire() = affinityQuestionnaireHandler.close()
+
+    fun refreshAffinityQuestionnaire() = affinityQuestionnaireHandler.refresh()
+
+    fun startAffinityQuestionnaireContinue() = affinityQuestionnaireHandler.openContinue()
+
+    fun openAffinityQuestionnaireCategories() = affinityQuestionnaireHandler.openCategories()
+
+    fun openAffinityQuestionnaireReview() = affinityQuestionnaireHandler.openReview()
+
+    fun openAffinityQuestionnaireCategory(categoryId: String) =
+        affinityQuestionnaireHandler.openCategory(categoryId)
+
+    fun openAffinityQuestionnaireReviewedAnswer(questionId: String) =
+        affinityQuestionnaireHandler.openReviewedAnswer(questionId)
+
+    fun skipAffinityQuestion() = affinityQuestionnaireHandler.skipQuestion()
+
+    fun nextAffinityQuestion() = affinityQuestionnaireHandler.nextQuestion()
+
+    fun navigateBackAffinityQuestionnaire() = affinityQuestionnaireHandler.navigateBack()
+
+    fun selectAffinityAnswer(questionId: String, answerCode: String) =
+        affinityQuestionnaireHandler.selectAnswer(questionId, answerCode)
+
+    fun deleteAffinityAnswer(questionId: String) =
+        affinityQuestionnaireHandler.deleteAnswer(questionId)
 
     private fun closeProfileManagement(current: RealsRootUiState.Ready) {
         if (current.session.profileSnapshot !is ProfileSnapshot.Found) return
@@ -1879,7 +1916,9 @@ private fun RealsRootUiState.hasLegalActionRequiredError(): Boolean = when (this
             photoReorderError.isLegalActionRequiredError() ||
             photoActionError.isLegalActionRequiredError() ||
             homeError.isLegalActionRequiredError() ||
-            matchmakingBlockedReason.isLegalActionRequiredError()
+            matchmakingBlockedReason.isLegalActionRequiredError() ||
+            affinityQuestionnaire.error.isLegalActionRequiredError() ||
+            affinityQuestionnaire.mutationError.isLegalActionRequiredError()
 
     is RealsRootUiState.FirstChat -> error.isLegalActionRequiredError()
     is RealsRootUiState.SecondChat -> error.isLegalActionRequiredError()
@@ -1905,7 +1944,9 @@ internal fun RealsRootUiState.hasTerminalAuthFailure(): Boolean = when (this) {
             photoActionError.isTerminalAuthFailure() ||
             homeError.isTerminalAuthFailure() ||
             matchmakingBlockedReason.isTerminalAuthFailure() ||
-            accountDeleteError.isTerminalAuthFailure()
+            accountDeleteError.isTerminalAuthFailure() ||
+            affinityQuestionnaire.error.isTerminalAuthFailure() ||
+            affinityQuestionnaire.mutationError.isTerminalAuthFailure()
 
     is RealsRootUiState.FirstChat ->
         error.isTerminalAuthFailure() || manualBlock.error.isTerminalAuthFailure()

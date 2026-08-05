@@ -3,6 +3,8 @@ package com.reals.app.testutil
 import com.reals.app.core.network.ApiExecutor
 import com.reals.app.data.api.RealsApi
 import com.reals.app.data.dto.AddProposalRequestDto
+import com.reals.app.data.dto.AffinityAnswersResponseDto
+import com.reals.app.data.dto.AffinityQuestionCatalogResponseDto
 import com.reals.app.data.dto.ChatDecisionRequestDto
 import com.reals.app.data.dto.ChatExitOutcomeResponseDto
 import com.reals.app.data.dto.ChatExitRequestCreateRequestDto
@@ -26,6 +28,7 @@ import com.reals.app.data.dto.NegotiationResponseDto
 import com.reals.app.data.dto.PartnerPersonalMessageResponseDto
 import com.reals.app.data.dto.PhotoResponseDto
 import com.reals.app.data.dto.PingResponseDto
+import com.reals.app.data.dto.PatchAffinityAnswersRequestDto
 import com.reals.app.data.dto.ProfileResponseDto
 import com.reals.app.data.dto.QueueStatusResponseDto
 import com.reals.app.data.dto.RegisterPushTokenRequestDto
@@ -123,6 +126,8 @@ class FakeRealsApi : RealsApi {
         private set
     var legalActionBody: RecordLegalDocumentActionRequestDto? = null
         private set
+    var patchAffinityAnswersBody: PatchAffinityAnswersRequestDto? = null
+        private set
     var blockMatchIds: List<String> = emptyList()
         private set
 
@@ -146,6 +151,10 @@ class FakeRealsApi : RealsApi {
     var beforeReorderPhotosResponse: suspend () -> Unit = {}
     var beforeAddPhotoResponse: suspend () -> Unit = {}
     var beforeReplacePhotoResponse: suspend () -> Unit = {}
+    var beforeGetAffinityQuestionCatalogResponse: suspend () -> Unit = {}
+    var beforeGetMyAffinityAnswersResponse: suspend () -> Unit = {}
+    var beforePatchMyAffinityAnswersResponse: suspend () -> Unit = {}
+    var beforeDeleteMyAffinityAnswerResponse: suspend () -> Unit = {}
 
     var pingResponse: Response<PingResponseDto> = Response.success(PingResponseDto("ok"))
     var userResponse: Response<UserResponseDto> = Response.success(TestDtos.user())
@@ -199,6 +208,10 @@ class FakeRealsApi : RealsApi {
     var submitProposalsResponse: Response<List<ScheduleProposalResponseDto>>? = null
     var acceptProposalResponse: Response<NegotiationResponseDto>? = null
     var rejectPartnerProposalsResponse: Response<NegotiationResponseDto>? = null
+    var affinityQuestionCatalogResponse: Response<AffinityQuestionCatalogResponseDto> =
+        Response.success(TestDtos.affinityQuestionCatalog())
+    var affinityAnswersResponse: Response<AffinityAnswersResponseDto> =
+        Response.success(TestDtos.affinityAnswers())
 
     override suspend fun ping(): Response<PingResponseDto> = record("ping", null) { pingResponse }
 
@@ -323,6 +336,54 @@ class FakeRealsApi : RealsApi {
 
     override suspend fun activateMyProfile(authorization: String): Response<ProfileResponseDto> =
         record("activateMyProfile", authorization) { profileResponse }
+
+    override suspend fun getAffinityQuestionCatalog(
+        authorization: String,
+    ): Response<AffinityQuestionCatalogResponseDto> =
+        record(
+            "getAffinityQuestionCatalog",
+            authorization,
+            beforeResponse = beforeGetAffinityQuestionCatalogResponse,
+        ) {
+            affinityQuestionCatalogResponse
+        }
+
+    override suspend fun getMyAffinityAnswers(
+        authorization: String,
+    ): Response<AffinityAnswersResponseDto> =
+        record(
+            "getMyAffinityAnswers",
+            authorization,
+            beforeResponse = beforeGetMyAffinityAnswersResponse,
+        ) {
+            affinityAnswersResponse
+        }
+
+    override suspend fun patchMyAffinityAnswers(
+        authorization: String,
+        body: PatchAffinityAnswersRequestDto,
+    ): Response<AffinityAnswersResponseDto> =
+        record(
+            "patchMyAffinityAnswers",
+            authorization,
+            beforeResponse = beforePatchMyAffinityAnswersResponse,
+        ) {
+            patchAffinityAnswersBody = body
+            affinityAnswersResponse
+        }
+
+    override suspend fun deleteMyAffinityAnswer(
+        authorization: String,
+        questionId: String,
+    ): Response<AffinityAnswersResponseDto> =
+        record(
+            "deleteMyAffinityAnswer",
+            authorization,
+            questionId,
+            beforeResponse = beforeDeleteMyAffinityAnswerResponse,
+        ) {
+            affinityAnswersResponse
+        }
 
     override suspend fun enqueueMatchmaking(
         authorization: String,

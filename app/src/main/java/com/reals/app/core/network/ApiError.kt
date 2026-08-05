@@ -164,6 +164,7 @@ enum class ErrorContext {
     Account,
     Legal,
     ManualBlock,
+    AffinityQuestions,
 }
 
 val ApiError.Backend.backendErrorCode: BackendErrorCode
@@ -238,6 +239,7 @@ fun ApiError.toUserTitle(context: ErrorContext = ErrorContext.General): String =
     ErrorContext.Account -> "No pudimos actualizar tu cuenta"
     ErrorContext.Legal -> "No pudimos actualizar los documentos"
     ErrorContext.ManualBlock -> "No pudimos bloquear a ésta persona"
+    ErrorContext.AffinityQuestions -> "No pudimos actualizar tus respuestas"
     ErrorContext.General -> "Algo salió mal"
 }
 
@@ -365,6 +367,7 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
         ErrorContext.Chat -> "La conversación cambió de estado. Actualizá e intentá nuevamente."
         ErrorContext.VisualReview -> "La revisión visual cambió de estado. Actualizá e intentá nuevamente."
         ErrorContext.Scheduling -> "La coordinación de horarios cambió de estado. Actualizá e intentá nuevamente."
+        ErrorContext.AffinityQuestions -> "No pudimos actualizar las preguntas de afinidad. Intentá nuevamente."
         else -> "Intentá nuevamente en unos segundos."
     }
 }

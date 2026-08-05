@@ -3,6 +3,8 @@ package com.reals.app.ui.root
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.isLegalActionRequired
 import com.reals.app.core.time.ServerClockSnapshot
+import com.reals.app.domain.model.AffinityAnswer
+import com.reals.app.domain.model.AffinityQuestionCatalog
 import com.reals.app.domain.model.BackendUser
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatExitRequest
@@ -67,6 +69,7 @@ sealed interface RealsRootUiState {
         val home: HomeUiState = HomeUiState(),
         val account: AccountUiState = AccountUiState(),
         val editingActiveProfile: Boolean = false,
+        val affinityQuestionnaire: AffinityQuestionnaireUiState = AffinityQuestionnaireUiState(),
     ) : RealsRootUiState {
         val creatingProfile: Boolean get() = profileOp.creatingProfile
         val profileCreateError: ApiError? get() = profileOp.profileCreateError
@@ -317,6 +320,49 @@ data class AccountUiState(
     val changePasswordMessage: String? = null,
 )
 
+data class AffinityQuestionnaireUiState(
+    val open: Boolean = false,
+    val profileId: String? = null,
+    val destination: AffinityQuestionnaireDestination = AffinityQuestionnaireDestination.Overview,
+    val catalog: AffinityQuestionCatalog? = null,
+    val answers: List<AffinityAnswer> = emptyList(),
+    val loading: Boolean = false,
+    val refreshing: Boolean = false,
+    val mutation: AffinityAnswerMutationUiState? = null,
+    val error: ApiError? = null,
+    val mutationError: ApiError? = null,
+    val mutationFeedbackQuestionId: String? = null,
+    val message: String? = null,
+)
+
+sealed interface AffinityQuestionnaireDestination {
+    data object Overview : AffinityQuestionnaireDestination
+    data object Categories : AffinityQuestionnaireDestination
+    data object Review : AffinityQuestionnaireDestination
+
+    data class Question(
+        val questionId: String,
+        val source: AffinityQuestionSource,
+    ) : AffinityQuestionnaireDestination
+}
+
+sealed interface AffinityQuestionSource {
+    data object Continue : AffinityQuestionSource
+
+    data class Category(
+        val categoryId: String,
+        val reviewAll: Boolean,
+    ) : AffinityQuestionSource
+
+    data object Review : AffinityQuestionSource
+}
+
+data class AffinityAnswerMutationUiState(
+    val questionId: String,
+    val pendingAnswerCode: String?,
+    val requestId: Long = 0L,
+)
+
 sealed interface LegalResumeContext {
     data object PostSession : LegalResumeContext
     data object PostReactivation : LegalResumeContext
@@ -456,6 +502,30 @@ fun RealsRootUiState.clearLegalActionRequiredForResume(): RealsRootUiState = whe
                 home.matchmakingSearchPhase
             },
         ),
+        affinityQuestionnaire = affinityQuestionnaire.copy(
+            loading = if (affinityQuestionnaire.error.isLegalActionRequired()) {
+                false
+            } else {
+                affinityQuestionnaire.loading
+            },
+            refreshing = if (affinityQuestionnaire.error.isLegalActionRequired()) {
+                false
+            } else {
+                affinityQuestionnaire.refreshing
+            },
+            mutation = if (affinityQuestionnaire.mutationError.isLegalActionRequired()) {
+                null
+            } else {
+                affinityQuestionnaire.mutation
+            },
+            error = affinityQuestionnaire.error.takeUnless { it.isLegalActionRequired() },
+            mutationError = affinityQuestionnaire.mutationError.takeUnless { it.isLegalActionRequired() },
+            mutationFeedbackQuestionId = if (affinityQuestionnaire.mutationError.isLegalActionRequired()) {
+                null
+            } else {
+                affinityQuestionnaire.mutationFeedbackQuestionId
+            },
+        ),
     )
 
     is RealsRootUiState.FirstChat -> copy(error = error.takeUnless { it.isLegalActionRequired() })
@@ -469,7 +539,8 @@ private fun ApiError?.isLegalActionRequired(): Boolean = this?.isLegalActionRequ
 
 fun RealsRootUiState.canHandleSystemBack(): Boolean = when (this) {
     is RealsRootUiState.Ready ->
-        editingActiveProfile &&
+        affinityQuestionnaire.open ||
+            editingActiveProfile &&
             session.profileSnapshot is ProfileSnapshot.Found &&
             !photos.reorderingPhotos
 

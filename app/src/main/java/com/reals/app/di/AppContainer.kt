@@ -8,6 +8,7 @@ import com.reals.app.core.network.ApiExecutor
 import com.reals.app.core.time.AndroidElapsedRealtimeClock
 import com.reals.app.data.preferences.SharedPreferencesFirstChatUnansweredSuggestionDismissalStore
 import com.reals.app.data.api.RealsApiClient
+import com.reals.app.data.repository.AffinityQuestionRepository
 import com.reals.app.data.repository.FirebaseAuthRepository
 import com.reals.app.data.repository.ChatRepository
 import com.reals.app.data.repository.LegalRepository
@@ -27,10 +28,12 @@ import com.reals.app.domain.usecase.CreateSecondChatCompletionRequestUseCase
 import com.reals.app.domain.usecase.CreateSecondChatInactivityClaimUseCase
 import com.reals.app.domain.usecase.CreateSecondChatNoShowClaimUseCase
 import com.reals.app.domain.usecase.DeleteAccountUseCase
+import com.reals.app.domain.usecase.DeleteMyAffinityAnswerUseCase
 import com.reals.app.domain.usecase.DeleteProfilePhotoUseCase
 import com.reals.app.domain.usecase.DecideSecondChatCompletionRequestUseCase
 import com.reals.app.domain.usecase.DismissSecondChatForConnectionUseCase
 import com.reals.app.domain.usecase.EnqueueMatchmakingUseCase
+import com.reals.app.domain.usecase.GetAffinityQuestionCatalogUseCase
 import com.reals.app.domain.usecase.GetChatExitRequestsUseCase
 import com.reals.app.domain.usecase.GetChatMessagesUseCase
 import com.reals.app.domain.usecase.GetChatUseCase
@@ -43,6 +46,7 @@ import com.reals.app.domain.usecase.GetHomeUseCase
 import com.reals.app.domain.usecase.GetLegalStatusUseCase
 import com.reals.app.domain.usecase.GetMatchUseCase
 import com.reals.app.domain.usecase.GetMeUseCase
+import com.reals.app.domain.usecase.GetMyAffinityAnswersUseCase
 import com.reals.app.domain.usecase.GetPartnerPersonalMessageUseCase
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
 import com.reals.app.domain.usecase.GetQueueStatusUseCase
@@ -55,6 +59,7 @@ import com.reals.app.domain.usecase.GetVisualProfileUseCase
 import com.reals.app.domain.usecase.LeaveQueueUseCase
 import com.reals.app.domain.usecase.JoinSecondChatUseCase
 import com.reals.app.domain.usecase.MarkLocalFirebaseEmailVerifiedUseCase
+import com.reals.app.domain.usecase.PatchMyAffinityAnswerUseCase
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
 import com.reals.app.domain.usecase.PutMyPersonalMessageUseCase
 import com.reals.app.domain.usecase.ReactivateAccountUseCase
@@ -109,6 +114,7 @@ class AppContainer(context: Context) {
     private val chatRepository = ChatRepository(api, json, tokenProvider, apiExecutor)
     private val schedulingRepository = SchedulingRepository(api, tokenProvider, apiExecutor)
     private val legalRepository = LegalRepository(api, tokenProvider, apiExecutor)
+    private val affinityQuestionRepository = AffinityQuestionRepository(api, tokenProvider, apiExecutor)
     val provisionAndLoadProfileUseCase = ProvisionAndLoadProfileUseCase(
         meRepository = meRepository,
         profileRepository = profileRepository,
@@ -177,6 +183,10 @@ class AppContainer(context: Context) {
     val submitSchedulingProposalsUseCase = SubmitSchedulingProposalsUseCase(schedulingRepository)
     val acceptSchedulingProposalUseCase = AcceptSchedulingProposalUseCase(schedulingRepository)
     val rejectPartnerSchedulingProposalsUseCase = RejectPartnerSchedulingProposalsUseCase(schedulingRepository)
+    val getAffinityQuestionCatalogUseCase = GetAffinityQuestionCatalogUseCase(affinityQuestionRepository)
+    val getMyAffinityAnswersUseCase = GetMyAffinityAnswersUseCase(affinityQuestionRepository)
+    val patchMyAffinityAnswerUseCase = PatchMyAffinityAnswerUseCase(affinityQuestionRepository)
+    val deleteMyAffinityAnswerUseCase = DeleteMyAffinityAnswerUseCase(affinityQuestionRepository)
 
     val rootDependencies = RealsRootDependencies(
         session = SessionFeatureDependencies(
@@ -266,6 +276,12 @@ class AppContainer(context: Context) {
             submitProposals = submitSchedulingProposalsUseCase,
             acceptProposal = acceptSchedulingProposalUseCase,
             rejectPartnerProposals = rejectPartnerSchedulingProposalsUseCase,
+        ),
+        affinity = AffinityFeatureDependencies(
+            getCatalog = getAffinityQuestionCatalogUseCase,
+            getMyAnswers = getMyAffinityAnswersUseCase,
+            patchAnswer = patchMyAffinityAnswerUseCase,
+            deleteAnswer = deleteMyAffinityAnswerUseCase,
         ),
     )
 }

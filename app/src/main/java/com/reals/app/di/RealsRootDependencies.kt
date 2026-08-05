@@ -13,10 +13,12 @@ import com.reals.app.domain.usecase.CreateSecondChatCompletionRequestUseCase
 import com.reals.app.domain.usecase.CreateSecondChatInactivityClaimUseCase
 import com.reals.app.domain.usecase.CreateSecondChatNoShowClaimUseCase
 import com.reals.app.domain.usecase.DeleteAccountUseCase
+import com.reals.app.domain.usecase.DeleteMyAffinityAnswerUseCase
 import com.reals.app.domain.usecase.DeleteProfilePhotoUseCase
 import com.reals.app.domain.usecase.DecideSecondChatCompletionRequestUseCase
 import com.reals.app.domain.usecase.DismissSecondChatForConnectionUseCase
 import com.reals.app.domain.usecase.EnqueueMatchmakingUseCase
+import com.reals.app.domain.usecase.GetAffinityQuestionCatalogUseCase
 import com.reals.app.domain.usecase.GetChatExitRequestsUseCase
 import com.reals.app.domain.usecase.GetChatMessagesUseCase
 import com.reals.app.domain.usecase.GetChatUseCase
@@ -29,6 +31,7 @@ import com.reals.app.domain.usecase.GetHomeUseCase
 import com.reals.app.domain.usecase.GetLegalStatusUseCase
 import com.reals.app.domain.usecase.GetMatchUseCase
 import com.reals.app.domain.usecase.GetMeUseCase
+import com.reals.app.domain.usecase.GetMyAffinityAnswersUseCase
 import com.reals.app.domain.usecase.GetPartnerPersonalMessageUseCase
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
 import com.reals.app.domain.usecase.GetSchedulingAvailabilityUseCase
@@ -40,6 +43,7 @@ import com.reals.app.domain.usecase.GetVisualProfileUseCase
 import com.reals.app.domain.usecase.JoinSecondChatUseCase
 import com.reals.app.domain.usecase.LeaveQueueUseCase
 import com.reals.app.domain.usecase.MarkLocalFirebaseEmailVerified
+import com.reals.app.domain.usecase.PatchMyAffinityAnswerUseCase
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
 import com.reals.app.domain.usecase.PutMyPersonalMessageUseCase
 import com.reals.app.domain.usecase.ReactivateAccountUseCase
@@ -73,6 +77,7 @@ data class RealsRootDependencies(
     val secondChat: SecondChatFeatureDependencies,
     val visualApproval: VisualApprovalFeatureDependencies,
     val scheduling: SchedulingFeatureDependencies,
+    val affinity: AffinityFeatureDependencies,
 )
 
 data class ManualBlockFeatureDependencies(
@@ -176,4 +181,11 @@ data class SchedulingFeatureDependencies(
     val submitProposals: SubmitSchedulingProposalsUseCase,
     val acceptProposal: AcceptSchedulingProposalUseCase,
     val rejectPartnerProposals: RejectPartnerSchedulingProposalsUseCase,
+)
+
+data class AffinityFeatureDependencies(
+    val getCatalog: GetAffinityQuestionCatalogUseCase,
+    val getMyAnswers: GetMyAffinityAnswersUseCase,
+    val patchAnswer: PatchMyAffinityAnswerUseCase,
+    val deleteAnswer: DeleteMyAffinityAnswerUseCase,
 )
