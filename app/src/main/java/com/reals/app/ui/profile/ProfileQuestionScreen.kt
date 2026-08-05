@@ -28,17 +28,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ErrorContext
 import com.reals.app.core.security.TextSafety
-import com.reals.app.domain.model.ProfileQuestionAnswer
 import com.reals.app.domain.model.ProfileQuestionCatalog
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.root.ProfileQuestionDestination
 import com.reals.app.ui.root.ProfileQuestionMutationKind
 import com.reals.app.ui.root.ProfileQuestionUiState
 import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 fun ProfileQuestionScreen(
@@ -203,10 +202,10 @@ private fun ProfileQuestionEditor(
 ) {
     val question = catalog.questions.firstOrNull { it.id == questionId } ?: return
     val savedAnswer = state.answers.firstOrNull { it.questionId == questionId }
-    var text by rememberSaveable(questionId, savedAnswer?.updatedAt, state.mutation == null) {
-        mutableStateOf(TextFieldValue(savedAnswer?.answer.orEmpty()))
+    var text by rememberSaveable(questionId, savedAnswer?.updatedAt) {
+        mutableStateOf(savedAnswer?.answer.orEmpty())
     }
-    val validation = validateProfileQuestionAnswer(text.text)
+    val validation = validateProfileQuestionAnswer(text)
     val mutationActive = state.mutation != null
     val savingThisQuestion = state.mutation?.questionId == questionId
     val canSave = !mutationActive &&
@@ -219,7 +218,9 @@ private fun ProfileQuestionEditor(
                 prompt = question.prompt,
                 text = text,
                 onTextChange = { value ->
-                    text = value.copy(text = value.text.lineSequence().firstOrNull().orEmpty())
+                    text = value
+                        .substringBefore('\n')
+                        .substringBefore('\r')
                 },
                 validation = validation,
                 canSave = canSave,
@@ -228,7 +229,7 @@ private fun ProfileQuestionEditor(
                 feedbackMessage = state.feedback
                     ?.takeIf { it.questionId == questionId && it.destination == state.destination }
                     ?.message,
-                onSave = { onSaveAnswer(questionId, text.text) },
+                onSave = { onSaveAnswer(questionId, text) },
                 onDelete = { onDeleteAnswer(questionId) },
             )
         }
@@ -238,8 +239,8 @@ private fun ProfileQuestionEditor(
 @Composable
 private fun ProfileQuestionEditorCard(
     prompt: String,
-    text: TextFieldValue,
-    onTextChange: (TextFieldValue) -> Unit,
+    text: String,
+    onTextChange: (String) -> Unit,
     validation: ProfileQuestionAnswerValidation,
     canSave: Boolean,
     canDelete: Boolean,
@@ -251,7 +252,7 @@ private fun ProfileQuestionEditorCard(
     var showSaving by remember { mutableStateOf(false) }
     LaunchedEffect(saving) {
         if (saving) {
-            delay(ProfileQuestionSavingIndicatorDelayMillis)
+            delay(ProfileQuestionSavingIndicatorDelayMillis.milliseconds)
             showSaving = true
         } else {
             showSaving = false
