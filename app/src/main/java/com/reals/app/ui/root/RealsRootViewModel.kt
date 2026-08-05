@@ -203,7 +203,7 @@ class RealsRootViewModel(
         when (current) {
             is RealsRootUiState.Ready -> {
                 if (current.affinityQuestionnaire.open) {
-                    closeAffinityQuestionnaire()
+                    navigateBackAffinityQuestionnaire()
                 } else if (current.editingActiveProfile) {
                     closeProfileManagement()
                 }
@@ -366,6 +366,24 @@ class RealsRootViewModel(
     fun closeAffinityQuestionnaire() = affinityQuestionnaireHandler.close()
 
     fun refreshAffinityQuestionnaire() = affinityQuestionnaireHandler.refresh()
+
+    fun startAffinityQuestionnaireContinue() = affinityQuestionnaireHandler.openContinue()
+
+    fun openAffinityQuestionnaireCategories() = affinityQuestionnaireHandler.openCategories()
+
+    fun openAffinityQuestionnaireReview() = affinityQuestionnaireHandler.openReview()
+
+    fun openAffinityQuestionnaireCategory(categoryId: String) =
+        affinityQuestionnaireHandler.openCategory(categoryId)
+
+    fun openAffinityQuestionnaireReviewedAnswer(questionId: String) =
+        affinityQuestionnaireHandler.openReviewedAnswer(questionId)
+
+    fun skipAffinityQuestion() = affinityQuestionnaireHandler.skipQuestion()
+
+    fun nextAffinityQuestion() = affinityQuestionnaireHandler.nextQuestion()
+
+    fun navigateBackAffinityQuestionnaire() = affinityQuestionnaireHandler.navigateBack()
 
     fun selectAffinityAnswer(questionId: String, answerCode: String) =
         affinityQuestionnaireHandler.selectAnswer(questionId, answerCode)

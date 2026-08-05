@@ -323,6 +323,7 @@ data class AccountUiState(
 data class AffinityQuestionnaireUiState(
     val open: Boolean = false,
     val profileId: String? = null,
+    val destination: AffinityQuestionnaireDestination = AffinityQuestionnaireDestination.Overview,
     val catalog: AffinityQuestionCatalog? = null,
     val answers: List<AffinityAnswer> = emptyList(),
     val loading: Boolean = false,
@@ -332,6 +333,28 @@ data class AffinityQuestionnaireUiState(
     val mutationError: ApiError? = null,
     val message: String? = null,
 )
+
+sealed interface AffinityQuestionnaireDestination {
+    data object Overview : AffinityQuestionnaireDestination
+    data object Categories : AffinityQuestionnaireDestination
+    data object Review : AffinityQuestionnaireDestination
+
+    data class Question(
+        val questionId: String,
+        val source: AffinityQuestionSource,
+    ) : AffinityQuestionnaireDestination
+}
+
+sealed interface AffinityQuestionSource {
+    data object Continue : AffinityQuestionSource
+
+    data class Category(
+        val categoryId: String,
+        val reviewAll: Boolean,
+    ) : AffinityQuestionSource
+
+    data object Review : AffinityQuestionSource
+}
 
 data class AffinityAnswerMutationUiState(
     val questionId: String,

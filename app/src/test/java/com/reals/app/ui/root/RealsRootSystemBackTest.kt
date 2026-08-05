@@ -188,7 +188,7 @@ class RealsRootSystemBackTest {
     }
 
     @Test
-    fun `onSystemBack closes questionnaire before profile management`() = runTest(dispatcher) {
+    fun `onSystemBack navigates questionnaire hierarchy before profile management`() = runTest(dispatcher) {
         val viewModel = RealsRootViewModel(
             dependencies = rootViewModelTestDependencies(com.reals.app.testutil.FakeRealsApi()),
             autoRefreshSession = false,
@@ -200,6 +200,10 @@ class RealsRootSystemBackTest {
                 affinityQuestionnaire = AffinityQuestionnaireUiState(
                     open = true,
                     profileId = "profile-1",
+                    destination = AffinityQuestionnaireDestination.Question(
+                        questionId = "MUSIC_DISCOVERY_001",
+                        source = AffinityQuestionSource.Review,
+                    ),
                     catalog = TestDtos.affinityQuestionCatalog().toDomain(),
                     answers = listOf(TestDtos.affinityAnswer().toDomain()),
                 ),
@@ -208,10 +212,22 @@ class RealsRootSystemBackTest {
 
         viewModel.onSystemBack()
 
-        val ready = viewModel.uiState.value as RealsRootUiState.Ready
-        assertFalse(ready.affinityQuestionnaire.open)
-        assertTrue(ready.editingActiveProfile)
-        assertEquals(listOf("MUSIC_DISCOVERY_001"), ready.affinityQuestionnaire.answers.map { it.questionId })
+        val review = viewModel.uiState.value as RealsRootUiState.Ready
+        assertTrue(review.affinityQuestionnaire.open)
+        assertEquals(AffinityQuestionnaireDestination.Review, review.affinityQuestionnaire.destination)
+
+        viewModel.onSystemBack()
+
+        val overview = viewModel.uiState.value as RealsRootUiState.Ready
+        assertTrue(overview.affinityQuestionnaire.open)
+        assertEquals(AffinityQuestionnaireDestination.Overview, overview.affinityQuestionnaire.destination)
+
+        viewModel.onSystemBack()
+
+        val closed = viewModel.uiState.value as RealsRootUiState.Ready
+        assertFalse(closed.affinityQuestionnaire.open)
+        assertTrue(closed.editingActiveProfile)
+        assertEquals(listOf("MUSIC_DISCOVERY_001"), closed.affinityQuestionnaire.answers.map { it.questionId })
     }
 
     @Test

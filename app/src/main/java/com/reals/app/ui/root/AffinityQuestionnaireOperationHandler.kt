@@ -8,6 +8,13 @@ import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.ui.profile.canSelectAnswerCode
 import com.reals.app.ui.profile.currentValidAnswer
+import com.reals.app.ui.profile.findAnswerableQuestion
+import com.reals.app.ui.profile.firstCategoryQuestion
+import com.reals.app.ui.profile.firstUnansweredQuestion
+import com.reals.app.ui.profile.groupQuestionsForPresentation
+import com.reals.app.ui.profile.nextCategoryQuestion
+import com.reals.app.ui.profile.nextContinueQuestion
+import com.reals.app.ui.profile.reconciledDestination
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -44,6 +51,7 @@ class AffinityQuestionnaireOperationHandler(
                 affinityQuestionnaire = AffinityQuestionnaireUiState(
                     open = true,
                     profileId = profile.id,
+                    destination = AffinityQuestionnaireDestination.Overview,
                     catalog = retained?.catalog,
                     answers = retained?.answers.orEmpty(),
                     loading = retained == null,
@@ -58,6 +66,7 @@ class AffinityQuestionnaireOperationHandler(
             affinityQuestionnaire = AffinityQuestionnaireUiState(
                 open = true,
                 profileId = profile.id,
+                destination = AffinityQuestionnaireDestination.Overview,
                 catalog = retained?.catalog,
                 answers = retained?.answers.orEmpty(),
                 loading = retained == null,
@@ -81,6 +90,7 @@ class AffinityQuestionnaireOperationHandler(
         uiState.value = current.copy(
             affinityQuestionnaire = current.affinityQuestionnaire.copy(
                 open = false,
+                destination = AffinityQuestionnaireDestination.Overview,
                 loading = false,
                 refreshing = false,
                 mutation = null,
@@ -114,6 +124,153 @@ class AffinityQuestionnaireOperationHandler(
                 result = loadSnapshot(),
             )
         }
+    }
+
+    fun openContinue() {
+        val current = uiState.value as? RealsRootUiState.Ready ?: return
+        val questionnaire = current.affinityQuestionnaire
+        val catalog = questionnaire.catalog ?: return
+        if (!questionnaire.open) return
+        val question = catalog.firstUnansweredQuestion(questionnaire.answers) ?: return
+        setDestination(
+            current = current,
+            destination = AffinityQuestionnaireDestination.Question(
+                questionId = question.id,
+                source = AffinityQuestionSource.Continue,
+            ),
+        )
+    }
+
+    fun openCategories() {
+        val current = uiState.value as? RealsRootUiState.Ready ?: return
+        if (!current.affinityQuestionnaire.open) return
+        setDestination(current, AffinityQuestionnaireDestination.Categories)
+    }
+
+    fun openReview() {
+        val current = uiState.value as? RealsRootUiState.Ready ?: return
+        if (!current.affinityQuestionnaire.open) return
+        setDestination(current, AffinityQuestionnaireDestination.Review)
+    }
+
+    fun openCategory(categoryId: String) {
+        val current = uiState.value as? RealsRootUiState.Ready ?: return
+        val questionnaire = current.affinityQuestionnaire
+        val catalog = questionnaire.catalog ?: return
+        if (!questionnaire.open) return
+        val group = catalog.groupQuestionsForPresentation(questionnaire.answers)
+            .firstOrNull { it.category.id == categoryId }
+            ?: return
+        val reviewAll = group.validAnsweredCount == group.totalQuestionCount
+        val question = catalog.firstCategoryQuestion(
+            categoryId = categoryId,
+            answers = questionnaire.answers,
+            reviewAll = reviewAll,
+        ) ?: return
+        setDestination(
+            current = current,
+            destination = AffinityQuestionnaireDestination.Question(
+                questionId = question.id,
+                source = AffinityQuestionSource.Category(
+                    categoryId = categoryId,
+                    reviewAll = reviewAll,
+                ),
+            ),
+        )
+    }
+
+    fun openReviewedAnswer(questionId: String) {
+        val current = uiState.value as? RealsRootUiState.Ready ?: return
+        val questionnaire = current.affinityQuestionnaire
+        val catalog = questionnaire.catalog ?: return
+        if (!questionnaire.open) return
+        val question = catalog.findAnswerableQuestion(questionId) ?: return
+        if (question.currentValidAnswer(questionnaire.answers) == null) return
+        setDestination(
+            current = current,
+            destination = AffinityQuestionnaireDestination.Question(
+                questionId = question.id,
+                source = AffinityQuestionSource.Review,
+            ),
+        )
+    }
+
+    fun skipQuestion() {
+        moveFromCurrentQuestion(requireConfirmedAnswer = false)
+    }
+
+    fun nextQuestion() {
+        moveFromCurrentQuestion(requireConfirmedAnswer = true)
+    }
+
+    fun navigateBack() {
+        val current = uiState.value as? RealsRootUiState.Ready ?: return
+        if (!current.affinityQuestionnaire.open) return
+        when (val destination = current.affinityQuestionnaire.destination) {
+            AffinityQuestionnaireDestination.Overview -> close()
+            AffinityQuestionnaireDestination.Categories,
+            AffinityQuestionnaireDestination.Review -> {
+                setDestination(current, AffinityQuestionnaireDestination.Overview)
+            }
+
+            is AffinityQuestionnaireDestination.Question -> {
+                val parent = when (destination.source) {
+                    AffinityQuestionSource.Continue -> AffinityQuestionnaireDestination.Overview
+                    is AffinityQuestionSource.Category -> AffinityQuestionnaireDestination.Categories
+                    AffinityQuestionSource.Review -> AffinityQuestionnaireDestination.Review
+                }
+                setDestination(current, parent)
+            }
+        }
+    }
+
+    private fun moveFromCurrentQuestion(requireConfirmedAnswer: Boolean) {
+        val current = uiState.value as? RealsRootUiState.Ready ?: return
+        val questionnaire = current.affinityQuestionnaire
+        val catalog = questionnaire.catalog ?: return
+        val destination = questionnaire.destination as? AffinityQuestionnaireDestination.Question ?: return
+        val question = catalog.findAnswerableQuestion(destination.questionId) ?: run {
+            setDestination(current, destination.fallbackParent())
+            return
+        }
+        if (requireConfirmedAnswer && question.currentValidAnswer(questionnaire.answers) == null) return
+        if (questionnaire.mutation != null) return
+
+        val next = when (val source = destination.source) {
+            AffinityQuestionSource.Continue -> {
+                catalog.nextContinueQuestion(question.id, questionnaire.answers)?.let { nextQuestion ->
+                    AffinityQuestionnaireDestination.Question(nextQuestion.id, AffinityQuestionSource.Continue)
+                } ?: AffinityQuestionnaireDestination.Overview
+            }
+
+            is AffinityQuestionSource.Category -> {
+                catalog.nextCategoryQuestion(
+                    categoryId = source.categoryId,
+                    currentQuestionId = question.id,
+                    answers = questionnaire.answers,
+                    reviewAll = source.reviewAll,
+                )?.let { nextQuestion ->
+                    AffinityQuestionnaireDestination.Question(nextQuestion.id, source)
+                } ?: AffinityQuestionnaireDestination.Categories
+            }
+
+            AffinityQuestionSource.Review -> AffinityQuestionnaireDestination.Review
+        }
+        setDestination(current, next)
+    }
+
+    private fun setDestination(
+        current: RealsRootUiState.Ready,
+        destination: AffinityQuestionnaireDestination,
+    ) {
+        val latest = uiState.value as? RealsRootUiState.Ready ?: return
+        if (!latest.affinityQuestionnaire.open) return
+        uiState.value = latest.copy(
+            affinityQuestionnaire = latest.affinityQuestionnaire.copy(
+                destination = destination,
+                error = null,
+            ),
+        )
     }
 
     fun selectAnswer(questionId: String, answerCode: String) {
@@ -256,6 +413,10 @@ class AffinityQuestionnaireOperationHandler(
                 affinityQuestionnaire = questionnaire.copy(
                     catalog = result.catalog,
                     answers = result.answers,
+                    destination = result.catalog.reconciledDestination(
+                        destination = questionnaire.destination,
+                        answers = result.answers,
+                    ),
                     loading = false,
                     refreshing = false,
                     error = null,
@@ -302,7 +463,7 @@ class AffinityQuestionnaireOperationHandler(
                     refreshing = false,
                     mutation = null,
                     mutationError = null,
-                    message = if (questionnaire.open) "Respuesta guardada." else null,
+                    message = if (questionnaire.open) "Respuesta guardada" else null,
                 ),
             )
 
@@ -357,6 +518,13 @@ class AffinityQuestionnaireOperationHandler(
         }
     }
 }
+
+private fun AffinityQuestionnaireDestination.Question.fallbackParent(): AffinityQuestionnaireDestination =
+    when (source) {
+        AffinityQuestionSource.Continue -> AffinityQuestionnaireDestination.Overview
+        is AffinityQuestionSource.Category -> AffinityQuestionnaireDestination.Categories
+        AffinityQuestionSource.Review -> AffinityQuestionnaireDestination.Review
+    }
 
 private data class ActiveAffinityAnswerMutation(
     val requestId: Long,

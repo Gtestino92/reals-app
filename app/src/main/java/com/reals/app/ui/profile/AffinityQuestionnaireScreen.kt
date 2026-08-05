@@ -1,9 +1,9 @@
 package com.reals.app.ui.profile
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -20,28 +20,33 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
+import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
 import com.reals.app.domain.model.AffinityQuestion
+import com.reals.app.domain.model.AffinityQuestionCatalog
 import com.reals.app.ui.common.ApiErrorFeedbackCard
-import com.reals.app.ui.common.FeedbackCard
-import com.reals.app.ui.common.FeedbackTone
+import com.reals.app.ui.root.AffinityQuestionSource
+import com.reals.app.ui.root.AffinityQuestionnaireDestination
 import com.reals.app.ui.root.AffinityQuestionnaireUiState
 
 @Composable
 fun AffinityQuestionnaireScreen(
     state: AffinityQuestionnaireUiState,
     onBack: () -> Unit,
-    onRefresh: () -> Unit,
+    onRetry: () -> Unit,
+    onStartContinue: () -> Unit,
+    onOpenCategories: () -> Unit,
+    onOpenReview: () -> Unit,
+    onOpenCategory: (categoryId: String) -> Unit,
+    onOpenReviewedAnswer: (questionId: String) -> Unit,
+    onSkipQuestion: () -> Unit,
+    onNextQuestion: () -> Unit,
     onSelectAnswer: (questionId: String, answerCode: String) -> Unit,
     onDeleteAnswer: (questionId: String) -> Unit,
 ) {
@@ -53,20 +58,486 @@ fun AffinityQuestionnaireScreen(
     if (catalog == null && state.error != null) {
         AffinityQuestionnaireInitialFailure(
             state = state,
-            onRetry = onRefresh,
+            onRetry = onRetry,
             onBack = onBack,
         )
         return
     }
-
-    val contentCatalog = catalog
-    val groups = contentCatalog?.groupQuestionsForPresentation(state.answers).orEmpty()
-    val progress = contentCatalog?.progress(state.answers)
-    var expandedCategoryId by rememberSaveable(state.profileId, contentCatalog?.catalogVersion) {
-        mutableStateOf(initialExpandedAffinityCategoryId(groups))
+    if (catalog == null) {
+        AffinityQuestionnaireLoading(onBack)
+        return
     }
-    val activeExpandedCategoryId = resolvedExpandedAffinityCategoryId(expandedCategoryId, groups)
 
+    val destination = state.destination
+    when (destination) {
+        AffinityQuestionnaireDestination.Overview -> AffinityQuestionnaireOverview(
+            state = state,
+            catalog = catalog,
+            onBack = onBack,
+            onRetry = onRetry,
+            onStartContinue = onStartContinue,
+            onOpenCategories = onOpenCategories,
+            onOpenReview = onOpenReview,
+        )
+
+        AffinityQuestionnaireDestination.Categories -> AffinityQuestionnaireCategories(
+            state = state,
+            catalog = catalog,
+            onBack = onBack,
+            onRetry = onRetry,
+            onOpenCategory = onOpenCategory,
+        )
+
+        AffinityQuestionnaireDestination.Review -> AffinityQuestionnaireReview(
+            state = state,
+            catalog = catalog,
+            onBack = onBack,
+            onRetry = onRetry,
+            onStartContinue = onStartContinue,
+            onOpenReviewedAnswer = onOpenReviewedAnswer,
+        )
+
+        is AffinityQuestionnaireDestination.Question -> AffinitySingleQuestionScreen(
+            state = state,
+            catalog = catalog,
+            destination = destination,
+            onBack = onBack,
+            onRetry = onRetry,
+            onSkipQuestion = onSkipQuestion,
+            onNextQuestion = onNextQuestion,
+            onSelectAnswer = onSelectAnswer,
+            onDeleteAnswer = onDeleteAnswer,
+        )
+    }
+}
+
+@Composable
+private fun AffinityQuestionnaireOverview(
+    state: AffinityQuestionnaireUiState,
+    catalog: AffinityQuestionCatalog,
+    onBack: () -> Unit,
+    onRetry: () -> Unit,
+    onStartContinue: () -> Unit,
+    onOpenCategories: () -> Unit,
+    onOpenReview: () -> Unit,
+) {
+    val progress = catalog.progress(state.answers)
+    val reviewRows = catalog.reviewRows(state.answers)
+    val hasUnanswered = progress.answeredCount < progress.totalQuestionCount
+    val primaryLabel = when {
+        progress.totalQuestionCount == 0 -> null
+        hasUnanswered && progress.answeredCount == 0 -> "Empezar a responder"
+        hasUnanswered -> "Continuar respondiendo"
+        else -> "Revisar mis respuestas"
+    }
+
+    AffinityQuestionnaireLazySurface(
+        title = "Preguntas de afinidad",
+        onBack = onBack,
+    ) {
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Tus respuestas son opcionales y privadas. Otras personas no ven tus respuestas concretas. Reals puede usarlas para mejorar afinidades, proponer temas de conversación y mostrar categorías generales compartidas.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                AffinityRefreshAndError(state, onRetry)
+                Text(
+                    text = "${progress.answeredCount} de ${progress.totalQuestionCount} respondidas",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                if (primaryLabel != null) {
+                    Button(
+                        onClick = if (hasUnanswered) onStartContinue else onOpenReview,
+                        enabled = !state.loading && !state.refreshing,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(primaryLabel)
+                    }
+                } else {
+                    Text(
+                        text = "No hay preguntas disponibles por ahora.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                OutlinedButton(
+                    onClick = onOpenCategories,
+                    enabled = progress.totalQuestionCount > 0,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Explorar por categoría")
+                }
+                if (reviewRows.isEmpty()) {
+                    Text(
+                        text = "Todavía no hay respuestas para revisar.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    OutlinedButton(
+                        onClick = onOpenReview,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Revisar mis respuestas")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AffinityQuestionnaireCategories(
+    state: AffinityQuestionnaireUiState,
+    catalog: AffinityQuestionCatalog,
+    onBack: () -> Unit,
+    onRetry: () -> Unit,
+    onOpenCategory: (categoryId: String) -> Unit,
+) {
+    val groups = catalog.groupQuestionsForPresentation(state.answers)
+    AffinityQuestionnaireLazySurface(
+        title = "Explorar por categoría",
+        onBack = onBack,
+    ) {
+        item {
+            AffinityRefreshAndError(state, onRetry)
+        }
+        if (groups.isEmpty()) {
+            item {
+                Text(
+                    text = "No hay categorías disponibles por ahora.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
+            items(groups, key = { it.category.id }) { group ->
+                AffinityCategoryRow(group = group, onOpenCategory = onOpenCategory)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AffinityCategoryRow(
+    group: AffinityQuestionCategoryPresentation,
+    onOpenCategory: (categoryId: String) -> Unit,
+) {
+    val actionLabel = when (group.validAnsweredCount) {
+        0 -> "Empezar"
+        group.totalQuestionCount -> "Revisar"
+        else -> "Continuar"
+    }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = group.category.title,
+                style = MaterialTheme.typography.titleLarge,
+            )
+            group.category.description?.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                text = "${group.validAnsweredCount} de ${group.totalQuestionCount} respondidas",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Button(
+                onClick = { onOpenCategory(group.category.id) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(actionLabel)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AffinityQuestionnaireReview(
+    state: AffinityQuestionnaireUiState,
+    catalog: AffinityQuestionCatalog,
+    onBack: () -> Unit,
+    onRetry: () -> Unit,
+    onStartContinue: () -> Unit,
+    onOpenReviewedAnswer: (questionId: String) -> Unit,
+) {
+    val reviewGroups = catalog.reviewRows(state.answers)
+    val progress = catalog.progress(state.answers)
+    AffinityQuestionnaireLazySurface(
+        title = "Revisar mis respuestas",
+        onBack = onBack,
+    ) {
+        item {
+            AffinityRefreshAndError(state, onRetry)
+        }
+        if (reviewGroups.isEmpty()) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Todavía no hay respuestas para revisar.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (progress.totalQuestionCount > 0) {
+                        Button(
+                            onClick = onStartContinue,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Empezar a responder")
+                        }
+                    }
+                }
+            }
+        } else {
+            reviewGroups.forEach { group ->
+                item(key = "category-${group.category.id}") {
+                    Text(
+                        text = group.category.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                items(group.rows, key = { it.question.id }) { row ->
+                    AffinityReviewRow(
+                        row = row,
+                        onOpenReviewedAnswer = onOpenReviewedAnswer,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AffinityReviewRow(
+    row: AffinityQuestionReviewRowPresentation,
+    onOpenReviewedAnswer: (questionId: String) -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onOpenReviewedAnswer(row.question.id) },
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = row.question.prompt,
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                text = row.selectedOptionLabel,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AffinitySingleQuestionScreen(
+    state: AffinityQuestionnaireUiState,
+    catalog: AffinityQuestionCatalog,
+    destination: AffinityQuestionnaireDestination.Question,
+    onBack: () -> Unit,
+    onRetry: () -> Unit,
+    onSkipQuestion: () -> Unit,
+    onNextQuestion: () -> Unit,
+    onSelectAnswer: (questionId: String, answerCode: String) -> Unit,
+    onDeleteAnswer: (questionId: String) -> Unit,
+) {
+    val question = catalog.findAnswerableQuestion(destination.questionId)
+    if (question == null) {
+        AffinityQuestionnaireOverview(
+            state = state,
+            catalog = catalog,
+            onBack = onBack,
+            onRetry = onRetry,
+            onStartContinue = {},
+            onOpenCategories = {},
+            onOpenReview = {},
+        )
+        return
+    }
+    val category = catalog.categoryFor(question)
+    val currentAnswer = question.currentValidAnswer(state.answers)
+    val selectedCode = question.presentedAnswerCode(state.answers, state.mutation)
+    val mutationActive = state.mutation != null
+    val mutationsEnabled = !mutationActive && !state.loading && !state.refreshing
+    val questionSaving = state.mutation?.questionId == question.id
+    val positionLabel = catalog.questionPositionLabel(question.id, destination.source)
+    val progress = catalog.progress(state.answers)
+    val isReviewQuestion = destination.source == AffinityQuestionSource.Review
+
+    AffinityQuestionnaireLazySurface(
+        title = category?.title ?: "Preguntas de afinidad",
+        onBack = onBack,
+    ) {
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                AffinityRefreshAndError(state, onRetry)
+                positionLabel?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } ?: Text(
+                    text = "${progress.answeredCount} de ${progress.totalQuestionCount} respondidas",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                AffinityQuestionCard(
+                    question = question,
+                    selectedCode = selectedCode,
+                    currentAnswerExists = currentAnswer != null,
+                    mutationsEnabled = mutationsEnabled,
+                    questionSaving = questionSaving,
+                    mutationError = state.mutationError,
+                    message = state.message,
+                    onSelectAnswer = onSelectAnswer,
+                    onDeleteAnswer = onDeleteAnswer,
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (isReviewQuestion) {
+                        Button(
+                            onClick = onBack,
+                            enabled = !mutationActive,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Volver a mis respuestas")
+                        }
+                    } else {
+                        if (currentAnswer == null) {
+                            OutlinedButton(
+                                onClick = onSkipQuestion,
+                                enabled = !mutationActive,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text("Omitir")
+                            }
+                        }
+                        Button(
+                            onClick = onNextQuestion,
+                            enabled = currentAnswer != null && !mutationActive,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Siguiente")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AffinityQuestionCard(
+    question: AffinityQuestion,
+    selectedCode: String?,
+    currentAnswerExists: Boolean,
+    mutationsEnabled: Boolean,
+    questionSaving: Boolean,
+    mutationError: ApiError?,
+    message: String?,
+    onSelectAnswer: (questionId: String, answerCode: String) -> Unit,
+    onDeleteAnswer: (questionId: String) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = question.prompt,
+                style = MaterialTheme.typography.titleLarge,
+            )
+            question.options.forEach { option ->
+                val selected = selectedCode == option.code
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectable(
+                            selected = selected,
+                            enabled = mutationsEnabled,
+                            role = Role.RadioButton,
+                            onClick = { onSelectAnswer(question.id, option.code) },
+                        )
+                        .semantics {
+                            stateDescription = if (selected) "Seleccionada" else "No seleccionada"
+                        }
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    RadioButton(
+                        selected = selected,
+                        enabled = mutationsEnabled,
+                        onClick = null,
+                    )
+                    Text(
+                        text = option.label,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+            }
+            if (currentAnswerExists) {
+                TextButton(
+                    onClick = { onDeleteAnswer(question.id) },
+                    enabled = mutationsEnabled,
+                ) {
+                    Text("Quitar respuesta")
+                }
+            }
+            when {
+                questionSaving -> Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator()
+                    Text(
+                        text = "Guardando...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                mutationError != null -> ApiErrorFeedbackCard(mutationError, ErrorContext.AffinityQuestions)
+
+                message != null -> Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AffinityQuestionnaireLazySurface(
+    title: String,
+    onBack: () -> Unit,
+    content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit,
+) {
     LazyColumn(
         modifier = Modifier
             .safeDrawingPadding()
@@ -74,85 +545,47 @@ fun AffinityQuestionnaireScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.Top,
-                ) {
-                    Text(
-                        text = "Preguntas de afinidad",
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                    TextButton(onClick = onBack) {
-                        Text("Volver")
-                    }
-                }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
                 Text(
-                    text = "Tus respuestas son opcionales y privadas. Otras personas no ven tus respuestas concretas. Reals puede usarlas para mejorar afinidades, proponer temas de conversación y mostrar categorías generales compartidas.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = title,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.primary,
                 )
-                if (progress != null) {
-                    Text(
-                        text = "${progress.answeredCount} de ${progress.totalQuestionCount} respondidas",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(
-                        onClick = onRefresh,
-                        enabled = !state.loading && !state.refreshing && state.mutation == null,
-                    ) {
-                        Text(if (state.refreshing) "Actualizando..." else "Actualizar")
-                    }
-                }
-                if (state.refreshing) {
-                    Text(
-                        text = "Actualizando preguntas...",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                state.error?.let {
-                    ApiErrorFeedbackCard(it, ErrorContext.AffinityQuestions)
-                }
-                state.mutationError?.let {
-                    ApiErrorFeedbackCard(it, ErrorContext.AffinityQuestions)
-                }
-                state.message?.let {
-                    FeedbackCard(
-                        title = "Listo",
-                        message = it,
-                        tone = FeedbackTone.Success,
-                    )
+                TextButton(onClick = onBack) {
+                    Text("Volver")
                 }
             }
         }
-        items(groups, key = { it.category.id }) { group ->
-            AffinityCategoryCard(
-                group = group,
-                expanded = activeExpandedCategoryId == group.category.id,
-                state = state,
-                onToggleExpanded = {
-                    expandedCategoryId = toggledExpandedAffinityCategoryId(
-                        currentCategoryId = activeExpandedCategoryId,
-                        selectedCategoryId = group.category.id,
-                    )
-                },
-                onSelectAnswer = onSelectAnswer,
-                onDeleteAnswer = onDeleteAnswer,
+        content()
+    }
+}
+
+@Composable
+private fun AffinityRefreshAndError(
+    state: AffinityQuestionnaireUiState,
+    onRetry: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (state.refreshing) {
+            Text(
+                text = "Actualizando...",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        if (groups.isEmpty() && !state.loading) {
-            item {
-                Text(
-                    text = "No hay preguntas disponibles por ahora.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+        state.error?.let {
+            ApiErrorFeedbackCard(it, ErrorContext.AffinityQuestions)
+            OutlinedButton(
+                onClick = onRetry,
+                enabled = !state.loading && !state.refreshing && state.mutation == null,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Reintentar")
             }
         }
     }
@@ -205,154 +638,19 @@ private fun AffinityQuestionnaireInitialFailure(
         state.error?.let {
             ApiErrorFeedbackCard(it, ErrorContext.AffinityQuestions)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = onRetry, enabled = !state.loading) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Button(
+                onClick = onRetry,
+                enabled = !state.loading,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 Text("Reintentar")
             }
-            OutlinedButton(onClick = onBack) {
-                Text("Volver")
-            }
-        }
-    }
-}
-
-@Composable
-private fun AffinityCategoryCard(
-    group: AffinityQuestionCategoryPresentation,
-    expanded: Boolean,
-    state: AffinityQuestionnaireUiState,
-    onToggleExpanded: () -> Unit,
-    onSelectAnswer: (questionId: String, answerCode: String) -> Unit,
-    onDeleteAnswer: (questionId: String) -> Unit,
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-    ) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Column(
+            OutlinedButton(
+                onClick = onBack,
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Text(
-                    text = group.category.title,
-                    style = MaterialTheme.typography.titleLarge,
-                )
-                group.category.description?.takeIf { it.isNotBlank() }?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Text(
-                    text = "${group.validAnsweredCount} de ${group.totalQuestionCount} respondidas",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                TextButton(onClick = onToggleExpanded) {
-                    Text(if (expanded) "Contraer" else "Ver preguntas")
-                }
-            }
-            if (expanded) {
-                group.questions.forEach { question ->
-                    AffinityQuestionCard(
-                        question = question,
-                        state = state,
-                        onSelectAnswer = onSelectAnswer,
-                        onDeleteAnswer = onDeleteAnswer,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AffinityQuestionCard(
-    question: AffinityQuestion,
-    state: AffinityQuestionnaireUiState,
-    onSelectAnswer: (questionId: String, answerCode: String) -> Unit,
-    onDeleteAnswer: (questionId: String) -> Unit,
-) {
-    val currentAnswer = question.currentValidAnswer(state.answers)
-    val selectedCode = question.presentedAnswerCode(state.answers, state.mutation)
-    val mutationsEnabled = state.mutation == null && !state.loading && !state.refreshing
-    val questionSaving = state.mutation?.questionId == question.id
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text(
-                text = question.prompt,
-                style = MaterialTheme.typography.titleMedium,
-            )
-            if (!question.answerType.isSupported()) {
-                Text(
-                    text = "Esta pregunta requiere una versión más reciente de la app.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                return@Column
-            }
-            question.options.forEach { option ->
-                val selected = selectedCode == option.code
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .selectable(
-                            selected = selected,
-                            enabled = mutationsEnabled,
-                            role = Role.RadioButton,
-                            onClick = { onSelectAnswer(question.id, option.code) },
-                        )
-                        .semantics {
-                            stateDescription = if (selected) "Seleccionada" else "No seleccionada"
-                        }
-                        .padding(vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.Top,
-                ) {
-                    RadioButton(
-                        selected = selected,
-                        enabled = mutationsEnabled,
-                        onClick = null,
-                    )
-                    Text(
-                        text = option.label,
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                }
-            }
-            if (currentAnswer != null) {
-                TextButton(
-                    onClick = { onDeleteAnswer(question.id) },
-                    enabled = mutationsEnabled,
-                ) {
-                    Text("Quitar respuesta")
-                }
-            }
-            if (questionSaving) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    CircularProgressIndicator()
-                    Text(
-                        text = "Guardando...",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                Text("Volver")
             }
         }
     }

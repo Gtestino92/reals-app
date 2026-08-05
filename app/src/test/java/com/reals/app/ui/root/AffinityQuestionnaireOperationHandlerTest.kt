@@ -51,6 +51,207 @@ class AffinityQuestionnaireOperationHandlerTest {
         active.handler.open()
         advanceUntilIdle()
         assertTrue(active.ready().affinityQuestionnaire.open)
+        assertEquals(AffinityQuestionnaireDestination.Overview, active.ready().affinityQuestionnaire.destination)
+    }
+
+    @Test
+    fun `overview opens Continue Categories and Review destinations`() = runTest {
+        val continueHarness = harness(initialState = ready(questionnaire = loadedQuestionnaire(answers = emptyList())))
+        continueHarness.handler.openContinue()
+        assertEquals(
+            AffinityQuestionnaireDestination.Question(
+                questionId = "MUSIC_DISCOVERY_001",
+                source = AffinityQuestionSource.Continue,
+            ),
+            continueHarness.ready().affinityQuestionnaire.destination,
+        )
+
+        val categoriesHarness = loadedHarness()
+        categoriesHarness.handler.openCategories()
+        assertEquals(AffinityQuestionnaireDestination.Categories, categoriesHarness.ready().affinityQuestionnaire.destination)
+
+        val reviewHarness = loadedHarness()
+        reviewHarness.handler.openReview()
+        assertEquals(AffinityQuestionnaireDestination.Review, reviewHarness.ready().affinityQuestionnaire.destination)
+    }
+
+    @Test
+    fun `category and review entries open one question destinations`() = runTest {
+        val incompleteCategory = harness(initialState = ready(questionnaire = loadedQuestionnaire(answers = emptyList())))
+        incompleteCategory.handler.openCategory("MUSIC")
+        assertEquals(
+            AffinityQuestionnaireDestination.Question(
+                questionId = "MUSIC_DISCOVERY_001",
+                source = AffinityQuestionSource.Category(categoryId = "MUSIC", reviewAll = false),
+            ),
+            incompleteCategory.ready().affinityQuestionnaire.destination,
+        )
+
+        val completeCategory = loadedHarness()
+        completeCategory.handler.openCategory("MUSIC")
+        assertEquals(
+            AffinityQuestionnaireDestination.Question(
+                questionId = "MUSIC_DISCOVERY_001",
+                source = AffinityQuestionSource.Category(categoryId = "MUSIC", reviewAll = true),
+            ),
+            completeCategory.ready().affinityQuestionnaire.destination,
+        )
+
+        val review = loadedHarness()
+        review.handler.openReviewedAnswer("MUSIC_DISCOVERY_001")
+        assertEquals(
+            AffinityQuestionnaireDestination.Question(
+                questionId = "MUSIC_DISCOVERY_001",
+                source = AffinityQuestionSource.Review,
+            ),
+            review.ready().affinityQuestionnaire.destination,
+        )
+    }
+
+    @Test
+    fun `internal Back follows questionnaire hierarchy and closes from Overview`() = runTest {
+        val harness = harness(
+            initialState = ready(
+                questionnaire = loadedQuestionnaire(
+                    destination = AffinityQuestionnaireDestination.Question(
+                        questionId = "MUSIC_DISCOVERY_001",
+                        source = AffinityQuestionSource.Category(categoryId = "MUSIC", reviewAll = true),
+                    ),
+                ),
+            ),
+        )
+
+        harness.handler.navigateBack()
+        assertEquals(AffinityQuestionnaireDestination.Categories, harness.ready().affinityQuestionnaire.destination)
+        assertTrue(harness.ready().affinityQuestionnaire.open)
+
+        harness.handler.navigateBack()
+        assertEquals(AffinityQuestionnaireDestination.Overview, harness.ready().affinityQuestionnaire.destination)
+        assertTrue(harness.ready().affinityQuestionnaire.open)
+
+        harness.handler.navigateBack()
+        assertFalse(harness.ready().affinityQuestionnaire.open)
+        assertEquals(AffinityQuestionnaireDestination.Overview, harness.ready().affinityQuestionnaire.destination)
+    }
+
+    @Test
+    fun `skip and next advance through local source sequences`() = runTest {
+        val harness = harness(initialState = ready(questionnaire = loadedQuestionnaire(answers = emptyList())))
+        harness.handler.openContinue()
+        harness.handler.skipQuestion()
+        assertEquals(
+            AffinityQuestionnaireDestination.Question(
+                questionId = "PLANS_WEEKEND_001",
+                source = AffinityQuestionSource.Continue,
+            ),
+            harness.ready().affinityQuestionnaire.destination,
+        )
+
+        harness.state.value = harness.ready().copy(
+            affinityQuestionnaire = harness.ready().affinityQuestionnaire.copy(
+                answers = listOf(TestDtos.affinityAnswer("PLANS_WEEKEND_001", 1, "VERY_HIGH").toDomain()),
+            ),
+        )
+        harness.handler.nextQuestion()
+        assertEquals(AffinityQuestionnaireDestination.Overview, harness.ready().affinityQuestionnaire.destination)
+    }
+
+    @Test
+    fun `closing resets destination while preserving retained content`() = runTest {
+        val harness = harness(
+            initialState = ready(
+                questionnaire = loadedQuestionnaire(
+                    destination = AffinityQuestionnaireDestination.Review,
+                ),
+            ),
+        )
+
+        harness.handler.close()
+
+        assertFalse(harness.ready().affinityQuestionnaire.open)
+        assertEquals(AffinityQuestionnaireDestination.Overview, harness.ready().affinityQuestionnaire.destination)
+        assertEquals("catalog-1", harness.ready().affinityQuestionnaire.catalog?.catalogVersion)
+        assertEquals(listOf("MUSIC_DISCOVERY_001"), harness.ready().affinityQuestionnaire.answers.map { it.questionId })
+    }
+
+    @Test
+    fun `mutation result preserves destination changed while request is active`() = runTest {
+        val requestStarted = CompletableDeferred<Unit>()
+        val releaseResponse = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforePatchMyAffinityAnswersResponse = {
+                requestStarted.complete(Unit)
+                releaseResponse.await()
+            }
+            affinityAnswersResponse = Response.success(
+                TestDtos.affinityAnswers(listOf(TestDtos.affinityAnswer(answerCode = "LOW")))
+            )
+        }
+        val harness = harness(
+            api = api,
+            initialState = ready(
+                questionnaire = loadedQuestionnaire(
+                    destination = AffinityQuestionnaireDestination.Question(
+                        questionId = "MUSIC_DISCOVERY_001",
+                        source = AffinityQuestionSource.Continue,
+                    ),
+                ),
+            ),
+        )
+
+        harness.handler.selectAnswer("MUSIC_DISCOVERY_001", "LOW")
+        runCurrent()
+        requestStarted.await()
+        harness.state.value = harness.ready().copy(
+            affinityQuestionnaire = harness.ready().affinityQuestionnaire.copy(
+                destination = AffinityQuestionnaireDestination.Review,
+            ),
+        )
+
+        releaseResponse.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(AffinityQuestionnaireDestination.Review, harness.ready().affinityQuestionnaire.destination)
+        assertEquals(listOf("LOW"), harness.ready().affinityQuestionnaire.answers.map { it.answerCode })
+    }
+
+    @Test
+    fun `refresh preserves valid destination and invalidates removed Continue question`() = runTest {
+        val valid = harness(
+            initialState = ready(
+                questionnaire = loadedQuestionnaire(
+                    destination = AffinityQuestionnaireDestination.Categories,
+                ),
+            ),
+        )
+        valid.handler.refresh()
+        advanceUntilIdle()
+        assertEquals(AffinityQuestionnaireDestination.Categories, valid.ready().affinityQuestionnaire.destination)
+
+        val invalidApi = FakeRealsApi().apply {
+            affinityQuestionCatalogResponse = Response.success(
+                TestDtos.affinityQuestionCatalog(
+                    questions = listOf(TestDtos.affinityQuestion("PLANS_WEEKEND_001", categoryId = "PLANS")),
+                )
+            )
+        }
+        val invalid = harness(
+            api = invalidApi,
+            initialState = ready(
+                questionnaire = loadedQuestionnaire(
+                    destination = AffinityQuestionnaireDestination.Question(
+                        questionId = "MUSIC_DISCOVERY_001",
+                        source = AffinityQuestionSource.Continue,
+                    ),
+                ),
+            ),
+        )
+
+        invalid.handler.refresh()
+        advanceUntilIdle()
+
+        assertEquals(AffinityQuestionnaireDestination.Overview, invalid.ready().affinityQuestionnaire.destination)
+        assertEquals(listOf("PLANS_WEEKEND_001"), invalid.ready().affinityQuestionnaire.catalog?.questions?.map { it.id })
     }
 
     @Test
@@ -486,6 +687,18 @@ class AffinityQuestionnaireOperationHandlerTest {
             ),
         )
     }
+
+    private fun loadedQuestionnaire(
+        destination: AffinityQuestionnaireDestination = AffinityQuestionnaireDestination.Overview,
+        answers: List<com.reals.app.domain.model.AffinityAnswer> =
+            listOf(TestDtos.affinityAnswer().toDomain()),
+    ): AffinityQuestionnaireUiState = AffinityQuestionnaireUiState(
+        open = true,
+        profileId = "profile-1",
+        destination = destination,
+        catalog = TestDtos.affinityQuestionCatalog().toDomain(),
+        answers = answers,
+    )
 
     private fun TestScope.harness(
         api: FakeRealsApi = FakeRealsApi(),

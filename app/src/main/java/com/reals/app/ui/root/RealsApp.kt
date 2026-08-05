@@ -159,8 +159,15 @@ fun RealsApp(
                     if (current.shouldRenderAffinityQuestionnaireSurface()) {
                         AffinityQuestionnaireScreen(
                             state = current.affinityQuestionnaire,
-                            onBack = viewModel::closeAffinityQuestionnaire,
-                            onRefresh = viewModel::refreshAffinityQuestionnaire,
+                            onBack = viewModel::navigateBackAffinityQuestionnaire,
+                            onRetry = viewModel::refreshAffinityQuestionnaire,
+                            onStartContinue = viewModel::startAffinityQuestionnaireContinue,
+                            onOpenCategories = viewModel::openAffinityQuestionnaireCategories,
+                            onOpenReview = viewModel::openAffinityQuestionnaireReview,
+                            onOpenCategory = viewModel::openAffinityQuestionnaireCategory,
+                            onOpenReviewedAnswer = viewModel::openAffinityQuestionnaireReviewedAnswer,
+                            onSkipQuestion = viewModel::skipAffinityQuestion,
+                            onNextQuestion = viewModel::nextAffinityQuestion,
                             onSelectAnswer = viewModel::selectAffinityAnswer,
                             onDeleteAnswer = viewModel::deleteAffinityAnswer,
                         )
