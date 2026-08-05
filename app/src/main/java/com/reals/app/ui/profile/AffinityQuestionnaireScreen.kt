@@ -22,6 +22,11 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -36,6 +41,7 @@ import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.root.AffinityQuestionSource
 import com.reals.app.ui.root.AffinityQuestionnaireDestination
 import com.reals.app.ui.root.AffinityQuestionnaireUiState
+import kotlinx.coroutines.delay
 
 @Composable
 fun AffinityQuestionnaireScreen(
@@ -488,6 +494,16 @@ private fun AffinityQuestionCard(
     onSelectAnswer: (questionId: String, answerCode: String) -> Unit,
     onDeleteAnswer: (questionId: String) -> Unit,
 ) {
+    var showSavingIndicator by remember(question.id) { mutableStateOf(false) }
+    LaunchedEffect(questionSaving) {
+        if (questionSaving) {
+            delay(AffinityQuestionSavingIndicatorDelayMillis)
+            showSavingIndicator = true
+        } else {
+            showSavingIndicator = false
+        }
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
@@ -545,7 +561,7 @@ private fun AffinityQuestionCard(
                 verticalArrangement = Arrangement.Center,
             ) {
                 when {
-                    questionSaving -> Row(
+                    questionSaving && showSavingIndicator -> Row(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -569,6 +585,8 @@ private fun AffinityQuestionCard(
         }
     }
 }
+
+private const val AffinityQuestionSavingIndicatorDelayMillis = 400L
 
 @Composable
 private fun AffinityQuestionnaireLazySurface(
