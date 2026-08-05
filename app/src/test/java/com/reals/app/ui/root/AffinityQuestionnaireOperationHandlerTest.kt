@@ -1,6 +1,7 @@
 package com.reals.app.ui.root
 
 import com.reals.app.core.network.ApiError
+import com.reals.app.core.network.AuthFailureReason
 import com.reals.app.data.mapper.toDomain
 import com.reals.app.data.repository.AffinityQuestionRepository
 import com.reals.app.di.AffinityFeatureDependencies
@@ -291,6 +292,95 @@ class AffinityQuestionnaireOperationHandlerTest {
         assertNull(harness.ready().affinityQuestionnaire.message)
         assertNull(harness.ready().affinityQuestionnaire.mutationError)
         assertNull(harness.ready().affinityQuestionnaire.mutationFeedbackQuestionId)
+    }
+
+    @Test
+    fun `navigating after ordinary mutation failure clears scoped feedback`() = runTest {
+        val ordinaryError = ApiError.Backend(
+            statusCode = 500,
+            code = "SERVER_ERROR",
+            error = "Server",
+            message = "server error",
+        )
+        val harness = harness(
+            initialState = ready(
+                questionnaire = loadedQuestionnaire(
+                    destination = AffinityQuestionnaireDestination.Question(
+                        questionId = "MUSIC_DISCOVERY_001",
+                        source = AffinityQuestionSource.Continue,
+                    ),
+                ).copy(
+                    mutationError = ordinaryError,
+                    mutationFeedbackQuestionId = "MUSIC_DISCOVERY_001",
+                    message = "Respuesta guardada",
+                ),
+            ),
+        )
+
+        harness.handler.navigateBack()
+
+        assertEquals(AffinityQuestionnaireDestination.Overview, harness.ready().affinityQuestionnaire.destination)
+        assertNull(harness.ready().affinityQuestionnaire.mutationError)
+        assertNull(harness.ready().affinityQuestionnaire.mutationFeedbackQuestionId)
+        assertNull(harness.ready().affinityQuestionnaire.message)
+    }
+
+    @Test
+    fun `navigating after legal mutation failure preserves routing error and clears scoped feedback`() = runTest {
+        val legalError = ApiError.Backend(
+            statusCode = 409,
+            code = "LEGAL_ACTION_REQUIRED",
+            error = "Conflict",
+            message = "legal action required",
+        )
+        val harness = harness(
+            initialState = ready(
+                questionnaire = loadedQuestionnaire(
+                    destination = AffinityQuestionnaireDestination.Question(
+                        questionId = "MUSIC_DISCOVERY_001",
+                        source = AffinityQuestionSource.Continue,
+                    ),
+                ).copy(
+                    mutationError = legalError,
+                    mutationFeedbackQuestionId = "MUSIC_DISCOVERY_001",
+                    message = "Respuesta guardada",
+                ),
+            ),
+        )
+
+        harness.handler.navigateBack()
+
+        assertEquals(legalError, harness.ready().affinityQuestionnaire.mutationError)
+        assertNull(harness.ready().affinityQuestionnaire.mutationFeedbackQuestionId)
+        assertNull(harness.ready().affinityQuestionnaire.message)
+    }
+
+    @Test
+    fun `navigating after terminal auth mutation failure preserves routing error and clears scoped feedback`() = runTest {
+        val terminalError = ApiError.Auth(
+            reason = AuthFailureReason.NOT_SIGNED_IN,
+            message = "signed out",
+        )
+        val harness = harness(
+            initialState = ready(
+                questionnaire = loadedQuestionnaire(
+                    destination = AffinityQuestionnaireDestination.Question(
+                        questionId = "MUSIC_DISCOVERY_001",
+                        source = AffinityQuestionSource.Continue,
+                    ),
+                ).copy(
+                    mutationError = terminalError,
+                    mutationFeedbackQuestionId = "MUSIC_DISCOVERY_001",
+                    message = "Respuesta guardada",
+                ),
+            ),
+        )
+
+        harness.handler.navigateBack()
+
+        assertEquals(terminalError, harness.ready().affinityQuestionnaire.mutationError)
+        assertNull(harness.ready().affinityQuestionnaire.mutationFeedbackQuestionId)
+        assertNull(harness.ready().affinityQuestionnaire.message)
     }
 
     @Test

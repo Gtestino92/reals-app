@@ -1,6 +1,8 @@
 package com.reals.app.ui.root
 
 import com.reals.app.core.network.ApiResult
+import com.reals.app.core.network.isLegalActionRequired
+import com.reals.app.core.network.isTerminalAuthFailure
 import com.reals.app.di.AffinityFeatureDependencies
 import com.reals.app.domain.model.AffinityAnswer
 import com.reals.app.domain.model.AffinityQuestionCatalog
@@ -267,11 +269,16 @@ class AffinityQuestionnaireOperationHandler(
     ) {
         val latest = uiState.value as? RealsRootUiState.Ready ?: return
         if (!latest.affinityQuestionnaire.open) return
+        val retainedMutationError = latest.affinityQuestionnaire.mutationError
+            ?.takeIf { error ->
+                error.isLegalActionRequired() ||
+                    error.isTerminalAuthFailure()
+            }
         uiState.value = latest.copy(
             affinityQuestionnaire = latest.affinityQuestionnaire.copy(
                 destination = destination,
                 error = null,
-                mutationError = null,
+                mutationError = retainedMutationError,
                 mutationFeedbackQuestionId = null,
                 message = null,
             ),

@@ -64,6 +64,11 @@ fun AffinityQuestionnaireProgress.overviewActionPolicy(
     )
 }
 
+fun shouldShowAffinityParentMutationStatus(
+    showMutationStatus: Boolean,
+    mutation: AffinityAnswerMutationUiState?,
+): Boolean = showMutationStatus && mutation != null
+
 fun AffinityQuestionCatalog.groupQuestionsForPresentation(
     answers: List<AffinityAnswer>,
 ): List<AffinityQuestionCategoryPresentation> {

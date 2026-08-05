@@ -143,7 +143,11 @@ private fun AffinityQuestionnaireOverview(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                AffinityQuestionnaireStatus(state, onRetry)
+                AffinityQuestionnaireStatus(
+                    state = state,
+                    onRetry = onRetry,
+                    showMutationStatus = false,
+                )
                 Text(
                     text = "${progress.answeredCount} de ${progress.totalQuestionCount} respondidas",
                     style = MaterialTheme.typography.titleMedium,
@@ -590,6 +594,7 @@ private fun AffinityQuestionnaireLazySurface(
 private fun AffinityQuestionnaireStatus(
     state: AffinityQuestionnaireUiState,
     onRetry: () -> Unit,
+    showMutationStatus: Boolean = true,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (state.refreshing) {
@@ -599,7 +604,7 @@ private fun AffinityQuestionnaireStatus(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        if (state.mutation != null) {
+        if (shouldShowAffinityParentMutationStatus(showMutationStatus, state.mutation)) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,

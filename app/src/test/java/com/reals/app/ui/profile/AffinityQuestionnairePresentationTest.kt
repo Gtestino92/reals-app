@@ -66,6 +66,19 @@ class AffinityQuestionnairePresentationTest {
     }
 
     @Test
+    fun `parent mutation status policy is disabled on single question and enabled on parent surfaces`() {
+        val mutation = AffinityAnswerMutationUiState(
+            questionId = "MUSIC_DISCOVERY_001",
+            pendingAnswerCode = "LOW",
+            requestId = 1L,
+        )
+
+        assertFalse(shouldShowAffinityParentMutationStatus(showMutationStatus = false, mutation = mutation))
+        assertTrue(shouldShowAffinityParentMutationStatus(showMutationStatus = true, mutation = mutation))
+        assertFalse(shouldShowAffinityParentMutationStatus(showMutationStatus = true, mutation = null))
+    }
+
+    @Test
     fun `answerable filtering excludes unsupported types and malformed option lists`() {
         val catalog = catalogWithExtraQuestions(
             TestDtos.affinityQuestion("UNKNOWN_001", categoryId = "MUSIC", answerType = "FUTURE_TYPE"),
