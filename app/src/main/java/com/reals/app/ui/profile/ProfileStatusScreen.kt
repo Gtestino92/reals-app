@@ -157,6 +157,7 @@ fun ProfileStatusScreen(
     onActivateProfile: (Profile) -> Unit,
     onResendEmailVerification: () -> Unit,
     onCheckEmailVerification: () -> Unit,
+    onOpenAffinityQuestions: () -> Unit,
     onRefresh: () -> Unit,
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit,
@@ -269,6 +270,7 @@ fun ProfileStatusScreen(
                 onActivateProfile = onActivateProfile,
                 onResendEmailVerification = onResendEmailVerification,
                 onCheckEmailVerification = onCheckEmailVerification,
+                onOpenAffinityQuestions = onOpenAffinityQuestions,
             )
         }
         if (onBackHome != null) {
@@ -362,6 +364,7 @@ private fun ProfileCard(
     onActivateProfile: (Profile) -> Unit,
     onResendEmailVerification: () -> Unit,
     onCheckEmailVerification: () -> Unit,
+    onOpenAffinityQuestions: () -> Unit,
 ) {
     var expandedSection by rememberSaveable(profile.id) {
         mutableStateOf(if (profile.status == ProfileStatus.Draft) ProfileSection.Photos else null)
@@ -445,6 +448,10 @@ private fun ProfileCard(
                 onUpdateMatchFilters(it)
             },
         )
+        AffinityQuestionsEntryCard(
+            busy = busy,
+            onOpenAffinityQuestions = onOpenAffinityQuestions,
+        )
         PhotosCard(
             profile = profile,
             photosLoading = photosLoading,
@@ -487,6 +494,39 @@ private enum class ProfileSection {
     Profile,
     Filters,
     Photos,
+}
+
+@Composable
+private fun AffinityQuestionsEntryCard(
+    busy: Boolean,
+    onOpenAffinityQuestions: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = "Preguntas de afinidad",
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Text(
+                text = "Son opcionales y privadas. Ayudan a encontrar temas y afinidades compartidas.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedButton(
+                onClick = onOpenAffinityQuestions,
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Responder o editar")
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)

@@ -760,6 +760,8 @@ class RealsRootViewModelPasswordResetTest {
         val chatRepository = ChatRepository(api, testJson, tokenProvider, apiExecutor)
         val schedulingRepository = SchedulingRepository(api, tokenProvider, apiExecutor)
         val legalRepository = LegalRepository(api, tokenProvider, apiExecutor)
+        val affinityQuestionRepository =
+            com.reals.app.data.repository.AffinityQuestionRepository(api, tokenProvider, apiExecutor)
         val registerPushTokenUseCase = RegisterPushTokenUseCase(meRepository)
 
         return RealsRootDependencies(
@@ -850,6 +852,20 @@ class RealsRootViewModelPasswordResetTest {
                 submitProposals = SubmitSchedulingProposalsUseCase(schedulingRepository),
                 acceptProposal = AcceptSchedulingProposalUseCase(schedulingRepository),
                 rejectPartnerProposals = RejectPartnerSchedulingProposalsUseCase(schedulingRepository),
+            ),
+            affinity = com.reals.app.di.AffinityFeatureDependencies(
+                getCatalog = com.reals.app.domain.usecase.GetAffinityQuestionCatalogUseCase(
+                    affinityQuestionRepository,
+                ),
+                getMyAnswers = com.reals.app.domain.usecase.GetMyAffinityAnswersUseCase(
+                    affinityQuestionRepository,
+                ),
+                patchAnswer = com.reals.app.domain.usecase.PatchMyAffinityAnswerUseCase(
+                    affinityQuestionRepository,
+                ),
+                deleteAnswer = com.reals.app.domain.usecase.DeleteMyAffinityAnswerUseCase(
+                    affinityQuestionRepository,
+                ),
             ),
         )
     }

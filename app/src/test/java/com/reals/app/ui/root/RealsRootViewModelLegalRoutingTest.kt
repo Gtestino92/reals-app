@@ -228,6 +228,60 @@ class RealsRootViewModelLegalRoutingTest {
     }
 
     @Test
+    fun `affinity legal error enters existing legal flow and restores questionnaire without legal error`() =
+        runTest(dispatcher) {
+            val api = FakeRealsApi().apply { configureUnsatisfiedLegal() }
+            val viewModel = viewModel(api)
+            runCurrent()
+
+            viewModel.setState(
+                RealsRootUiState.Ready(
+                    session = TestDomain.session(),
+                    editingActiveProfile = true,
+                    affinityQuestionnaire = AffinityQuestionnaireUiState(
+                        open = true,
+                        profileId = "profile-1",
+                        catalog = TestDtos.affinityQuestionCatalog().toDomain(),
+                        answers = listOf(TestDtos.affinityAnswer().toDomain()),
+                        mutationError = legalActionRequiredError(),
+                    ),
+                )
+            )
+            advanceUntilIdle()
+
+            assertTrue(viewModel.uiState.value is RealsRootUiState.LegalRequirements)
+
+            viewModel.deferLegalRequirements()
+            advanceUntilIdle()
+
+            val restored = viewModel.uiState.value as RealsRootUiState.Ready
+            assertTrue(restored.affinityQuestionnaire.open)
+            assertNull(restored.affinityQuestionnaire.mutationError)
+            assertTrue(restored.editingActiveProfile)
+        }
+
+    @Test
+    fun `terminal authentication traversal includes affinity errors`() {
+        val terminalError = ApiError.Auth(
+            reason = com.reals.app.core.network.AuthFailureReason.NOT_SIGNED_IN,
+            message = "signed out",
+        )
+
+        assertTrue(
+            RealsRootUiState.Ready(
+                session = TestDomain.session(),
+                affinityQuestionnaire = AffinityQuestionnaireUiState(error = terminalError),
+            ).hasTerminalAuthFailure()
+        )
+        assertTrue(
+            RealsRootUiState.Ready(
+                session = TestDomain.session(),
+                affinityQuestionnaire = AffinityQuestionnaireUiState(mutationError = terminalError),
+            ).hasTerminalAuthFailure()
+        )
+    }
+
+    @Test
     fun `defer is ignored while legal requirements are busy`() = runTest(dispatcher) {
         val viewModel = viewModel(FakeRealsApi())
         runCurrent()
@@ -318,6 +372,8 @@ class RealsRootViewModelLegalRoutingTest {
         val chatRepository = ChatRepository(api, testJson, tokenProvider, apiExecutor)
         val schedulingRepository = SchedulingRepository(api, tokenProvider, apiExecutor)
         val legalRepository = LegalRepository(api, tokenProvider, apiExecutor)
+        val affinityQuestionRepository =
+            com.reals.app.data.repository.AffinityQuestionRepository(api, tokenProvider, apiExecutor)
         val registerPushTokenUseCase = RegisterPushTokenUseCase(meRepository)
 
         return RealsRootDependencies(
@@ -408,6 +464,20 @@ class RealsRootViewModelLegalRoutingTest {
                 submitProposals = SubmitSchedulingProposalsUseCase(schedulingRepository),
                 acceptProposal = AcceptSchedulingProposalUseCase(schedulingRepository),
                 rejectPartnerProposals = RejectPartnerSchedulingProposalsUseCase(schedulingRepository),
+            ),
+            affinity = com.reals.app.di.AffinityFeatureDependencies(
+                getCatalog = com.reals.app.domain.usecase.GetAffinityQuestionCatalogUseCase(
+                    affinityQuestionRepository,
+                ),
+                getMyAnswers = com.reals.app.domain.usecase.GetMyAffinityAnswersUseCase(
+                    affinityQuestionRepository,
+                ),
+                patchAnswer = com.reals.app.domain.usecase.PatchMyAffinityAnswerUseCase(
+                    affinityQuestionRepository,
+                ),
+                deleteAnswer = com.reals.app.domain.usecase.DeleteMyAffinityAnswerUseCase(
+                    affinityQuestionRepository,
+                ),
             ),
         )
     }

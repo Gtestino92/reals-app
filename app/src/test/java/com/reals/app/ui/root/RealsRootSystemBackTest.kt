@@ -5,12 +5,34 @@ import com.reals.app.domain.model.ProfileActivationResult
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.testutil.TestDomain
 import com.reals.app.testutil.TestDtos
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class RealsRootSystemBackTest {
+    private val dispatcher = StandardTestDispatcher()
+
+    @Before
+    fun setUp() {
+        Dispatchers.setMain(dispatcher)
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
+    }
+
     @Test
     fun `system back is handled for supported non root screens`() {
         val session = TestDomain.session()
@@ -57,6 +79,11 @@ class RealsRootSystemBackTest {
             RealsRootUiState.LoadingSession(email = "alex@example.com"),
             RealsRootUiState.MissingFirebase("missing"),
             RealsRootUiState.Ready(session = session),
+            RealsRootUiState.Ready(
+                session = session,
+                editingActiveProfile = true,
+                photos = PhotoManagementUiState(reorderingPhotos = true),
+            ),
             firstChat(chat = TestDtos.chat(status = "ACTIVE").toDomain()),
             firstChat(loading = true),
         ).forEach { state ->
@@ -116,6 +143,78 @@ class RealsRootSystemBackTest {
     }
 
     @Test
+    fun `system back is handled when questionnaire is open regardless of profile management state`() {
+        listOf(
+            RealsRootUiState.Ready(
+                session = TestDomain.session(),
+                affinityQuestionnaire = AffinityQuestionnaireUiState(open = true, profileId = "profile-1"),
+            ),
+            RealsRootUiState.Ready(
+                session = draftSession(),
+                affinityQuestionnaire = AffinityQuestionnaireUiState(open = true, profileId = "profile-1"),
+            ),
+            RealsRootUiState.Ready(
+                session = TestDomain.session(),
+                editingActiveProfile = true,
+                photos = PhotoManagementUiState(reorderingPhotos = true),
+                affinityQuestionnaire = AffinityQuestionnaireUiState(open = true, profileId = "profile-1"),
+            ),
+        ).forEach { state ->
+            assertTrue(state.canHandleSystemBack())
+        }
+    }
+
+    @Test
+    fun `questionnaire surface takes precedence over profile and Home routing`() {
+        assertTrue(
+            RealsRootUiState.Ready(
+                session = TestDomain.session(),
+                affinityQuestionnaire = AffinityQuestionnaireUiState(open = true, profileId = "profile-1"),
+            ).shouldRenderAffinityQuestionnaireSurface()
+        )
+        assertTrue(
+            RealsRootUiState.Ready(
+                session = TestDomain.session(),
+                editingActiveProfile = true,
+                affinityQuestionnaire = AffinityQuestionnaireUiState(open = true, profileId = "profile-1"),
+            ).shouldRenderAffinityQuestionnaireSurface()
+        )
+        assertFalse(
+            RealsRootUiState.Ready(
+                session = TestDomain.session(),
+                affinityQuestionnaire = AffinityQuestionnaireUiState(open = false, profileId = "profile-1"),
+            ).shouldRenderAffinityQuestionnaireSurface()
+        )
+    }
+
+    @Test
+    fun `onSystemBack closes questionnaire before profile management`() = runTest(dispatcher) {
+        val viewModel = RealsRootViewModel(
+            dependencies = rootViewModelTestDependencies(com.reals.app.testutil.FakeRealsApi()),
+            autoRefreshSession = false,
+        )
+        viewModel.setState(
+            RealsRootUiState.Ready(
+                session = TestDomain.session(),
+                editingActiveProfile = true,
+                affinityQuestionnaire = AffinityQuestionnaireUiState(
+                    open = true,
+                    profileId = "profile-1",
+                    catalog = TestDtos.affinityQuestionCatalog().toDomain(),
+                    answers = listOf(TestDtos.affinityAnswer().toDomain()),
+                ),
+            )
+        )
+
+        viewModel.onSystemBack()
+
+        val ready = viewModel.uiState.value as RealsRootUiState.Ready
+        assertFalse(ready.affinityQuestionnaire.open)
+        assertTrue(ready.editingActiveProfile)
+        assertEquals(listOf("MUSIC_DISCOVERY_001"), ready.affinityQuestionnaire.answers.map { it.questionId })
+    }
+
+    @Test
     fun `system back is not handled while guarded operations are active`() {
         val session = TestDomain.session()
 
@@ -168,4 +267,12 @@ class RealsRootSystemBackTest {
         guidanceActionLoading = guidanceActionLoading,
         manualBlock = manualBlock,
     )
+
+    private fun RealsRootViewModel.setState(state: RealsRootUiState) {
+        val field = RealsRootViewModel::class.java.getDeclaredField("_uiState")
+        field.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        val stateFlow = field.get(this) as MutableStateFlow<RealsRootUiState>
+        stateFlow.value = state
+    }
 }

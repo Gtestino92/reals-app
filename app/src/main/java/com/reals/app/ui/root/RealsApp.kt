@@ -41,6 +41,7 @@ import com.reals.app.ui.common.FullScreenMessage
 import com.reals.app.ui.common.formatBackendDate
 import com.reals.app.ui.legal.LegalRequirementsScreen
 import com.reals.app.ui.matchmaking.MatchmakingHomeScreen
+import com.reals.app.ui.profile.AffinityQuestionnaireScreen
 import com.reals.app.ui.profile.CreateProfileScreen
 import com.reals.app.ui.profile.ProfileActivationResultScreen
 import com.reals.app.ui.profile.ProfileStatusScreen
@@ -155,7 +156,15 @@ fun RealsApp(
                 is ProfileSnapshot.Found -> {
                     val profile = (current.session.profileSnapshot).profile
                     val homeAvailable = current.shouldRenderHomeSurface()
-                    if (current.editingActiveProfile || !homeAvailable) {
+                    if (current.shouldRenderAffinityQuestionnaireSurface()) {
+                        AffinityQuestionnaireScreen(
+                            state = current.affinityQuestionnaire,
+                            onBack = viewModel::closeAffinityQuestionnaire,
+                            onRefresh = viewModel::refreshAffinityQuestionnaire,
+                            onSelectAnswer = viewModel::selectAffinityAnswer,
+                            onDeleteAnswer = viewModel::deleteAffinityAnswer,
+                        )
+                    } else if (current.editingActiveProfile || !homeAvailable) {
                         ProfileStatusScreen(
                             session = current.session,
                             profileUpdateLoading = current.updatingProfile,
@@ -201,6 +210,7 @@ fun RealsApp(
                             onActivateProfile = { viewModel.activateProfile() },
                             onResendEmailVerification = viewModel::resendEmailVerification,
                             onCheckEmailVerification = viewModel::checkEmailVerification,
+                            onOpenAffinityQuestions = viewModel::openAffinityQuestionnaire,
                             onRefresh = viewModel::refreshSession,
                             onSignOut = viewModel::signOut,
                             accountDeleteLoading = current.deletingAccount,
@@ -506,6 +516,9 @@ private fun HomeUiState.hasRenderableDraftHomeSurface(): Boolean {
                 allowDraftHomeWithoutInteractions
             )
 }
+
+internal fun RealsRootUiState.Ready.shouldRenderAffinityQuestionnaireSurface(): Boolean =
+    affinityQuestionnaire.open && session.profileSnapshot is ProfileSnapshot.Found
 
 @Composable
 private fun NotificationPermissionGate(enabled: Boolean) {

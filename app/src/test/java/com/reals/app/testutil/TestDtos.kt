@@ -1,6 +1,12 @@
 package com.reals.app.testutil
 
 import com.reals.app.data.dto.ChatExitOutcomeResponseDto
+import com.reals.app.data.dto.AffinityAnswerOptionResponseDto
+import com.reals.app.data.dto.AffinityAnswerResponseDto
+import com.reals.app.data.dto.AffinityAnswersResponseDto
+import com.reals.app.data.dto.AffinityQuestionCatalogResponseDto
+import com.reals.app.data.dto.AffinityQuestionCategoryResponseDto
+import com.reals.app.data.dto.AffinityQuestionResponseDto
 import com.reals.app.data.dto.ChatExitRequestResponseDto
 import com.reals.app.data.dto.ChatAudioPolicyResponseDto
 import com.reals.app.data.dto.ChatAudioResponseDto
@@ -134,6 +140,89 @@ object TestDtos {
         maxDistanceKm = 10,
         status = status,
         photoCount = 2,
+        createdAt = now,
+        updatedAt = now,
+    )
+
+    fun affinityQuestionCatalog(
+        categories: List<AffinityQuestionCategoryResponseDto> = listOf(
+            affinityQuestionCategory(id = "MUSIC", title = "Música", displayOrder = 1),
+            affinityQuestionCategory(id = "PLANS", title = "Planes", displayOrder = 2),
+        ),
+        questions: List<AffinityQuestionResponseDto> = listOf(
+            affinityQuestion(id = "MUSIC_DISCOVERY_001", categoryId = "MUSIC"),
+            affinityQuestion(
+                id = "PLANS_WEEKEND_001",
+                categoryId = "PLANS",
+                prompt = "¿Qué plan de fin de semana preferís compartir?",
+                answerType = "SINGLE_CHOICE",
+            ),
+        ),
+    ) = AffinityQuestionCatalogResponseDto(
+        catalogVersion = "catalog-1",
+        categories = categories,
+        questions = questions,
+    )
+
+    fun affinityQuestionCategory(
+        id: String = "MUSIC",
+        title: String = "Música",
+        description: String? = "Sobre música compartida",
+        displayOrder: Int = 1,
+    ) = AffinityQuestionCategoryResponseDto(
+        id = id,
+        title = title,
+        description = description,
+        displayOrder = displayOrder,
+    )
+
+    fun affinityQuestion(
+        id: String = "MUSIC_DISCOVERY_001",
+        semanticVersion: Int = 1,
+        contentVersion: Int = 1,
+        categoryId: String = "MUSIC",
+        primaryTopic: String = "music_discovery",
+        topicTags: List<String> = listOf("music"),
+        answerType: String = "ORDINAL_SCALE",
+        prompt: String = "¿Qué tanto disfrutás descubrir música nueva con otra persona?",
+        options: List<AffinityAnswerOptionResponseDto> = listOf(
+            affinityAnswerOption("LOW", "Poco", 1),
+            affinityAnswerOption("VERY_HIGH", "Mucho", 2),
+        ),
+    ) = AffinityQuestionResponseDto(
+        id = id,
+        semanticVersion = semanticVersion,
+        contentVersion = contentVersion,
+        categoryId = categoryId,
+        primaryTopic = primaryTopic,
+        topicTags = topicTags,
+        answerType = answerType,
+        prompt = prompt,
+        options = options,
+    )
+
+    fun affinityAnswerOption(
+        code: String = "LOW",
+        label: String = "Poco",
+        displayOrder: Int = 1,
+    ) = AffinityAnswerOptionResponseDto(
+        code = code,
+        label = label,
+        displayOrder = displayOrder,
+    )
+
+    fun affinityAnswers(
+        answers: List<AffinityAnswerResponseDto> = listOf(affinityAnswer()),
+    ) = AffinityAnswersResponseDto(answers = answers)
+
+    fun affinityAnswer(
+        questionId: String = "MUSIC_DISCOVERY_001",
+        questionSemanticVersion: Int = 1,
+        answerCode: String = "VERY_HIGH",
+    ) = AffinityAnswerResponseDto(
+        questionId = questionId,
+        questionSemanticVersion = questionSemanticVersion,
+        answerCode = answerCode,
         createdAt = now,
         updatedAt = now,
     )

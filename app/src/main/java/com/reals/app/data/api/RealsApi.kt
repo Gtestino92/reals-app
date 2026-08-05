@@ -1,6 +1,8 @@
 ﻿package com.reals.app.data.api
 
 import com.reals.app.data.dto.AddProposalRequestDto
+import com.reals.app.data.dto.AffinityAnswersResponseDto
+import com.reals.app.data.dto.AffinityQuestionCatalogResponseDto
 import com.reals.app.data.dto.ChatDecisionRequestDto
 import com.reals.app.data.dto.ChatExitOutcomeResponseDto
 import com.reals.app.data.dto.ChatExitRequestCreateRequestDto
@@ -25,6 +27,7 @@ import com.reals.app.data.dto.PartnerPersonalMessageResponseDto
 import com.reals.app.data.dto.PersonalMessageRequestDto
 import com.reals.app.data.dto.PhotoResponseDto
 import com.reals.app.data.dto.PingResponseDto
+import com.reals.app.data.dto.PatchAffinityAnswersRequestDto
 import com.reals.app.data.dto.ProfileResponseDto
 import com.reals.app.data.dto.QueueStatusResponseDto
 import com.reals.app.data.dto.RegisterPushTokenRequestDto
@@ -188,6 +191,28 @@ interface RealsApi {
     suspend fun activateMyProfile(
         @Header("Authorization") authorization: String,
     ): Response<ProfileResponseDto>
+
+    @GET("api/reference/affinity-questions")
+    suspend fun getAffinityQuestionCatalog(
+        @Header("Authorization") authorization: String,
+    ): Response<AffinityQuestionCatalogResponseDto>
+
+    @GET("api/me/profile/affinity-answers")
+    suspend fun getMyAffinityAnswers(
+        @Header("Authorization") authorization: String,
+    ): Response<AffinityAnswersResponseDto>
+
+    @PATCH("api/me/profile/affinity-answers")
+    suspend fun patchMyAffinityAnswers(
+        @Header("Authorization") authorization: String,
+        @Body body: PatchAffinityAnswersRequestDto,
+    ): Response<AffinityAnswersResponseDto>
+
+    @DELETE("api/me/profile/affinity-answers/{questionId}")
+    suspend fun deleteMyAffinityAnswer(
+        @Header("Authorization") authorization: String,
+        @Path("questionId") questionId: String,
+    ): Response<AffinityAnswersResponseDto>
 
     @POST("api/matchmaking/queue")
     suspend fun enqueueMatchmaking(
