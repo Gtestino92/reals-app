@@ -5,8 +5,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
@@ -413,7 +415,11 @@ private fun AffinitySingleQuestionScreen(
     ) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                AffinityQuestionnaireStatus(state, onRetry)
+                AffinityQuestionnaireStatus(
+                    state = state,
+                    onRetry = onRetry,
+                    showMutationStatus = false,
+                )
                 positionLabel?.let {
                     Text(
                         text = it,
@@ -532,26 +538,33 @@ private fun AffinityQuestionCard(
                     Text("Quitar respuesta")
                 }
             }
-            when {
-                questionSaving -> Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    CircularProgressIndicator()
-                    Text(
-                        text = "Guardando...",
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 32.dp),
+                verticalArrangement = Arrangement.Center,
+            ) {
+                when {
+                    questionSaving -> Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp))
+                        Text(
+                            text = "Guardando...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+
+                    mutationError != null -> ApiErrorFeedbackCard(mutationError, ErrorContext.AffinityQuestions)
+
+                    message != null -> Text(
+                        text = message,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.primary,
                     )
                 }
-
-                mutationError != null -> ApiErrorFeedbackCard(mutationError, ErrorContext.AffinityQuestions)
-
-                message != null -> Text(
-                    text = message,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
             }
         }
     }
