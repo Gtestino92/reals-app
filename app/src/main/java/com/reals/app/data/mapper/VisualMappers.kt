@@ -23,4 +23,5 @@ fun VisualProfileResponseDto.toDomain(): VisualProfile = VisualProfile(
             title = indicator.title,
         )
     },
+    profileQuestions = profileQuestions.map { it.toDomain() },
 )

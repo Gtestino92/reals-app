@@ -45,8 +45,8 @@ class AffinityQuestionnaireOperationHandler(
         val activeMutationForProfile = activeMutation
             ?.takeIf {
                 mutationJob?.isActive == true &&
-                    it.profileId == profile.id &&
-                    it.userId == current.session.user.id
+                        it.profileId == profile.id &&
+                        it.userId == current.session.user.id
             }
         if (activeMutationForProfile != null) {
             uiState.value = current.copy(
@@ -204,7 +204,108 @@ class AffinityQuestionnaireOperationHandler(
     }
 
     fun nextQuestion() {
-        moveFromCurrentQuestion(requireConfirmedAnswer = true)
+        val current = uiState.value as? RealsRootUiState.Ready ?: return
+        val questionnaire = current.affinityQuestionnaire
+        val catalog = questionnaire.catalog ?: return
+        val destination =
+            questionnaire.destination as? AffinityQuestionnaireDestination.Question
+                ?: return
+
+        if (questionnaire.mutation != null) return
+
+        val question = catalog.findAnswerableQuestion(destination.questionId) ?: return
+        val draftAnswerCode = questionnaire.draftAnswerCode
+            ?.takeIf { questionnaire.draftQuestionId == question.id }
+            ?: return
+
+        if (!question.canSelectAnswerCode(draftAnswerCode)) return
+
+        val confirmedAnswerCode =
+            question.currentValidAnswer(questionnaire.answers)?.answerCode
+
+        if (draftAnswerCode == confirmedAnswerCode) {
+            moveFromCurrentQuestion(requireConfirmedAnswer = true)
+            return
+        }
+
+        saveAnswerAndAdvance(
+            current = current,
+            questionId = question.id,
+            answerCode = draftAnswerCode,
+        )
+    }
+
+    private fun saveAnswerAndAdvance(
+        current: RealsRootUiState.Ready,
+        questionId: String,
+        answerCode: String,
+    ) {
+        val questionnaire = current.affinityQuestionnaire
+        val profileId = questionnaire.profileId ?: return
+        val userId = current.session.user.id
+        val requestId = ++mutationRequestId
+
+        val mutation = AffinityAnswerMutationUiState(
+            questionId = questionId,
+            pendingAnswerCode = answerCode,
+            requestId = requestId,
+        )
+
+        activeMutation = ActiveAffinityAnswerMutation(
+            requestId = requestId,
+            profileId = profileId,
+            userId = userId,
+            mutation = mutation,
+        )
+
+        uiState.value = current.copy(
+            affinityQuestionnaire = questionnaire.copy(
+                mutation = mutation,
+                mutationError = null,
+                mutationFeedbackQuestionId = null,
+                message = null,
+            ),
+        )
+
+        mutationJob = scope.launch {
+            val completion = installMutationResult(
+                profileId = profileId,
+                userId = userId,
+                mutation = mutation,
+                result = dependencies.patchAnswer(questionId, answerCode),
+            )
+
+            clearActiveMutationIfCurrent(requestId)
+
+            if (completion.shouldReload) {
+                startLoadForOpenQuestionnaireAfterMutation(
+                    profileId = profileId,
+                    userId = userId,
+                )
+            }
+
+            if (completion.successful) {
+                val latest =
+                    uiState.value as? RealsRootUiState.Ready
+
+                val latestQuestion =
+                    latest
+                        ?.affinityQuestionnaire
+                        ?.destination as? AffinityQuestionnaireDestination.Question
+
+                /*
+                 * Advance only if the user is still looking at the same question.
+                 * A late completion must not move them after they navigated Back.
+                 */
+                if (
+                    latest?.affinityQuestionnaire?.open == true &&
+                    latest.affinityQuestionnaire.mutation == null &&
+                    latestQuestion?.questionId == questionId
+                ) {
+                    moveFromCurrentQuestion(requireConfirmedAnswer = true)
+                }
+            }
+        }
     }
 
     fun navigateBack() {
@@ -232,7 +333,8 @@ class AffinityQuestionnaireOperationHandler(
         val current = uiState.value as? RealsRootUiState.Ready ?: return
         val questionnaire = current.affinityQuestionnaire
         val catalog = questionnaire.catalog ?: return
-        val destination = questionnaire.destination as? AffinityQuestionnaireDestination.Question ?: return
+        val destination =
+            questionnaire.destination as? AffinityQuestionnaireDestination.Question ?: return
         val question = catalog.findAnswerableQuestion(destination.questionId) ?: run {
             setDestination(current, destination.fallbackParent())
             return
@@ -242,9 +344,13 @@ class AffinityQuestionnaireOperationHandler(
 
         val next = when (val source = destination.source) {
             AffinityQuestionSource.Continue -> {
-                catalog.nextContinueQuestion(question.id, questionnaire.answers)?.let { nextQuestion ->
-                    AffinityQuestionnaireDestination.Question(nextQuestion.id, AffinityQuestionSource.Continue)
-                } ?: AffinityQuestionnaireDestination.Overview
+                catalog.nextContinueQuestion(question.id, questionnaire.answers)
+                    ?.let { nextQuestion ->
+                        AffinityQuestionnaireDestination.Question(
+                            nextQuestion.id,
+                            AffinityQuestionSource.Continue
+                        )
+                    } ?: AffinityQuestionnaireDestination.Overview
             }
 
             is AffinityQuestionSource.Category -> {
@@ -272,7 +378,17 @@ class AffinityQuestionnaireOperationHandler(
         val retainedMutationError = latest.affinityQuestionnaire.mutationError
             ?.takeIf { error ->
                 error.isLegalActionRequired() ||
-                    error.isTerminalAuthFailure()
+                        error.isTerminalAuthFailure()
+            }
+        val destinationQuestion =
+            destination as? AffinityQuestionnaireDestination.Question
+
+        val draftAnswerCode = destinationQuestion
+            ?.let { questionDestination ->
+                latest.affinityQuestionnaire.catalog
+                    ?.findAnswerableQuestion(questionDestination.questionId)
+                    ?.currentValidAnswer(latest.affinityQuestionnaire.answers)
+                    ?.answerCode
             }
         uiState.value = latest.copy(
             affinityQuestionnaire = latest.affinityQuestionnaire.copy(
@@ -281,6 +397,8 @@ class AffinityQuestionnaireOperationHandler(
                 mutationError = retainedMutationError,
                 mutationFeedbackQuestionId = null,
                 message = null,
+                draftQuestionId = destinationQuestion?.questionId,
+                draftAnswerCode = draftAnswerCode,
             ),
         )
     }
@@ -289,6 +407,7 @@ class AffinityQuestionnaireOperationHandler(
         val current = uiState.value as? RealsRootUiState.Ready ?: return
         val questionnaire = current.affinityQuestionnaire
         val catalog = questionnaire.catalog ?: return
+
         if (
             !questionnaire.open ||
             questionnaire.mutation != null ||
@@ -298,44 +417,29 @@ class AffinityQuestionnaireOperationHandler(
         ) {
             return
         }
-        val question = catalog.questions.firstOrNull { it.id == questionId } ?: return
-        if (!question.canSelectAnswerCode(answerCode)) return
-        if (question.currentValidAnswer(questionnaire.answers)?.answerCode == answerCode) return
 
-        val requestId = ++mutationRequestId
-        val mutation = AffinityAnswerMutationUiState(
-            questionId = question.id,
-            pendingAnswerCode = answerCode,
-            requestId = requestId,
-        )
-        val profileId = questionnaire.profileId ?: return
-        val userId = current.session.user.id
-        activeMutation = ActiveAffinityAnswerMutation(
-            requestId = requestId,
-            profileId = profileId,
-            userId = userId,
-            mutation = mutation,
-        )
+        val question = catalog.questions
+            .firstOrNull { it.id == questionId }
+            ?: return
+
+        if (!question.canSelectAnswerCode(answerCode)) return
+
+        val presentedAnswerCode =
+            questionnaire.draftAnswerCode
+                .takeIf { questionnaire.draftQuestionId == question.id }
+                ?: question.currentValidAnswer(questionnaire.answers)?.answerCode
+
+        if (presentedAnswerCode == answerCode) return
+
         uiState.value = current.copy(
             affinityQuestionnaire = questionnaire.copy(
-                mutation = mutation,
+                draftQuestionId = question.id,
+                draftAnswerCode = answerCode,
                 mutationError = null,
                 mutationFeedbackQuestionId = null,
                 message = null,
             ),
         )
-        mutationJob = scope.launch {
-            val shouldReloadAfterMutation = installMutationResult(
-                profileId = profileId,
-                userId = userId,
-                mutation = mutation,
-                result = dependencies.patchAnswer(question.id, answerCode),
-            )
-            clearActiveMutationIfCurrent(requestId)
-            if (shouldReloadAfterMutation) {
-                startLoadForOpenQuestionnaireAfterMutation(profileId, userId)
-            }
-        }
     }
 
     fun deleteAnswer(questionId: String) {
@@ -355,19 +459,23 @@ class AffinityQuestionnaireOperationHandler(
         if (question.currentValidAnswer(questionnaire.answers) == null) return
 
         val requestId = ++mutationRequestId
+
+        val profileId = questionnaire.profileId ?: return
+        val userId = current.session.user.id
+
         val mutation = AffinityAnswerMutationUiState(
             questionId = question.id,
             pendingAnswerCode = null,
             requestId = requestId,
         )
-        val profileId = questionnaire.profileId ?: return
-        val userId = current.session.user.id
+
         activeMutation = ActiveAffinityAnswerMutation(
             requestId = requestId,
             profileId = profileId,
             userId = userId,
             mutation = mutation,
         )
+
         uiState.value = current.copy(
             affinityQuestionnaire = questionnaire.copy(
                 mutation = mutation,
@@ -376,16 +484,22 @@ class AffinityQuestionnaireOperationHandler(
                 message = null,
             ),
         )
+
         mutationJob = scope.launch {
-            val shouldReloadAfterMutation = installMutationResult(
+            val completion = installMutationResult(
                 profileId = profileId,
                 userId = userId,
                 mutation = mutation,
                 result = dependencies.deleteAnswer(question.id),
             )
+
             clearActiveMutationIfCurrent(requestId)
-            if (shouldReloadAfterMutation) {
-                startLoadForOpenQuestionnaireAfterMutation(profileId, userId)
+
+            if (completion.shouldReload) {
+                startLoadForOpenQuestionnaireAfterMutation(
+                    profileId = profileId,
+                    userId = userId,
+                )
             }
         }
     }
@@ -454,25 +568,64 @@ class AffinityQuestionnaireOperationHandler(
         userId: String,
         mutation: AffinityAnswerMutationUiState,
         result: ApiResult<List<AffinityAnswer>>,
-    ): Boolean {
-        val latest = uiState.value as? RealsRootUiState.Ready ?: return false
+    ): AffinityMutationCompletion {
+        val ignored = AffinityMutationCompletion(
+            successful = false,
+            shouldReload = false,
+        )
+
+        val latest = uiState.value as? RealsRootUiState.Ready
+            ?: return ignored
+
         val questionnaire = latest.affinityQuestionnaire
+
         if (
             questionnaire.profileId != profileId ||
             latest.session.user.id != userId ||
-            (latest.session.profileSnapshot as? ProfileSnapshot.Found)?.profile?.id != profileId
+            (latest.session.profileSnapshot as? ProfileSnapshot.Found)
+                ?.profile
+                ?.id != profileId
         ) {
-            return false
+            return ignored
         }
-        if (questionnaire.open && questionnaire.mutation?.requestId != mutation.requestId) {
-            return false
+
+        if (
+            questionnaire.open &&
+            questionnaire.mutation?.requestId != mutation.requestId
+        ) {
+            return ignored
         }
-        val shouldReloadAfterMutation = questionnaire.open &&
-            (questionnaire.loading || questionnaire.refreshing) &&
-            result is ApiResult.Success
-        val showQuestionFeedback = questionnaire.open &&
-            (questionnaire.destination as? AffinityQuestionnaireDestination.Question)
-                ?.questionId == mutation.questionId
+
+        val successful = result is ApiResult.Success
+
+        val shouldReloadAfterMutation =
+            questionnaire.open &&
+                    (questionnaire.loading || questionnaire.refreshing) &&
+                    successful
+
+        val showQuestionFeedback =
+            questionnaire.open &&
+                    (questionnaire.destination as? AffinityQuestionnaireDestination.Question)
+                        ?.questionId == mutation.questionId
+
+        /*
+         * pendingAnswerCode == null identifies DELETE.
+         * Successful deletion must not display "Respuesta guardada".
+         */
+        val deletingAnswer = mutation.pendingAnswerCode == null
+
+        val showSavedFeedback =
+            showQuestionFeedback && !deletingAnswer
+
+        /*
+         * Clear the local draft only when the successful DELETE still owns
+         * the draft for the deleted question. Do not overwrite a draft belonging
+         * to another question if the user navigated while the request was active.
+         */
+        val shouldClearDeletedDraft =
+            deletingAnswer &&
+                    questionnaire.draftQuestionId == mutation.questionId
+
         uiState.value = when (result) {
             is ApiResult.Success -> latest.copy(
                 affinityQuestionnaire = questionnaire.copy(
@@ -481,8 +634,22 @@ class AffinityQuestionnaireOperationHandler(
                     refreshing = false,
                     mutation = null,
                     mutationError = null,
-                    mutationFeedbackQuestionId = if (showQuestionFeedback) mutation.questionId else null,
-                    message = if (showQuestionFeedback) "Respuesta guardada" else null,
+                    mutationFeedbackQuestionId =
+                        if (showSavedFeedback) mutation.questionId else null,
+                    message =
+                        if (showSavedFeedback) "Respuesta guardada" else null,
+                    draftQuestionId =
+                        if (shouldClearDeletedDraft) {
+                            mutation.questionId
+                        } else {
+                            questionnaire.draftQuestionId
+                        },
+                    draftAnswerCode =
+                        if (shouldClearDeletedDraft) {
+                            null
+                        } else {
+                            questionnaire.draftAnswerCode
+                        },
                 ),
             )
 
@@ -492,12 +659,17 @@ class AffinityQuestionnaireOperationHandler(
                     refreshing = false,
                     mutation = null,
                     mutationError = result.error,
-                    mutationFeedbackQuestionId = if (showQuestionFeedback) mutation.questionId else null,
+                    mutationFeedbackQuestionId =
+                        if (showQuestionFeedback) mutation.questionId else null,
                     message = null,
                 ),
             )
         }
-        return shouldReloadAfterMutation
+
+        return AffinityMutationCompletion(
+            successful = successful,
+            shouldReload = shouldReloadAfterMutation,
+        )
     }
 
     private fun clearActiveMutationIfCurrent(requestId: Long) {
@@ -554,11 +726,17 @@ private data class ActiveAffinityAnswerMutation(
     val mutation: AffinityAnswerMutationUiState,
 )
 
+private data class AffinityMutationCompletion(
+    val successful: Boolean,
+    val shouldReload: Boolean,
+)
+
 private sealed interface AffinityQuestionnaireLoadResult {
     data class Success(
         val catalog: AffinityQuestionCatalog,
         val answers: List<AffinityAnswer>,
     ) : AffinityQuestionnaireLoadResult
 
-    data class Failure(val error: com.reals.app.core.network.ApiError) : AffinityQuestionnaireLoadResult
+    data class Failure(val error: com.reals.app.core.network.ApiError) :
+        AffinityQuestionnaireLoadResult
 }

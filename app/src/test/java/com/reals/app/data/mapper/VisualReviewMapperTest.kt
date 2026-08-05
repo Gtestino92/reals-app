@@ -1,6 +1,7 @@
 package com.reals.app.data.mapper
 
 import com.reals.app.data.dto.PhotoResponseDto
+import com.reals.app.data.dto.PublicProfileQuestionResponseDto
 import com.reals.app.data.dto.VisualAffinityIndicatorResponseDto
 import com.reals.app.data.dto.VisualProfileResponseDto
 import com.reals.app.testutil.testJson
@@ -107,6 +108,39 @@ class VisualReviewMapperTest {
         assertEquals(true, domain.partnerPersonalMessageRead)
         assertEquals(false, domain.decisionRequiresPartnerPersonalMessageRead)
         assertEquals(0, domain.affinityIndicators.size)
+        assertEquals(0, domain.profileQuestions.size)
+    }
+
+    @Test
+    fun `VisualProfileResponseDto maps public profile questions in backend order`() {
+        val dto = VisualProfileResponseDto(
+            profileId = "profile-1",
+            displayName = "Alex",
+            age = 29,
+            bio = null,
+            photos = emptyList(),
+            profileQuestions = listOf(
+                PublicProfileQuestionResponseDto(
+                    questionId = "LIFE_SOUNDTRACK_001",
+                    prompt = "Mi banda sonora sería...",
+                    answer = "Soul",
+                    position = 2,
+                ),
+                PublicProfileQuestionResponseDto(
+                    questionId = "PERFECT_SUNDAY_001",
+                    prompt = "Mi domingo perfecto incluye...",
+                    answer = "Café",
+                    position = 1,
+                ),
+            ),
+        )
+
+        val domain = dto.toDomain()
+
+        assertEquals(
+            listOf("LIFE_SOUNDTRACK_001" to 2, "PERFECT_SUNDAY_001" to 1),
+            domain.profileQuestions.map { it.questionId to it.position },
+        )
     }
 
     @Test

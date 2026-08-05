@@ -1070,6 +1070,8 @@ internal fun rootViewModelTestDependencies(
         val legalRepository = LegalRepository(api, tokenProvider, apiExecutor)
         val affinityQuestionRepository =
             com.reals.app.data.repository.AffinityQuestionRepository(api, tokenProvider, apiExecutor)
+        val profileQuestionRepository =
+            com.reals.app.data.repository.ProfileQuestionRepository(api, tokenProvider, apiExecutor)
         val registerPushTokenUseCase = RegisterPushTokenUseCase(meRepository)
 
         return RealsRootDependencies(
@@ -1169,6 +1171,23 @@ internal fun rootViewModelTestDependencies(
                 ),
                 deleteAnswer = com.reals.app.domain.usecase.DeleteMyAffinityAnswerUseCase(
                     affinityQuestionRepository,
+                ),
+            ),
+            profileQuestions = com.reals.app.di.ProfileQuestionFeatureDependencies(
+                getCatalog = com.reals.app.domain.usecase.GetProfileQuestionCatalogUseCase(
+                    profileQuestionRepository,
+                ),
+                getMyAnswers = com.reals.app.domain.usecase.GetMyProfileQuestionAnswersUseCase(
+                    profileQuestionRepository,
+                ),
+                upsertAnswer = com.reals.app.domain.usecase.UpsertMyProfileQuestionAnswerUseCase(
+                    profileQuestionRepository,
+                ),
+                deleteAnswer = com.reals.app.domain.usecase.DeleteMyProfileQuestionAnswerUseCase(
+                    profileQuestionRepository,
+                ),
+                replaceSelections = com.reals.app.domain.usecase.ReplaceMyProfileQuestionSelectionsUseCase(
+                    profileQuestionRepository,
                 ),
             ),
         )

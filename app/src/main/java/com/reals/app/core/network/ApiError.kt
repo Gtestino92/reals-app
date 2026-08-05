@@ -137,6 +137,11 @@ enum class BackendErrorCode(val raw: String) {
     SchedulingProposalNotAvailable("SCHEDULING_PROPOSAL_NOT_AVAILABLE"),
     SchedulingCannotAcceptOwnProposal("SCHEDULING_CANNOT_ACCEPT_OWN_PROPOSAL"),
     SchedulingPartnerProposalsNotAvailable("SCHEDULING_PARTNER_PROPOSALS_NOT_AVAILABLE"),
+    InvalidProfileQuestion("INVALID_PROFILE_QUESTION"),
+    InvalidProfileQuestionAnswer("INVALID_PROFILE_QUESTION_ANSWER"),
+    InvalidProfileQuestionSelection("INVALID_PROFILE_QUESTION_SELECTION"),
+    DuplicateProfileQuestionSelection("DUPLICATE_PROFILE_QUESTION_SELECTION"),
+    ProfileQuestionSelectionLimitExceeded("PROFILE_QUESTION_SELECTION_LIMIT_EXCEEDED"),
     Unknown("UNKNOWN");
 
     companion object {
@@ -165,6 +170,7 @@ enum class ErrorContext {
     Legal,
     ManualBlock,
     AffinityQuestions,
+    ProfileQuestions,
 }
 
 val ApiError.Backend.backendErrorCode: BackendErrorCode
@@ -240,6 +246,7 @@ fun ApiError.toUserTitle(context: ErrorContext = ErrorContext.General): String =
     ErrorContext.Legal -> "No pudimos actualizar los documentos"
     ErrorContext.ManualBlock -> "No pudimos bloquear a ésta persona"
     ErrorContext.AffinityQuestions -> "No pudimos actualizar tus respuestas"
+    ErrorContext.ProfileQuestions -> "No pudimos actualizar tus preguntas del perfil"
     ErrorContext.General -> "Algo salió mal"
 }
 
@@ -359,6 +366,11 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.SchedulingProposalNotAvailable -> "Ese horario ya no está disponible. Actualizamos las opciones."
     BackendErrorCode.SchedulingCannotAcceptOwnProposal -> "No podés aceptar un horario propuesto por vos."
     BackendErrorCode.SchedulingPartnerProposalsNotAvailable -> "Esas opciones ya no están disponibles. Actualizamos el estado de la coordinación."
+    BackendErrorCode.InvalidProfileQuestion,
+    BackendErrorCode.InvalidProfileQuestionAnswer -> "Revisá la respuesta. No puede estar vacía ni superar el límite permitido."
+    BackendErrorCode.InvalidProfileQuestionSelection,
+    BackendErrorCode.DuplicateProfileQuestionSelection -> "Revisá las preguntas elegidas para mostrar."
+    BackendErrorCode.ProfileQuestionSelectionLimitExceeded -> "Podés elegir hasta tres preguntas para mostrar."
     BackendErrorCode.Unknown -> when (context) {
         ErrorContext.ProfileActivation -> "Revisá que tu perfil tenga la información y fotos necesarias."
         ErrorContext.PhotoUpload,
@@ -368,6 +380,7 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
         ErrorContext.VisualReview -> "La revisión visual cambió de estado. Actualizá e intentá nuevamente."
         ErrorContext.Scheduling -> "La coordinación de horarios cambió de estado. Actualizá e intentá nuevamente."
         ErrorContext.AffinityQuestions -> "No pudimos actualizar las preguntas de afinidad. Intentá nuevamente."
+        ErrorContext.ProfileQuestions -> "No pudimos actualizar las preguntas del perfil. Intentá nuevamente."
         else -> "Intentá nuevamente en unos segundos."
     }
 }

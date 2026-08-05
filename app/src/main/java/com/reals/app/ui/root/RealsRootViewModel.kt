@@ -71,6 +71,11 @@ class RealsRootViewModel(
         dependencies = dependencies.affinity,
         scope = viewModelScope,
     )
+    private val profileQuestionHandler = ProfileQuestionOperationHandler(
+        uiState = _uiState,
+        dependencies = dependencies.profileQuestions,
+        scope = viewModelScope,
+    )
     private val manualBlockCoordinator = ManualBlockCoordinator(
         dependencies.manualBlock.blockMatchParticipant,
     )
@@ -204,6 +209,8 @@ class RealsRootViewModel(
             is RealsRootUiState.Ready -> {
                 if (current.affinityQuestionnaire.open) {
                     navigateBackAffinityQuestionnaire()
+                } else if (current.profileQuestions.open) {
+                    navigateBackProfileQuestions()
                 } else if (current.editingActiveProfile) {
                     closeProfileManagement()
                 }
@@ -390,6 +397,33 @@ class RealsRootViewModel(
 
     fun deleteAffinityAnswer(questionId: String) =
         affinityQuestionnaireHandler.deleteAnswer(questionId)
+
+    fun openProfileQuestions() = profileQuestionHandler.open()
+
+    fun closeProfileQuestions() = profileQuestionHandler.close()
+
+    fun refreshProfileQuestions() = profileQuestionHandler.refresh()
+
+    fun navigateBackProfileQuestions() = profileQuestionHandler.navigateBack()
+
+    fun openProfileQuestionOverview() = profileQuestionHandler.openOverview()
+
+    fun openProfileQuestionList() = profileQuestionHandler.openQuestions()
+
+    fun openProfileQuestionEditor(questionId: String) = profileQuestionHandler.openEditor(questionId)
+
+    fun openProfileQuestionSelection() = profileQuestionHandler.openSelection()
+
+    fun updateProfileQuestionSelectionDraft(questionIds: List<String>) =
+        profileQuestionHandler.updateSelectionDraft(questionIds)
+
+    fun saveProfileQuestionAnswer(questionId: String, answer: String) =
+        profileQuestionHandler.saveAnswer(questionId, answer)
+
+    fun deleteProfileQuestionAnswer(questionId: String) =
+        profileQuestionHandler.deleteAnswer(questionId)
+
+    fun saveProfileQuestionSelection() = profileQuestionHandler.saveSelection()
 
     private fun closeProfileManagement(current: RealsRootUiState.Ready) {
         if (current.session.profileSnapshot !is ProfileSnapshot.Found) return
@@ -1918,7 +1952,9 @@ private fun RealsRootUiState.hasLegalActionRequiredError(): Boolean = when (this
             homeError.isLegalActionRequiredError() ||
             matchmakingBlockedReason.isLegalActionRequiredError() ||
             affinityQuestionnaire.error.isLegalActionRequiredError() ||
-            affinityQuestionnaire.mutationError.isLegalActionRequiredError()
+            affinityQuestionnaire.mutationError.isLegalActionRequiredError() ||
+            profileQuestions.error.isLegalActionRequiredError() ||
+            profileQuestions.mutationError.isLegalActionRequiredError()
 
     is RealsRootUiState.FirstChat -> error.isLegalActionRequiredError()
     is RealsRootUiState.SecondChat -> error.isLegalActionRequiredError()
@@ -1946,7 +1982,9 @@ internal fun RealsRootUiState.hasTerminalAuthFailure(): Boolean = when (this) {
             matchmakingBlockedReason.isTerminalAuthFailure() ||
             accountDeleteError.isTerminalAuthFailure() ||
             affinityQuestionnaire.error.isTerminalAuthFailure() ||
-            affinityQuestionnaire.mutationError.isTerminalAuthFailure()
+            affinityQuestionnaire.mutationError.isTerminalAuthFailure() ||
+            profileQuestions.error.isTerminalAuthFailure() ||
+            profileQuestions.mutationError.isTerminalAuthFailure()
 
     is RealsRootUiState.FirstChat ->
         error.isTerminalAuthFailure() || manualBlock.error.isTerminalAuthFailure()

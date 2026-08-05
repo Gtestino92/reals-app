@@ -33,31 +33,36 @@ import retrofit2.Response
 @OptIn(ExperimentalCoroutinesApi::class)
 class AffinityQuestionnaireOperationHandlerTest {
     @Test
-    fun `opening without a profile does nothing while draft and active profiles can open`() = runTest {
-        val missing = harness(
-            initialState = RealsRootUiState.Ready(
-                TestDomain.session().copy(profileSnapshot = ProfileSnapshot.Missing),
-            ),
-        )
-        missing.handler.open()
-        advanceUntilIdle()
-        assertFalse(missing.ready().affinityQuestionnaire.open)
+    fun `opening without a profile does nothing while draft and active profiles can open`() =
+        runTest {
+            val missing = harness(
+                initialState = RealsRootUiState.Ready(
+                    TestDomain.session().copy(profileSnapshot = ProfileSnapshot.Missing),
+                ),
+            )
+            missing.handler.open()
+            advanceUntilIdle()
+            assertFalse(missing.ready().affinityQuestionnaire.open)
 
-        val draft = harness(initialState = ready(profileStatus = "DRAFT"))
-        draft.handler.open()
-        advanceUntilIdle()
-        assertTrue(draft.ready().affinityQuestionnaire.open)
+            val draft = harness(initialState = ready(profileStatus = "DRAFT"))
+            draft.handler.open()
+            advanceUntilIdle()
+            assertTrue(draft.ready().affinityQuestionnaire.open)
 
-        val active = harness(initialState = ready(profileStatus = "ACTIVE"))
-        active.handler.open()
-        advanceUntilIdle()
-        assertTrue(active.ready().affinityQuestionnaire.open)
-        assertEquals(AffinityQuestionnaireDestination.Overview, active.ready().affinityQuestionnaire.destination)
-    }
+            val active = harness(initialState = ready(profileStatus = "ACTIVE"))
+            active.handler.open()
+            advanceUntilIdle()
+            assertTrue(active.ready().affinityQuestionnaire.open)
+            assertEquals(
+                AffinityQuestionnaireDestination.Overview,
+                active.ready().affinityQuestionnaire.destination
+            )
+        }
 
     @Test
     fun `overview opens Continue Categories and Review destinations`() = runTest {
-        val continueHarness = harness(initialState = ready(questionnaire = loadedQuestionnaire(answers = emptyList())))
+        val continueHarness =
+            harness(initialState = ready(questionnaire = loadedQuestionnaire(answers = emptyList())))
         continueHarness.handler.openContinue()
         assertEquals(
             AffinityQuestionnaireDestination.Question(
@@ -69,16 +74,23 @@ class AffinityQuestionnaireOperationHandlerTest {
 
         val categoriesHarness = loadedHarness()
         categoriesHarness.handler.openCategories()
-        assertEquals(AffinityQuestionnaireDestination.Categories, categoriesHarness.ready().affinityQuestionnaire.destination)
+        assertEquals(
+            AffinityQuestionnaireDestination.Categories,
+            categoriesHarness.ready().affinityQuestionnaire.destination
+        )
 
         val reviewHarness = loadedHarness()
         reviewHarness.handler.openReview()
-        assertEquals(AffinityQuestionnaireDestination.Review, reviewHarness.ready().affinityQuestionnaire.destination)
+        assertEquals(
+            AffinityQuestionnaireDestination.Review,
+            reviewHarness.ready().affinityQuestionnaire.destination
+        )
     }
 
     @Test
     fun `category and review entries open one question destinations`() = runTest {
-        val incompleteCategory = harness(initialState = ready(questionnaire = loadedQuestionnaire(answers = emptyList())))
+        val incompleteCategory =
+            harness(initialState = ready(questionnaire = loadedQuestionnaire(answers = emptyList())))
         incompleteCategory.handler.openCategory("MUSIC")
         assertEquals(
             AffinityQuestionnaireDestination.Question(
@@ -116,28 +128,41 @@ class AffinityQuestionnaireOperationHandlerTest {
                 questionnaire = loadedQuestionnaire(
                     destination = AffinityQuestionnaireDestination.Question(
                         questionId = "MUSIC_DISCOVERY_001",
-                        source = AffinityQuestionSource.Category(categoryId = "MUSIC", reviewAll = true),
+                        source = AffinityQuestionSource.Category(
+                            categoryId = "MUSIC",
+                            reviewAll = true
+                        ),
                     ),
                 ),
             ),
         )
 
         harness.handler.navigateBack()
-        assertEquals(AffinityQuestionnaireDestination.Categories, harness.ready().affinityQuestionnaire.destination)
+        assertEquals(
+            AffinityQuestionnaireDestination.Categories,
+            harness.ready().affinityQuestionnaire.destination
+        )
         assertTrue(harness.ready().affinityQuestionnaire.open)
 
         harness.handler.navigateBack()
-        assertEquals(AffinityQuestionnaireDestination.Overview, harness.ready().affinityQuestionnaire.destination)
+        assertEquals(
+            AffinityQuestionnaireDestination.Overview,
+            harness.ready().affinityQuestionnaire.destination
+        )
         assertTrue(harness.ready().affinityQuestionnaire.open)
 
         harness.handler.navigateBack()
         assertFalse(harness.ready().affinityQuestionnaire.open)
-        assertEquals(AffinityQuestionnaireDestination.Overview, harness.ready().affinityQuestionnaire.destination)
+        assertEquals(
+            AffinityQuestionnaireDestination.Overview,
+            harness.ready().affinityQuestionnaire.destination
+        )
     }
 
     @Test
     fun `skip and next advance through local source sequences`() = runTest {
-        val harness = harness(initialState = ready(questionnaire = loadedQuestionnaire(answers = emptyList())))
+        val harness =
+            harness(initialState = ready(questionnaire = loadedQuestionnaire(answers = emptyList())))
         harness.handler.openContinue()
         harness.state.value = harness.ready().copy(
             affinityQuestionnaire = harness.ready().affinityQuestionnaire.copy(
@@ -158,13 +183,25 @@ class AffinityQuestionnaireOperationHandlerTest {
 
         harness.state.value = harness.ready().copy(
             affinityQuestionnaire = harness.ready().affinityQuestionnaire.copy(
-                answers = listOf(TestDtos.affinityAnswer("PLANS_WEEKEND_001", 1, "VERY_HIGH").toDomain()),
+                answers = listOf(
+                    TestDtos.affinityAnswer(
+                        "PLANS_WEEKEND_001",
+                        1,
+                        "VERY_HIGH",
+                    ).toDomain(),
+                ),
+                draftQuestionId = "PLANS_WEEKEND_001",
+                draftAnswerCode = "VERY_HIGH",
                 message = "Respuesta guardada",
                 mutationFeedbackQuestionId = "PLANS_WEEKEND_001",
             ),
         )
         harness.handler.nextQuestion()
-        assertEquals(AffinityQuestionnaireDestination.Overview, harness.ready().affinityQuestionnaire.destination)
+
+        assertEquals(
+            AffinityQuestionnaireDestination.Overview,
+            harness.ready().affinityQuestionnaire.destination,
+        )
         assertNull(harness.ready().affinityQuestionnaire.message)
         assertNull(harness.ready().affinityQuestionnaire.mutationFeedbackQuestionId)
     }
@@ -185,9 +222,14 @@ class AffinityQuestionnaireOperationHandlerTest {
         harness.handler.close()
 
         assertFalse(harness.ready().affinityQuestionnaire.open)
-        assertEquals(AffinityQuestionnaireDestination.Overview, harness.ready().affinityQuestionnaire.destination)
+        assertEquals(
+            AffinityQuestionnaireDestination.Overview,
+            harness.ready().affinityQuestionnaire.destination
+        )
         assertEquals("catalog-1", harness.ready().affinityQuestionnaire.catalog?.catalogVersion)
-        assertEquals(listOf("MUSIC_DISCOVERY_001"), harness.ready().affinityQuestionnaire.answers.map { it.questionId })
+        assertEquals(
+            listOf("MUSIC_DISCOVERY_001"),
+            harness.ready().affinityQuestionnaire.answers.map { it.questionId })
         assertNull(harness.ready().affinityQuestionnaire.message)
         assertNull(harness.ready().affinityQuestionnaire.mutationFeedbackQuestionId)
     }
@@ -196,15 +238,24 @@ class AffinityQuestionnaireOperationHandlerTest {
     fun `mutation result preserves destination changed while request is active`() = runTest {
         val requestStarted = CompletableDeferred<Unit>()
         val releaseResponse = CompletableDeferred<Unit>()
+
         val api = FakeRealsApi().apply {
             beforePatchMyAffinityAnswersResponse = {
                 requestStarted.complete(Unit)
                 releaseResponse.await()
             }
             affinityAnswersResponse = Response.success(
-                TestDtos.affinityAnswers(listOf(TestDtos.affinityAnswer(answerCode = "LOW")))
+                TestDtos.affinityAnswers(
+                    listOf(
+                        TestDtos.affinityAnswer(
+                            questionId = "MUSIC_DISCOVERY_001",
+                            answerCode = "LOW",
+                        ),
+                    ),
+                ),
             )
         }
+
         val harness = harness(
             api = api,
             initialState = ready(
@@ -217,31 +268,55 @@ class AffinityQuestionnaireOperationHandlerTest {
             ),
         )
 
-        harness.handler.selectAnswer("MUSIC_DISCOVERY_001", "LOW")
+        harness.handler.selectAnswer(
+            questionId = "MUSIC_DISCOVERY_001",
+            answerCode = "LOW",
+        )
+
+        harness.handler.nextQuestion()
         runCurrent()
         requestStarted.await()
+
         harness.state.value = harness.ready().copy(
-            affinityQuestionnaire = harness.ready().affinityQuestionnaire.copy(
-                destination = AffinityQuestionnaireDestination.Review,
-            ),
+            affinityQuestionnaire =
+                harness.ready().affinityQuestionnaire.copy(
+                    destination = AffinityQuestionnaireDestination.Review,
+                ),
         )
 
         releaseResponse.complete(Unit)
         advanceUntilIdle()
 
-        assertEquals(AffinityQuestionnaireDestination.Review, harness.ready().affinityQuestionnaire.destination)
-        assertEquals(listOf("LOW"), harness.ready().affinityQuestionnaire.answers.map { it.answerCode })
-        assertNull(harness.ready().affinityQuestionnaire.message)
-        assertNull(harness.ready().affinityQuestionnaire.mutationFeedbackQuestionId)
+        val state = harness.ready().affinityQuestionnaire
+
+        assertEquals(
+            AffinityQuestionnaireDestination.Review,
+            state.destination,
+        )
+        assertEquals(
+            listOf("LOW"),
+            state.answers.map { it.answerCode },
+        )
+        assertNull(state.mutation)
+        assertNull(state.message)
+        assertNull(state.mutationFeedbackQuestionId)
     }
 
     @Test
-    fun `successful mutation on same question owns feedback by question`() = runTest {
+    fun `successful Next persists answer advances and clears scoped feedback`() = runTest {
         val api = FakeRealsApi().apply {
             affinityAnswersResponse = Response.success(
-                TestDtos.affinityAnswers(listOf(TestDtos.affinityAnswer(answerCode = "LOW")))
+                TestDtos.affinityAnswers(
+                    listOf(
+                        TestDtos.affinityAnswer(
+                            questionId = "MUSIC_DISCOVERY_001",
+                            answerCode = "LOW",
+                        ),
+                    ),
+                ),
             )
         }
+
         val harness = harness(
             api = api,
             initialState = ready(
@@ -254,11 +329,39 @@ class AffinityQuestionnaireOperationHandlerTest {
             ),
         )
 
-        harness.handler.selectAnswer("MUSIC_DISCOVERY_001", "LOW")
+        harness.handler.selectAnswer(
+            questionId = "MUSIC_DISCOVERY_001",
+            answerCode = "LOW",
+        )
+
+        harness.handler.nextQuestion()
         advanceUntilIdle()
 
-        assertEquals("Respuesta guardada", harness.ready().affinityQuestionnaire.message)
-        assertEquals("MUSIC_DISCOVERY_001", harness.ready().affinityQuestionnaire.mutationFeedbackQuestionId)
+        val state = harness.ready().affinityQuestionnaire
+
+        assertEquals(
+            1,
+            api.calls.count { it == "patchMyAffinityAnswers" },
+        )
+        assertEquals(
+            listOf("LOW"),
+            state.answers.map { it.answerCode },
+        )
+        assertEquals(
+            AffinityQuestionnaireDestination.Question(
+                questionId = "PLANS_WEEKEND_001",
+                source = AffinityQuestionSource.Continue,
+            ),
+            state.destination,
+        )
+        assertNull(state.mutation)
+        assertNull(state.message)
+        assertNull(state.mutationFeedbackQuestionId)
+        assertEquals(
+            "PLANS_WEEKEND_001",
+            state.draftQuestionId,
+        )
+        assertNull(state.draftAnswerCode)
     }
 
     @Test
@@ -271,9 +374,15 @@ class AffinityQuestionnaireOperationHandlerTest {
                         source = AffinityQuestionSource.Continue,
                     ),
                     answers = listOf(
-                        TestDtos.affinityAnswer("MUSIC_DISCOVERY_001", 1, "VERY_HIGH").toDomain(),
+                        TestDtos.affinityAnswer(
+                            "MUSIC_DISCOVERY_001",
+                            1,
+                            "VERY_HIGH",
+                        ).toDomain(),
                     ),
                 ).copy(
+                    draftQuestionId = "MUSIC_DISCOVERY_001",
+                    draftAnswerCode = "VERY_HIGH",
                     message = "Respuesta guardada",
                     mutationFeedbackQuestionId = "MUSIC_DISCOVERY_001",
                 ),
@@ -292,6 +401,11 @@ class AffinityQuestionnaireOperationHandlerTest {
         assertNull(harness.ready().affinityQuestionnaire.message)
         assertNull(harness.ready().affinityQuestionnaire.mutationError)
         assertNull(harness.ready().affinityQuestionnaire.mutationFeedbackQuestionId)
+        assertEquals(
+            "PLANS_WEEKEND_001",
+            harness.ready().affinityQuestionnaire.draftQuestionId,
+        )
+        assertNull(harness.ready().affinityQuestionnaire.draftAnswerCode)
     }
 
     @Test
@@ -319,83 +433,97 @@ class AffinityQuestionnaireOperationHandlerTest {
 
         harness.handler.navigateBack()
 
-        assertEquals(AffinityQuestionnaireDestination.Overview, harness.ready().affinityQuestionnaire.destination)
+        assertEquals(
+            AffinityQuestionnaireDestination.Overview,
+            harness.ready().affinityQuestionnaire.destination
+        )
         assertNull(harness.ready().affinityQuestionnaire.mutationError)
         assertNull(harness.ready().affinityQuestionnaire.mutationFeedbackQuestionId)
         assertNull(harness.ready().affinityQuestionnaire.message)
     }
 
     @Test
-    fun `navigating after legal mutation failure preserves routing error and clears scoped feedback`() = runTest {
-        val legalError = ApiError.Backend(
-            statusCode = 409,
-            code = "LEGAL_ACTION_REQUIRED",
-            error = "Conflict",
-            message = "legal action required",
-        )
-        val harness = harness(
-            initialState = ready(
-                questionnaire = loadedQuestionnaire(
-                    destination = AffinityQuestionnaireDestination.Question(
-                        questionId = "MUSIC_DISCOVERY_001",
-                        source = AffinityQuestionSource.Continue,
+    fun `navigating after legal mutation failure preserves routing error and clears scoped feedback`() =
+        runTest {
+            val legalError = ApiError.Backend(
+                statusCode = 409,
+                code = "LEGAL_ACTION_REQUIRED",
+                error = "Conflict",
+                message = "legal action required",
+            )
+            val harness = harness(
+                initialState = ready(
+                    questionnaire = loadedQuestionnaire(
+                        destination = AffinityQuestionnaireDestination.Question(
+                            questionId = "MUSIC_DISCOVERY_001",
+                            source = AffinityQuestionSource.Continue,
+                        ),
+                    ).copy(
+                        mutationError = legalError,
+                        mutationFeedbackQuestionId = "MUSIC_DISCOVERY_001",
+                        message = "Respuesta guardada",
                     ),
-                ).copy(
-                    mutationError = legalError,
-                    mutationFeedbackQuestionId = "MUSIC_DISCOVERY_001",
-                    message = "Respuesta guardada",
                 ),
-            ),
-        )
+            )
 
-        harness.handler.navigateBack()
+            harness.handler.navigateBack()
 
-        assertEquals(legalError, harness.ready().affinityQuestionnaire.mutationError)
-        assertNull(harness.ready().affinityQuestionnaire.mutationFeedbackQuestionId)
-        assertNull(harness.ready().affinityQuestionnaire.message)
-    }
+            assertEquals(legalError, harness.ready().affinityQuestionnaire.mutationError)
+            assertNull(harness.ready().affinityQuestionnaire.mutationFeedbackQuestionId)
+            assertNull(harness.ready().affinityQuestionnaire.message)
+        }
 
     @Test
-    fun `navigating after terminal auth mutation failure preserves routing error and clears scoped feedback`() = runTest {
-        val terminalError = ApiError.Auth(
-            reason = AuthFailureReason.NOT_SIGNED_IN,
-            message = "signed out",
-        )
-        val harness = harness(
-            initialState = ready(
-                questionnaire = loadedQuestionnaire(
-                    destination = AffinityQuestionnaireDestination.Question(
-                        questionId = "MUSIC_DISCOVERY_001",
-                        source = AffinityQuestionSource.Continue,
+    fun `navigating after terminal auth mutation failure preserves routing error and clears scoped feedback`() =
+        runTest {
+            val terminalError = ApiError.Auth(
+                reason = AuthFailureReason.NOT_SIGNED_IN,
+                message = "signed out",
+            )
+            val harness = harness(
+                initialState = ready(
+                    questionnaire = loadedQuestionnaire(
+                        destination = AffinityQuestionnaireDestination.Question(
+                            questionId = "MUSIC_DISCOVERY_001",
+                            source = AffinityQuestionSource.Continue,
+                        ),
+                    ).copy(
+                        mutationError = terminalError,
+                        mutationFeedbackQuestionId = "MUSIC_DISCOVERY_001",
+                        message = "Respuesta guardada",
                     ),
-                ).copy(
-                    mutationError = terminalError,
-                    mutationFeedbackQuestionId = "MUSIC_DISCOVERY_001",
-                    message = "Respuesta guardada",
                 ),
-            ),
-        )
+            )
 
-        harness.handler.navigateBack()
+            harness.handler.navigateBack()
 
-        assertEquals(terminalError, harness.ready().affinityQuestionnaire.mutationError)
-        assertNull(harness.ready().affinityQuestionnaire.mutationFeedbackQuestionId)
-        assertNull(harness.ready().affinityQuestionnaire.message)
-    }
+            assertEquals(terminalError, harness.ready().affinityQuestionnaire.mutationError)
+            assertNull(harness.ready().affinityQuestionnaire.mutationFeedbackQuestionId)
+            assertNull(harness.ready().affinityQuestionnaire.message)
+        }
 
     @Test
     fun `late success after navigating Back updates answers without parent feedback`() = runTest {
         val requestStarted = CompletableDeferred<Unit>()
         val releaseResponse = CompletableDeferred<Unit>()
+
         val api = FakeRealsApi().apply {
             beforePatchMyAffinityAnswersResponse = {
                 requestStarted.complete(Unit)
                 releaseResponse.await()
             }
             affinityAnswersResponse = Response.success(
-                TestDtos.affinityAnswers(listOf(TestDtos.affinityAnswer(answerCode = "LOW")))
+                TestDtos.affinityAnswers(
+                    listOf(
+                        TestDtos.affinityAnswer(
+                            questionId = "MUSIC_DISCOVERY_001",
+                            answerCode = "LOW",
+                        ),
+                    ),
+                ),
             )
         }
+
         val harness = harness(
             api = api,
             initialState = ready(
@@ -408,73 +536,122 @@ class AffinityQuestionnaireOperationHandlerTest {
             ),
         )
 
-        harness.handler.selectAnswer("MUSIC_DISCOVERY_001", "LOW")
+        harness.handler.selectAnswer(
+            questionId = "MUSIC_DISCOVERY_001",
+            answerCode = "LOW",
+        )
+
+        assertEquals(
+            "LOW",
+            harness.ready().affinityQuestionnaire.draftAnswerCode,
+        )
+        assertEquals(
+            0,
+            api.calls.count { it == "patchMyAffinityAnswers" },
+        )
+
+        harness.handler.nextQuestion()
         runCurrent()
         requestStarted.await()
+
+        assertEquals(
+            1,
+            api.calls.count { it == "patchMyAffinityAnswers" },
+        )
+        assertTrue(harness.ready().affinityQuestionnaire.mutation != null)
+
         harness.handler.navigateBack()
-        assertEquals(AffinityQuestionnaireDestination.Overview, harness.ready().affinityQuestionnaire.destination)
+
+        assertEquals(
+            AffinityQuestionnaireDestination.Overview,
+            harness.ready().affinityQuestionnaire.destination,
+        )
 
         releaseResponse.complete(Unit)
         advanceUntilIdle()
 
-        assertEquals(listOf("LOW"), harness.ready().affinityQuestionnaire.answers.map { it.answerCode })
-        assertNull(harness.ready().affinityQuestionnaire.mutation)
-        assertEquals(AffinityQuestionnaireDestination.Overview, harness.ready().affinityQuestionnaire.destination)
-        assertNull(harness.ready().affinityQuestionnaire.message)
-        assertNull(harness.ready().affinityQuestionnaire.mutationFeedbackQuestionId)
+        val state = harness.ready().affinityQuestionnaire
+
+        assertEquals(
+            listOf("LOW"),
+            state.answers.map { it.answerCode },
+        )
+        assertNull(state.mutation)
+        assertEquals(
+            AffinityQuestionnaireDestination.Overview,
+            state.destination,
+        )
+        assertNull(state.message)
+        assertNull(state.mutationFeedbackQuestionId)
     }
 
     @Test
-    fun `late ordinary failure after navigating Back preserves answers without parent feedback ownership`() = runTest {
-        val requestStarted = CompletableDeferred<Unit>()
-        val releaseResponse = CompletableDeferred<Unit>()
-        val api = FakeRealsApi().apply {
-            beforePatchMyAffinityAnswersResponse = {
-                requestStarted.complete(Unit)
-                releaseResponse.await()
+    fun `late ordinary failure after navigating Back preserves answers without parent feedback ownership`() =
+        runTest {
+            val requestStarted = CompletableDeferred<Unit>()
+            val releaseResponse = CompletableDeferred<Unit>()
+
+            val api = FakeRealsApi().apply {
+                beforePatchMyAffinityAnswersResponse = {
+                    requestStarted.complete(Unit)
+                    releaseResponse.await()
+                }
+                affinityAnswersResponse = backendErrorResponse(
+                    statusCode = 500,
+                    code = "SERVER_ERROR",
+                )
             }
-            affinityAnswersResponse = backendErrorResponse(500, "SERVER_ERROR")
-        }
-        val harness = harness(
-            api = api,
-            initialState = ready(
-                questionnaire = loadedQuestionnaire(
-                    destination = AffinityQuestionnaireDestination.Question(
-                        questionId = "MUSIC_DISCOVERY_001",
-                        source = AffinityQuestionSource.Continue,
+
+            val harness = harness(
+                api = api,
+                initialState = ready(
+                    questionnaire = loadedQuestionnaire(
+                        destination = AffinityQuestionnaireDestination.Question(
+                            questionId = "MUSIC_DISCOVERY_001",
+                            source = AffinityQuestionSource.Continue,
+                        ),
                     ),
                 ),
-            ),
-        )
-        val confirmedAnswers = harness.ready().affinityQuestionnaire.answers
+            )
 
-        harness.handler.selectAnswer("MUSIC_DISCOVERY_001", "LOW")
-        runCurrent()
-        requestStarted.await()
-        harness.handler.navigateBack()
-        releaseResponse.complete(Unit)
-        advanceUntilIdle()
+            val confirmedAnswers =
+                harness.ready().affinityQuestionnaire.answers
 
-        assertEquals(confirmedAnswers, harness.ready().affinityQuestionnaire.answers)
-        assertNull(harness.ready().affinityQuestionnaire.mutation)
-        assertEquals(AffinityQuestionnaireDestination.Overview, harness.ready().affinityQuestionnaire.destination)
-        assertTrue(harness.ready().affinityQuestionnaire.mutationError is ApiError.Backend)
-        assertNull(harness.ready().affinityQuestionnaire.mutationFeedbackQuestionId)
-    }
+            harness.handler.selectAnswer(
+                questionId = "MUSIC_DISCOVERY_001",
+                answerCode = "LOW",
+            )
+
+            harness.handler.nextQuestion()
+            runCurrent()
+            requestStarted.await()
+
+            harness.handler.navigateBack()
+
+            assertEquals(
+                AffinityQuestionnaireDestination.Overview,
+                harness.ready().affinityQuestionnaire.destination,
+            )
+
+            releaseResponse.complete(Unit)
+            advanceUntilIdle()
+
+            val state = harness.ready().affinityQuestionnaire
+
+            assertEquals(confirmedAnswers, state.answers)
+            assertNull(state.mutation)
+            assertEquals(
+                AffinityQuestionnaireDestination.Overview,
+                state.destination,
+            )
+            assertTrue(state.mutationError is ApiError.Backend)
+            assertNull(state.mutationFeedbackQuestionId)
+            assertNull(state.message)
+        }
 
     @Test
-    fun `starting new mutation clears old feedback`() = runTest {
-        val requestStarted = CompletableDeferred<Unit>()
-        val releaseResponse = CompletableDeferred<Unit>()
-        val api = FakeRealsApi().apply {
-            beforePatchMyAffinityAnswersResponse = {
-                requestStarted.complete(Unit)
-                releaseResponse.await()
-            }
-            affinityAnswersResponse = Response.success(
-                TestDtos.affinityAnswers(listOf(TestDtos.affinityAnswer(answerCode = "LOW")))
-            )
-        }
+    fun `selecting a local draft clears old feedback without starting mutation`() = runTest {
+        val api = FakeRealsApi()
         val harness = harness(
             api = api,
             initialState = ready(
@@ -491,87 +668,111 @@ class AffinityQuestionnaireOperationHandlerTest {
             ),
         )
 
-        harness.handler.selectAnswer("MUSIC_DISCOVERY_001", "LOW")
-        runCurrent()
-        requestStarted.await()
+        harness.handler.selectAnswer(
+            questionId = "MUSIC_DISCOVERY_001",
+            answerCode = "LOW",
+        )
 
-        assertNull(harness.ready().affinityQuestionnaire.message)
-        assertNull(harness.ready().affinityQuestionnaire.mutationError)
-        assertNull(harness.ready().affinityQuestionnaire.mutationFeedbackQuestionId)
+        val state = harness.ready().affinityQuestionnaire
 
-        releaseResponse.complete(Unit)
-        advanceUntilIdle()
+        assertEquals("MUSIC_DISCOVERY_001", state.draftQuestionId)
+        assertEquals("LOW", state.draftAnswerCode)
+        assertNull(state.message)
+        assertNull(state.mutationError)
+        assertNull(state.mutationFeedbackQuestionId)
+        assertNull(state.mutation)
+        assertEquals(
+            0,
+            api.calls.count { it == "patchMyAffinityAnswers" },
+        )
     }
 
     @Test
-    fun `refresh preserves valid destination and invalidates removed Continue question`() = runTest {
-        val valid = harness(
-            initialState = ready(
-                questionnaire = loadedQuestionnaire(
-                    destination = AffinityQuestionnaireDestination.Categories,
-                ),
-            ),
-        )
-        valid.handler.refresh()
-        advanceUntilIdle()
-        assertEquals(AffinityQuestionnaireDestination.Categories, valid.ready().affinityQuestionnaire.destination)
-
-        val invalidApi = FakeRealsApi().apply {
-            affinityQuestionCatalogResponse = Response.success(
-                TestDtos.affinityQuestionCatalog(
-                    questions = listOf(TestDtos.affinityQuestion("PLANS_WEEKEND_001", categoryId = "PLANS")),
-                )
-            )
-        }
-        val invalid = harness(
-            api = invalidApi,
-            initialState = ready(
-                questionnaire = loadedQuestionnaire(
-                    destination = AffinityQuestionnaireDestination.Question(
-                        questionId = "MUSIC_DISCOVERY_001",
-                        source = AffinityQuestionSource.Continue,
+    fun `refresh preserves valid destination and invalidates removed Continue question`() =
+        runTest {
+            val valid = harness(
+                initialState = ready(
+                    questionnaire = loadedQuestionnaire(
+                        destination = AffinityQuestionnaireDestination.Categories,
                     ),
                 ),
-            ),
-        )
+            )
+            valid.handler.refresh()
+            advanceUntilIdle()
+            assertEquals(
+                AffinityQuestionnaireDestination.Categories,
+                valid.ready().affinityQuestionnaire.destination
+            )
 
-        invalid.handler.refresh()
-        advanceUntilIdle()
+            val invalidApi = FakeRealsApi().apply {
+                affinityQuestionCatalogResponse = Response.success(
+                    TestDtos.affinityQuestionCatalog(
+                        questions = listOf(
+                            TestDtos.affinityQuestion(
+                                "PLANS_WEEKEND_001",
+                                categoryId = "PLANS"
+                            )
+                        ),
+                    )
+                )
+            }
+            val invalid = harness(
+                api = invalidApi,
+                initialState = ready(
+                    questionnaire = loadedQuestionnaire(
+                        destination = AffinityQuestionnaireDestination.Question(
+                            questionId = "MUSIC_DISCOVERY_001",
+                            source = AffinityQuestionSource.Continue,
+                        ),
+                    ),
+                ),
+            )
 
-        assertEquals(AffinityQuestionnaireDestination.Overview, invalid.ready().affinityQuestionnaire.destination)
-        assertEquals(listOf("PLANS_WEEKEND_001"), invalid.ready().affinityQuestionnaire.catalog?.questions?.map { it.id })
-    }
+            invalid.handler.refresh()
+            advanceUntilIdle()
+
+            assertEquals(
+                AffinityQuestionnaireDestination.Overview,
+                invalid.ready().affinityQuestionnaire.destination
+            )
+            assertEquals(
+                listOf("PLANS_WEEKEND_001"),
+                invalid.ready().affinityQuestionnaire.catalog?.questions?.map { it.id })
+        }
 
     @Test
-    fun `initial catalog and answers install atomically and failures do not install partial data`() = runTest {
-        val success = harness()
-        success.handler.open()
-        advanceUntilIdle()
+    fun `initial catalog and answers install atomically and failures do not install partial data`() =
+        runTest {
+            val success = harness()
+            success.handler.open()
+            advanceUntilIdle()
 
-        assertEquals("catalog-1", success.ready().affinityQuestionnaire.catalog?.catalogVersion)
-        assertEquals(listOf("MUSIC_DISCOVERY_001"), success.ready().affinityQuestionnaire.answers.map { it.questionId })
-        assertFalse(success.ready().affinityQuestionnaire.loading)
+            assertEquals("catalog-1", success.ready().affinityQuestionnaire.catalog?.catalogVersion)
+            assertEquals(
+                listOf("MUSIC_DISCOVERY_001"),
+                success.ready().affinityQuestionnaire.answers.map { it.questionId })
+            assertFalse(success.ready().affinityQuestionnaire.loading)
 
-        val catalogFailure = harness(
-            api = FakeRealsApi().apply {
-                affinityQuestionCatalogResponse = backendErrorResponse(500, "SERVER_ERROR")
-            },
-        )
-        catalogFailure.handler.open()
-        advanceUntilIdle()
-        assertNull(catalogFailure.ready().affinityQuestionnaire.catalog)
-        assertTrue(catalogFailure.ready().affinityQuestionnaire.error is ApiError.Backend)
+            val catalogFailure = harness(
+                api = FakeRealsApi().apply {
+                    affinityQuestionCatalogResponse = backendErrorResponse(500, "SERVER_ERROR")
+                },
+            )
+            catalogFailure.handler.open()
+            advanceUntilIdle()
+            assertNull(catalogFailure.ready().affinityQuestionnaire.catalog)
+            assertTrue(catalogFailure.ready().affinityQuestionnaire.error is ApiError.Backend)
 
-        val answersFailure = harness(
-            api = FakeRealsApi().apply {
-                affinityAnswersResponse = backendErrorResponse(500, "SERVER_ERROR")
-            },
-        )
-        answersFailure.handler.open()
-        advanceUntilIdle()
-        assertNull(answersFailure.ready().affinityQuestionnaire.catalog)
-        assertTrue(answersFailure.ready().affinityQuestionnaire.error is ApiError.Backend)
-    }
+            val answersFailure = harness(
+                api = FakeRealsApi().apply {
+                    affinityAnswersResponse = backendErrorResponse(500, "SERVER_ERROR")
+                },
+            )
+            answersFailure.handler.open()
+            advanceUntilIdle()
+            assertNull(answersFailure.ready().affinityQuestionnaire.catalog)
+            assertTrue(answersFailure.ready().affinityQuestionnaire.error is ApiError.Backend)
+        }
 
     @Test
     fun `refresh retains content and refresh failure preserves snapshot`() = runTest {
@@ -613,72 +814,66 @@ class AffinityQuestionnaireOperationHandlerTest {
     }
 
     @Test
-    fun `mutations are blocked while refresh is in flight and refresh completes normally`() = runTest {
-        val requestStarted = CompletableDeferred<Unit>()
-        val releaseResponse = CompletableDeferred<Unit>()
-        val api = FakeRealsApi().apply {
-            beforeGetAffinityQuestionCatalogResponse = {
-                requestStarted.complete(Unit)
-                releaseResponse.await()
+    fun `mutations are blocked while refresh is in flight and refresh completes normally`() =
+        runTest {
+            val requestStarted = CompletableDeferred<Unit>()
+            val releaseResponse = CompletableDeferred<Unit>()
+            val api = FakeRealsApi().apply {
+                beforeGetAffinityQuestionCatalogResponse = {
+                    requestStarted.complete(Unit)
+                    releaseResponse.await()
+                }
+                affinityAnswersResponse = Response.success(
+                    TestDtos.affinityAnswers(listOf(TestDtos.affinityAnswer(answerCode = "LOW")))
+                )
             }
-            affinityAnswersResponse = Response.success(
-                TestDtos.affinityAnswers(listOf(TestDtos.affinityAnswer(answerCode = "LOW")))
-            )
+            val harness = loadedHarness(api)
+
+            harness.handler.refresh()
+            runCurrent()
+            requestStarted.await()
+
+            harness.handler.selectAnswer("MUSIC_DISCOVERY_001", "LOW")
+            harness.handler.deleteAnswer("MUSIC_DISCOVERY_001")
+
+            assertEquals(0, api.calls.count { it == "patchMyAffinityAnswers" })
+            assertEquals(0, api.calls.count { it == "deleteMyAffinityAnswer" })
+
+            releaseResponse.complete(Unit)
+            advanceUntilIdle()
+
+            assertFalse(harness.ready().affinityQuestionnaire.refreshing)
+            assertEquals(
+                listOf("LOW"),
+                harness.ready().affinityQuestionnaire.answers.map { it.answerCode })
         }
-        val harness = loadedHarness(api)
-
-        harness.handler.refresh()
-        runCurrent()
-        requestStarted.await()
-
-        harness.handler.selectAnswer("MUSIC_DISCOVERY_001", "LOW")
-        harness.handler.deleteAnswer("MUSIC_DISCOVERY_001")
-
-        assertEquals(0, api.calls.count { it == "patchMyAffinityAnswers" })
-        assertEquals(0, api.calls.count { it == "deleteMyAffinityAnswer" })
-
-        releaseResponse.complete(Unit)
-        advanceUntilIdle()
-
-        assertFalse(harness.ready().affinityQuestionnaire.refreshing)
-        assertEquals(listOf("LOW"), harness.ready().affinityQuestionnaire.answers.map { it.answerCode })
-    }
 
     @Test
-    fun `selection enters one mutation ignores concurrent second and success replaces complete answers`() = runTest {
-        val requestStarted = CompletableDeferred<Unit>()
-        val releaseResponse = CompletableDeferred<Unit>()
+    fun `successful DELETE replaces answers and clears previous saved feedback`() = runTest {
         val api = FakeRealsApi().apply {
-            beforePatchMyAffinityAnswersResponse = {
-                requestStarted.complete(Unit)
-                releaseResponse.await()
-            }
-            affinityAnswersResponse = Response.success(
-                TestDtos.affinityAnswers(
-                    listOf(
-                        TestDtos.affinityAnswer("MUSIC_DISCOVERY_001", answerCode = "LOW"),
-                        TestDtos.affinityAnswer("PLANS_WEEKEND_001", answerCode = "QUIET"),
-                    )
-                )
-            )
+            affinityAnswersResponse =
+                Response.success(TestDtos.affinityAnswers(emptyList()))
         }
-        val harness = loadedHarness(api)
-
-        harness.handler.selectAnswer("MUSIC_DISCOVERY_001", "LOW")
-        runCurrent()
-        requestStarted.await()
-        harness.handler.selectAnswer("PLANS_WEEKEND_001", "QUIET")
-
-        assertEquals("MUSIC_DISCOVERY_001", harness.ready().affinityQuestionnaire.mutation?.questionId)
-        assertEquals(1, api.calls.count { it == "patchMyAffinityAnswers" })
-
-        releaseResponse.complete(Unit)
-        advanceUntilIdle()
-        assertNull(harness.ready().affinityQuestionnaire.mutation)
-        assertEquals(
-            listOf("MUSIC_DISCOVERY_001", "PLANS_WEEKEND_001"),
-            harness.ready().affinityQuestionnaire.answers.map { it.questionId },
+        val harness = harness(
+            api = api,
+            initialState = ready(
+                questionnaire = loadedQuestionnaire().copy(
+                    message = "Respuesta guardada",
+                    mutationFeedbackQuestionId = "MUSIC_DISCOVERY_001",
+                ),
+            ),
         )
+
+        harness.handler.deleteAnswer("MUSIC_DISCOVERY_001")
+        advanceUntilIdle()
+
+        val state = harness.ready().affinityQuestionnaire
+
+        assertEquals(listOf("deleteMyAffinityAnswer"), api.calls)
+        assertEquals(emptyList<String>(), state.answers.map { it.questionId })
+        assertNull(state.mutation)
+        assertNull(state.message)
+        assertNull(state.mutationFeedbackQuestionId)
     }
 
     @Test
@@ -697,29 +892,110 @@ class AffinityQuestionnaireOperationHandlerTest {
     @Test
     fun `failed PATCH and DELETE clear mutation and preserve confirmed answers`() = runTest {
         val patchApi = FakeRealsApi().apply {
-            affinityAnswersResponse = backendErrorResponse(500, "SERVER_ERROR")
+            affinityAnswersResponse = backendErrorResponse(
+                statusCode = 500,
+                code = "SERVER_ERROR",
+            )
         }
-        val patchHarness = loadedHarness(patchApi)
-        val originalAnswers = patchHarness.ready().affinityQuestionnaire.answers
 
-        patchHarness.handler.selectAnswer("MUSIC_DISCOVERY_001", "LOW")
+        val patchHarness = harness(
+            api = patchApi,
+            initialState = ready(
+                questionnaire = loadedQuestionnaire(
+                    destination = AffinityQuestionnaireDestination.Question(
+                        questionId = "MUSIC_DISCOVERY_001",
+                        source = AffinityQuestionSource.Continue,
+                    ),
+                ).copy(
+                    draftQuestionId = "MUSIC_DISCOVERY_001",
+                    draftAnswerCode = "VERY_HIGH",
+                ),
+            ),
+        )
+
+        val originalAnswers =
+            patchHarness.ready().affinityQuestionnaire.answers
+
+        patchHarness.handler.selectAnswer(
+            questionId = "MUSIC_DISCOVERY_001",
+            answerCode = "LOW",
+        )
+
+        assertEquals(
+            "LOW",
+            patchHarness.ready().affinityQuestionnaire.draftAnswerCode,
+        )
+        assertEquals(
+            0,
+            patchApi.calls.count { it == "patchMyAffinityAnswers" },
+        )
+
+        patchHarness.handler.nextQuestion()
         advanceUntilIdle()
 
-        assertEquals(originalAnswers, patchHarness.ready().affinityQuestionnaire.answers)
-        assertNull(patchHarness.ready().affinityQuestionnaire.mutation)
-        assertTrue(patchHarness.ready().affinityQuestionnaire.mutationError is ApiError.Backend)
+        val patchState =
+            patchHarness.ready().affinityQuestionnaire
+
+        assertEquals(
+            1,
+            patchApi.calls.count { it == "patchMyAffinityAnswers" },
+        )
+        assertEquals(originalAnswers, patchState.answers)
+        assertNull(patchState.mutation)
+        assertTrue(patchState.mutationError is ApiError.Backend)
+
+        // The failed PATCH preserves the local draft so the user can retry.
+        assertEquals(
+            "MUSIC_DISCOVERY_001",
+            patchState.draftQuestionId,
+        )
+        assertEquals("LOW", patchState.draftAnswerCode)
 
         val deleteApi = FakeRealsApi().apply {
-            affinityAnswersResponse = backendErrorResponse(500, "SERVER_ERROR")
+            affinityAnswersResponse = backendErrorResponse(
+                statusCode = 500,
+                code = "SERVER_ERROR",
+            )
         }
-        val deleteHarness = loadedHarness(deleteApi)
+
+        val deleteHarness = harness(
+            api = deleteApi,
+            initialState = ready(
+                questionnaire = loadedQuestionnaire(
+                    destination = AffinityQuestionnaireDestination.Question(
+                        questionId = "MUSIC_DISCOVERY_001",
+                        source = AffinityQuestionSource.Review,
+                    ),
+                ).copy(
+                    draftQuestionId = "MUSIC_DISCOVERY_001",
+                    draftAnswerCode = "VERY_HIGH",
+                ),
+            ),
+        )
+
+        val deleteOriginalAnswers =
+            deleteHarness.ready().affinityQuestionnaire.answers
 
         deleteHarness.handler.deleteAnswer("MUSIC_DISCOVERY_001")
         advanceUntilIdle()
 
-        assertEquals(originalAnswers, deleteHarness.ready().affinityQuestionnaire.answers)
-        assertNull(deleteHarness.ready().affinityQuestionnaire.mutation)
-        assertTrue(deleteHarness.ready().affinityQuestionnaire.mutationError is ApiError.Backend)
+        val deleteState =
+            deleteHarness.ready().affinityQuestionnaire
+
+        assertEquals(
+            1,
+            deleteApi.calls.count { it == "deleteMyAffinityAnswer" },
+        )
+        assertEquals(deleteOriginalAnswers, deleteState.answers)
+        assertNull(deleteState.mutation)
+        assertTrue(deleteState.mutationError is ApiError.Backend)
+
+        // Failed DELETE must retain the confirmed visible selection.
+        assertEquals(
+            "MUSIC_DISCOVERY_001",
+            deleteState.draftQuestionId,
+        )
+        assertEquals("VERY_HIGH", deleteState.draftAnswerCode)
     }
 
     @Test
@@ -733,7 +1009,9 @@ class AffinityQuestionnaireOperationHandlerTest {
         advanceUntilIdle()
 
         assertEquals(listOf("deleteMyAffinityAnswer"), api.calls)
-        assertEquals(emptyList<String>(), harness.ready().affinityQuestionnaire.answers.map { it.questionId })
+        assertEquals(
+            emptyList<String>(),
+            harness.ready().affinityQuestionnaire.answers.map { it.questionId })
         assertNull(harness.ready().affinityQuestionnaire.mutation)
     }
 
@@ -776,36 +1054,42 @@ class AffinityQuestionnaireOperationHandlerTest {
         releaseMutation.complete(Unit)
         advanceUntilIdle()
         assertFalse(mutationHarness.ready().affinityQuestionnaire.open)
-        assertEquals(emptyList<String>(), mutationHarness.ready().affinityQuestionnaire.answers.map { it.questionId })
+        assertEquals(
+            emptyList<String>(),
+            mutationHarness.ready().affinityQuestionnaire.answers.map { it.questionId })
     }
 
     @Test
-    fun `response for different profile is ignored and unrelated Ready fields are preserved`() = runTest {
-        val started = CompletableDeferred<Unit>()
-        val release = CompletableDeferred<Unit>()
-        val api = FakeRealsApi().apply {
-            beforeGetAffinityQuestionCatalogResponse = {
-                started.complete(Unit)
-                release.await()
+    fun `response for different profile is ignored and unrelated Ready fields are preserved`() =
+        runTest {
+            val started = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            val api = FakeRealsApi().apply {
+                beforeGetAffinityQuestionCatalogResponse = {
+                    started.complete(Unit)
+                    release.await()
+                }
             }
+            val harness = harness(api, ready(editingActiveProfile = true))
+            harness.handler.open()
+            runCurrent()
+            started.await()
+            harness.state.value = ready(
+                profileId = "profile-2",
+                editingActiveProfile = true,
+                questionnaire = AffinityQuestionnaireUiState(open = true, profileId = "profile-2"),
+            )
+
+            release.complete(Unit)
+            advanceUntilIdle()
+
+            assertTrue(harness.ready().editingActiveProfile)
+            assertEquals(
+                "profile-2",
+                (harness.ready().session.profileSnapshot as ProfileSnapshot.Found).profile.id
+            )
+            assertNull(harness.ready().affinityQuestionnaire.catalog)
         }
-        val harness = harness(api, ready(editingActiveProfile = true))
-        harness.handler.open()
-        runCurrent()
-        started.await()
-        harness.state.value = ready(
-            profileId = "profile-2",
-            editingActiveProfile = true,
-            questionnaire = AffinityQuestionnaireUiState(open = true, profileId = "profile-2"),
-        )
-
-        release.complete(Unit)
-        advanceUntilIdle()
-
-        assertTrue(harness.ready().editingActiveProfile)
-        assertEquals("profile-2", (harness.ready().session.profileSnapshot as ProfileSnapshot.Found).profile.id)
-        assertNull(harness.ready().affinityQuestionnaire.catalog)
-    }
 
     @Test
     fun `active profile remains active after answer change`() = runTest {
@@ -830,6 +1114,7 @@ class AffinityQuestionnaireOperationHandlerTest {
         val loadStarted = CompletableDeferred<Unit>()
         val releaseLoad = CompletableDeferred<Unit>()
         var patchReleased = false
+
         val api = FakeRealsApi().apply {
             beforePatchMyAffinityAnswersResponse = {
                 patchStarted.complete(Unit)
@@ -841,34 +1126,84 @@ class AffinityQuestionnaireOperationHandlerTest {
                 releaseLoad.await()
             }
             affinityAnswersResponse = Response.success(
-                TestDtos.affinityAnswers(listOf(TestDtos.affinityAnswer(answerCode = "LOW")))
+                TestDtos.affinityAnswers(
+                    listOf(
+                        TestDtos.affinityAnswer(
+                            questionId = "MUSIC_DISCOVERY_001",
+                            answerCode = "LOW",
+                        ),
+                    ),
+                ),
             )
         }
-        val harness = loadedHarness(api)
 
-        harness.handler.selectAnswer("MUSIC_DISCOVERY_001", "LOW")
+        val harness = harness(
+            api = api,
+            initialState = ready(
+                questionnaire = loadedQuestionnaire(
+                    destination = AffinityQuestionnaireDestination.Question(
+                        questionId = "MUSIC_DISCOVERY_001",
+                        source = AffinityQuestionSource.Continue,
+                    ),
+                ),
+            ),
+        )
+
+        harness.handler.selectAnswer(
+            questionId = "MUSIC_DISCOVERY_001",
+            answerCode = "LOW",
+        )
+
+        assertEquals(
+            0,
+            api.calls.count { it == "patchMyAffinityAnswers" },
+        )
+
+        harness.handler.nextQuestion()
         runCurrent()
         patchStarted.await()
+
+        assertEquals(
+            1,
+            api.calls.count { it == "patchMyAffinityAnswers" },
+        )
+        assertTrue(
+            harness.ready().affinityQuestionnaire.mutation != null,
+        )
+
         harness.handler.close()
         harness.handler.open()
         runCurrent()
 
         assertTrue(harness.ready().affinityQuestionnaire.open)
         assertTrue(harness.ready().affinityQuestionnaire.refreshing)
-        assertEquals(0, api.calls.count { it == "getAffinityQuestionCatalog" })
+        assertEquals(
+            0,
+            api.calls.count { it == "getAffinityQuestionCatalog" },
+        )
         assertFalse(patchReleased)
 
         releasePatch.complete(Unit)
         runCurrent()
         loadStarted.await()
-        assertEquals(listOf("LOW"), harness.ready().affinityQuestionnaire.answers.map { it.answerCode })
+
+        assertEquals(
+            listOf("LOW"),
+            harness.ready().affinityQuestionnaire.answers.map { it.answerCode },
+        )
 
         releaseLoad.complete(Unit)
         advanceUntilIdle()
 
-        assertTrue(harness.ready().affinityQuestionnaire.open)
-        assertFalse(harness.ready().affinityQuestionnaire.refreshing)
-        assertEquals(listOf("LOW"), harness.ready().affinityQuestionnaire.answers.map { it.answerCode })
+        val state = harness.ready().affinityQuestionnaire
+
+        assertTrue(state.open)
+        assertFalse(state.refreshing)
+        assertNull(state.mutation)
+        assertEquals(
+            listOf("LOW"),
+            state.answers.map { it.answerCode },
+        )
     }
 
     @Test
@@ -907,56 +1242,187 @@ class AffinityQuestionnaireOperationHandlerTest {
         releaseDelete.complete(Unit)
         runCurrent()
         loadStarted.await()
-        assertEquals(emptyList<String>(), harness.ready().affinityQuestionnaire.answers.map { it.answerCode })
+        assertEquals(
+            emptyList<String>(),
+            harness.ready().affinityQuestionnaire.answers.map { it.answerCode })
 
         releaseLoad.complete(Unit)
         advanceUntilIdle()
 
         assertTrue(harness.ready().affinityQuestionnaire.open)
         assertFalse(harness.ready().affinityQuestionnaire.refreshing)
-        assertEquals(emptyList<String>(), harness.ready().affinityQuestionnaire.answers.map { it.answerCode })
+        assertEquals(
+            emptyList<String>(),
+            harness.ready().affinityQuestionnaire.answers.map { it.answerCode })
     }
 
     @Test
     fun `old identical mutation response cannot clear newer mutation generation`() = runTest {
         val patchStarted = CompletableDeferred<Unit>()
         val releasePatch = CompletableDeferred<Unit>()
+
         val api = FakeRealsApi().apply {
             beforePatchMyAffinityAnswersResponse = {
                 patchStarted.complete(Unit)
                 releasePatch.await()
             }
             affinityAnswersResponse = Response.success(
-                TestDtos.affinityAnswers(listOf(TestDtos.affinityAnswer(answerCode = "LOW")))
+                TestDtos.affinityAnswers(
+                    listOf(
+                        TestDtos.affinityAnswer(
+                            questionId = "MUSIC_DISCOVERY_001",
+                            answerCode = "LOW",
+                        ),
+                    ),
+                ),
             )
         }
-        val harness = loadedHarness(api)
 
-        harness.handler.selectAnswer("MUSIC_DISCOVERY_001", "LOW")
-        runCurrent()
-        patchStarted.await()
-        harness.state.value = harness.ready().copy(
-            affinityQuestionnaire = harness.ready().affinityQuestionnaire.copy(
-                mutation = AffinityAnswerMutationUiState(
-                    questionId = "MUSIC_DISCOVERY_001",
-                    pendingAnswerCode = "LOW",
-                    requestId = 2L,
+        val harness = harness(
+            api = api,
+            initialState = ready(
+                questionnaire = loadedQuestionnaire(
+                    destination = AffinityQuestionnaireDestination.Question(
+                        questionId = "MUSIC_DISCOVERY_001",
+                        source = AffinityQuestionSource.Continue,
+                    ),
+                ).copy(
+                    draftQuestionId = "MUSIC_DISCOVERY_001",
+                    draftAnswerCode = "VERY_HIGH",
                 ),
             ),
+        )
+
+        harness.handler.selectAnswer(
+            questionId = "MUSIC_DISCOVERY_001",
+            answerCode = "LOW",
+        )
+
+        harness.handler.nextQuestion()
+        runCurrent()
+        patchStarted.await()
+
+        val firstMutation =
+            harness.ready().affinityQuestionnaire.mutation
+
+        assertEquals(1L, firstMutation?.requestId)
+
+        val newerMutation = AffinityAnswerMutationUiState(
+            questionId = "MUSIC_DISCOVERY_001",
+            pendingAnswerCode = "LOW",
+            requestId = 2L,
+        )
+
+        /*
+         * Simulate a newer generation owning the same logical answer before
+         * generation 1 completes.
+         */
+        harness.state.value = harness.ready().copy(
+            affinityQuestionnaire =
+                harness.ready().affinityQuestionnaire.copy(
+                    mutation = newerMutation,
+                ),
         )
 
         releasePatch.complete(Unit)
         advanceUntilIdle()
 
+        val state = harness.ready().affinityQuestionnaire
+
+        assertEquals(newerMutation, state.mutation)
+
+        /*
+         * Generation 1 must not install its response because generation 2
+         * owns the state, even though questionId and answerCode are identical.
+         */
         assertEquals(
-            AffinityAnswerMutationUiState(
-                questionId = "MUSIC_DISCOVERY_001",
-                pendingAnswerCode = "LOW",
-                requestId = 2L,
-            ),
-            harness.ready().affinityQuestionnaire.mutation,
+            listOf("VERY_HIGH"),
+            state.answers.map { it.answerCode },
         )
-        assertEquals(listOf("VERY_HIGH"), harness.ready().affinityQuestionnaire.answers.map { it.answerCode })
+    }
+
+    @Test
+    fun `user can revert local draft to confirmed answer before saving`() = runTest {
+        val harness = loadedHarness()
+
+        harness.handler.selectAnswer("MUSIC_DISCOVERY_001", "LOW")
+
+        assertEquals(
+            "LOW",
+            harness.ready().affinityQuestionnaire.draftAnswerCode,
+        )
+
+        harness.handler.selectAnswer("MUSIC_DISCOVERY_001", "VERY_HIGH")
+
+        assertEquals(
+            "VERY_HIGH",
+            harness.ready().affinityQuestionnaire.draftAnswerCode,
+        )
+        assertEquals(
+            0,
+            harness.api.calls.count { it == "patchMyAffinityAnswers" },
+        )
+    }
+
+    @Test
+    fun `selection remains local until Next persists it`() = runTest {
+        val api = FakeRealsApi().apply {
+            affinityAnswersResponse = Response.success(
+                TestDtos.affinityAnswers(
+                    listOf(
+                        TestDtos.affinityAnswer(
+                            questionId = "MUSIC_DISCOVERY_001",
+                            answerCode = "LOW",
+                        ),
+                    ),
+                ),
+            )
+        }
+
+        val harness = harness(
+            api = api,
+            initialState = ready(
+                questionnaire = loadedQuestionnaire(
+                    destination = AffinityQuestionnaireDestination.Question(
+                        questionId = "MUSIC_DISCOVERY_001",
+                        source = AffinityQuestionSource.Continue,
+                    ),
+                ),
+            ),
+        )
+
+        harness.handler.selectAnswer(
+            questionId = "MUSIC_DISCOVERY_001",
+            answerCode = "LOW",
+        )
+
+        val localState = harness.ready().affinityQuestionnaire
+
+        assertEquals(
+            "MUSIC_DISCOVERY_001",
+            localState.draftQuestionId,
+        )
+        assertEquals("LOW", localState.draftAnswerCode)
+        assertNull(localState.mutation)
+        assertEquals(
+            0,
+            api.calls.count { it == "patchMyAffinityAnswers" },
+        )
+
+        harness.handler.nextQuestion()
+        advanceUntilIdle()
+
+        val persistedState = harness.ready().affinityQuestionnaire
+
+        assertEquals(
+            1,
+            api.calls.count { it == "patchMyAffinityAnswers" },
+        )
+        assertEquals(
+            listOf("LOW"),
+            persistedState.answers.map { it.answerCode },
+        )
+        assertNull(persistedState.mutation)
     }
 
     private fun TestScope.loadedHarness(

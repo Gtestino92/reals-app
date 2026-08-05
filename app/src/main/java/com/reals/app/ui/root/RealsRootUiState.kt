@@ -16,11 +16,13 @@ import com.reals.app.domain.model.LegalDocumentType
 import com.reals.app.domain.model.Match
 import com.reals.app.domain.model.ProfileActivationResult
 import com.reals.app.domain.model.ProfilePhoto
+import com.reals.app.domain.model.ProfileQuestionAnswer
+import com.reals.app.domain.model.ProfileQuestionCatalog
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProvisionedSession
+import com.reals.app.domain.model.SchedulingAvailability
 import com.reals.app.domain.model.SchedulingNegotiation
 import com.reals.app.domain.model.SchedulingProposal
-import com.reals.app.domain.model.SchedulingAvailability
 import com.reals.app.domain.model.SecondChatStatus
 import com.reals.app.domain.model.VisualProfile
 import com.reals.app.ui.matchmaking.HomeScreenModel
@@ -70,6 +72,7 @@ sealed interface RealsRootUiState {
         val account: AccountUiState = AccountUiState(),
         val editingActiveProfile: Boolean = false,
         val affinityQuestionnaire: AffinityQuestionnaireUiState = AffinityQuestionnaireUiState(),
+        val profileQuestions: ProfileQuestionUiState = ProfileQuestionUiState(),
     ) : RealsRootUiState {
         val creatingProfile: Boolean get() = profileOp.creatingProfile
         val profileCreateError: ApiError? get() = profileOp.profileCreateError
@@ -91,10 +94,12 @@ sealed interface RealsRootUiState {
         val emailVerificationError: String? get() = profileOp.emailVerificationError
         val emailVerificationRequired: Boolean get() = profileOp.emailVerificationRequired
         val emailVerificationLocallyVerified: Boolean get() = profileOp.emailVerificationLocallyVerified
-        val resendEmailVerificationAvailableAtMillis: Long? get() =
-            profileOp.resendEmailVerificationAvailableAtMillis
-        val checkEmailVerificationAvailableAtMillis: Long? get() =
-            profileOp.checkEmailVerificationAvailableAtMillis
+        val resendEmailVerificationAvailableAtMillis: Long?
+            get() =
+                profileOp.resendEmailVerificationAvailableAtMillis
+        val checkEmailVerificationAvailableAtMillis: Long?
+            get() =
+                profileOp.checkEmailVerificationAvailableAtMillis
         val loadingPhotos: Boolean get() = photos.loadingPhotos
         val profilePhotos: List<ProfilePhoto> get() = photos.profilePhotos
         val profilePhotosError: ApiError? get() = photos.profilePhotosError
@@ -333,6 +338,10 @@ data class AffinityQuestionnaireUiState(
     val mutationError: ApiError? = null,
     val mutationFeedbackQuestionId: String? = null,
     val message: String? = null,
+
+    val draftQuestionId: String? = null,
+
+    val draftAnswerCode: String? = null,
 )
 
 sealed interface AffinityQuestionnaireDestination {
@@ -361,6 +370,46 @@ data class AffinityAnswerMutationUiState(
     val questionId: String,
     val pendingAnswerCode: String?,
     val requestId: Long = 0L,
+)
+
+data class ProfileQuestionUiState(
+    val open: Boolean = false,
+    val profileId: String? = null,
+    val destination: ProfileQuestionDestination = ProfileQuestionDestination.Overview,
+    val catalog: ProfileQuestionCatalog? = null,
+    val answers: List<ProfileQuestionAnswer> = emptyList(),
+    val loading: Boolean = false,
+    val refreshing: Boolean = false,
+    val mutation: ProfileQuestionMutationUiState? = null,
+    val error: ApiError? = null,
+    val mutationError: ApiError? = null,
+    val feedback: ProfileQuestionFeedback? = null,
+    val selectionDraftQuestionIds: List<String> = emptyList(),
+)
+
+sealed interface ProfileQuestionDestination {
+    data object Overview : ProfileQuestionDestination
+    data object Questions : ProfileQuestionDestination
+    data object Selection : ProfileQuestionDestination
+    data class Editor(val questionId: String) : ProfileQuestionDestination
+}
+
+sealed interface ProfileQuestionMutationKind {
+    data object Upsert : ProfileQuestionMutationKind
+    data object Delete : ProfileQuestionMutationKind
+    data object Selection : ProfileQuestionMutationKind
+}
+
+data class ProfileQuestionMutationUiState(
+    val kind: ProfileQuestionMutationKind,
+    val requestId: Long,
+    val questionId: String? = null,
+)
+
+data class ProfileQuestionFeedback(
+    val destination: ProfileQuestionDestination,
+    val questionId: String?,
+    val message: String,
 )
 
 sealed interface LegalResumeContext {
@@ -526,6 +575,28 @@ fun RealsRootUiState.clearLegalActionRequiredForResume(): RealsRootUiState = whe
                 affinityQuestionnaire.mutationFeedbackQuestionId
             },
         ),
+        profileQuestions = profileQuestions.copy(
+            loading = if (profileQuestions.error.isLegalActionRequired()) {
+                false
+            } else {
+                profileQuestions.loading
+            },
+            refreshing = if (profileQuestions.error.isLegalActionRequired()) {
+                false
+            } else {
+                profileQuestions.refreshing
+            },
+            mutation = if (profileQuestions.mutationError.isLegalActionRequired()) {
+                null
+            } else {
+                profileQuestions.mutation
+            },
+            error = profileQuestions.error.takeUnless { it.isLegalActionRequired() },
+            mutationError = profileQuestions.mutationError.takeUnless { it.isLegalActionRequired() },
+            feedback = profileQuestions.feedback.takeUnless {
+                profileQuestions.mutationError.isLegalActionRequired()
+            },
+        ),
     )
 
     is RealsRootUiState.FirstChat -> copy(error = error.takeUnless { it.isLegalActionRequired() })
@@ -540,14 +611,17 @@ private fun ApiError?.isLegalActionRequired(): Boolean = this?.isLegalActionRequ
 fun RealsRootUiState.canHandleSystemBack(): Boolean = when (this) {
     is RealsRootUiState.Ready ->
         affinityQuestionnaire.open ||
-            editingActiveProfile &&
-            session.profileSnapshot is ProfileSnapshot.Found &&
-            !photos.reorderingPhotos
+                profileQuestions.open ||
+                editingActiveProfile &&
+                session.profileSnapshot is ProfileSnapshot.Found &&
+                !photos.reorderingPhotos
 
     is RealsRootUiState.SecondChat -> !isJoinedActiveSecondChat() &&
-        !sending && !audioUpload.uploading && !actionLoading && !manualBlock.loading
+            !sending && !audioUpload.uploading && !actionLoading && !manualBlock.loading
+
     is RealsRootUiState.VisualApproval ->
         !deciding && !writingMessage && !readingPartnerMessage && !manualBlock.loading
+
     is RealsRootUiState.Scheduling -> !submitting && !manualBlock.loading
     is RealsRootUiState.PartnerProfile -> !manualBlock.loading
     is RealsRootUiState.PendingEngagement -> true
@@ -566,13 +640,13 @@ fun RealsRootUiState.canHandleSystemBack(): Boolean = when (this) {
 
 fun RealsRootUiState.FirstChat.canRecoverFirstChatToHome(): Boolean =
     !loading &&
-        chat == null &&
-        !refreshing &&
-        !sending &&
-        !audioUpload.uploading &&
-        !actionLoading &&
-        !guidanceActionLoading &&
-        !manualBlock.loading
+            chat == null &&
+            !refreshing &&
+            !sending &&
+            !audioUpload.uploading &&
+            !actionLoading &&
+            !guidanceActionLoading &&
+            !manualBlock.loading
 
 fun RealsRootUiState.SecondChat.isJoinedActiveSecondChat(): Boolean =
     lifecycle.timingPresentation().genuinelyActive

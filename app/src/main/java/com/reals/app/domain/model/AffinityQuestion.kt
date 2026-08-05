@@ -44,3 +44,4 @@ enum class AffinityAnswerType {
     OrdinalScale,
     Unknown,
 }
+

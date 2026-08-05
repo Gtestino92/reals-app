@@ -38,7 +38,12 @@ import com.reals.app.data.dto.MatchResponseDto
 import com.reals.app.data.dto.NegotiationResponseDto
 import com.reals.app.data.dto.PhotoResponseDto
 import com.reals.app.data.dto.PingResponseDto
+import com.reals.app.data.dto.ProfileQuestionAnswerResponseDto
+import com.reals.app.data.dto.ProfileQuestionAnswersResponseDto
+import com.reals.app.data.dto.ProfileQuestionCatalogResponseDto
+import com.reals.app.data.dto.ProfileQuestionResponseDto
 import com.reals.app.data.dto.ProfileResponseDto
+import com.reals.app.data.dto.PublicProfileQuestionResponseDto
 import com.reals.app.data.dto.QueueStatusResponseDto
 import com.reals.app.data.dto.ScheduleProposalResponseDto
 import com.reals.app.data.dto.SchedulingAvailabilityResponseDto
@@ -223,6 +228,52 @@ object TestDtos {
         questionId = questionId,
         questionSemanticVersion = questionSemanticVersion,
         answerCode = answerCode,
+        createdAt = now,
+        updatedAt = now,
+    )
+
+    fun profileQuestionCatalog(
+        questions: List<ProfileQuestionResponseDto> = listOf(
+            profileQuestion("PERFECT_SUNDAY_001", prompt = "Mi domingo perfecto incluye...", displayOrder = 1),
+            profileQuestion("LIFE_SOUNDTRACK_001", prompt = "Mi banda sonora sería...", displayOrder = 2),
+            profileQuestion("SMALL_JOY_001", prompt = "Una alegría simple para mí es...", displayOrder = 3),
+            profileQuestion("BEST_PLAN_001", prompt = "Un plan que siempre disfruto es...", displayOrder = 4),
+        ),
+    ) = ProfileQuestionCatalogResponseDto(
+        catalogVersion = "2026-08-01",
+        questions = questions,
+    )
+
+    fun profileQuestion(
+        id: String = "PERFECT_SUNDAY_001",
+        semanticVersion: Int = 1,
+        contentVersion: Int = 1,
+        prompt: String = "Mi domingo perfecto incluye...",
+        displayOrder: Int = 1,
+    ) = ProfileQuestionResponseDto(
+        id = id,
+        semanticVersion = semanticVersion,
+        contentVersion = contentVersion,
+        prompt = prompt,
+        displayOrder = displayOrder,
+    )
+
+    fun profileQuestionAnswers(
+        answers: List<ProfileQuestionAnswerResponseDto> = listOf(profileQuestionAnswer()),
+    ) = ProfileQuestionAnswersResponseDto(answers = answers)
+
+    fun profileQuestionAnswer(
+        questionId: String = "PERFECT_SUNDAY_001",
+        questionSemanticVersion: Int = 1,
+        answer: String = "Café y una caminata.",
+        selectedPosition: Int? = null,
+        current: Boolean = true,
+    ) = ProfileQuestionAnswerResponseDto(
+        questionId = questionId,
+        questionSemanticVersion = questionSemanticVersion,
+        answer = answer,
+        selectedPosition = selectedPosition,
+        current = current,
         createdAt = now,
         updatedAt = now,
     )
@@ -472,6 +523,7 @@ object TestDtos {
         partnerPersonalMessageRead: Boolean = true,
         decisionRequiresPartnerPersonalMessageRead: Boolean = false,
         affinityIndicators: List<VisualAffinityIndicatorResponseDto> = emptyList(),
+        profileQuestions: List<PublicProfileQuestionResponseDto> = emptyList(),
     ) = VisualProfileResponseDto(
         profileId = "visual-profile-1",
         displayName = "Taylor",
@@ -484,6 +536,19 @@ object TestDtos {
         partnerPersonalMessageRead = partnerPersonalMessageRead,
         decisionRequiresPartnerPersonalMessageRead = decisionRequiresPartnerPersonalMessageRead,
         affinityIndicators = affinityIndicators,
+        profileQuestions = profileQuestions,
+    )
+
+    fun publicProfileQuestion(
+        questionId: String = "PERFECT_SUNDAY_001",
+        prompt: String = "Mi domingo perfecto incluye...",
+        answer: String = "Café y una caminata.",
+        position: Int = 1,
+    ) = PublicProfileQuestionResponseDto(
+        questionId = questionId,
+        prompt = prompt,
+        answer = answer,
+        position = position,
     )
 
     fun queueStatus(inQueue: Boolean = true) = QueueStatusResponseDto(
