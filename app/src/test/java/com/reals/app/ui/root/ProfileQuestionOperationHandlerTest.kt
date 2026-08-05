@@ -5,6 +5,7 @@ import com.reals.app.core.network.AuthFailureReason
 import com.reals.app.data.mapper.toDomain
 import com.reals.app.data.repository.ProfileQuestionRepository
 import com.reals.app.di.ProfileQuestionFeatureDependencies
+import com.reals.app.domain.model.ProfileQuestionAnswer
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.usecase.DeleteMyProfileQuestionAnswerUseCase
 import com.reals.app.domain.usecase.GetMyProfileQuestionAnswersUseCase
@@ -70,33 +71,94 @@ class ProfileQuestionOperationHandlerTest {
     }
 
     @Test
-    fun `successful selection replacement installs authoritative answers`() = runTest {
-        val api = FakeRealsApi().apply {
-            profileQuestionAnswersResponse = Response.success(
-                TestDtos.profileQuestionAnswers(
-                    listOf(
-                        TestDtos.profileQuestionAnswer("PERFECT_SUNDAY_001", selectedPosition = 2),
-                        TestDtos.profileQuestionAnswer("LIFE_SOUNDTRACK_001", selectedPosition = 1),
+    fun `successful selection replacement returns to Overview with authoritative state and feedback`() =
+        runTest {
+            val api = FakeRealsApi().apply {
+                profileQuestionAnswersResponse = Response.success(
+                    TestDtos.profileQuestionAnswers(
+                        listOf(
+                            TestDtos.profileQuestionAnswer(
+                                "PERFECT_SUNDAY_001",
+                                selectedPosition = 2,
+                            ),
+                            TestDtos.profileQuestionAnswer(
+                                "LIFE_SOUNDTRACK_001",
+                                selectedPosition = 1,
+                            ),
+                        ),
                     ),
+                )
+            }
+
+            val state = loadedState(
+                destination = ProfileQuestionDestination.Selection,
+                answers = listOf(
+                    TestDtos.profileQuestionAnswer(
+                        "PERFECT_SUNDAY_001",
+                    ).toDomain(),
+                    TestDtos.profileQuestionAnswer(
+                        "LIFE_SOUNDTRACK_001",
+                    ).toDomain(),
+                ),
+                selectionDraft = listOf(
+                    "LIFE_SOUNDTRACK_001",
+                    "PERFECT_SUNDAY_001",
                 ),
             )
+
+            val harness = harness(
+                api = api,
+                initialState = ready(profileQuestions = state),
+            )
+
+            harness.handler.saveSelection()
+            advanceUntilIdle()
+
+            val result = harness.ready().profileQuestions
+
+            assertEquals(
+                listOf(
+                    "LIFE_SOUNDTRACK_001",
+                    "PERFECT_SUNDAY_001",
+                ),
+                api.replaceProfileQuestionSelectionsBody?.questionIds,
+            )
+
+            assertEquals(
+                listOf(
+                    "LIFE_SOUNDTRACK_001" to 1,
+                    "PERFECT_SUNDAY_001" to 2,
+                ),
+                result.answers
+                    .sortedBy { it.selectedPosition }
+                    .map { it.questionId to it.selectedPosition },
+            )
+
+            assertEquals(
+                listOf(
+                    "LIFE_SOUNDTRACK_001",
+                    "PERFECT_SUNDAY_001",
+                ),
+                result.selectionDraftQuestionIds,
+            )
+
+            assertEquals(
+                ProfileQuestionDestination.Overview,
+                result.destination,
+            )
+            assertNull(result.mutation)
+            assertNull(result.mutationError)
+
+            assertEquals(
+                ProfileQuestionDestination.Overview,
+                result.feedback?.destination,
+            )
+            assertEquals(
+                "Selección guardada",
+                result.feedback?.message,
+            )
+            assertNull(result.feedback?.questionId)
         }
-        val state = loadedState(
-            destination = ProfileQuestionDestination.Selection,
-            answers = listOf(
-                TestDtos.profileQuestionAnswer("PERFECT_SUNDAY_001").toDomain(),
-                TestDtos.profileQuestionAnswer("LIFE_SOUNDTRACK_001").toDomain(),
-            ),
-            selectionDraft = listOf("LIFE_SOUNDTRACK_001", "PERFECT_SUNDAY_001"),
-        )
-        val harness = harness(api = api, initialState = ready(profileQuestions = state))
-
-        harness.handler.saveSelection()
-        advanceUntilIdle()
-
-        assertEquals(listOf("LIFE_SOUNDTRACK_001", "PERFECT_SUNDAY_001"), api.replaceProfileQuestionSelectionsBody?.questionIds)
-        assertEquals(listOf("LIFE_SOUNDTRACK_001", "PERFECT_SUNDAY_001"), harness.ready().profileQuestions.selectionDraftQuestionIds)
-    }
 
     @Test
     fun `stale out of order mutation completion cannot overwrite newer open mutation`() = runTest {
@@ -256,9 +318,182 @@ class ProfileQuestionOperationHandlerTest {
         assertNull(harness.ready().profileQuestions.mutationError)
     }
 
+    @Test
+    fun `failed selection replacement remains in Selection and preserves draft`() = runTest {
+        val api = FakeRealsApi().apply {
+            profileQuestionAnswersResponse = backendErrorResponse(
+                statusCode = 500,
+                code = "SERVER_ERROR",
+            )
+        }
+
+        val confirmedAnswers = listOf(
+            TestDtos.profileQuestionAnswer(
+                "PERFECT_SUNDAY_001",
+                selectedPosition = 1,
+            ).toDomain(),
+            TestDtos.profileQuestionAnswer(
+                "LIFE_SOUNDTRACK_001",
+                selectedPosition = 2,
+            ).toDomain(),
+        )
+
+        val draft = listOf(
+            "LIFE_SOUNDTRACK_001",
+            "PERFECT_SUNDAY_001",
+        )
+
+        val harness = harness(
+            api = api,
+            initialState = ready(
+                profileQuestions = loadedState(
+                    destination = ProfileQuestionDestination.Selection,
+                    answers = confirmedAnswers,
+                    selectionDraft = draft,
+                ),
+            ),
+        )
+
+        harness.handler.saveSelection()
+        advanceUntilIdle()
+
+        val result = harness.ready().profileQuestions
+
+        assertEquals(
+            draft,
+            api.replaceProfileQuestionSelectionsBody?.questionIds,
+        )
+        assertEquals(
+            ProfileQuestionDestination.Selection,
+            result.destination,
+        )
+        assertEquals(
+            confirmedAnswers,
+            result.answers,
+        )
+        assertEquals(
+            draft,
+            result.selectionDraftQuestionIds,
+        )
+        assertNull(result.mutation)
+        assertTrue(result.mutationError is ApiError.Backend)
+        assertNull(result.feedback)
+    }
+
+    @Test
+    fun `late selection success preserves destination changed while request is active`() = runTest {
+        val requestStarted = CompletableDeferred<Unit>()
+        val releaseResponse = CompletableDeferred<Unit>()
+
+        val api = FakeRealsApi().apply {
+            beforeReplaceMyProfileQuestionSelectionsResponse = {
+                requestStarted.complete(Unit)
+                releaseResponse.await()
+            }
+
+            profileQuestionAnswersResponse = Response.success(
+                TestDtos.profileQuestionAnswers(
+                    listOf(
+                        TestDtos.profileQuestionAnswer(
+                            "PERFECT_SUNDAY_001",
+                            selectedPosition = 2,
+                        ),
+                        TestDtos.profileQuestionAnswer(
+                            "LIFE_SOUNDTRACK_001",
+                            selectedPosition = 1,
+                        ),
+                    ),
+                ),
+            )
+        }
+
+        val harness = harness(
+            api = api,
+            initialState = ready(
+                profileQuestions = loadedState(
+                    destination = ProfileQuestionDestination.Selection,
+                    answers = listOf(
+                        TestDtos.profileQuestionAnswer(
+                            "PERFECT_SUNDAY_001",
+                            selectedPosition = 1,
+                        ).toDomain(),
+                        TestDtos.profileQuestionAnswer(
+                            "LIFE_SOUNDTRACK_001",
+                            selectedPosition = 2,
+                        ).toDomain(),
+                    ),
+                    selectionDraft = listOf(
+                        "LIFE_SOUNDTRACK_001",
+                        "PERFECT_SUNDAY_001",
+                    ),
+                ),
+            ),
+        )
+
+        harness.handler.saveSelection()
+        runCurrent()
+        requestStarted.await()
+
+        assertEquals(
+            ProfileQuestionMutationKind.Selection,
+            harness.ready().profileQuestions.mutation?.kind,
+        )
+
+        /*
+         * Simulate the user leaving Selection before the response arrives.
+         * navigateBack() moves Selection -> Overview.
+         */
+        harness.handler.navigateBack()
+
+        assertEquals(
+            ProfileQuestionDestination.Overview,
+            harness.ready().profileQuestions.destination,
+        )
+
+        /*
+         * Move somewhere other than the automatic success target so the test
+         * can detect an incorrect forced navigation back to Overview.
+         */
+        harness.handler.openQuestions()
+
+        assertEquals(
+            ProfileQuestionDestination.Questions,
+            harness.ready().profileQuestions.destination,
+        )
+
+        releaseResponse.complete(Unit)
+        advanceUntilIdle()
+
+        val result = harness.ready().profileQuestions
+
+        assertEquals(
+            ProfileQuestionDestination.Questions,
+            result.destination,
+        )
+        assertEquals(
+            listOf(
+                "LIFE_SOUNDTRACK_001",
+                "PERFECT_SUNDAY_001",
+            ),
+            result.selectionDraftQuestionIds,
+        )
+        assertEquals(
+            listOf(
+                "LIFE_SOUNDTRACK_001" to 1,
+                "PERFECT_SUNDAY_001" to 2,
+            ),
+            result.answers
+                .sortedBy { it.selectedPosition }
+                .map { it.questionId to it.selectedPosition },
+        )
+        assertNull(result.mutation)
+        assertNull(result.mutationError)
+        assertNull(result.feedback)
+    }
+
     private fun loadedState(
         destination: ProfileQuestionDestination = ProfileQuestionDestination.Editor("PERFECT_SUNDAY_001"),
-        answers: List<com.reals.app.domain.model.ProfileQuestionAnswer> = listOf(
+        answers: List<ProfileQuestionAnswer> = listOf(
             TestDtos.profileQuestionAnswer("PERFECT_SUNDAY_001", selectedPosition = 1).toDomain(),
             TestDtos.profileQuestionAnswer("LIFE_SOUNDTRACK_001", selectedPosition = 2).toDomain(),
         ),
