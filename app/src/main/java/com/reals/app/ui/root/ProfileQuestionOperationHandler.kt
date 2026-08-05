@@ -340,21 +340,43 @@ class ProfileQuestionOperationHandler(
         val localResultStillRelevant =
             state.open && state.destination == originDestination
         uiState.value = when (result) {
-            is ApiResult.Success -> latest.copy(
-                profileQuestions = state.copy(
-                    answers = result.value,
-                    loading = false,
-                    refreshing = false,
-                    mutation = null,
-                    mutationError = null,
-                    feedback = if (localResultStillRelevant) {
-                        mutation.successFeedback(originDestination)
-                    } else {
-                        null
-                    },
-                    selectionDraftQuestionIds = selectedProfileQuestionIds(result.value),
-                ),
-            )
+            is ApiResult.Success -> {
+                val completedSelectionAtOrigin =
+                    mutation.kind == ProfileQuestionMutationKind.Selection &&
+                            localResultStillRelevant
+
+                latest.copy(
+                    profileQuestions = state.copy(
+                        answers = result.value,
+                        destination =
+                            if (completedSelectionAtOrigin) {
+                                ProfileQuestionDestination.Overview
+                            } else {
+                                state.destination
+                            },
+                        loading = false,
+                        refreshing = false,
+                        mutation = null,
+                        mutationError = null,
+                        feedback = when {
+                            completedSelectionAtOrigin ->
+                                ProfileQuestionFeedback(
+                                    destination = ProfileQuestionDestination.Overview,
+                                    questionId = null,
+                                    message = "Selección guardada",
+                                )
+
+                            localResultStillRelevant ->
+                                mutation.successFeedback(originDestination)
+
+                            else ->
+                                null
+                        },
+                        selectionDraftQuestionIds =
+                            selectedProfileQuestionIds(result.value),
+                    ),
+                )
+            }
 
             is ApiResult.Failure -> {
                 val mustRemainObservable =
