@@ -645,40 +645,31 @@ class AffinityQuestionnaireOperationHandlerTest {
     }
 
     @Test
-    fun `selection enters one mutation ignores concurrent second and success replaces complete answers`() = runTest {
-        val requestStarted = CompletableDeferred<Unit>()
-        val releaseResponse = CompletableDeferred<Unit>()
+    fun `successful DELETE replaces answers and clears previous saved feedback`() = runTest {
         val api = FakeRealsApi().apply {
-            beforePatchMyAffinityAnswersResponse = {
-                requestStarted.complete(Unit)
-                releaseResponse.await()
-            }
-            affinityAnswersResponse = Response.success(
-                TestDtos.affinityAnswers(
-                    listOf(
-                        TestDtos.affinityAnswer("MUSIC_DISCOVERY_001", answerCode = "LOW"),
-                        TestDtos.affinityAnswer("PLANS_WEEKEND_001", answerCode = "QUIET"),
-                    )
-                )
-            )
+            affinityAnswersResponse =
+                Response.success(TestDtos.affinityAnswers(emptyList()))
         }
-        val harness = loadedHarness(api)
-
-        harness.handler.selectAnswer("MUSIC_DISCOVERY_001", "LOW")
-        runCurrent()
-        requestStarted.await()
-        harness.handler.selectAnswer("PLANS_WEEKEND_001", "QUIET")
-
-        assertEquals("MUSIC_DISCOVERY_001", harness.ready().affinityQuestionnaire.mutation?.questionId)
-        assertEquals(1, api.calls.count { it == "patchMyAffinityAnswers" })
-
-        releaseResponse.complete(Unit)
-        advanceUntilIdle()
-        assertNull(harness.ready().affinityQuestionnaire.mutation)
-        assertEquals(
-            listOf("MUSIC_DISCOVERY_001", "PLANS_WEEKEND_001"),
-            harness.ready().affinityQuestionnaire.answers.map { it.questionId },
+        val harness = harness(
+            api = api,
+            initialState = ready(
+                questionnaire = loadedQuestionnaire().copy(
+                    message = "Respuesta guardada",
+                    mutationFeedbackQuestionId = "MUSIC_DISCOVERY_001",
+                ),
+            ),
         )
+
+        harness.handler.deleteAnswer("MUSIC_DISCOVERY_001")
+        advanceUntilIdle()
+
+        val state = harness.ready().affinityQuestionnaire
+
+        assertEquals(listOf("deleteMyAffinityAnswer"), api.calls)
+        assertEquals(emptyList<String>(), state.answers.map { it.questionId })
+        assertNull(state.mutation)
+        assertNull(state.message)
+        assertNull(state.mutationFeedbackQuestionId)
     }
 
     @Test

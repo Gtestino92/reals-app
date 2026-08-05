@@ -42,6 +42,7 @@ import com.reals.app.ui.root.AffinityQuestionSource
 import com.reals.app.ui.root.AffinityQuestionnaireDestination
 import com.reals.app.ui.root.AffinityQuestionnaireUiState
 import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 fun AffinityQuestionnaireScreen(
@@ -407,13 +408,22 @@ private fun AffinitySingleQuestionScreen(
     }
     val category = catalog.categoryFor(question)
     val currentAnswer = question.currentValidAnswer(state.answers)
-    val selectedCode = question.presentedAnswerCode(state.answers, state.mutation)
+    val selectedCode = when {
+        state.draftQuestionId == question.id ->
+            state.draftAnswerCode
+
+        else ->
+            currentAnswer?.answerCode
+    }
     val mutationActive = state.mutation != null
     val mutationsEnabled = !mutationActive && !state.loading && !state.refreshing
     val questionSaving = state.mutation?.questionId == question.id
     val positionLabel = catalog.questionPositionLabel(question.id, destination.source)
     val progress = catalog.progress(state.answers)
     val isReviewQuestion = destination.source == AffinityQuestionSource.Review
+    val draftChanged =
+        selectedCode != null &&
+                selectedCode != currentAnswer?.answerCode
 
     AffinityQuestionnaireLazySurface(
         title = category?.title ?: "Preguntas de afinidad",
@@ -453,13 +463,20 @@ private fun AffinitySingleQuestionScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (isReviewQuestion) {
                         Button(
-                            onClick = onBack,
+                            onClick = if (draftChanged) onNextQuestion else onBack,
+                            enabled = !mutationActive,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("Volver a mis respuestas")
+                            Text(
+                                when {
+                                    mutationActive -> "Guardando..."
+                                    draftChanged -> "Guardar cambios"
+                                    else -> "Volver a mis respuestas"
+                                }
+                            )
                         }
                     } else {
-                        if (currentAnswer == null) {
+                        if (selectedCode == null) {
                             OutlinedButton(
                                 onClick = onSkipQuestion,
                                 enabled = !mutationActive,
@@ -497,7 +514,7 @@ private fun AffinityQuestionCard(
     var showSavingIndicator by remember(question.id) { mutableStateOf(false) }
     LaunchedEffect(questionSaving) {
         if (questionSaving) {
-            delay(AffinityQuestionSavingIndicatorDelayMillis)
+            delay(AffinityQuestionSavingIndicatorDelayMillis.milliseconds)
             showSavingIndicator = true
         } else {
             showSavingIndicator = false
