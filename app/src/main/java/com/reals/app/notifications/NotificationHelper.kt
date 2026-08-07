@@ -12,30 +12,34 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.reals.app.R
+import com.reals.app.notifications.PushNotificationContract.GENERAL_UPDATES_CHANNEL_ID
+import com.reals.app.notifications.PushNotificationContract.MATCH_FOUND_NOTIFICATION_ID_BASE
 import com.reals.app.notifications.PushNotificationContract.SCHEDULING_AVAILABLE_NOTIFICATION_ID_BASE
 import com.reals.app.notifications.PushNotificationContract.SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE
+import com.reals.app.notifications.PushNotificationContract.TYPE_MATCH_FOUND
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_AVAILABLE
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_CONFIRMED
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_PROPOSALS_RECEIVED
 import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_REMINDER
 import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_STARTED
 import com.reals.app.notifications.PushNotificationContract.TYPE_VISUAL_REVIEW_REMINDER
-import com.reals.app.notifications.PushNotificationContract.VISUAL_REVIEW_CHANNEL_ID
 import com.reals.app.notifications.PushNotificationContract.VISUAL_REVIEW_NOTIFICATION_ID_BASE
 
 object NotificationHelper {
     private const val TAG = "NotificationHelper"
-    internal const val VISUAL_REVIEW_CHANNEL_IMPORTANCE = NotificationManager.IMPORTANCE_HIGH
-    internal const val VISUAL_REVIEW_NOTIFICATION_PRIORITY = NotificationCompat.PRIORITY_HIGH
+    internal const val GENERAL_UPDATES_CHANNEL_IMPORTANCE =
+        NotificationManager.IMPORTANCE_HIGH
+
+    internal const val GENERAL_UPDATES_NOTIFICATION_PRIORITY =
+        NotificationCompat.PRIORITY_HIGH
 
     fun ensureChannels(context: Context) {
-
         val channel = NotificationChannel(
-            VISUAL_REVIEW_CHANNEL_ID,
-            "Revisiones",
-            VISUAL_REVIEW_CHANNEL_IMPORTANCE,
+            GENERAL_UPDATES_CHANNEL_ID,
+            "Actualizaciones de Reals",
+            GENERAL_UPDATES_CHANNEL_IMPORTANCE,
         ).apply {
-            description = "Avisos cuando hay una revisión visual disponible"
+            description = "Avisos sobre chats, revisiones y coordinación"
         }
 
         context.getSystemService(NotificationManager::class.java)
@@ -46,7 +50,7 @@ object NotificationHelper {
     fun showVisualReviewReminder(context: Context, matchId: String?) {
         if (!canPostNotifications(context)) return
 
-        val notification = NotificationCompat.Builder(context, VISUAL_REVIEW_CHANNEL_ID)
+        val notification = NotificationCompat.Builder(context, GENERAL_UPDATES_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Revisión visual pendiente")
             .setContentText("Entrá a Reals para completarla antes de que venza.")
@@ -54,7 +58,7 @@ object NotificationHelper {
                 NotificationCompat.BigTextStyle()
                     .bigText("Entrá a Reals para completarla antes de que venza."),
             )
-            .setPriority(VISUAL_REVIEW_NOTIFICATION_PRIORITY)
+            .setPriority(GENERAL_UPDATES_NOTIFICATION_PRIORITY)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
             .setContentIntent(visualReviewPendingIntent(context, matchId))
@@ -79,12 +83,12 @@ object NotificationHelper {
         if (!canPostNotifications(context)) return
 
         val body = "Entr\u00e1 a Reals para ver el horario y prepararte."
-        val notification = NotificationCompat.Builder(context, VISUAL_REVIEW_CHANNEL_ID)
+        val notification = NotificationCompat.Builder(context, GENERAL_UPDATES_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Tu segunda charla empieza pronto")
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-            .setPriority(VISUAL_REVIEW_NOTIFICATION_PRIORITY)
+            .setPriority(GENERAL_UPDATES_NOTIFICATION_PRIORITY)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
             .setContentIntent(secondChatReminderPendingIntent(context, connectionId, availableAt))
@@ -116,12 +120,12 @@ object NotificationHelper {
         if (!canPostNotifications(context)) return
 
         val (title, body) = secondChatStartedNotificationCopy()
-        val notification = NotificationCompat.Builder(context, VISUAL_REVIEW_CHANNEL_ID)
+        val notification = NotificationCompat.Builder(context, GENERAL_UPDATES_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-            .setPriority(VISUAL_REVIEW_NOTIFICATION_PRIORITY)
+            .setPriority(GENERAL_UPDATES_NOTIFICATION_PRIORITY)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
             .setContentIntent(secondChatStartedPendingIntent(context, connectionId, matchId, availableAt))
@@ -153,12 +157,12 @@ object NotificationHelper {
         if (!canPostNotifications(context)) return
 
         val (title, body) = schedulingNotificationCopy(type)
-        val notification = NotificationCompat.Builder(context, VISUAL_REVIEW_CHANNEL_ID)
+        val notification = NotificationCompat.Builder(context, GENERAL_UPDATES_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-            .setPriority(VISUAL_REVIEW_NOTIFICATION_PRIORITY)
+            .setPriority(GENERAL_UPDATES_NOTIFICATION_PRIORITY)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
             .setContentIntent(schedulingAvailablePendingIntent(context, type, connectionId, matchId))
@@ -174,6 +178,91 @@ object NotificationHelper {
                 TAG,
                 "Could not show scheduling notification because permission was denied.",
                 exception
+            )
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun showMatchFound(
+        context: Context,
+        matchId: String?,
+    ) {
+        if (!canPostNotifications(context)) return
+
+        val (title, body) = matchFoundNotificationCopy()
+
+        val notification = NotificationCompat.Builder(
+            context,
+            GENERAL_UPDATES_CHANNEL_ID,
+        )
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(
+                NotificationCompat.BigTextStyle()
+                    .bigText(body),
+            )
+            .setPriority(GENERAL_UPDATES_NOTIFICATION_PRIORITY)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setAutoCancel(true)
+            .setContentIntent(
+                matchFoundPendingIntent(
+                    context = context,
+                    matchId = matchId,
+                ),
+            )
+            .build()
+
+        try {
+            val identity = matchFoundNotificationDisplayIdentity(matchId)
+
+            NotificationManagerCompat.from(context).notify(
+                identity.tag,
+                identity.id,
+                notification,
+            )
+        } catch (exception: SecurityException) {
+            Log.w(
+                TAG,
+                "Could not show match found notification because permission was denied.",
+                exception,
+            )
+        }
+    }
+
+    private fun matchFoundPendingIntent(
+        context: Context,
+        matchId: String?,
+    ) = NotificationPendingIntents.mainActivity(
+        context,
+        MATCH_FOUND_NOTIFICATION_ID_BASE + notificationSuffix(matchId),
+        TYPE_MATCH_FOUND,
+        null,
+        matchId,
+        null,
+    )
+
+    internal fun matchFoundNotificationCopy(): Pair<String, String> =
+        "Encontramos un chat" to "Tu nuevo chat ya está disponible."
+
+    internal fun matchFoundNotificationTag(matchId: String?): String? =
+        normalizedNotificationTargetId(matchId)
+            ?.let { "match-found-$it" }
+
+    internal fun matchFoundNotificationDisplayIdentity(
+        matchId: String?,
+    ): NotificationDisplayIdentity {
+        val tag = matchFoundNotificationTag(matchId)
+
+        return if (tag != null) {
+            NotificationDisplayIdentity(
+                tag = tag,
+                id = 0,
+            )
+        } else {
+            NotificationDisplayIdentity(
+                tag = null,
+                id = MATCH_FOUND_NOTIFICATION_ID_BASE,
             )
         }
     }

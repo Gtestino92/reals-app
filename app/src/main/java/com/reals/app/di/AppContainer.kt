@@ -87,6 +87,7 @@ import com.reals.app.domain.usecase.UpdateMatchFiltersUseCase
 import com.reals.app.domain.usecase.UpdateProfileUseCase
 import com.reals.app.domain.usecase.UpsertMyProfileQuestionAnswerUseCase
 import com.reals.app.foreground.AtomicForegroundDestinationTracker
+import com.reals.app.notifications.HomeRefreshSignal
 import com.reals.app.notifications.NotificationPresentationPolicy
 import com.reals.app.notifications.registration.PushTokenRegistrationService
 import com.reals.app.ui.root.LocalFirebaseEmailVerificationCoordinator
@@ -110,6 +111,7 @@ class AppContainer(context: Context) {
     val authRepository = FirebaseAuthRepository(appContext)
     val foregroundDestinationTracker = AtomicForegroundDestinationTracker()
     val notificationPresentationPolicy = NotificationPresentationPolicy()
+    val homeRefreshSignal = HomeRefreshSignal()
     private val meRepository = MeRepository(api, tokenProvider, apiExecutor)
     private val profileRepository = ProfileRepository(appContext, api, tokenProvider, apiExecutor)
     private val matchmakingRepository = MatchmakingRepository(api, tokenProvider, apiExecutor)
