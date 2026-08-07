@@ -51,7 +51,7 @@ object NotificationHelper {
         if (!canPostNotifications(context)) return
 
         val notification = NotificationCompat.Builder(context, GENERAL_UPDATES_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification)
+            .setSmallIcon(R.drawable.ic_stat_name)
             .setContentTitle("Revisión visual pendiente")
             .setContentText("Entrá a Reals para completarla antes de que venza.")
             .setStyle(
@@ -84,7 +84,7 @@ object NotificationHelper {
 
         val body = "Entr\u00e1 a Reals para ver el horario y prepararte."
         val notification = NotificationCompat.Builder(context, GENERAL_UPDATES_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification)
+            .setSmallIcon(R.drawable.ic_stat_name)
             .setContentTitle("Tu segunda charla empieza pronto")
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
@@ -121,7 +121,7 @@ object NotificationHelper {
 
         val (title, body) = secondChatStartedNotificationCopy()
         val notification = NotificationCompat.Builder(context, GENERAL_UPDATES_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification)
+            .setSmallIcon(R.drawable.ic_stat_name)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
@@ -158,7 +158,7 @@ object NotificationHelper {
 
         val (title, body) = schedulingNotificationCopy(type)
         val notification = NotificationCompat.Builder(context, GENERAL_UPDATES_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification)
+            .setSmallIcon(R.drawable.ic_stat_name)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
@@ -195,7 +195,7 @@ object NotificationHelper {
             context,
             GENERAL_UPDATES_CHANNEL_ID,
         )
-            .setSmallIcon(R.drawable.ic_notification)
+            .setSmallIcon(R.drawable.ic_stat_name)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(
