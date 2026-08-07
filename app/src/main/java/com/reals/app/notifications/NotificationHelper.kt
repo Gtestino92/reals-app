@@ -7,6 +7,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.graphics.BitmapFactory
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -196,12 +197,19 @@ object NotificationHelper {
             GENERAL_UPDATES_CHANNEL_ID,
         )
             .setSmallIcon(R.drawable.ic_stat_name)
+            .setLargeIcon(
+                BitmapFactory.decodeResource(
+                    context.resources,
+                    R.drawable.ic_notification_large,
+                ),
+            )
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(
                 NotificationCompat.BigTextStyle()
                     .bigText(body),
             )
+            .setColor(ContextCompat.getColor(context, R.color.ic_launcher_background))
             .setPriority(GENERAL_UPDATES_NOTIFICATION_PRIORITY)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
