@@ -63,6 +63,12 @@ fun RealsApp(
         state = state,
     )
 
+    LaunchedEffect(appContainer.homeRefreshSignal) {
+        appContainer.homeRefreshSignal.requests.collect {
+            viewModel.pollHomeStateSilently()
+        }
+    }
+
     LaunchedEffect(notificationOpenNonce) {
         if (notificationOpenNonce != 0L) {
             viewModel.handleExternalNotificationOpened(notificationOpenType)
