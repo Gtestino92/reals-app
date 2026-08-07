@@ -7,18 +7,18 @@ import org.junit.Test
 
 class NotificationHelperTest {
     @Test
-    fun `visual review channel uses high importance`() {
+    fun `general update channel uses high importance`() {
         assertEquals(
             NotificationManager.IMPORTANCE_HIGH,
-            NotificationHelper.VISUAL_REVIEW_CHANNEL_IMPORTANCE,
+            NotificationHelper.GENERAL_UPDATES_CHANNEL_IMPORTANCE,
         )
     }
 
     @Test
-    fun `visual review notification uses high priority`() {
+    fun `general update notification uses high priority`() {
         assertEquals(
             NotificationCompat.PRIORITY_HIGH,
-            NotificationHelper.VISUAL_REVIEW_NOTIFICATION_PRIORITY,
+            NotificationHelper.GENERAL_UPDATES_NOTIFICATION_PRIORITY,
         )
     }
 
