@@ -34,6 +34,15 @@ object NotificationHelper {
     internal const val GENERAL_UPDATES_NOTIFICATION_PRIORITY =
         NotificationCompat.PRIORITY_HIGH
 
+    internal val NOTIFICATION_SMALL_ICON_RES_ID: Int
+        get() = R.drawable.ic_stat_name
+
+    internal val NOTIFICATION_LARGE_ICON_RES_ID: Int
+        get() = R.drawable.ic_notification_large
+
+    internal val NOTIFICATION_COLOR_RES_ID: Int
+        get() = R.color.ic_launcher_background
+
     fun ensureChannels(context: Context) {
         val channel = NotificationChannel(
             GENERAL_UPDATES_CHANNEL_ID,
@@ -52,7 +61,7 @@ object NotificationHelper {
         if (!canPostNotifications(context)) return
 
         val notification = NotificationCompat.Builder(context, GENERAL_UPDATES_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_name)
+            .applyRealsBranding(context)
             .setContentTitle("Revisión visual pendiente")
             .setContentText("Entrá a Reals para completarla antes de que venza.")
             .setStyle(
@@ -85,7 +94,7 @@ object NotificationHelper {
 
         val body = "Entr\u00e1 a Reals para ver el horario y prepararte."
         val notification = NotificationCompat.Builder(context, GENERAL_UPDATES_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_name)
+            .applyRealsBranding(context)
             .setContentTitle("Tu segunda charla empieza pronto")
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
@@ -122,7 +131,7 @@ object NotificationHelper {
 
         val (title, body) = secondChatStartedNotificationCopy()
         val notification = NotificationCompat.Builder(context, GENERAL_UPDATES_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_name)
+            .applyRealsBranding(context)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
@@ -159,7 +168,7 @@ object NotificationHelper {
 
         val (title, body) = schedulingNotificationCopy(type)
         val notification = NotificationCompat.Builder(context, GENERAL_UPDATES_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_name)
+            .applyRealsBranding(context)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
@@ -196,20 +205,13 @@ object NotificationHelper {
             context,
             GENERAL_UPDATES_CHANNEL_ID,
         )
-            .setSmallIcon(R.drawable.ic_stat_name)
-            .setLargeIcon(
-                BitmapFactory.decodeResource(
-                    context.resources,
-                    R.drawable.ic_notification_large,
-                ),
-            )
+            .applyRealsBranding(context)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(
                 NotificationCompat.BigTextStyle()
                     .bigText(body),
             )
-            .setColor(ContextCompat.getColor(context, R.color.ic_launcher_background))
             .setPriority(GENERAL_UPDATES_NOTIFICATION_PRIORITY)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
@@ -357,6 +359,18 @@ object NotificationHelper {
 
     private fun normalizedNotificationTargetId(value: String?): String? =
         value?.trim()?.takeIf { it.isNotEmpty() }
+
+    private fun NotificationCompat.Builder.applyRealsBranding(
+        context: Context,
+    ): NotificationCompat.Builder =
+        setSmallIcon(NOTIFICATION_SMALL_ICON_RES_ID)
+            .setLargeIcon(
+                BitmapFactory.decodeResource(
+                    context.resources,
+                    NOTIFICATION_LARGE_ICON_RES_ID,
+                ),
+            )
+            .setColor(ContextCompat.getColor(context, NOTIFICATION_COLOR_RES_ID))
 
     private fun Int.floorMod(modulus: Int): Int = ((this % modulus) + modulus) % modulus
 

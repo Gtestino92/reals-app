@@ -2,6 +2,7 @@ package com.reals.app.notifications
 
 import android.app.NotificationManager
 import androidx.core.app.NotificationCompat
+import com.reals.app.R
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -20,6 +21,13 @@ class NotificationHelperTest {
             NotificationCompat.PRIORITY_HIGH,
             NotificationHelper.GENERAL_UPDATES_NOTIFICATION_PRIORITY,
         )
+    }
+
+    @Test
+    fun `notification branding uses Reals assets`() {
+        assertEquals(R.drawable.ic_stat_name, NotificationHelper.NOTIFICATION_SMALL_ICON_RES_ID)
+        assertEquals(R.drawable.ic_notification_large, NotificationHelper.NOTIFICATION_LARGE_ICON_RES_ID)
+        assertEquals(R.color.ic_launcher_background, NotificationHelper.NOTIFICATION_COLOR_RES_ID)
     }
 
     @Test
