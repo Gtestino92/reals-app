@@ -9,6 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.reals.app.notifications.NotificationHelper
 import com.reals.app.notifications.PushNotificationContract.EXTRA_PUSH_TYPE
 import com.reals.app.notifications.PushNotificationContract.EXTRA_REFRESH_HOME
 import com.reals.app.notifications.PushNotificationOpenContract
@@ -33,6 +34,11 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        NotificationHelper.cancelAllMatchFound(this)
     }
 
     override fun onNewIntent(intent: Intent) {
