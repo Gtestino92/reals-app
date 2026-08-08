@@ -7,7 +7,6 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
-import android.graphics.BitmapFactory
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -36,9 +35,6 @@ object NotificationHelper {
 
     internal val NOTIFICATION_SMALL_ICON_RES_ID: Int
         get() = R.drawable.ic_stat_name
-
-    internal val NOTIFICATION_LARGE_ICON_RES_ID: Int
-        get() = R.drawable.ic_notification_large
 
     internal val NOTIFICATION_COLOR_RES_ID: Int
         get() = R.color.ic_launcher_background
@@ -364,12 +360,6 @@ object NotificationHelper {
         context: Context,
     ): NotificationCompat.Builder =
         setSmallIcon(NOTIFICATION_SMALL_ICON_RES_ID)
-            .setLargeIcon(
-                BitmapFactory.decodeResource(
-                    context.resources,
-                    NOTIFICATION_LARGE_ICON_RES_ID,
-                ),
-            )
             .setColor(ContextCompat.getColor(context, NOTIFICATION_COLOR_RES_ID))
 
     private fun Int.floorMod(modulus: Int): Int = ((this % modulus) + modulus) % modulus

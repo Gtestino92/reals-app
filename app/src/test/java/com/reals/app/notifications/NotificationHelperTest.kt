@@ -24,9 +24,8 @@ class NotificationHelperTest {
     }
 
     @Test
-    fun `notification branding uses Reals assets`() {
+    fun `notification branding uses small icon and color without large icon`() {
         assertEquals(R.drawable.ic_stat_name, NotificationHelper.NOTIFICATION_SMALL_ICON_RES_ID)
-        assertEquals(R.drawable.ic_notification_large, NotificationHelper.NOTIFICATION_LARGE_ICON_RES_ID)
         assertEquals(R.color.ic_launcher_background, NotificationHelper.NOTIFICATION_COLOR_RES_ID)
     }
 
