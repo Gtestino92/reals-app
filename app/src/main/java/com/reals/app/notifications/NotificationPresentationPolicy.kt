@@ -10,6 +10,7 @@ data class IncomingNotificationContext(
     val connectionId: String?,
     val matchId: String?,
     val availableAt: String?,
+    val expiresAt: String?,
 )
 
 class NotificationPresentationPolicy {

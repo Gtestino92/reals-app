@@ -17,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import java.time.Instant
 
 class RealsFirebaseMessagingService : FirebaseMessagingService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -57,23 +58,32 @@ class RealsFirebaseMessagingService : FirebaseMessagingService() {
         )
 
         if (
-            notification.type == TYPE_MATCH_FOUND &&
+            notification.type != TYPE_MATCH_FOUND &&
             !shouldPresent
         ) {
-            appContainer
-                ?.homeRefreshSignal
-                ?.request()
-
             return
         }
 
-        if (!shouldPresent) return
-
         when (notification.type) {
-            TYPE_MATCH_FOUND -> NotificationHelper.showMatchFound(
-                context = this,
-                matchId = notification.matchId,
-            )
+            TYPE_MATCH_FOUND -> when (
+                val action = matchFoundDispatchAction(
+                    notification = notification,
+                    shouldPresent = shouldPresent,
+                    now = Instant.now(),
+                )
+            ) {
+                MatchFoundDispatchAction.RefreshHomeOnly -> appContainer
+                    ?.homeRefreshSignal
+                    ?.request()
+
+                MatchFoundDispatchAction.IgnoreStale -> Unit
+
+                is MatchFoundDispatchAction.Present -> NotificationHelper.showMatchFound(
+                    context = this,
+                    matchId = action.matchId,
+                    timeoutAfterMillis = action.timeoutAfterMillis,
+                )
+            }
 
             TYPE_VISUAL_REVIEW_REMINDER,
             TYPE_VISUAL_REVIEW_AVAILABLE -> NotificationHelper.showVisualReviewReminder(
@@ -121,6 +131,7 @@ internal fun Map<String, String>.incomingNotificationContext(): IncomingNotifica
         connectionId = this["connectionId"].trimToNonBlank(),
         matchId = this["matchId"].trimToNonBlank(),
         availableAt = this["availableAt"].trimToNonBlank(),
+        expiresAt = this["expiresAt"].trimToNonBlank(),
     )
 
 internal fun isKnownForegroundNotificationType(type: String?): Boolean = when (type?.trim()) {

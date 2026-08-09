@@ -212,12 +212,14 @@ object NotificationHelper {
     fun showMatchFound(
         context: Context,
         matchId: String?,
+        timeoutAfterMillis: Long? = null,
     ) {
         if (!canPostNotifications(context)) return
+        if (timeoutAfterMillis != null && timeoutAfterMillis <= 0L) return
 
         val (title, body) = matchFoundNotificationCopy()
 
-        val notification = NotificationCompat.Builder(
+        val builder = NotificationCompat.Builder(
             context,
             GENERAL_UPDATES_CHANNEL_ID,
         )
@@ -244,6 +246,10 @@ object NotificationHelper {
                     matchId = matchId,
                 ),
             )
+
+        timeoutAfterMillis?.let { builder.setTimeoutAfter(it) }
+
+        val notification = builder
             .build()
 
         try {
