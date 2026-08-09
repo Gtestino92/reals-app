@@ -77,6 +77,16 @@ class ChatMessageActionHandlerTest {
     }
 
     @Test
+    fun `first chat send is ignored while send operation is in progress`() {
+        val result = ChatMessageActionHandler.prepareFirstChatSend(
+            current = firstChatState(sending = true),
+            content = "hola",
+        )
+
+        assertEquals(ChatMessageSendPreparation.Ignored, result)
+    }
+
+    @Test
     fun `first chat retry keeps failed optimistic message while mutual cancellation is pending`() {
         val failed = failedOptimisticMessage(localId = "local-failed")
         val current = firstChatState(
@@ -244,6 +254,7 @@ class ChatMessageActionHandlerTest {
     private fun firstChatState(
         optimisticMessages: List<OptimisticOutgoingMessage> = emptyList(),
         exitRequests: List<ChatExitRequest> = emptyList(),
+        sending: Boolean = false,
         error: ApiError? = null,
         message: String? = null,
     ): RealsRootUiState.FirstChat = RealsRootUiState.FirstChat(
@@ -253,6 +264,7 @@ class ChatMessageActionHandlerTest {
         chat = TestDtos.chat().toDomain(),
         optimisticMessages = optimisticMessages,
         exitRequests = exitRequests,
+        sending = sending,
         error = error,
         message = message,
     )

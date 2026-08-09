@@ -15,6 +15,7 @@ import com.reals.app.di.RealsRootDependencies
 import com.reals.app.domain.model.ChatContinueDecision
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatExitReason
+import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.CreateProfileInput
 import com.reals.app.domain.model.FirstChatGuidance
@@ -1173,13 +1174,27 @@ class RealsRootViewModel(
         return when (val preparation = ChatMessageActionHandler.prepareFirstChatSend(current, content)) {
             is ChatMessageSendPreparation.Accepted -> {
                 _uiState.value = preparation.pendingState
+                val expectedSessionUserId = preparation.pendingState.session.user.id
+                val expectedMatchId = preparation.pendingState.matchId
+                val expectedChatId = preparation.pendingState.chatId ?: preparation.pendingState.chat?.id
+                val preSendMessageIds = preparation.pendingState.messages.mapTo(HashSet()) { it.id }
                 viewModelScope.launch {
                     applyFirstChatSendResult(
-                        firstChatCoordinator.sendMessage(
+                        result = firstChatCoordinator.sendMessage(
                             preparation.pendingState,
                             preparation.cleanContent,
                             preparation.localId,
-                        )
+                            onPostAcknowledged = { sentMessage ->
+                                applyFirstChatPostAcknowledgement(
+                                    sentMessage = sentMessage,
+                                    localId = preparation.localId,
+                                    expectedSessionUserId = expectedSessionUserId,
+                                    expectedMatchId = expectedMatchId,
+                                    expectedChatId = expectedChatId,
+                                )
+                            },
+                        ),
+                        preSendMessageIds = preSendMessageIds,
                     )
                 }
                 true
@@ -1207,6 +1222,7 @@ class RealsRootViewModel(
                 silentFirstChatRefreshJob?.cancel()
                 silentFirstChatRefreshJob = null
                 _uiState.value = preparation.pendingState
+                val preSendMessageIds = preparation.pendingState.messages.mapTo(HashSet()) { it.id }
                 viewModelScope.launch {
                     val result = firstChatCoordinator.sendAudioMessage(
                         preparation.pendingState,
@@ -1224,7 +1240,10 @@ class RealsRootViewModel(
                         latestDraft.clientMessageId == preparation.clientMessageId &&
                         latestDraft.filePath == preparation.file.absolutePath
                     if (canInstall) {
-                        applyFirstChatSendResult(result)
+                        applyFirstChatSendResult(
+                            result = result,
+                            preSendMessageIds = preSendMessageIds,
+                        )
                         deleteCompletedFirstChatDraftIfMatching(
                             chatId = preparation.chatId,
                             clientMessageId = preparation.clientMessageId,
@@ -1635,12 +1654,23 @@ class RealsRootViewModel(
         )
     }
 
-    private suspend fun applyFirstChatSendResult(result: FirstChatSendResult) {
+    private suspend fun applyFirstChatSendResult(
+        result: FirstChatSendResult,
+        preSendMessageIds: Set<String> = emptySet(),
+    ) {
         when (result) {
             is FirstChatSendResult.Show -> {
                 val latest = _uiState.value as? RealsRootUiState.FirstChat
                 _uiState.value = latest?.let {
-                    result.state.reconcileAsyncFirstChatResult(it) ?: return
+                    val reconciled = result.state.reconcileAsyncFirstChatResult(it) ?: return
+                    reconciled.copy(
+                        messages = it.messages.appendUnique(
+                            reconciled.messages.filterNot { message ->
+                                message.id in preSendMessageIds &&
+                                    it.messages.any { latestMessage -> latestMessage.id == message.id }
+                            }
+                        )
+                    )
                 } ?: result.state
             }
             is FirstChatSendResult.ReturnHome -> {
@@ -1652,6 +1682,21 @@ class RealsRootViewModel(
                 )
             }
         }
+    }
+
+    private fun applyFirstChatPostAcknowledgement(
+        sentMessage: ChatMessage,
+        localId: String,
+        expectedSessionUserId: String,
+        expectedMatchId: String,
+        expectedChatId: String?,
+    ) {
+        val latest = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        if (!latest.sameFirstChatInstance(expectedSessionUserId, expectedMatchId, expectedChatId)) return
+        _uiState.value = latest.copy(
+            messages = latest.messages.appendUnique(listOf(sentMessage)),
+            optimisticMessages = latest.optimisticMessages.withoutOptimisticMessage(localId),
+        )
     }
 
     private suspend fun applySecondChatActionResult(result: SecondChatActionResult) {
@@ -2114,11 +2159,23 @@ private fun RealsRootUiState.FirstChat.freshestAtomicChatServerClockPair(
 private fun RealsRootUiState.FirstChat.sameFirstChatInstance(
     displayed: RealsRootUiState.FirstChat,
 ): Boolean {
-    if (session.user.id != displayed.session.user.id) return false
-    if (matchId != displayed.matchId) return false
     val resultChatId = chatId ?: chat?.id
-    val displayedChatId = displayed.chatId ?: displayed.chat?.id
-    return resultChatId != null && resultChatId == displayedChatId
+    return displayed.sameFirstChatInstance(
+        expectedSessionUserId = session.user.id,
+        expectedMatchId = matchId,
+        expectedChatId = resultChatId,
+    )
+}
+
+private fun RealsRootUiState.FirstChat.sameFirstChatInstance(
+    expectedSessionUserId: String,
+    expectedMatchId: String,
+    expectedChatId: String?,
+): Boolean {
+    if (session.user.id != expectedSessionUserId) return false
+    if (matchId != expectedMatchId) return false
+    val displayedChatId = chatId ?: chat?.id
+    return expectedChatId != null && expectedChatId == displayedChatId
 }
 
 private fun Chat?.withFreshGuidanceFrom(displayed: Chat?): Chat? {

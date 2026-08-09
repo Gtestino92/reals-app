@@ -210,24 +210,63 @@ internal class FirstChatCoordinator(
         current: RealsRootUiState.FirstChat,
         cleanContent: String,
         localId: String,
+        onPostAcknowledged: (ChatMessage) -> Unit = {},
     ): FirstChatSendResult {
         val chat = current.chat ?: return FirstChatSendResult.Show(current)
         val cursorBeforeSend = current.messages.lastMessageCursor()
+        val sendStarted = FirstChatSendTiming.markNow()
         return when (val result = dependencies.sendChatMessage(chat.id, cleanContent)) {
             is ApiResult.Success -> {
+                val postCompleted = FirstChatSendTiming.markNow()
+                FirstChatSendTiming.logStage(
+                    stage = "send_to_post_success",
+                    duration = sendStarted.elapsedNow(),
+                )
                 val sentMessage = result.value
                 val messagesWithSent = current.messages.appendUnique(listOf(sentMessage))
+                onPostAcknowledged(sentMessage)
+                FirstChatSendTiming.logStage(
+                    stage = "send_to_optimistic_acknowledged",
+                    duration = sendStarted.elapsedNow(),
+                )
 
-                val messagesResult = dependencies.getChatMessages(chat.id, cursorBeforeSend)
-                val chatResult = dependencies.getFirstChatForMatch(current.matchId)
+                val (messagesResult, chatResult) = coroutineScope {
+                    val messagesDeferred = async {
+                        val messagesStarted = FirstChatSendTiming.markNow()
+                        dependencies.getChatMessages(chat.id, cursorBeforeSend).also {
+                            FirstChatSendTiming.logStage(
+                                stage = "post_send_messages_refresh",
+                                duration = messagesStarted.elapsedNow(),
+                            )
+                        }
+                    }
+                    val chatDeferred = async {
+                        val snapshotStarted = FirstChatSendTiming.markNow()
+                        dependencies.getFirstChatForMatch(current.matchId).also {
+                            FirstChatSendTiming.logStage(
+                                stage = "post_send_first_chat_snapshot_refresh",
+                                duration = snapshotStarted.elapsedNow(),
+                            )
+                        }
+                    }
+                    messagesDeferred.await() to chatDeferred.await()
+                }
+                FirstChatSendTiming.logStage(
+                    stage = "post_send_reconciliation_total",
+                    duration = postCompleted.elapsedNow(),
+                )
+                FirstChatSendTiming.logStage(
+                    stage = "send_to_reconciliation_complete",
+                    duration = sendStarted.elapsedNow(),
+                )
 
                 val updated = (chatResult as? ApiResult.Success)
                     ?.let { current.withInstalledFirstChatSnapshot(it.value) }
                     ?: current
                 FirstChatSendResult.Show(updated.copy(
-                    messages = messagesWithSent.appendUnique(
-                        (messagesResult as? ApiResult.Success)?.value.orEmpty()
-                    ),
+                    messages = messagesWithSent
+                        .appendUnique((messagesResult as? ApiResult.Success)?.value.orEmpty())
+                        .appendUnique(listOf(sentMessage)),
                     optimisticMessages = current.optimisticMessages.filterNot { it.localId == localId },
                     sending = false,
                     error = (messagesResult as? ApiResult.Failure)?.error
@@ -235,20 +274,26 @@ internal class FirstChatCoordinator(
                 ))
             }
 
-            is ApiResult.Failure -> result.error.firstChatSendExpiryRoute(current)
-                ?: refreshAfterPendingMutualCancellation(
-                    error = result.error,
-                    current = current,
-                    chatId = chat.id,
-                    localId = localId,
+            is ApiResult.Failure -> {
+                FirstChatSendTiming.logStage(
+                    stage = "post_failure",
+                    duration = sendStarted.elapsedNow(),
                 )
-                ?: FirstChatSendResult.Show(
-                    current.copy(
-                        optimisticMessages = current.optimisticMessages.markOptimisticMessageFailed(localId),
-                        sending = false,
+                result.error.firstChatSendExpiryRoute(current)
+                    ?: refreshAfterPendingMutualCancellation(
                         error = result.error,
+                        current = current,
+                        chatId = chat.id,
+                        localId = localId,
                     )
-            )
+                    ?: FirstChatSendResult.Show(
+                        current.copy(
+                            optimisticMessages = current.optimisticMessages.markOptimisticMessageFailed(localId),
+                            sending = false,
+                            error = result.error,
+                        )
+                    )
+            }
         }
     }
 
