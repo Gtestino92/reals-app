@@ -530,10 +530,20 @@ class FirstChatCoordinatorTest {
     @OptIn(ExperimentalCoroutinesApi::class)
     fun `sendMessage acknowledges persisted message before post send refresh completes`() = runTest {
         val releaseMessagesRefresh = CompletableDeferred<Unit>()
+        val releaseSnapshotRefresh = CompletableDeferred<Unit>()
+        val messagesRefreshStarted = CompletableDeferred<Unit>()
+        val snapshotRefreshStarted = CompletableDeferred<Unit>()
         val acknowledged = CompletableDeferred<ChatMessage>()
         api.chatMessageResponse = Response.success(TestDtos.chatMessage(id = "message-post"))
         api.chatMessagesResponse = Response.success(TestDtos.chatMessagesArrayPayload(emptyList()))
-        api.beforeGetChatMessagesResponse = { releaseMessagesRefresh.await() }
+        api.beforeGetChatMessagesResponse = {
+            messagesRefreshStarted.complete(Unit)
+            releaseMessagesRefresh.await()
+        }
+        api.beforeGetFirstChatForMatchResponse = {
+            snapshotRefreshStarted.complete(Unit)
+            releaseSnapshotRefresh.await()
+        }
         val optimistic = newOptimisticOutgoingMessage(
             chatId = "chat-1",
             senderId = "user-1",
@@ -557,13 +567,128 @@ class FirstChatCoordinatorTest {
         runCurrent()
 
         val acknowledgedState = acknowledged.await()
-        assertEquals(listOf("sendChatMessage", "getChatMessages"), api.calls)
+        messagesRefreshStarted.await()
+        snapshotRefreshStarted.await()
+        assertEquals("sendChatMessage", api.calls.first())
+        assertTrue(api.calls.contains("getChatMessages"))
+        assertTrue(api.calls.contains("getFirstChatForMatch"))
         assertEquals("message-post", acknowledgedState.id)
+        assertFalse(send.isCompleted)
 
         releaseMessagesRefresh.complete(Unit)
+        releaseSnapshotRefresh.complete(Unit)
         val final = send.await() as FirstChatSendResult.Show
         assertFalse(final.state.sending)
-        assertEquals(listOf("sendChatMessage", "getChatMessages", "getFirstChatForMatch"), api.calls)
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `sendMessage starts post send reconciliation reads concurrently`() = runTest {
+        val messagesRefreshStarted = CompletableDeferred<Unit>()
+        val snapshotRefreshStarted = CompletableDeferred<Unit>()
+        val releaseMessagesRefresh = CompletableDeferred<Unit>()
+        val releaseSnapshotRefresh = CompletableDeferred<Unit>()
+        api.beforeGetChatMessagesResponse = {
+            messagesRefreshStarted.complete(Unit)
+            releaseMessagesRefresh.await()
+        }
+        api.beforeGetFirstChatForMatchResponse = {
+            snapshotRefreshStarted.complete(Unit)
+            releaseSnapshotRefresh.await()
+        }
+        val current = firstChatState(chatStatus = ChatStatus.Active).copy(sending = true)
+
+        val send = async {
+            coordinator.sendMessage(current, "hola", localId = "local-1")
+        }
+        runCurrent()
+
+        messagesRefreshStarted.await()
+        snapshotRefreshStarted.await()
+        assertFalse(send.isCompleted)
+
+        releaseMessagesRefresh.complete(Unit)
+        releaseSnapshotRefresh.complete(Unit)
+        val state = (send.await() as FirstChatSendResult.Show).state
+        assertFalse(state.sending)
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `sendMessage waits for snapshot when messages refresh finishes first`() = runTest {
+        val messagesRefreshStarted = CompletableDeferred<Unit>()
+        val snapshotRefreshStarted = CompletableDeferred<Unit>()
+        val releaseMessagesRefresh = CompletableDeferred<Unit>()
+        val releaseSnapshotRefresh = CompletableDeferred<Unit>()
+        api.chatMessagesResponse = Response.success(
+            TestDtos.chatMessagesArrayPayload(listOf(TestDtos.chatMessage(id = "message-refresh")))
+        )
+        api.chatResponse = Response.success(TestDtos.chat(serverTime = "2026-06-18T21:02:00Z"))
+        api.beforeGetChatMessagesResponse = {
+            messagesRefreshStarted.complete(Unit)
+            releaseMessagesRefresh.await()
+        }
+        api.beforeGetFirstChatForMatchResponse = {
+            snapshotRefreshStarted.complete(Unit)
+            releaseSnapshotRefresh.await()
+        }
+        val current = firstChatState(chatStatus = ChatStatus.Active).copy(sending = true)
+
+        val send = async {
+            coordinator.sendMessage(current, "hola", localId = "local-1")
+        }
+        runCurrent()
+        messagesRefreshStarted.await()
+        snapshotRefreshStarted.await()
+
+        releaseMessagesRefresh.complete(Unit)
+        runCurrent()
+        assertFalse(send.isCompleted)
+
+        releaseSnapshotRefresh.complete(Unit)
+        val state = (send.await() as FirstChatSendResult.Show).state
+        assertFalse(state.sending)
+        assertTrue(state.messages.any { it.id == "message-refresh" })
+        assertEquals(java.time.Instant.parse("2026-06-18T21:02:00Z").toEpochMilli(), state.serverClockSnapshot?.serverTimeEpochMillis)
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `sendMessage waits for messages when snapshot refresh finishes first`() = runTest {
+        val messagesRefreshStarted = CompletableDeferred<Unit>()
+        val snapshotRefreshStarted = CompletableDeferred<Unit>()
+        val releaseMessagesRefresh = CompletableDeferred<Unit>()
+        val releaseSnapshotRefresh = CompletableDeferred<Unit>()
+        api.chatMessagesResponse = Response.success(
+            TestDtos.chatMessagesArrayPayload(listOf(TestDtos.chatMessage(id = "message-refresh")))
+        )
+        api.chatResponse = Response.success(TestDtos.chat(serverTime = "2026-06-18T21:02:00Z"))
+        api.beforeGetChatMessagesResponse = {
+            messagesRefreshStarted.complete(Unit)
+            releaseMessagesRefresh.await()
+        }
+        api.beforeGetFirstChatForMatchResponse = {
+            snapshotRefreshStarted.complete(Unit)
+            releaseSnapshotRefresh.await()
+        }
+        val current = firstChatState(chatStatus = ChatStatus.Active).copy(sending = true)
+
+        val send = async {
+            coordinator.sendMessage(current, "hola", localId = "local-1")
+        }
+        runCurrent()
+        messagesRefreshStarted.await()
+        snapshotRefreshStarted.await()
+
+        releaseSnapshotRefresh.complete(Unit)
+        runCurrent()
+        assertFalse(send.isCompleted)
+
+        releaseMessagesRefresh.complete(Unit)
+        val state = (send.await() as FirstChatSendResult.Show).state
+        assertFalse(state.sending)
+        assertTrue(state.messages.any { it.id == "message-refresh" })
+        assertEquals(java.time.Instant.parse("2026-06-18T21:02:00Z").toEpochMilli(), state.serverClockSnapshot?.serverTimeEpochMillis)
     }
 
     @Test
@@ -593,6 +718,42 @@ class FirstChatCoordinatorTest {
         assertFalse(state.sending)
         assertTrue(state.error is ApiError.Backend)
         assertEquals(listOf("sendChatMessage", "getChatMessages", "getFirstChatForMatch"), api.calls)
+    }
+
+    @Test
+    fun `sendMessage post success with both refreshes failing keeps messages error precedence`() = runBlocking {
+        api.chatMessageResponse = Response.success(TestDtos.chatMessage(id = "message-post"))
+        api.chatMessagesResponse = backendErrorResponse(
+            statusCode = 500,
+            code = "INTERNAL_ERROR",
+            message = "messages failed",
+        )
+        api.chatResponse = backendErrorResponse(
+            statusCode = 500,
+            code = "INTERNAL_ERROR",
+            message = "snapshot failed",
+        )
+        val current = firstChatState(chatStatus = ChatStatus.Active).copy(
+            optimisticMessages = listOf(
+                newOptimisticOutgoingMessage(
+                    chatId = "chat-1",
+                    senderId = "user-1",
+                    content = "hola",
+                    localId = "local-1",
+                    createdAtMillis = 123L,
+                )
+            ),
+            sending = true,
+        )
+
+        val result = coordinator.sendMessage(current, "hola", localId = "local-1")
+
+        val state = (result as FirstChatSendResult.Show).state
+        val error = state.error as ApiError.Backend
+        assertEquals("messages failed", error.message)
+        assertEquals(listOf("message-post"), state.messages.map { it.id })
+        assertTrue(state.optimisticMessages.isEmpty())
+        assertFalse(state.sending)
     }
 
     @Test

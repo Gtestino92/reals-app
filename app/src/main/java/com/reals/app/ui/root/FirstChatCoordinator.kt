@@ -230,18 +230,27 @@ internal class FirstChatCoordinator(
                     duration = sendStarted.elapsedNow(),
                 )
 
-                val messagesStarted = FirstChatSendTiming.markNow()
-                val messagesResult = dependencies.getChatMessages(chat.id, cursorBeforeSend)
-                FirstChatSendTiming.logStage(
-                    stage = "post_send_messages_refresh",
-                    duration = messagesStarted.elapsedNow(),
-                )
-                val snapshotStarted = FirstChatSendTiming.markNow()
-                val chatResult = dependencies.getFirstChatForMatch(current.matchId)
-                FirstChatSendTiming.logStage(
-                    stage = "post_send_first_chat_snapshot_refresh",
-                    duration = snapshotStarted.elapsedNow(),
-                )
+                val (messagesResult, chatResult) = coroutineScope {
+                    val messagesDeferred = async {
+                        val messagesStarted = FirstChatSendTiming.markNow()
+                        dependencies.getChatMessages(chat.id, cursorBeforeSend).also {
+                            FirstChatSendTiming.logStage(
+                                stage = "post_send_messages_refresh",
+                                duration = messagesStarted.elapsedNow(),
+                            )
+                        }
+                    }
+                    val chatDeferred = async {
+                        val snapshotStarted = FirstChatSendTiming.markNow()
+                        dependencies.getFirstChatForMatch(current.matchId).also {
+                            FirstChatSendTiming.logStage(
+                                stage = "post_send_first_chat_snapshot_refresh",
+                                duration = snapshotStarted.elapsedNow(),
+                            )
+                        }
+                    }
+                    messagesDeferred.await() to chatDeferred.await()
+                }
                 FirstChatSendTiming.logStage(
                     stage = "post_send_reconciliation_total",
                     duration = postCompleted.elapsedNow(),

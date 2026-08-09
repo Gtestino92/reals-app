@@ -210,6 +210,50 @@ class FirstChatAsyncResultReconciliationTest {
     }
 
     @Test
+    fun `second first chat text send remains blocked until post send reconciliation completes`() = runTest(dispatcher) {
+        val messagesRefreshStarted = CompletableDeferred<Unit>()
+        val snapshotRefreshStarted = CompletableDeferred<Unit>()
+        val releaseMessagesRefresh = CompletableDeferred<Unit>()
+        val releaseSnapshotRefresh = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            exitRequestsResponse = Response.success(emptyList())
+            chatMessageResponse = Response.success(
+                ownMessageDto(id = "sent-1", sentAt = "2026-06-18T21:04:00Z")
+            )
+            chatMessagesResponse = Response.success(TestDtos.chatMessagesArrayPayload(emptyList()))
+            beforeGetChatMessagesResponse = {
+                messagesRefreshStarted.complete(Unit)
+                releaseMessagesRefresh.await()
+            }
+            beforeGetFirstChatForMatchResponse = {
+                snapshotRefreshStarted.complete(Unit)
+                releaseSnapshotRefresh.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(firstChatState(serverTime = S1, lastMessageAt = S1))
+
+        assertTrue(viewModel.sendFirstChatMessage("hola"))
+        runCurrent()
+        messagesRefreshStarted.await()
+        snapshotRefreshStarted.await()
+
+        val acknowledgedState = viewModel.uiState.value as RealsRootUiState.FirstChat
+        assertTrue(acknowledgedState.sending)
+        assertTrue(acknowledgedState.optimisticMessages.isEmpty())
+        assertTrue(acknowledgedState.messages.any { it.id == "sent-1" })
+        assertFalse(viewModel.sendFirstChatMessage("otra"))
+
+        releaseMessagesRefresh.complete(Unit)
+        releaseSnapshotRefresh.complete(Unit)
+        advanceUntilIdle()
+
+        val finalState = viewModel.uiState.value as RealsRootUiState.FirstChat
+        assertFalse(finalState.sending)
+        assertEquals(1, api.calls.count { it == "sendChatMessage" })
+    }
+
+    @Test
     fun `older refresh result cannot regress newer displayed chat and server clock`() = runTest(dispatcher) {
         val gate = CompletableDeferred<Unit>()
         val refreshStarted = CompletableDeferred<Unit>()
