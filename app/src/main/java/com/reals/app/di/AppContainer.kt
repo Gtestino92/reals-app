@@ -89,6 +89,7 @@ import com.reals.app.domain.usecase.UpsertMyProfileQuestionAnswerUseCase
 import com.reals.app.foreground.AtomicForegroundDestinationTracker
 import com.reals.app.notifications.HomeRefreshSignal
 import com.reals.app.notifications.NotificationPresentationPolicy
+import com.reals.app.notifications.SharedPreferencesMatchFoundInvalidationStore
 import com.reals.app.notifications.registration.PushTokenRegistrationService
 import com.reals.app.ui.root.LocalFirebaseEmailVerificationCoordinator
 import kotlinx.serialization.json.Json
@@ -112,6 +113,7 @@ class AppContainer(context: Context) {
     val foregroundDestinationTracker = AtomicForegroundDestinationTracker()
     val notificationPresentationPolicy = NotificationPresentationPolicy()
     val homeRefreshSignal = HomeRefreshSignal()
+    val matchFoundInvalidationStore = SharedPreferencesMatchFoundInvalidationStore(appContext)
     private val meRepository = MeRepository(api, tokenProvider, apiExecutor)
     private val profileRepository = ProfileRepository(appContext, api, tokenProvider, apiExecutor)
     private val matchmakingRepository = MatchmakingRepository(api, tokenProvider, apiExecutor)

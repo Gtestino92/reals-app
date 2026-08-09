@@ -4,7 +4,10 @@ import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.reals.app.RealsApplication
+import com.reals.app.di.AppContainer
+import com.reals.app.foreground.ForegroundDestination
 import com.reals.app.notifications.PushNotificationContract.TYPE_MATCH_FOUND
+import com.reals.app.notifications.PushNotificationContract.TYPE_MATCH_FOUND_INVALIDATED
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_AVAILABLE
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_CONFIRMED
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_PROPOSALS_RECEIVED
@@ -52,6 +55,15 @@ class RealsFirebaseMessagingService : FirebaseMessagingService() {
             return
         }
 
+        if (notification.type == TYPE_MATCH_FOUND_INVALIDATED) {
+            handleMatchFoundInvalidated(
+                notification = notification,
+                appContainer = appContainer,
+                foregroundDestination = foregroundDestination,
+            )
+            return
+        }
+
         val shouldPresent = presentationPolicy.shouldPresent(
             notification = notification,
             foregroundDestination = foregroundDestination,
@@ -70,6 +82,11 @@ class RealsFirebaseMessagingService : FirebaseMessagingService() {
                     notification = notification,
                     shouldPresent = shouldPresent,
                     now = Instant.now(),
+                    isInvalidated = { matchId, now ->
+                        appContainer
+                            ?.matchFoundInvalidationStore
+                            ?.isInvalidated(matchId, now) == true
+                    },
                 )
             ) {
                 MatchFoundDispatchAction.RefreshHomeOnly -> appContainer
@@ -77,6 +94,8 @@ class RealsFirebaseMessagingService : FirebaseMessagingService() {
                     ?.request()
 
                 MatchFoundDispatchAction.IgnoreStale -> Unit
+
+                MatchFoundDispatchAction.SuppressInvalidated -> Unit
 
                 is MatchFoundDispatchAction.Present -> NotificationHelper.showMatchFound(
                     context = this,
@@ -115,6 +134,48 @@ class RealsFirebaseMessagingService : FirebaseMessagingService() {
         }
     }
 
+    private fun handleMatchFoundInvalidated(
+        notification: IncomingNotificationContext,
+        appContainer: AppContainer?,
+        foregroundDestination: ForegroundDestination?,
+    ) {
+        val now = Instant.now()
+        val action = matchFoundInvalidationDispatchAction(
+            notification = notification,
+            foregroundDestination = foregroundDestination,
+            now = now,
+        )
+
+        when (val decision = action.decision) {
+            MatchFoundInvalidationDecision.Ignore -> return
+
+            is MatchFoundInvalidationDecision.PersistAndCancel -> {
+                appContainer
+                    ?.matchFoundInvalidationStore
+                    ?.recordInvalidation(
+                        matchId = decision.matchId,
+                        expiresAt = decision.expiresAt,
+                        now = now,
+                    )
+                NotificationHelper.cancelMatchFound(
+                    context = this,
+                    matchId = decision.matchId,
+                )
+            }
+
+            is MatchFoundInvalidationDecision.CancelOnly -> NotificationHelper.cancelMatchFound(
+                context = this,
+                matchId = decision.matchId,
+            )
+        }
+
+        if (action.requestHomeRefresh) {
+            appContainer
+                ?.homeRefreshSignal
+                ?.request()
+        }
+    }
+
     override fun onDestroy() {
         scope.cancel()
         super.onDestroy()
@@ -136,6 +197,7 @@ internal fun Map<String, String>.incomingNotificationContext(): IncomingNotifica
 
 internal fun isKnownForegroundNotificationType(type: String?): Boolean = when (type?.trim()) {
     TYPE_MATCH_FOUND,
+    TYPE_MATCH_FOUND_INVALIDATED,
     TYPE_VISUAL_REVIEW_REMINDER,
     TYPE_VISUAL_REVIEW_AVAILABLE,
     TYPE_SCHEDULING_AVAILABLE,

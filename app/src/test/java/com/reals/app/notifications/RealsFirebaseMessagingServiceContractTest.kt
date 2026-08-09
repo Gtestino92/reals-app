@@ -1,6 +1,7 @@
 package com.reals.app.notifications
 
 import com.reals.app.notifications.PushNotificationContract.TYPE_MATCH_FOUND
+import com.reals.app.notifications.PushNotificationContract.TYPE_MATCH_FOUND_INVALIDATED
 import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_STARTED
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -49,7 +50,34 @@ class RealsFirebaseMessagingServiceContractTest {
     @Test
     fun `known foreground notification types include match found and unknown remains ignored`() {
         assertTrue(isKnownForegroundNotificationType(TYPE_MATCH_FOUND))
+        assertTrue(isKnownForegroundNotificationType(TYPE_MATCH_FOUND_INVALIDATED))
         assertTrue(isKnownForegroundNotificationType(TYPE_SECOND_CHAT_STARTED))
         assertFalse(isKnownForegroundNotificationType("UNKNOWN"))
+    }
+
+    @Test
+    fun `incoming match found invalidated context trims control payload fields`() {
+        val context = mapOf(
+            "type" to " $TYPE_MATCH_FOUND_INVALIDATED ",
+            "matchId" to " match-1 ",
+            "expiresAt" to " 2026-08-01T21:00:00-03:00 ",
+        ).incomingNotificationContext()
+
+        assertEquals(TYPE_MATCH_FOUND_INVALIDATED, context.type)
+        assertEquals("match-1", context.matchId)
+        assertEquals("2026-08-01T21:00:00-03:00", context.expiresAt)
+        assertEquals(null, context.connectionId)
+        assertEquals(null, context.availableAt)
+    }
+
+    @Test
+    fun `incoming match found invalidated context tolerates missing fields`() {
+        val context = mapOf(
+            "type" to TYPE_MATCH_FOUND_INVALIDATED,
+        ).incomingNotificationContext()
+
+        assertEquals(TYPE_MATCH_FOUND_INVALIDATED, context.type)
+        assertEquals(null, context.matchId)
+        assertEquals(null, context.expiresAt)
     }
 }

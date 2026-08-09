@@ -72,6 +72,16 @@ object NotificationHelper {
         notificationManagerCompat.cancel(MATCH_FOUND_NOTIFICATION_ID_BASE)
     }
 
+    fun cancelMatchFound(context: Context, matchId: String) {
+        val normalizedMatchId = normalizedNotificationTargetId(matchId) ?: return
+        val identity = matchFoundNotificationDisplayIdentity(normalizedMatchId)
+
+        NotificationManagerCompat.from(context).cancel(
+            identity.tag,
+            identity.id,
+        )
+    }
+
     @SuppressLint("MissingPermission")
     fun showVisualReviewReminder(context: Context, matchId: String?) {
         if (!canPostNotifications(context)) return

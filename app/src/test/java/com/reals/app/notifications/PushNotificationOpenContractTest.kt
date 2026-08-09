@@ -1,6 +1,7 @@
 package com.reals.app.notifications
 
 import com.reals.app.notifications.PushNotificationContract.TYPE_MATCH_FOUND
+import com.reals.app.notifications.PushNotificationContract.TYPE_MATCH_FOUND_INVALIDATED
 import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_STARTED
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -34,6 +35,7 @@ class PushNotificationOpenContractTest {
     fun `match found and second chat started are handled and unknown is ignored`() {
         assertTrue(PushNotificationOpenContract.shouldHandleExternalOpen(TYPE_MATCH_FOUND))
         assertTrue(PushNotificationOpenContract.shouldHandleExternalOpen(TYPE_SECOND_CHAT_STARTED))
+        assertFalse(PushNotificationOpenContract.shouldHandleExternalOpen(TYPE_MATCH_FOUND_INVALIDATED))
         assertFalse(PushNotificationOpenContract.shouldHandleExternalOpen("UNKNOWN"))
     }
 }

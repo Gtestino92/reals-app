@@ -56,6 +56,15 @@ class NotificationHelperTest {
     }
 
     @Test
+    fun `match found invalidated contract is control-only`() {
+        assertEquals("MATCH_FOUND_INVALIDATED", PushNotificationContract.TYPE_MATCH_FOUND_INVALIDATED)
+        assertEquals(
+            NotificationDisplayIdentity(tag = "match-found-match-1", id = 0),
+            NotificationHelper.matchFoundNotificationDisplayIdentity(" match-1 "),
+        )
+    }
+
+    @Test
     fun `visual review reminder contract keeps historical type compatibility`() {
         assertEquals("VISUAL_REVIEW_REMINDER", PushNotificationContract.TYPE_VISUAL_REVIEW_REMINDER)
         assertEquals("VISUAL_REVIEW_AVAILABLE", PushNotificationContract.TYPE_VISUAL_REVIEW_AVAILABLE)
