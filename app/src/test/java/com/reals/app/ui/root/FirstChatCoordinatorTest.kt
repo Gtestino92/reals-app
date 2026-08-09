@@ -599,8 +599,9 @@ class FirstChatCoordinatorTest {
     }
 
     @Test
-    fun `approved decision with active chat reloads home and hides first chat`() = runBlocking {
+    fun `approved decision with visual phase response reloads home and hides first chat`() = runBlocking {
         var pending: RealsRootUiState.FirstChat? = null
+        api.matchResponse = Response.success(TestDtos.match("VISUAL_PHASE"))
         val current = firstChatState(chatStatus = ChatStatus.Active)
 
         val result = coordinator.submitDecision(
@@ -614,7 +615,7 @@ class FirstChatCoordinatorTest {
         assertTrue(result is FirstChatActionResult.ReloadHome)
         result as FirstChatActionResult.ReloadHome
         assertEquals("match-1", result.hideFirstChatMatchId)
-        assertEquals("Aprobaste el chat. Te avisaremos si la otra persona también aprueba.", result.message)
+        assertEquals("El chat cambió de estado. Actualizamos tu Home.", result.message)
         assertFalse(result.autoNavigateEngagements)
         assertEquals(listOf("submitChatDecision"), api.calls)
     }
@@ -678,7 +679,7 @@ class FirstChatCoordinatorTest {
         assertTrue(result is FirstChatActionResult.ReturnHome)
         result as FirstChatActionResult.ReturnHome
         assertEquals("match-1", result.hideFirstChatMatchId)
-        assertEquals("El chat pasó a revisión visual. Actualizamos tu lista.", result.message)
+        assertEquals("El chat cambió de estado. Actualizamos tu Home.", result.message)
     }
 
     @Test

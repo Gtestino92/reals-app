@@ -38,8 +38,12 @@ class FirstChatRulesTest {
             firstChatDecisionMessage(MatchState.ChatActive),
         )
         assertEquals(
-            "Ambas personas aprobaron. La revisión visual ya está pendiente.",
+            "Ambas personas aprobaron. Actualizamos tu Home.",
             firstChatDecisionMessage(MatchState.VisualPhase),
+        )
+        assertEquals(
+            "El chat cambió de estado. Actualizamos tu Home.",
+            firstChatExitMessage(MatchState.VisualPhase),
         )
         assertEquals(
             "El chat fue rechazado. Actualizamos tu Home.",

@@ -4,10 +4,12 @@ import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ApiResult
 import com.reals.app.core.network.BackendErrorCode
 import com.reals.app.core.network.backendErrorCode
+import com.reals.app.core.time.backendInstantOrNull
 import com.reals.app.di.HomeFeatureDependencies
 import com.reals.app.domain.model.BackendUser
 import com.reals.app.domain.model.HomePendingAction
 import com.reals.app.domain.model.HomeState
+import com.reals.app.domain.model.HomeStatus
 import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.SearchLocationInput
@@ -106,8 +108,13 @@ internal class HomeCoordinator(
                     val status = statusResult.value
                     val knownVersion = latest.home.homeStatusVersion
                     val hasHome = latest.home.homeState != null
-                    if (hasHome && knownVersion == status.version) return@launch
-                    if (hasHome && knownVersion == null && !status.dirty) {
+                    val wakeUpDue = status.isHomeWakeUpDue()
+                    val requiresFullRefresh = !hasHome ||
+                        status.dirty ||
+                        knownVersion != status.version ||
+                        wakeUpDue
+                    if (!requiresFullRefresh) return@launch
+                    if (hasHome && knownVersion == null && !status.dirty && !wakeUpDue) {
                         uiState.value = latest.copy(
                             home = latest.home.copy(homeStatusVersion = status.version),
                         )
@@ -651,4 +658,10 @@ private fun RealsRootUiState.Ready.withoutStaleHomeForKnownDraftProfile(): Reals
             matchmakingSearchPhase = MatchmakingSearchUiPhase.Idle,
         ),
     )
+}
+
+internal fun HomeStatus.isHomeWakeUpDue(): Boolean {
+    val nextRefreshAtInstant = backendInstantOrNull(nextRefreshAt) ?: return false
+    val serverTimeInstant = backendInstantOrNull(serverTime) ?: return false
+    return !serverTimeInstant.isBefore(nextRefreshAtInstant)
 }

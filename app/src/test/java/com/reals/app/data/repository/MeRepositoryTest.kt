@@ -34,7 +34,13 @@ class MeRepositoryTest {
 
     @Test
     fun `getHomeStatus calls status endpoint with auth and maps response`() = runBlocking {
-        api.homeStatusResponse = retrofit2.Response.success(TestDtos.homeStatus(version = 9, dirty = true))
+        api.homeStatusResponse = retrofit2.Response.success(
+            TestDtos.homeStatus(
+                version = 9,
+                dirty = true,
+                nextRefreshAt = "2026-06-18T21:05:00Z",
+            )
+        )
 
         val status = repository.getHomeStatus().successValue()
 
@@ -42,6 +48,7 @@ class MeRepositoryTest {
         assertEquals("Bearer test-token", api.lastAuthorization)
         assertEquals(9L, status.version)
         assertEquals(true, status.dirty)
+        assertEquals("2026-06-18T21:05:00Z", status.nextRefreshAt)
         assertEquals(TestDtos.now, status.serverTime)
     }
 
