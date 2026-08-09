@@ -1179,6 +1179,12 @@ class RealsRootViewModel(
                             preparation.pendingState,
                             preparation.cleanContent,
                             preparation.localId,
+                            onPostAcknowledged = { acknowledged ->
+                                applyFirstChatPostAcknowledgement(
+                                    acknowledged = acknowledged,
+                                    localId = preparation.localId,
+                                )
+                            },
                         )
                     )
                 }
@@ -1652,6 +1658,20 @@ class RealsRootViewModel(
                 )
             }
         }
+    }
+
+    private fun applyFirstChatPostAcknowledgement(
+        acknowledged: RealsRootUiState.FirstChat,
+        localId: String,
+    ) {
+        val latest = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        if (!acknowledged.sameFirstChatInstance(latest)) return
+        _uiState.value = latest.copy(
+            messages = latest.messages.appendUnique(acknowledged.messages),
+            optimisticMessages = latest.optimisticMessages.withoutOptimisticMessage(localId),
+            error = acknowledged.error,
+            message = acknowledged.message,
+        )
     }
 
     private suspend fun applySecondChatActionResult(result: SecondChatActionResult) {

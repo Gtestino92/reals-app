@@ -526,6 +526,138 @@ class FirstChatCoordinatorTest {
     }
 
     @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `sendMessage acknowledges persisted message before post send refresh completes`() = runTest {
+        val releaseMessagesRefresh = CompletableDeferred<Unit>()
+        val acknowledged = CompletableDeferred<RealsRootUiState.FirstChat>()
+        api.chatMessageResponse = Response.success(TestDtos.chatMessage(id = "message-post"))
+        api.chatMessagesResponse = Response.success(TestDtos.chatMessagesArrayPayload(emptyList()))
+        api.beforeGetChatMessagesResponse = { releaseMessagesRefresh.await() }
+        val optimistic = newOptimisticOutgoingMessage(
+            chatId = "chat-1",
+            senderId = "user-1",
+            content = "hola",
+            localId = "local-1",
+            createdAtMillis = 123L,
+        )
+        val current = firstChatState(chatStatus = ChatStatus.Active).copy(
+            optimisticMessages = listOf(optimistic),
+            sending = true,
+        )
+
+        val send = async {
+            coordinator.sendMessage(
+                current = current,
+                cleanContent = "hola",
+                localId = "local-1",
+                onPostAcknowledged = { acknowledged.complete(it) },
+            )
+        }
+        runCurrent()
+
+        val acknowledgedState = acknowledged.await()
+        assertEquals(listOf("sendChatMessage", "getChatMessages"), api.calls)
+        assertEquals(listOf("message-post"), acknowledgedState.messages.map { it.id })
+        assertTrue(acknowledgedState.optimisticMessages.isEmpty())
+        assertTrue(acknowledgedState.sending)
+
+        releaseMessagesRefresh.complete(Unit)
+        val final = send.await() as FirstChatSendResult.Show
+        assertFalse(final.state.sending)
+        assertEquals(listOf("sendChatMessage", "getChatMessages", "getFirstChatForMatch"), api.calls)
+    }
+
+    @Test
+    fun `sendMessage post success with messages refresh failure stays acknowledged`() = runBlocking {
+        api.chatMessageResponse = Response.success(TestDtos.chatMessage(id = "message-post"))
+        api.chatMessagesResponse = backendErrorResponse(
+            statusCode = 500,
+            code = "INTERNAL_ERROR",
+        )
+        val optimistic = newOptimisticOutgoingMessage(
+            chatId = "chat-1",
+            senderId = "user-1",
+            content = "hola",
+            localId = "local-1",
+            createdAtMillis = 123L,
+        )
+        val current = firstChatState(chatStatus = ChatStatus.Active).copy(
+            optimisticMessages = listOf(optimistic),
+            sending = true,
+        )
+
+        val result = coordinator.sendMessage(current, "hola", localId = "local-1")
+
+        val state = (result as FirstChatSendResult.Show).state
+        assertEquals(listOf("message-post"), state.messages.map { it.id })
+        assertTrue(state.optimisticMessages.isEmpty())
+        assertFalse(state.sending)
+        assertTrue(state.error is ApiError.Backend)
+        assertEquals(listOf("sendChatMessage", "getChatMessages", "getFirstChatForMatch"), api.calls)
+    }
+
+    @Test
+    fun `sendMessage post success with first chat snapshot failure stays acknowledged`() = runBlocking {
+        api.chatMessageResponse = Response.success(TestDtos.chatMessage(id = "message-post"))
+        api.chatMessagesResponse = Response.success(TestDtos.chatMessagesArrayPayload(emptyList()))
+        api.chatResponse = backendErrorResponse(
+            statusCode = 500,
+            code = "INTERNAL_ERROR",
+        )
+        val optimistic = newOptimisticOutgoingMessage(
+            chatId = "chat-1",
+            senderId = "user-1",
+            content = "hola",
+            localId = "local-1",
+            createdAtMillis = 123L,
+        )
+        val current = firstChatState(chatStatus = ChatStatus.Active).copy(
+            optimisticMessages = listOf(optimistic),
+            sending = true,
+        )
+
+        val result = coordinator.sendMessage(current, "hola", localId = "local-1")
+
+        val state = (result as FirstChatSendResult.Show).state
+        assertEquals(listOf("message-post"), state.messages.map { it.id })
+        assertTrue(state.optimisticMessages.isEmpty())
+        assertFalse(state.sending)
+        assertTrue(state.error is ApiError.Backend)
+        assertEquals(listOf("sendChatMessage", "getChatMessages", "getFirstChatForMatch"), api.calls)
+    }
+
+    @Test
+    fun `sendMessage stale messages refresh does not replace post response for sent message`() = runBlocking {
+        api.chatMessageResponse = Response.success(
+            TestDtos.chatMessage(id = "message-post").copy(content = "desde post")
+        )
+        api.chatMessagesResponse = Response.success(
+            TestDtos.chatMessagesArrayPayload(
+                listOf(TestDtos.chatMessage(id = "message-post").copy(content = "desde refresh viejo"))
+            )
+        )
+        val current = firstChatState(chatStatus = ChatStatus.Active).copy(
+            optimisticMessages = listOf(
+                newOptimisticOutgoingMessage(
+                    chatId = "chat-1",
+                    senderId = "user-1",
+                    content = "hola",
+                    localId = "local-1",
+                    createdAtMillis = 123L,
+                )
+            ),
+            sending = true,
+        )
+
+        val result = coordinator.sendMessage(current, "hola", localId = "local-1")
+
+        val state = (result as FirstChatSendResult.Show).state
+        assertEquals("desde post", state.messages.single { it.id == "message-post" }.content)
+        assertTrue(state.optimisticMessages.isEmpty())
+        assertFalse(state.sending)
+    }
+
+    @Test
     fun `sendMessage failure keeps chat backend error`() = runBlocking {
         api.chatMessageResponse = backendErrorResponse(
             statusCode = 400,
