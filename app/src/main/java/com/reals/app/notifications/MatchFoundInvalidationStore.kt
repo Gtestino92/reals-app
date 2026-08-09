@@ -2,6 +2,7 @@ package com.reals.app.notifications
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import java.time.Instant
 
 interface MatchFoundInvalidationStore {
@@ -41,7 +42,9 @@ class SharedPreferencesMatchFoundInvalidationStore(
         } else {
             editor.putLong(normalizedMatchId, expiryMillis)
         }
-        editor.apply()
+        if (!editor.commit()) {
+            Log.w(TAG, "Could not synchronously persist match found invalidation tombstone.")
+        }
     }
 
     override fun isInvalidated(
@@ -73,6 +76,10 @@ class SharedPreferencesMatchFoundInvalidationStore(
                 editor.remove(key)
             }
         }
+    }
+
+    private companion object {
+        const val TAG = "MatchFoundInvalidationStore"
     }
 }
 
