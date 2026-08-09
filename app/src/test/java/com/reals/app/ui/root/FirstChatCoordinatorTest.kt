@@ -14,6 +14,7 @@ import com.reals.app.di.FirstChatFeatureDependencies
 import com.reals.app.domain.model.ChatContinueDecision
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequestStatus
+import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.usecase.AcceptChatExitRequestUseCase
 import com.reals.app.domain.usecase.CancelChatUseCase
@@ -529,7 +530,7 @@ class FirstChatCoordinatorTest {
     @OptIn(ExperimentalCoroutinesApi::class)
     fun `sendMessage acknowledges persisted message before post send refresh completes`() = runTest {
         val releaseMessagesRefresh = CompletableDeferred<Unit>()
-        val acknowledged = CompletableDeferred<RealsRootUiState.FirstChat>()
+        val acknowledged = CompletableDeferred<ChatMessage>()
         api.chatMessageResponse = Response.success(TestDtos.chatMessage(id = "message-post"))
         api.chatMessagesResponse = Response.success(TestDtos.chatMessagesArrayPayload(emptyList()))
         api.beforeGetChatMessagesResponse = { releaseMessagesRefresh.await() }
@@ -557,9 +558,7 @@ class FirstChatCoordinatorTest {
 
         val acknowledgedState = acknowledged.await()
         assertEquals(listOf("sendChatMessage", "getChatMessages"), api.calls)
-        assertEquals(listOf("message-post"), acknowledgedState.messages.map { it.id })
-        assertTrue(acknowledgedState.optimisticMessages.isEmpty())
-        assertTrue(acknowledgedState.sending)
+        assertEquals("message-post", acknowledgedState.id)
 
         releaseMessagesRefresh.complete(Unit)
         val final = send.await() as FirstChatSendResult.Show

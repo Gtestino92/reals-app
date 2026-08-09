@@ -210,7 +210,7 @@ internal class FirstChatCoordinator(
         current: RealsRootUiState.FirstChat,
         cleanContent: String,
         localId: String,
-        onPostAcknowledged: (RealsRootUiState.FirstChat) -> Unit = {},
+        onPostAcknowledged: (ChatMessage) -> Unit = {},
     ): FirstChatSendResult {
         val chat = current.chat ?: return FirstChatSendResult.Show(current)
         val cursorBeforeSend = current.messages.lastMessageCursor()
@@ -224,13 +224,7 @@ internal class FirstChatCoordinator(
                 )
                 val sentMessage = result.value
                 val messagesWithSent = current.messages.appendUnique(listOf(sentMessage))
-                onPostAcknowledged(
-                    current.copy(
-                        messages = messagesWithSent,
-                        optimisticMessages = current.optimisticMessages.withoutOptimisticMessage(localId),
-                        error = null,
-                    )
-                )
+                onPostAcknowledged(sentMessage)
                 FirstChatSendTiming.logStage(
                     stage = "send_to_optimistic_acknowledged",
                     duration = sendStarted.elapsedNow(),

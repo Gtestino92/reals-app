@@ -127,6 +127,89 @@ class FirstChatAsyncResultReconciliationTest {
     }
 
     @Test
+    fun `post acknowledgement preserves fresher concurrently refreshed existing message`() = runTest(dispatcher) {
+        val sendGate = CompletableDeferred<Unit>()
+        val sendStarted = CompletableDeferred<Unit>()
+        val oldAudio = TestDtos.audioChatMessage(id = "audio-1", url = "https://old.test/audio").toDomain()
+        val freshAudio = TestDtos.audioChatMessage(id = "audio-1", url = "https://fresh.test/audio").toDomain()
+        val api = FakeRealsApi().apply {
+            exitRequestsResponse = Response.success(emptyList())
+            chatMessageResponse = Response.success(
+                ownMessageDto(id = "sent-1", sentAt = "2026-06-18T21:04:00Z")
+            )
+            beforeSendChatMessageResponse = {
+                sendStarted.complete(Unit)
+                sendGate.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(firstChatState(serverTime = S1, lastMessageAt = S1).copy(messages = listOf(oldAudio)))
+
+        assertTrue(viewModel.sendFirstChatMessage("hola"))
+        runCurrent()
+        sendStarted.await()
+
+        api.chatMessagesResponse = Response.success(
+            TestDtos.chatMessagesArrayPayload(listOf(TestDtos.audioChatMessage(id = "audio-1", url = "https://fresh.test/audio")))
+        )
+        assertEquals("https://fresh.test/audio", viewModel.refreshFirstChatAudioUrl("audio-1"))
+        val refreshedState = viewModel.uiState.value as RealsRootUiState.FirstChat
+        assertTrue(refreshedState.sending)
+        assertEquals("https://fresh.test/audio", refreshedState.messages.single { it.id == "audio-1" }.audio?.url)
+
+        api.chatMessagesResponse = Response.success(TestDtos.chatMessagesArrayPayload(emptyList()))
+        sendGate.complete(Unit)
+        advanceUntilIdle()
+
+        val finalState = viewModel.uiState.value as RealsRootUiState.FirstChat
+        assertFalse(finalState.sending)
+        assertTrue(finalState.optimisticMessages.isEmpty())
+        assertEquals("https://fresh.test/audio", finalState.messages.single { it.id == "audio-1" }.audio?.url)
+        assertTrue(finalState.messages.any { it.id == "sent-1" })
+        assertEquals(freshAudio, finalState.messages.single { it.id == "audio-1" })
+    }
+
+    @Test
+    fun `post acknowledgement from previous first chat cannot mutate current first chat`() = runTest(dispatcher) {
+        val sendGate = CompletableDeferred<Unit>()
+        val sendStarted = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            exitRequestsResponse = Response.success(emptyList())
+            chatMessageResponse = Response.success(
+                ownMessageDto(id = "sent-previous", sentAt = "2026-06-18T21:04:00Z")
+            )
+            chatMessagesResponse = Response.success(TestDtos.chatMessagesArrayPayload(emptyList()))
+            beforeSendChatMessageResponse = {
+                sendStarted.complete(Unit)
+                sendGate.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(firstChatState(serverTime = S1, lastMessageAt = S1))
+
+        assertTrue(viewModel.sendFirstChatMessage("hola"))
+        runCurrent()
+        sendStarted.await()
+
+        val currentOtherChat = firstChatState(serverTime = S1, lastMessageAt = S1).copy(
+            matchId = "match-2",
+            chatId = "chat-2",
+            chat = chatDto(serverTime = S1, lastMessageAt = S1).copy(id = "chat-2", matchId = "match-2").toDomain(),
+            messages = listOf(ownMessageDto(id = "other-message").copy(chatSessionId = "chat-2").toDomain()),
+        )
+        viewModel.setState(currentOtherChat)
+
+        sendGate.complete(Unit)
+        advanceUntilIdle()
+
+        val finalState = viewModel.uiState.value as RealsRootUiState.FirstChat
+        assertEquals("match-2", finalState.matchId)
+        assertEquals("chat-2", finalState.chatId)
+        assertEquals(listOf("other-message"), finalState.messages.map { it.id })
+        assertFalse(finalState.messages.any { it.id == "sent-previous" })
+    }
+
+    @Test
     fun `older refresh result cannot regress newer displayed chat and server clock`() = runTest(dispatcher) {
         val gate = CompletableDeferred<Unit>()
         val refreshStarted = CompletableDeferred<Unit>()
