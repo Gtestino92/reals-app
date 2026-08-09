@@ -23,6 +23,48 @@ class NotificationHelperTest {
     }
 
     @Test
+    fun `match found copy uses expected foreground text`() {
+        assertEquals(
+            "Encontramos un chat" to "Tu nuevo chat ya está disponible.",
+            NotificationHelper.matchFoundNotificationCopy(),
+        )
+    }
+
+    @Test
+    fun `match found tag matches backend replacement contract`() {
+        assertEquals("match-found-match-1", NotificationHelper.matchFoundNotificationTag("match-1"))
+        assertEquals("match-found-match-1", NotificationHelper.matchFoundNotificationTag(" match-1 "))
+    }
+
+    @Test
+    fun `match found identity recognition is scoped to match found notifications`() {
+        assertEquals(
+            NotificationDisplayIdentity(tag = "match-found-match-1", id = 0),
+            NotificationHelper.matchFoundNotificationDisplayIdentity("match-1"),
+        )
+        assertEquals(
+            NotificationDisplayIdentity(
+                tag = null,
+                id = PushNotificationContract.MATCH_FOUND_NOTIFICATION_ID_BASE,
+            ),
+            NotificationHelper.matchFoundNotificationDisplayIdentity(null),
+        )
+        assertEquals(true, NotificationHelper.isMatchFoundNotificationIdentity("match-found-match-1", 0))
+        assertEquals(true, NotificationHelper.isMatchFoundNotificationIdentity(null, 30_000))
+        assertEquals(false, NotificationHelper.isMatchFoundNotificationIdentity("second-chat-connection-1", 0))
+        assertEquals(false, NotificationHelper.isMatchFoundNotificationIdentity(null, 20_000))
+    }
+
+    @Test
+    fun `match found invalidated contract is control-only`() {
+        assertEquals("MATCH_FOUND_INVALIDATED", PushNotificationContract.TYPE_MATCH_FOUND_INVALIDATED)
+        assertEquals(
+            NotificationDisplayIdentity(tag = "match-found-match-1", id = 0),
+            NotificationHelper.matchFoundNotificationDisplayIdentity(" match-1 "),
+        )
+    }
+
+    @Test
     fun `visual review reminder contract keeps historical type compatibility`() {
         assertEquals("VISUAL_REVIEW_REMINDER", PushNotificationContract.TYPE_VISUAL_REVIEW_REMINDER)
         assertEquals("VISUAL_REVIEW_AVAILABLE", PushNotificationContract.TYPE_VISUAL_REVIEW_AVAILABLE)

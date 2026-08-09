@@ -7,6 +7,7 @@ import com.reals.app.data.dto.HomeNextStepResponseDto
 import com.reals.app.data.dto.HomePendingActionResponseDto
 import com.reals.app.data.mapper.toDomain
 import com.reals.app.data.repository.FirebaseAuthRepository
+import com.reals.app.notifications.PushNotificationContract.TYPE_MATCH_FOUND
 import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_REMINDER
 import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_STARTED
 import com.reals.app.testutil.FakeRealsApi
@@ -44,6 +45,25 @@ class RealsRootViewModelExternalNotificationTest {
     @After
     fun tearDown() {
         Dispatchers.resetMain()
+    }
+
+    @Test
+    fun `match found notification open refreshes Home without trusting push state`() = runTest(dispatcher) {
+        val home = TestDtos.home().copy(pendingActions = emptyList(), nextSteps = emptyList())
+        val api = FakeRealsApi().apply {
+            homeResponse = Response.success(home)
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(readyWithHome(home))
+
+        viewModel.handleExternalNotificationOpened(TYPE_MATCH_FOUND)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value is RealsRootUiState.Ready)
+        assertEquals(listOf("getHome"), api.calls)
+        assertFalse(api.calls.contains("getFirstChatForMatch"))
+        assertFalse(api.calls.contains("getSecondChatForConnection"))
+        assertFalse(api.calls.contains("joinSecondChat"))
     }
 
     @Test

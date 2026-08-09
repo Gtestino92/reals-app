@@ -28,6 +28,7 @@ import com.reals.app.notifications.PushNotificationContract.VISUAL_REVIEW_NOTIFI
 
 object NotificationHelper {
     private const val TAG = "NotificationHelper"
+    private const val MATCH_FOUND_NOTIFICATION_TAG_PREFIX = "match-found-"
     internal const val GENERAL_UPDATES_CHANNEL_IMPORTANCE =
         NotificationManager.IMPORTANCE_HIGH
 
@@ -45,6 +46,40 @@ object NotificationHelper {
 
         context.getSystemService(NotificationManager::class.java)
             ?.createNotificationChannel(channel)
+    }
+
+    fun cancelAllMatchFound(context: Context) {
+        val notificationManager = context.getSystemService(NotificationManager::class.java)
+            ?: return
+        val notificationManagerCompat = NotificationManagerCompat.from(context)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            notificationManager.activeNotifications
+                .filter { activeNotification ->
+                    isMatchFoundNotificationIdentity(
+                        tag = activeNotification.tag,
+                        id = activeNotification.id,
+                    )
+                }
+                .forEach { activeNotification ->
+                    notificationManagerCompat.cancel(
+                        activeNotification.tag,
+                        activeNotification.id,
+                    )
+                }
+        }
+
+        notificationManagerCompat.cancel(MATCH_FOUND_NOTIFICATION_ID_BASE)
+    }
+
+    fun cancelMatchFound(context: Context, matchId: String) {
+        val normalizedMatchId = normalizedNotificationTargetId(matchId) ?: return
+        val identity = matchFoundNotificationDisplayIdentity(normalizedMatchId)
+
+        NotificationManagerCompat.from(context).cancel(
+            identity.tag,
+            identity.id,
+        )
     }
 
     @SuppressLint("MissingPermission")
@@ -187,12 +222,14 @@ object NotificationHelper {
     fun showMatchFound(
         context: Context,
         matchId: String?,
+        timeoutAfterMillis: Long? = null,
     ) {
         if (!canPostNotifications(context)) return
+        if (timeoutAfterMillis != null && timeoutAfterMillis <= 0L) return
 
         val (title, body) = matchFoundNotificationCopy()
 
-        val notification = NotificationCompat.Builder(
+        val builder = NotificationCompat.Builder(
             context,
             GENERAL_UPDATES_CHANNEL_ID,
         )
@@ -219,6 +256,10 @@ object NotificationHelper {
                     matchId = matchId,
                 ),
             )
+
+        timeoutAfterMillis?.let { builder.setTimeoutAfter(it) }
+
+        val notification = builder
             .build()
 
         try {
@@ -255,7 +296,14 @@ object NotificationHelper {
 
     internal fun matchFoundNotificationTag(matchId: String?): String? =
         normalizedNotificationTargetId(matchId)
-            ?.let { "match-found-$it" }
+            ?.let { "$MATCH_FOUND_NOTIFICATION_TAG_PREFIX$it" }
+
+    internal fun isMatchFoundNotificationIdentity(
+        tag: String?,
+        id: Int,
+    ): Boolean =
+        tag?.startsWith(MATCH_FOUND_NOTIFICATION_TAG_PREFIX) == true ||
+                (tag == null && id == MATCH_FOUND_NOTIFICATION_ID_BASE)
 
     internal fun matchFoundNotificationDisplayIdentity(
         matchId: String?,
