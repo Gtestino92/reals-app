@@ -30,12 +30,37 @@ class HomeMappersTest {
         val status = HomeStatusResponseDto(
             version = 12,
             dirty = true,
+            nextRefreshAt = "2026-06-18T21:05:00Z",
             serverTime = "2026-06-18T21:00:00Z",
         ).toDomain()
 
         assertEquals(12L, status.version)
         assertEquals(true, status.dirty)
+        assertEquals("2026-06-18T21:05:00Z", status.nextRefreshAt)
         assertEquals("2026-06-18T21:00:00Z", status.serverTime)
+    }
+
+    @Test
+    fun `Home status DTO handles null and missing next refresh marker`() {
+        val nullStatus = HomeStatusResponseDto(
+            version = 12,
+            dirty = false,
+            nextRefreshAt = null,
+            serverTime = "2026-06-18T21:00:00Z",
+        ).toDomain()
+        val missingStatus = testJson.decodeFromString<HomeStatusResponseDto>(
+            """
+            {
+              "version": 13,
+              "dirty": false,
+              "serverTime": "2026-06-18T21:00:00Z"
+            }
+            """.trimIndent()
+        ).toDomain()
+
+        assertEquals(null, nullStatus.nextRefreshAt)
+        assertEquals(null, missingStatus.nextRefreshAt)
+        assertEquals("2026-06-18T21:00:00Z", missingStatus.serverTime)
     }
 
     @Test

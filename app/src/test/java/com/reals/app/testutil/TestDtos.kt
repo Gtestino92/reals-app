@@ -606,10 +606,16 @@ object TestDtos {
         passiveNotices = listOf(HomePassiveNoticeResponseDto("SCHEDULING_PREPARING")),
     )
 
-    fun homeStatus(version: Long = 1, dirty: Boolean = false) = HomeStatusResponseDto(
+    fun homeStatus(
+        version: Long = 1,
+        dirty: Boolean = false,
+        nextRefreshAt: String? = null,
+        serverTime: String? = now,
+    ) = HomeStatusResponseDto(
         version = version,
         dirty = dirty,
-        serverTime = now,
+        nextRefreshAt = nextRefreshAt,
+        serverTime = serverTime,
     )
 
     fun homePending() = HomePendingStateResponseDto(

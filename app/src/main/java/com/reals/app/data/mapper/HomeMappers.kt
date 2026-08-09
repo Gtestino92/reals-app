@@ -39,6 +39,7 @@ fun HomeResponseDto.toDomain(): HomeState = HomeState(
 fun HomeStatusResponseDto.toDomain(): HomeStatus = HomeStatus(
     version = version,
     dirty = dirty,
+    nextRefreshAt = nextRefreshAt,
     serverTime = serverTime,
 )
 

@@ -12,7 +12,8 @@ data class HomeState(
 data class HomeStatus(
     val version: Long,
     val dirty: Boolean,
-    val serverTime: String,
+    val nextRefreshAt: String?,
+    val serverTime: String?,
 )
 
 data class HomePendingState(

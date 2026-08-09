@@ -16,7 +16,8 @@ data class HomeResponseDto(
 data class HomeStatusResponseDto(
     val version: Long,
     val dirty: Boolean,
-    val serverTime: String,
+    val nextRefreshAt: String? = null,
+    val serverTime: String? = null,
 )
 
 @Serializable
