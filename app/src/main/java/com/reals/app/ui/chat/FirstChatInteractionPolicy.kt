@@ -12,6 +12,7 @@ internal data class FirstChatInteractionPolicy(
     val canRequestGuidance: Boolean,
     val canRequestOrdinaryExit: Boolean,
     val canDecide: Boolean,
+    val canRetryFailedTextMessages: Boolean,
     val pollingEnabled: Boolean,
     val safetyAvailable: Boolean,
     val manualBlockAvailable: Boolean,
@@ -44,8 +45,31 @@ internal fun firstChatInteractionPolicy(
         canRequestGuidance = ordinaryActionsAvailable && !exitFlowLocked,
         canRequestOrdinaryExit = ordinaryActionsAvailable && !exitFlowLocked,
         canDecide = canDecide,
+        canRetryFailedTextMessages = !decisionOnly,
         pollingEnabled = canChat,
         safetyAvailable = canChat,
         manualBlockAvailable = true,
     )
 }
+
+internal data class FirstChatOverflowActionVisibility(
+    val showMutualExit: Boolean,
+    val showReject: Boolean,
+    val showSafety: Boolean,
+    val showManualBlock: Boolean,
+)
+
+internal fun firstChatOverflowActionVisibility(
+    showMutualExitActions: Boolean,
+    showDecisionActions: Boolean,
+    canRequestOrdinaryExit: Boolean,
+    canDecide: Boolean,
+    canUseSafetyActions: Boolean,
+    canManualBlock: Boolean,
+): FirstChatOverflowActionVisibility =
+    FirstChatOverflowActionVisibility(
+        showMutualExit = showMutualExitActions && canRequestOrdinaryExit,
+        showReject = showDecisionActions && canDecide,
+        showSafety = canUseSafetyActions,
+        showManualBlock = canManualBlock,
+    )

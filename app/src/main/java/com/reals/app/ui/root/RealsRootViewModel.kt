@@ -14,6 +14,7 @@ import com.reals.app.di.AppContainer
 import com.reals.app.di.RealsRootDependencies
 import com.reals.app.domain.model.ChatContinueDecision
 import com.reals.app.domain.model.Chat
+import com.reals.app.domain.model.ChatDecisionState
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.ChatStatus
@@ -2137,6 +2138,8 @@ private fun RealsRootUiState.FirstChat.freshestAtomicChatServerClockPair(
     val useDisplayed = when {
         displayedSnapshot == null -> false
         returnedSnapshot == null -> true
+        displayedSnapshot.serverTimeEpochMillis == returnedSnapshot.serverTimeEpochMillis &&
+            chat.isFirstChatDecisionProgressionFrom(displayed.chat) -> false
         // Equal serverTime keeps the already displayed atomic pair to avoid stale-result churn.
         displayedSnapshot.serverTimeEpochMillis >= returnedSnapshot.serverTimeEpochMillis -> true
         else -> false
@@ -2154,6 +2157,22 @@ private fun RealsRootUiState.FirstChat.freshestAtomicChatServerClockPair(
             serverClockSnapshot = returnedSnapshot,
         )
     }
+}
+
+private fun Chat?.isFirstChatDecisionProgressionFrom(displayed: Chat?): Boolean {
+    if (this == null || displayed == null || id != displayed.id) return false
+    val displayedPendingPair =
+        displayed.myDecision == ChatDecisionState.Pending &&
+            displayed.partnerDecision == ChatDecisionState.Pending
+    if (!displayedPendingPair) return false
+    return (
+        myDecision == ChatDecisionState.Pending &&
+            partnerDecision == ChatDecisionState.Approved
+        ) ||
+        (
+            myDecision == ChatDecisionState.Approved &&
+                partnerDecision == ChatDecisionState.Pending
+            )
 }
 
 private fun RealsRootUiState.FirstChat.sameFirstChatInstance(

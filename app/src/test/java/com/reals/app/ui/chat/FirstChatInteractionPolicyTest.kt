@@ -3,6 +3,9 @@ package com.reals.app.ui.chat
 import com.reals.app.data.mapper.toDomain
 import com.reals.app.domain.model.ChatDecisionState
 import com.reals.app.testutil.TestDtos
+import com.reals.app.ui.root.OptimisticOutgoingMessageType
+import com.reals.app.ui.root.OutgoingMessageDeliveryState
+import com.reals.app.ui.root.newOptimisticOutgoingMessage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -32,9 +35,74 @@ class FirstChatInteractionPolicyTest {
         assertFalse(policy.canRequestGuidance)
         assertFalse(policy.canRequestOrdinaryExit)
         assertTrue(policy.canDecide)
+        assertFalse(policy.canRetryFailedTextMessages)
         assertTrue(policy.pollingEnabled)
         assertTrue(policy.safetyAvailable)
         assertTrue(policy.manualBlockAvailable)
+    }
+
+    @Test
+    fun `decision-only overflow hides mutual exit while keeping reject safety and block`() {
+        val visibility = firstChatOverflowActionVisibility(
+            showMutualExitActions = true,
+            showDecisionActions = true,
+            canRequestOrdinaryExit = false,
+            canDecide = true,
+            canUseSafetyActions = true,
+            canManualBlock = true,
+        )
+
+        assertFalse(visibility.showMutualExit)
+        assertTrue(visibility.showReject)
+        assertTrue(visibility.showSafety)
+        assertTrue(visibility.showManualBlock)
+    }
+
+    @Test
+    fun `normal first-chat overflow keeps mutual exit presentation`() {
+        val visibility = firstChatOverflowActionVisibility(
+            showMutualExitActions = true,
+            showDecisionActions = true,
+            canRequestOrdinaryExit = true,
+            canDecide = true,
+            canUseSafetyActions = true,
+            canManualBlock = true,
+        )
+
+        assertTrue(visibility.showMutualExit)
+        assertTrue(visibility.showReject)
+        assertTrue(visibility.showSafety)
+        assertTrue(visibility.showManualBlock)
+    }
+
+    @Test
+    fun `failed optimistic text retry follows first-chat retry policy`() {
+        val failedText = newOptimisticOutgoingMessage(
+            chatId = "chat-1",
+            senderId = "user-1",
+            content = "hola",
+            localId = "local-1",
+            createdAtMillis = 1L,
+        ).copy(deliveryState = OutgoingMessageDeliveryState.Failed)
+
+        assertTrue(optimisticTextRetryAvailable(failedText, canRetryFailedTextMessages = true))
+        assertFalse(optimisticTextRetryAvailable(failedText, canRetryFailedTextMessages = false))
+    }
+
+    @Test
+    fun `audio optimistic messages do not expose text retry`() {
+        val failedAudio = newOptimisticOutgoingMessage(
+            chatId = "chat-1",
+            senderId = "user-1",
+            content = "",
+            localId = "local-1",
+            createdAtMillis = 1L,
+        ).copy(
+            deliveryState = OutgoingMessageDeliveryState.Failed,
+            messageType = OptimisticOutgoingMessageType.Audio,
+        )
+
+        assertFalse(optimisticTextRetryAvailable(failedAudio, canRetryFailedTextMessages = true))
     }
 
     @Test

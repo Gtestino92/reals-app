@@ -321,9 +321,6 @@ fun ChatScreen(
         loading || refreshing || sending || actionLoading || guidanceActionLoading || manualBlockLoading
     val canManualBlock = !manualBlockBusy
     val canUseSafetyActions = firstChatPolicy.safetyAvailable && !loadingChatAction && !manualBlockLoading
-    val canOpenOverflowActions =
-        (!loadingChatAction && ((!exitFlowLocked && canUseChatActions) || !showMutualExitActions)) ||
-            canManualBlock
     val canDecide = firstChatInteractionPolicy(
         chat = chat,
         canChat = canChat,
@@ -333,6 +330,18 @@ fun ChatScreen(
         firstChatLocallyExpired = firstChatLocallyExpired,
         audioInteractionBusy = audioInteractionBusy,
     ).canDecide
+    val overflowVisibility = firstChatOverflowActionVisibility(
+        showMutualExitActions = showMutualExitActions,
+        showDecisionActions = showDecisionActions,
+        canRequestOrdinaryExit = firstChatPolicy.canRequestOrdinaryExit,
+        canDecide = canDecide,
+        canUseSafetyActions = canUseSafetyActions,
+        canManualBlock = canManualBlock,
+    )
+    val canOpenOverflowActions =
+        !loadingChatAction &&
+            (overflowVisibility.showMutualExit || overflowVisibility.showReject || overflowVisibility.showSafety) ||
+            overflowVisibility.showManualBlock
     val partnerDisplayName = chat?.partner?.displayName
         ?.takeIf { it.isNotBlank() }
         ?: partnerNameFallback?.takeIf { it.isNotBlank() }
@@ -444,7 +453,7 @@ fun ChatScreen(
                             canUseSafetyActions = canUseSafetyActions,
                             canDecide = canDecide,
                             canManualBlock = canManualBlock,
-                            showMutualExitActions = showMutualExitActions,
+                            visibility = overflowVisibility,
                             onExpandedChange = { actionsMenuExpanded = it },
                             onRequestMutualExit = {
                                 actionsMenuExpanded = false
@@ -538,6 +547,7 @@ fun ChatScreen(
                 bottomContentPadding = bottomContentPadding + 12.dp,
                 modifier = Modifier.weight(1f),
                 onRetryOptimisticMessage = onRetryOptimisticMessage,
+                canRetryFailedTextMessages = firstChatPolicy.canRetryFailedTextMessages,
                 playbackState = audioSession.playbackState,
                 onPlayAudio = audioSession::playRemoteMessage,
                 onPauseAudio = audioSession::pauseAudio,
@@ -979,7 +989,7 @@ private fun ChatOverflowMenu(
     canUseSafetyActions: Boolean,
     canDecide: Boolean,
     canManualBlock: Boolean,
-    showMutualExitActions: Boolean,
+    visibility: FirstChatOverflowActionVisibility,
     onExpandedChange: (Boolean) -> Unit,
     onRequestMutualExit: () -> Unit,
     onRejectChat: () -> Unit,
@@ -1005,13 +1015,15 @@ private fun ChatOverflowMenu(
                 }
             },
         ) {
-            if (showMutualExitActions) {
+            if (visibility.showMutualExit) {
                 DropdownMenuItem(
                     text = { Text("Salida consensuada") },
                     enabled = !actionLoading && canUseExistingChatActions,
                     onClick = onRequestMutualExit,
                 )
+            }
 
+            if (visibility.showReject) {
                 DropdownMenuItem(
                     text = { Text("Rechazar chat") },
                     enabled = !actionLoading && canDecide,
@@ -1019,17 +1031,21 @@ private fun ChatOverflowMenu(
                 )
             }
 
-            DropdownMenuItem(
-                text = { Text("Reportar y cerrar chat") },
-                enabled = !actionLoading && canUseSafetyActions,
-                onClick = onShowSafety,
-            )
+            if (visibility.showSafety) {
+                DropdownMenuItem(
+                    text = { Text("Reportar y cerrar chat") },
+                    enabled = !actionLoading && canUseSafetyActions,
+                    onClick = onShowSafety,
+                )
+            }
 
-            DropdownMenuItem(
-                text = { Text("Bloquear a ésta persona") },
-                enabled = canManualBlock,
-                onClick = onShowManualBlock,
-            )
+            if (visibility.showManualBlock) {
+                DropdownMenuItem(
+                    text = { Text("Bloquear a ésta persona") },
+                    enabled = canManualBlock,
+                    onClick = onShowManualBlock,
+                )
+            }
         }
     }
 }
@@ -1099,6 +1115,7 @@ private fun MessageList(
     bottomContentPadding: Dp,
     modifier: Modifier,
     onRetryOptimisticMessage: (localId: String, content: String) -> Unit,
+    canRetryFailedTextMessages: Boolean,
     playbackState: ChatAudioPlaybackUiState,
     onPlayAudio: (ChatMessage) -> Unit,
     onPauseAudio: () -> Unit,
@@ -1157,6 +1174,7 @@ private fun MessageList(
                         is ChatMessageListItem.Optimistic -> OptimisticMessageBubble(
                             message = item.message,
                             onRetry = onRetryOptimisticMessage,
+                            canRetryFailedTextMessages = canRetryFailedTextMessages,
                         )
                     }
                 }
@@ -1559,6 +1577,7 @@ internal fun AudioPlaybackRow(
 private fun OptimisticMessageBubble(
     message: OptimisticOutgoingMessage,
     onRetry: (localId: String, content: String) -> Unit,
+    canRetryFailedTextMessages: Boolean,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1594,8 +1613,7 @@ private fun OptimisticMessageBubble(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (
-                    message.deliveryState == OutgoingMessageDeliveryState.Failed &&
-                    message.messageType == OptimisticOutgoingMessageType.Text
+                    optimisticTextRetryAvailable(message, canRetryFailedTextMessages)
                 ) {
                     TextButton(
                         onClick = { onRetry(message.localId, message.content) },
@@ -1608,6 +1626,14 @@ private fun OptimisticMessageBubble(
         }
     }
 }
+
+internal fun optimisticTextRetryAvailable(
+    message: OptimisticOutgoingMessage,
+    canRetryFailedTextMessages: Boolean,
+): Boolean =
+    canRetryFailedTextMessages &&
+        message.deliveryState == OutgoingMessageDeliveryState.Failed &&
+        message.messageType == OptimisticOutgoingMessageType.Text
 
 @Composable
 private fun SafetyReportDialog(
