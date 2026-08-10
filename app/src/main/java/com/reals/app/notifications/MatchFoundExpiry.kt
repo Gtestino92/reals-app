@@ -33,6 +33,7 @@ internal fun matchFoundExpiryDecision(
 
 internal sealed interface MatchFoundDispatchAction {
     data object RefreshHomeOnly : MatchFoundDispatchAction
+    data object SuppressForeground : MatchFoundDispatchAction
     data object IgnoreStale : MatchFoundDispatchAction
     data object SuppressInvalidated : MatchFoundDispatchAction
     data class Present(
@@ -41,13 +42,31 @@ internal sealed interface MatchFoundDispatchAction {
     ) : MatchFoundDispatchAction
 }
 
+internal sealed interface MatchFoundForegroundDecision {
+    data object RefreshHomeOnly : MatchFoundForegroundDecision
+    data object SuppressForeground : MatchFoundForegroundDecision
+    data object ContinueBackground : MatchFoundForegroundDecision
+}
+
+internal fun matchFoundForegroundDecision(
+    foregroundDestination: ForegroundDestination?,
+): MatchFoundForegroundDecision = when (foregroundDestination) {
+    ForegroundDestination.Home -> MatchFoundForegroundDecision.RefreshHomeOnly
+    null -> MatchFoundForegroundDecision.ContinueBackground
+    else -> MatchFoundForegroundDecision.SuppressForeground
+}
+
 internal fun matchFoundDispatchAction(
     notification: IncomingNotificationContext,
-    shouldPresent: Boolean,
+    foregroundDestination: ForegroundDestination?,
     now: Instant,
     isInvalidated: (String, Instant) -> Boolean = { _, _ -> false },
 ): MatchFoundDispatchAction {
-    if (!shouldPresent) return MatchFoundDispatchAction.RefreshHomeOnly
+    when (matchFoundForegroundDecision(foregroundDestination)) {
+        MatchFoundForegroundDecision.RefreshHomeOnly -> return MatchFoundDispatchAction.RefreshHomeOnly
+        MatchFoundForegroundDecision.SuppressForeground -> return MatchFoundDispatchAction.SuppressForeground
+        MatchFoundForegroundDecision.ContinueBackground -> Unit
+    }
 
     val matchId = notification.matchId.trimToNonBlank()
     if (matchId != null && isInvalidated(matchId, now)) {

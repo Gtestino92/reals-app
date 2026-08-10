@@ -69,10 +69,7 @@ class RealsFirebaseMessagingService : FirebaseMessagingService() {
             foregroundDestination = foregroundDestination,
         )
 
-        if (
-            notification.type != TYPE_MATCH_FOUND &&
-            !shouldPresent
-        ) {
+        if (notification.type != TYPE_MATCH_FOUND && !shouldPresent) {
             return
         }
 
@@ -80,7 +77,7 @@ class RealsFirebaseMessagingService : FirebaseMessagingService() {
             TYPE_MATCH_FOUND -> when (
                 val action = matchFoundDispatchAction(
                     notification = notification,
-                    shouldPresent = shouldPresent,
+                    foregroundDestination = foregroundDestination,
                     now = Instant.now(),
                     isInvalidated = { matchId, now ->
                         appContainer
@@ -92,6 +89,8 @@ class RealsFirebaseMessagingService : FirebaseMessagingService() {
                 MatchFoundDispatchAction.RefreshHomeOnly -> appContainer
                     ?.homeRefreshSignal
                     ?.request()
+
+                MatchFoundDispatchAction.SuppressForeground -> Unit
 
                 MatchFoundDispatchAction.IgnoreStale -> Unit
 

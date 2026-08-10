@@ -12,13 +12,21 @@ class NotificationPresentationPolicyTest {
     private val policy = NotificationPresentationPolicy()
 
     @Test
-    fun `match found is suppressed only while Home is foreground`() {
+    fun `match found is suppressed for every foreground destination`() {
         val notification = notification(type = TYPE_MATCH_FOUND)
 
-        assertFalse(policy.shouldPresent(notification, ForegroundDestination.Home))
-        assertTrue(policy.shouldPresent(notification, ForegroundDestination.FirstChat("match-1", "chat-1")))
-        assertTrue(policy.shouldPresent(notification, ForegroundDestination.SecondChat("connection-1")))
-        assertTrue(policy.shouldPresent(notification, ForegroundDestination.ProfileManagement))
+        listOf(
+            ForegroundDestination.Home,
+            ForegroundDestination.FirstChat("match-1", "chat-1"),
+            ForegroundDestination.SecondChat("connection-1"),
+            ForegroundDestination.VisualReview("match-1"),
+            ForegroundDestination.Scheduling("connection-1"),
+            ForegroundDestination.PartnerProfile("match-1"),
+            ForegroundDestination.ProfileManagement,
+            ForegroundDestination.Other,
+        ).forEach { foregroundDestination ->
+            assertFalse(policy.shouldPresent(notification, foregroundDestination))
+        }
         assertTrue(policy.shouldPresent(notification, null))
     }
 

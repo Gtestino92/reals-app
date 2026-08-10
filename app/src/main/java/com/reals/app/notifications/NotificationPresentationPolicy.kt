@@ -19,7 +19,8 @@ class NotificationPresentationPolicy {
         foregroundDestination: ForegroundDestination?,
     ): Boolean {
         return when (notification.type?.trim()) {
-            TYPE_MATCH_FOUND -> foregroundDestination !== ForegroundDestination.Home
+            TYPE_MATCH_FOUND ->
+                matchFoundForegroundDecision(foregroundDestination) is MatchFoundForegroundDecision.ContinueBackground
             TYPE_SECOND_CHAT_STARTED -> shouldPresentSecondChatStarted(notification, foregroundDestination)
             else -> true
         }
