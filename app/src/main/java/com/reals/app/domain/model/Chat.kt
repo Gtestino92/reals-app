@@ -23,6 +23,21 @@ data class Chat(
     val audioPolicy: ChatAudioPolicy? = null,
 )
 
+fun Chat.isFirstChatDecisionOnly(): Boolean =
+    chatType == ChatType.FirstChat &&
+        status == ChatStatus.Active &&
+        (
+            myDecision == ChatDecisionState.Approved &&
+                partnerDecision == ChatDecisionState.Pending ||
+                myDecision == ChatDecisionState.Pending &&
+                partnerDecision == ChatDecisionState.Approved
+            )
+
+fun Chat.isFirstChatDecisionOnlyForCurrentUser(): Boolean =
+    isFirstChatDecisionOnly() &&
+        myDecision == ChatDecisionState.Pending &&
+        partnerDecision == ChatDecisionState.Approved
+
 data class ChatAudioPolicy(
     val enabled: Boolean,
     val unavailableReason: ChatAudioUnavailableReason?,

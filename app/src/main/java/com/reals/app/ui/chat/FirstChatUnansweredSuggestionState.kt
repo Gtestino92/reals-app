@@ -7,6 +7,7 @@ import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.ChatType
+import com.reals.app.domain.model.isFirstChatDecisionOnly
 
 private const val FIRST_CHAT_UNANSWERED_EXIT_SUGGESTION_MILLIS = 3 * 60 * 1000L
 
@@ -30,6 +31,7 @@ internal fun firstChatUnansweredSuggestionState(
 ): FirstChatUnansweredSuggestionState {
     if (chat?.chatType != ChatType.FirstChat) return hiddenFirstChatUnansweredSuggestionState
     if (chat.status != ChatStatus.Active) return hiddenFirstChatUnansweredSuggestionState
+    if (chat.isFirstChatDecisionOnly()) return hiddenFirstChatUnansweredSuggestionState
     if (chat.myDecision != ChatDecisionState.Pending) return hiddenFirstChatUnansweredSuggestionState
     if (pendingExitRequest != null) return hiddenFirstChatUnansweredSuggestionState
     val nowMillis = estimatedServerNowMillis ?: return hiddenFirstChatUnansweredSuggestionState

@@ -233,6 +233,22 @@ class FirstChatUnansweredSuggestionStateTest {
     }
 
     @Test
+    fun `decision-only hides suggestion even when unanswered timing is eligible`() {
+        val state = suggestionState(
+            chat = activeFirstChat().copy(
+                myDecision = ChatDecisionState.Pending,
+                partnerDecision = ChatDecisionState.Approved,
+            ),
+            nowMillis = millis("2026-06-18T21:04:00Z"),
+            confirmedMessages = listOf(message(id = "own-1", sentAt = "2026-06-18T21:01:00Z")),
+            mutualExitActionAvailable = true,
+        )
+
+        assertFalse(state.visible)
+        assertFalse(state.actionEnabled)
+    }
+
+    @Test
     fun `second chat hides suggestion`() {
         val state = suggestionState(
             chat = activeFirstChat().copy(chatType = ChatType.SecondChat),

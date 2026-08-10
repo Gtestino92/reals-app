@@ -12,6 +12,7 @@ import com.reals.app.data.repository.ChatRepository
 import com.reals.app.data.repository.MatchRepository
 import com.reals.app.di.FirstChatFeatureDependencies
 import com.reals.app.domain.model.ChatContinueDecision
+import com.reals.app.domain.model.ChatDecisionState
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatMessage
@@ -875,6 +876,43 @@ class FirstChatCoordinatorTest {
     }
 
     @Test
+    fun `sendMessage decision-only conflict refreshes snapshot and removes optimistic retry`() = runBlocking {
+        api.chatMessageResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "FIRST_CHAT_DECISION_ONLY",
+        )
+        api.chatResponse = Response.success(
+            TestDtos.chat(
+                myDecision = "PENDING",
+                partnerDecision = "APPROVED",
+                serverTime = "2026-06-18T21:02:00Z",
+            )
+        )
+        val optimistic = newOptimisticOutgoingMessage(
+            chatId = "chat-1",
+            senderId = "user-1",
+            content = "hola",
+            localId = "local-1",
+            createdAtMillis = 123L,
+        )
+        val current = firstChatState(chatStatus = ChatStatus.Active).copy(
+            optimisticMessages = listOf(optimistic),
+            sending = true,
+        )
+
+        val result = coordinator.sendMessage(current, "hola", localId = "local-1")
+
+        assertTrue(result is FirstChatSendResult.Show)
+        val state = (result as FirstChatSendResult.Show).state
+        assertFalse(state.sending)
+        assertTrue(state.optimisticMessages.isEmpty())
+        assertEquals(ChatDecisionState.Pending, state.chat?.myDecision)
+        assertEquals(ChatDecisionState.Approved, state.chat?.partnerDecision)
+        assertEquals(null, state.error)
+        assertEquals(listOf("sendChatMessage", "getFirstChatForMatch"), api.calls)
+    }
+
+    @Test
     fun `sendMessage chat abandoned returns home and hides first chat`() = runBlocking {
         api.chatMessageResponse = backendErrorResponse(
             statusCode = 409,
@@ -1219,6 +1257,34 @@ class FirstChatCoordinatorTest {
     }
 
     @Test
+    fun `guidance request decision-only conflict refreshes snapshot and clears loading`() = runBlocking {
+        api.firstChatGuidanceResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "FIRST_CHAT_DECISION_ONLY",
+        )
+        api.chatResponse = Response.success(
+            TestDtos.chat(
+                myDecision = "PENDING",
+                partnerDecision = "APPROVED",
+                serverTime = "2026-06-18T21:02:00Z",
+            )
+        )
+        val current = firstChatState(
+            chatStatus = ChatStatus.Active,
+            guidance = TestDtos.firstChatGuidance(),
+        )
+
+        val result = coordinator.requestNextGuidanceQuestion(current, onPending = {})
+
+        assertTrue(result is FirstChatActionResult.Show)
+        val state = (result as FirstChatActionResult.Show).state
+        assertFalse(state.guidanceActionLoading)
+        assertEquals(ChatDecisionState.Approved, state.chat?.partnerDecision)
+        assertEquals(null, state.error)
+        assertEquals(listOf("requestNextFirstChatGuidanceQuestion", "getFirstChatForMatch"), api.calls)
+    }
+
+    @Test
     fun `guidance request preserves unrelated first chat state`() = runBlocking {
         val message = TestDtos.chatMessage("message-old").toDomain()
         val optimistic = newOptimisticOutgoingMessage(
@@ -1302,6 +1368,51 @@ class FirstChatCoordinatorTest {
             listOf("requestChatExit", "getFirstChatForMatch", "getChatExitRequests"),
             api.calls,
         )
+    }
+
+    @Test
+    fun `mutual exit decision-only conflict refreshes snapshot and clears loading`() = runBlocking {
+        api.exitRequestResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "FIRST_CHAT_DECISION_ONLY",
+        )
+        api.chatResponse = Response.success(
+            TestDtos.chat(
+                myDecision = "PENDING",
+                partnerDecision = "APPROVED",
+                serverTime = "2026-06-18T21:02:00Z",
+            )
+        )
+        val current = firstChatState(chatStatus = ChatStatus.Active)
+
+        val result = coordinator.requestMutualExit(current = current, onPending = {})
+
+        assertTrue(result is FirstChatActionResult.Show)
+        val state = (result as FirstChatActionResult.Show).state
+        assertFalse(state.actionLoading)
+        assertEquals(null, state.actionLoadingLabel)
+        assertEquals(ChatDecisionState.Approved, state.chat?.partnerDecision)
+        assertEquals(null, state.error)
+        assertEquals(listOf("requestChatExit", "getFirstChatForMatch"), api.calls)
+    }
+
+    @Test
+    fun `decision-only snapshot blocks new guidance and ordinary exit locally`() = runBlocking {
+        val current = firstChatState(
+            chatStatus = ChatStatus.Active,
+            guidance = TestDtos.firstChatGuidance(),
+            myDecision = "PENDING",
+            partnerDecision = "APPROVED",
+        )
+
+        val guidanceResult = coordinator.requestNextGuidanceQuestion(current, onPending = {})
+        val exitResult = coordinator.requestMutualExit(current, onPending = {})
+        val cancelResult = coordinator.cancelUnilaterally(current, onPending = {})
+
+        assertEquals(FirstChatActionResult.Ignore, guidanceResult)
+        assertEquals(FirstChatActionResult.Ignore, exitResult)
+        assertEquals(FirstChatActionResult.Ignore, cancelResult)
+        assertTrue(api.calls.isEmpty())
     }
 
     @Test
@@ -1395,6 +1506,45 @@ class FirstChatCoordinatorTest {
     }
 
     @Test
+    fun `first chat audio decision-only conflict refreshes snapshot and clears upload retry`() = runBlocking {
+        api.chatAudioMessageResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "FIRST_CHAT_DECISION_ONLY",
+        )
+        api.chatResponse = Response.success(
+            TestDtos.chat(
+                myDecision = "PENDING",
+                partnerDecision = "APPROVED",
+                serverTime = "2026-06-18T21:02:00Z",
+            )
+        )
+        val file = tempAudioFile()
+        val optimistic = newOptimisticOutgoingAudioMessage(
+            chatId = "chat-1",
+            senderId = "user-1",
+            clientMessageId = "client-1",
+            durationMillis = 2_000L,
+        )
+
+        val result = coordinator.sendAudioMessage(
+            current = firstChatState(ChatStatus.Active).copy(
+                audioDraft = audioDraft(file),
+                audioUpload = ChatAudioUploadUiState(uploading = true),
+                optimisticMessages = listOf(optimistic),
+            ),
+            file = file,
+            clientMessageId = "client-1",
+        )
+
+        result as FirstChatSendResult.Show
+        assertTrue(result.state.optimisticMessages.isEmpty())
+        assertEquals(ChatAudioUploadUiState(), result.state.audioUpload)
+        assertEquals(ChatDecisionState.Approved, result.state.chat?.partnerDecision)
+        assertEquals(null, result.state.error)
+        assertEquals(listOf("sendChatAudioMessage", "getFirstChatForMatch"), api.calls)
+    }
+
+    @Test
     fun `optimistic message helper preserves sending state shape`() {
         val message = newOptimisticOutgoingMessage(
             chatId = "chat-1",
@@ -1432,13 +1582,20 @@ class FirstChatCoordinatorTest {
     private fun firstChatState(
         chatStatus: ChatStatus = ChatStatus.Active,
         guidance: FirstChatGuidanceResponseDto? = null,
+        myDecision: String? = "PENDING",
+        partnerDecision: String? = "PENDING",
     ): RealsRootUiState.FirstChat =
         RealsRootUiState.FirstChat(
             session = TestDomain.session(),
             matchId = "match-1",
             chatId = "chat-1",
             match = TestDtos.match("CHAT_ACTIVE").toDomain(),
-            chat = TestDtos.chat(status = chatStatus.rawValue, guidance = guidance).toDomain(),
+            chat = TestDtos.chat(
+                status = chatStatus.rawValue,
+                guidance = guidance,
+                myDecision = myDecision,
+                partnerDecision = partnerDecision,
+            ).toDomain(),
         )
 
     private fun audioDraft(file: File): ChatAudioDraftUiState =

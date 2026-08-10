@@ -4,6 +4,7 @@ import com.reals.app.core.network.ApiError
 import com.reals.app.core.security.TextSafety
 import com.reals.app.domain.model.ChatAudioUnavailableReason
 import com.reals.app.domain.model.ChatExitRequestStatus
+import com.reals.app.domain.model.isFirstChatDecisionOnly
 import java.io.File
 
 internal object ChatMessageActionHandler {
@@ -18,6 +19,9 @@ internal object ChatMessageActionHandler {
             return ChatMessageSendPreparation.Ignored
         }
         val chat = current.chat ?: return ChatMessageSendPreparation.Ignored
+        if (chat.isFirstChatDecisionOnly()) {
+            return ChatMessageSendPreparation.Ignored
+        }
         return prepareSend(
             content = content,
             chatId = chat.id,
@@ -58,6 +62,9 @@ internal object ChatMessageActionHandler {
             return ChatAudioSendPreparation.Ignored
         }
         val chat = current.chat ?: return ChatAudioSendPreparation.Ignored
+        if (chat.isFirstChatDecisionOnly()) {
+            return ChatAudioSendPreparation.Ignored
+        }
         return prepareAudioSend(
             filePath = filePath,
             clientMessageId = clientMessageId,
@@ -173,6 +180,8 @@ internal object ChatMessageActionHandler {
         localId: String,
     ): RealsRootUiState.FirstChat =
         if (current.hasPendingExitRequest()) {
+            current
+        } else if (current.chat?.isFirstChatDecisionOnly() == true) {
             current
         } else {
             current.copy(

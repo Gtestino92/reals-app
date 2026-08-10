@@ -77,6 +77,18 @@ class ChatMessageActionHandlerTest {
     }
 
     @Test
+    fun `first chat send is ignored during decision-only`() {
+        val result = ChatMessageActionHandler.prepareFirstChatSend(
+            current = firstChatState().copy(
+                chat = TestDtos.chat(myDecision = "PENDING", partnerDecision = "APPROVED").toDomain(),
+            ),
+            content = "hola",
+        )
+
+        assertEquals(ChatMessageSendPreparation.Ignored, result)
+    }
+
+    @Test
     fun `first chat send is ignored while send operation is in progress`() {
         val result = ChatMessageActionHandler.prepareFirstChatSend(
             current = firstChatState(sending = true),
@@ -92,6 +104,18 @@ class ChatMessageActionHandlerTest {
         val current = firstChatState(
             optimisticMessages = listOf(failed),
             exitRequests = listOf(TestDtos.exitRequest(status = "PENDING").toDomain()),
+        )
+
+        val state = ChatMessageActionHandler.retryFirstChat(current, "local-failed")
+
+        assertEquals(listOf("local-failed"), state.optimisticMessages.map { it.localId })
+    }
+
+    @Test
+    fun `first chat retry keeps failed optimistic message during decision-only`() {
+        val failed = failedOptimisticMessage(localId = "local-failed")
+        val current = firstChatState(optimisticMessages = listOf(failed)).copy(
+            chat = TestDtos.chat(myDecision = "PENDING", partnerDecision = "APPROVED").toDomain(),
         )
 
         val state = ChatMessageActionHandler.retryFirstChat(current, "local-failed")
@@ -249,6 +273,32 @@ class ChatMessageActionHandlerTest {
         assertEquals(OptimisticOutgoingMessageType.Audio, optimistic.messageType)
         assertEquals(1_000L, optimistic.audioDurationMillis)
         assertEquals(OutgoingMessageDeliveryState.Sending, optimistic.deliveryState)
+    }
+
+    @Test
+    fun `first chat audio send is ignored during decision-only`() {
+        val file = createTempFile()
+        val state = firstChatState().copy(
+            chat = TestDtos.chat(
+                myDecision = "PENDING",
+                partnerDecision = "APPROVED",
+                audioPolicy = TestDtos.audioPolicy(enabled = true),
+            ).toDomain(),
+            audioDraft = ChatAudioDraftUiState(
+                filePath = file.absolutePath,
+                clientMessageId = "client-1",
+                durationMillis = 1_000,
+                sizeBytes = file.length(),
+            ),
+        )
+
+        val result = ChatMessageActionHandler.prepareFirstChatAudioSend(
+            current = state,
+            filePath = file.absolutePath,
+            clientMessageId = "client-1",
+        )
+
+        assertEquals(ChatAudioSendPreparation.Ignored, result)
     }
 
     private fun firstChatState(

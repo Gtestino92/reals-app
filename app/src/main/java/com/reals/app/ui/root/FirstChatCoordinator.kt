@@ -16,6 +16,7 @@ import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.FirstChatSnapshot
 import com.reals.app.domain.model.MatchState
 import com.reals.app.domain.model.ProvisionedSession
+import com.reals.app.domain.model.isFirstChatDecisionOnly
 import java.io.File
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -280,6 +281,11 @@ internal class FirstChatCoordinator(
                     duration = sendStarted.elapsedNow(),
                 )
                 result.error.firstChatSendExpiryRoute(current)
+                    ?: refreshAfterDecisionOnlyTextConflict(
+                        error = result.error,
+                        current = current,
+                        localId = localId,
+                    )
                     ?: refreshAfterPendingMutualCancellation(
                         error = result.error,
                         current = current,
@@ -328,6 +334,11 @@ internal class FirstChatCoordinator(
             }
 
             is ApiResult.Failure -> result.error.firstChatSendExpiryRoute(current)
+                ?: refreshAfterDecisionOnlyAudioConflict(
+                    error = result.error,
+                    current = current,
+                    clientMessageId = clientMessageId,
+                )
                 ?: refreshAudioAfterPendingMutualCancellation(
                     error = result.error,
                     current = current,
@@ -346,6 +357,41 @@ internal class FirstChatCoordinator(
                     )
                 )
         }
+    }
+
+    private suspend fun refreshAfterDecisionOnlyTextConflict(
+        error: ApiError,
+        current: RealsRootUiState.FirstChat,
+        localId: String,
+    ): FirstChatSendResult.Show? {
+        val refreshed = refreshAfterDecisionOnlyConflict(error, current) ?: return null
+        val refreshError = refreshed.error
+        return FirstChatSendResult.Show(
+            refreshed.copy(
+                optimisticMessages = refreshed.optimisticMessages.withoutOptimisticMessage(localId),
+                sending = false,
+                error = refreshError ?: refreshed.error,
+            )
+        )
+    }
+
+    private suspend fun refreshAfterDecisionOnlyAudioConflict(
+        error: ApiError,
+        current: RealsRootUiState.FirstChat,
+        clientMessageId: String,
+    ): FirstChatSendResult.Show? {
+        val refreshed = refreshAfterDecisionOnlyConflict(error, current) ?: return null
+        return FirstChatSendResult.Show(
+            refreshed.copy(
+                optimisticMessages = refreshed.optimisticMessages.withoutOptimisticMessage(clientMessageId),
+                audioUpload = if (refreshed.error == null) {
+                    ChatAudioUploadUiState()
+                } else {
+                    ChatAudioUploadUiState(uploading = false, error = refreshed.error, nonRetryable = false)
+                },
+                error = null,
+            )
+        )
     }
 
     private suspend fun refreshAudioAfterPendingMutualCancellation(
@@ -595,6 +641,9 @@ internal class FirstChatCoordinator(
             return FirstChatActionResult.Ignore
         }
         val chat = current.chat ?: return FirstChatActionResult.Ignore
+        if (chat.isFirstChatDecisionOnly()) {
+            return FirstChatActionResult.Ignore
+        }
         val guidance = chat.guidance ?: return FirstChatActionResult.Ignore
         if (guidance.completed || guidance.myNextRequested || !guidance.canRequestNext) {
             return FirstChatActionResult.Ignore
@@ -617,6 +666,10 @@ internal class FirstChatCoordinator(
             )
 
             is ApiResult.Failure -> result.error.firstChatActionExpiryRoute(current)
+                ?: refreshGuidanceAfterDecisionOnlyConflict(
+                    error = result.error,
+                    pending = pending,
+                )
                 ?: refreshGuidanceAfterPendingMutualCancellation(
                     error = result.error,
                     pending = pending,
@@ -634,25 +687,33 @@ internal class FirstChatCoordinator(
     suspend fun requestMutualExit(
         current: RealsRootUiState.FirstChat,
         onPending: (RealsRootUiState.FirstChat) -> Unit,
-    ): FirstChatActionResult = runExitAction(
+    ): FirstChatActionResult {
+        if (current.chat?.isFirstChatDecisionOnly() == true) return FirstChatActionResult.Ignore
+        return runExitAction(
         current = current,
         successMessage = "Enviamos tu solicitud de salida consensuada.",
         loadingLabel = "Solicitando salida...",
         onPending = onPending,
+        reconcileDecisionOnlyConflict = true,
     ) { chatId ->
         dependencies.requestMutualChatExit(chatId, ChatExitReason.NoLongerInterested, null)
+    }
     }
 
     suspend fun cancelUnilaterally(
         current: RealsRootUiState.FirstChat,
         onPending: (RealsRootUiState.FirstChat) -> Unit,
-    ): FirstChatActionResult = runExitAction(
+    ): FirstChatActionResult {
+        if (current.chat?.isFirstChatDecisionOnly() == true) return FirstChatActionResult.Ignore
+        return runExitAction(
         current = current,
         successMessage = "Cerraste el chat.",
         loadingLabel = "Cerrando chat...",
         onPending = onPending,
+        reconcileDecisionOnlyConflict = true,
     ) { chatId ->
         dependencies.cancelChat(chatId, ChatExitReason.NoLongerInterested, null)
+    }
     }
 
     suspend fun safetyCancel(
@@ -731,6 +792,7 @@ internal class FirstChatCoordinator(
         successMessage: String = "Actualizamos el estado del chat.",
         loadingLabel: String = "Procesando...",
         onPending: (RealsRootUiState.FirstChat) -> Unit,
+        reconcileDecisionOnlyConflict: Boolean = false,
         action: suspend (chatId: String) -> ApiResult<*>,
     ): FirstChatActionResult {
         if (current.loading || current.refreshing || current.sending || current.audioUpload.uploading || current.actionLoading) {
@@ -782,15 +844,56 @@ internal class FirstChatCoordinator(
                 )
             }
 
-            is ApiResult.Failure -> FirstChatActionResult.Show(
-                pending.copy(
+            is ApiResult.Failure -> result.error.firstChatActionExpiryRoute(current)
+                ?: if (reconcileDecisionOnlyConflict) {
+                    refreshActionAfterDecisionOnlyConflict(
+                        error = result.error,
+                        pending = pending,
+                    )
+                } else {
+                    null
+                }
+                ?: FirstChatActionResult.Show(
+                    pending.copy(
+                        actionLoading = false,
+                        actionLoadingLabel = null,
+                        error = result.error,
+                    )
+                )
+        }
+    }
+
+    private suspend fun refreshAfterDecisionOnlyConflict(
+        error: ApiError,
+        current: RealsRootUiState.FirstChat,
+    ): RealsRootUiState.FirstChat? {
+        if (!error.isFirstChatDecisionOnlyConflict()) return null
+        val chatResult = dependencies.getFirstChatForMatch(current.matchId)
+        return (chatResult as? ApiResult.Success)
+            ?.let { current.withInstalledFirstChatSnapshot(it.value).copy(error = null, message = null) }
+            ?: current.copy(error = (chatResult as? ApiResult.Failure)?.error ?: error, message = null)
+    }
+
+    private suspend fun refreshGuidanceAfterDecisionOnlyConflict(
+        error: ApiError,
+        pending: RealsRootUiState.FirstChat,
+    ): FirstChatActionResult.Show? =
+        refreshAfterDecisionOnlyConflict(error, pending)?.let { refreshed ->
+            FirstChatActionResult.Show(refreshed.copy(guidanceActionLoading = false))
+        }
+
+    private suspend fun refreshActionAfterDecisionOnlyConflict(
+        error: ApiError,
+        pending: RealsRootUiState.FirstChat,
+    ): FirstChatActionResult.Show? =
+        refreshAfterDecisionOnlyConflict(error, pending)?.let { refreshed ->
+            FirstChatActionResult.Show(
+                refreshed.copy(
                     actionLoading = false,
                     actionLoadingLabel = null,
-                    error = result.error,
                 )
             )
         }
-    }
 
     private fun RealsRootUiState.FirstChat.hasPendingExitRequest(): Boolean =
         exitRequests.any { it.status == ChatExitRequestStatus.Pending }
@@ -895,7 +998,11 @@ internal fun ApiError.isAudioPolicyConflict(): Boolean =
             BackendErrorCode.ChatNotAvailable,
             BackendErrorCode.SecondChatJoinRequired,
             BackendErrorCode.ChatMutualCancellationPending,
+            BackendErrorCode.FirstChatDecisionOnly,
         )
+
+private fun ApiError.isFirstChatDecisionOnlyConflict(): Boolean =
+    this is ApiError.Backend && backendErrorCode == BackendErrorCode.FirstChatDecisionOnly
 
 internal fun normalizeSafetyReportDetails(details: String): String? =
     TextSafety.normalizeMultiline(details, maxLength = 1_000)
