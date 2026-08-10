@@ -59,6 +59,48 @@ class FirstChatInteractionPolicyTest {
     }
 
     @Test
+    fun `reject remains visible when decision action is temporarily disabled`() {
+        val visibility = firstChatOverflowActionVisibility(
+            showMutualExitActions = true,
+            showDecisionActions = true,
+            canRequestOrdinaryExit = true,
+            canDecide = false,
+            canUseSafetyActions = true,
+            canManualBlock = true,
+        )
+
+        assertTrue(visibility.showReject)
+    }
+
+    @Test
+    fun `safety remains visible when safety action is temporarily disabled`() {
+        val visibility = firstChatOverflowActionVisibility(
+            showMutualExitActions = true,
+            showDecisionActions = true,
+            canRequestOrdinaryExit = true,
+            canDecide = true,
+            canUseSafetyActions = false,
+            canManualBlock = true,
+        )
+
+        assertTrue(visibility.showSafety)
+    }
+
+    @Test
+    fun `manual block remains visible when block action is temporarily disabled`() {
+        val visibility = firstChatOverflowActionVisibility(
+            showMutualExitActions = true,
+            showDecisionActions = true,
+            canRequestOrdinaryExit = true,
+            canDecide = true,
+            canUseSafetyActions = true,
+            canManualBlock = false,
+        )
+
+        assertTrue(visibility.showManualBlock)
+    }
+
+    @Test
     fun `normal first-chat overflow keeps mutual exit presentation`() {
         val visibility = firstChatOverflowActionVisibility(
             showMutualExitActions = true,

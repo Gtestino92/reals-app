@@ -340,8 +340,12 @@ fun ChatScreen(
     )
     val canOpenOverflowActions =
         !loadingChatAction &&
-            (overflowVisibility.showMutualExit || overflowVisibility.showReject || overflowVisibility.showSafety) ||
-            overflowVisibility.showManualBlock
+            (
+                (overflowVisibility.showMutualExit && canUseExistingChatActions) ||
+                    (overflowVisibility.showReject && canDecide) ||
+                    (overflowVisibility.showSafety && canUseSafetyActions)
+                ) ||
+            (overflowVisibility.showManualBlock && canManualBlock)
     val partnerDisplayName = chat?.partner?.displayName
         ?.takeIf { it.isNotBlank() }
         ?: partnerNameFallback?.takeIf { it.isNotBlank() }

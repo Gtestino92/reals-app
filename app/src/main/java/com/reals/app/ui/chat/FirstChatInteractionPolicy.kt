@@ -59,6 +59,7 @@ internal data class FirstChatOverflowActionVisibility(
     val showManualBlock: Boolean,
 )
 
+@Suppress("UNUSED_PARAMETER")
 internal fun firstChatOverflowActionVisibility(
     showMutualExitActions: Boolean,
     showDecisionActions: Boolean,
@@ -69,7 +70,7 @@ internal fun firstChatOverflowActionVisibility(
 ): FirstChatOverflowActionVisibility =
     FirstChatOverflowActionVisibility(
         showMutualExit = showMutualExitActions && canRequestOrdinaryExit,
-        showReject = showDecisionActions && canDecide,
-        showSafety = canUseSafetyActions,
-        showManualBlock = canManualBlock,
+        showReject = showDecisionActions,
+        showSafety = true,
+        showManualBlock = true,
     )
