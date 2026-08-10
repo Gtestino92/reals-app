@@ -46,12 +46,77 @@ class MatchFoundExpiryTest {
     }
 
     @Test
-    fun `match found dispatch refreshes Home before expiry filtering when suppressed`() {
+    fun `match found dispatch refreshes Home before expiry filtering`() {
         assertEquals(
             MatchFoundDispatchAction.RefreshHomeOnly,
             matchFoundDispatchAction(
                 notification = notification(expiresAt = "2026-08-01T11:00:00Z"),
-                shouldPresent = false,
+                foregroundDestination = ForegroundDestination.Home,
+                now = now,
+            ),
+        )
+    }
+
+    @Test
+    fun `match found dispatch refreshes Home before invalidation filtering`() {
+        assertEquals(
+            MatchFoundDispatchAction.RefreshHomeOnly,
+            matchFoundDispatchAction(
+                notification = notification(expiresAt = "2026-08-01T12:01:00Z"),
+                foregroundDestination = ForegroundDestination.Home,
+                now = now,
+                isInvalidated = { _, _ -> true },
+            ),
+        )
+    }
+
+    @Test
+    fun `match found dispatch suppresses foreground FirstChat without Home refresh`() {
+        assertEquals(
+            MatchFoundDispatchAction.SuppressForeground,
+            matchFoundDispatchAction(
+                notification = notification(
+                    matchId = "match-1",
+                    expiresAt = "2026-08-01T12:01:00Z",
+                ),
+                foregroundDestination = ForegroundDestination.FirstChat("match-1", "chat-1"),
+                now = now,
+            ),
+        )
+        assertEquals(
+            MatchFoundDispatchAction.SuppressForeground,
+            matchFoundDispatchAction(
+                notification = notification(
+                    matchId = "match-2",
+                    expiresAt = "2026-08-01T12:01:00Z",
+                ),
+                foregroundDestination = ForegroundDestination.FirstChat("match-1", "chat-1"),
+                now = now,
+            ),
+        )
+    }
+
+    @Test
+    fun `match found dispatch suppresses non Home foreground destination`() {
+        assertEquals(
+            MatchFoundDispatchAction.SuppressForeground,
+            matchFoundDispatchAction(
+                notification = notification(expiresAt = "2026-08-01T12:01:00Z"),
+                foregroundDestination = ForegroundDestination.ProfileManagement,
+                now = now,
+            ),
+        )
+    }
+
+    @Test
+    fun `delayed match found uses latest FirstChat foreground destination`() {
+        val foregroundDestination = ForegroundDestination.FirstChat("match-1", "chat-1")
+
+        assertEquals(
+            MatchFoundDispatchAction.SuppressForeground,
+            matchFoundDispatchAction(
+                notification = notification(expiresAt = "2026-08-01T12:01:00Z"),
+                foregroundDestination = foregroundDestination,
                 now = now,
             ),
         )
@@ -66,7 +131,7 @@ class MatchFoundExpiryTest {
             ),
             matchFoundDispatchAction(
                 notification = notification(expiresAt = "2026-08-01T12:01:00Z"),
-                shouldPresent = true,
+                foregroundDestination = null,
                 now = now,
             ),
         )
@@ -78,7 +143,7 @@ class MatchFoundExpiryTest {
             MatchFoundDispatchAction.IgnoreStale,
             matchFoundDispatchAction(
                 notification = notification(expiresAt = "2026-08-01T11:59:00Z"),
-                shouldPresent = true,
+                foregroundDestination = null,
                 now = now,
             ),
         )
@@ -89,7 +154,7 @@ class MatchFoundExpiryTest {
             ),
             matchFoundDispatchAction(
                 notification = notification(expiresAt = null),
-                shouldPresent = true,
+                foregroundDestination = null,
                 now = now,
             ),
         )
@@ -101,24 +166,11 @@ class MatchFoundExpiryTest {
             MatchFoundDispatchAction.SuppressInvalidated,
             matchFoundDispatchAction(
                 notification = notification(expiresAt = "2026-08-01T12:01:00Z"),
-                shouldPresent = true,
+                foregroundDestination = null,
                 now = now,
                 isInvalidated = { matchId, currentNow ->
                     matchId == "match-1" && currentNow == now
                 },
-            ),
-        )
-    }
-
-    @Test
-    fun `match found dispatch keeps Home refresh even with a live tombstone`() {
-        assertEquals(
-            MatchFoundDispatchAction.RefreshHomeOnly,
-            matchFoundDispatchAction(
-                notification = notification(expiresAt = "2026-08-01T12:01:00Z"),
-                shouldPresent = false,
-                now = now,
-                isInvalidated = { _, _ -> true },
             ),
         )
     }
@@ -238,7 +290,7 @@ class MatchFoundExpiryTest {
             MatchFoundDispatchAction.SuppressInvalidated,
             matchFoundDispatchAction(
                 notification = notification(expiresAt = "2026-08-01T12:05:00Z"),
-                shouldPresent = true,
+                foregroundDestination = null,
                 now = now.plusSeconds(60),
                 isInvalidated = store::isInvalidated,
             ),
@@ -264,7 +316,7 @@ class MatchFoundExpiryTest {
                     matchId = "match-2",
                     expiresAt = "2026-08-01T12:05:00Z",
                 ),
-                shouldPresent = true,
+                foregroundDestination = null,
                 now = now.plusSeconds(60),
                 isInvalidated = store::isInvalidated,
             ),
