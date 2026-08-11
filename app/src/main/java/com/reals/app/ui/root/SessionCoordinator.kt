@@ -2,6 +2,8 @@ package com.reals.app.ui.root
 
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ApiResult
+import com.reals.app.core.network.BackendErrorCode
+import com.reals.app.core.network.backendErrorCode
 import com.reals.app.core.network.isAccountDeleted
 import com.reals.app.core.network.isTerminalAuthFailure
 import com.reals.app.data.repository.AuthOperationResult
@@ -14,6 +16,7 @@ import com.reals.app.di.SessionFeatureDependencies
 import com.reals.app.domain.model.BackendUser
 import com.reals.app.domain.model.BackendUserStatus
 import com.reals.app.domain.model.ProvisionedSession
+import com.reals.app.ui.auth.GoogleCredentialResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,9 +43,13 @@ internal class SessionCoordinator(
     private val pushTokenRegistrationService = dependencies.pushTokenRegistrationService
     private val localFirebaseEmailVerificationCoordinator =
         dependencies.localFirebaseEmailVerificationCoordinator
+    private val requestPasswordResetUseCase = dependencies.requestPasswordReset
+    private val clearLocalSessionUseCase = dependencies.clearLocalSession
     private val reactivateAccountUseCase = accountDependencies.reactivateAccount
     private val deleteAccountUseCase = accountDependencies.deleteAccount
+    private val finalizeAccountDeletionUseCase = accountDependencies.finalizeAccountDeletion
     private var refreshSessionJob: Job? = null
+    private var googleAttemptSequence = 0L
 
     fun refreshSession() {
         if (!authRepository.isConfigured()) {
@@ -66,31 +73,41 @@ internal class SessionCoordinator(
 
     fun signUp(email: String, password: String) {
         val cleanEmail = email.trim()
-        val loginState = uiState.value as? RealsRootUiState.Login
+        val loginState = uiState.value as? RealsRootUiState.Login ?: return
+        if (loginState.loading || loginState.googleLoading) return
         if (cleanEmail.isBlank() || password.isBlank()) {
-            uiState.value = RealsRootUiState.Login(
+            uiState.value = loginState.copy(
+                loading = false,
+                googleLoading = false,
+                googleAttemptId = null,
                 error = "Email y password son requeridos.",
-                passwordResetAvailableAtMillis = loginState?.passwordResetAvailableAtMillis,
+                passwordResetMessage = null,
             )
             return
         }
         scope.launch {
-            uiState.value = RealsRootUiState.Login(
+            uiState.value = loginState.copy(
                 loading = true,
-                passwordResetAvailableAtMillis = loginState?.passwordResetAvailableAtMillis,
+                googleLoading = false,
+                googleAttemptId = null,
+                error = null,
+                passwordResetMessage = null,
             )
             when (val result = authRepository.signUp(cleanEmail, password)) {
                 AuthOperationResult.Success -> {
                     if (!dependencies.localFirebaseEmailAutoVerificationEnabled) {
                         authRepository.sendEmailVerificationEmail()
                     }
-                    loadBackendSession()
+                    loadBackendSession().join()
                 }
 
                 is AuthOperationResult.Failure -> uiState.value =
-                    RealsRootUiState.Login(
+                    loginState.copy(
+                        loading = false,
+                        googleLoading = false,
+                        googleAttemptId = null,
                         error = result.message,
-                        passwordResetAvailableAtMillis = loginState?.passwordResetAvailableAtMillis,
+                        passwordResetMessage = null,
                     )
             }
         }
@@ -98,7 +115,7 @@ internal class SessionCoordinator(
 
     fun requestPasswordReset(email: String) {
         val current = uiState.value as? RealsRootUiState.Login ?: return
-        if (current.loading || current.passwordResetLoading) return
+        if (current.loading || current.googleLoading || current.passwordResetLoading) return
         val nowMillis = System.currentTimeMillis()
         if (current.passwordResetAvailableAtMillis.isInFuture(nowMillis)) return
 
@@ -120,7 +137,7 @@ internal class SessionCoordinator(
                 passwordResetAvailableAtMillis = nowMillis + PASSWORD_RESET_COOLDOWN_MILLIS,
             )
             uiState.value = pending
-            when (authRepository.sendPasswordResetEmail(cleanEmail)) {
+            when (requestPasswordResetUseCase(cleanEmail)) {
                 PasswordResetResult.SentOrHandledGenerically -> uiState.value =
                     pending.copy(
                         passwordResetLoading = false,
@@ -143,15 +160,54 @@ internal class SessionCoordinator(
     }
 
     fun signOut() {
-        authRepository.signOut()
-        uiState.value = RealsRootUiState.Login()
+        scope.launch {
+            clearLocalSessionAndShowLogin()
+        }
     }
 
     fun invalidateTerminalSession() {
-        authRepository.signOut()
-        uiState.value = RealsRootUiState.Login(
-            error = "Tu sesión terminó. Volvé a iniciar sesión.",
+        scope.launch {
+            clearLocalSessionAndShowLogin(
+                error = "Tu sesión terminó. Volvé a iniciar sesión.",
+            )
+        }
+    }
+
+    fun beginGoogleSignIn(): Long? {
+        val current = uiState.value as? RealsRootUiState.Login ?: return null
+        if (current.loading || current.googleLoading || current.passwordResetLoading) return null
+        val attemptId = ++googleAttemptSequence
+        uiState.value = current.copy(
+            googleLoading = true,
+            googleAttemptId = attemptId,
+            error = null,
+            passwordResetMessage = null,
         )
+        return attemptId
+    }
+
+    fun completeGoogleSignIn(attemptId: Long, result: GoogleCredentialResult) {
+        val current = uiState.value.googleLoginStateFor(attemptId) ?: return
+        when (result) {
+            GoogleCredentialResult.Cancelled -> uiState.value = current.copy(
+                googleLoading = false,
+                googleAttemptId = null,
+            )
+
+            GoogleCredentialResult.NotConfigured -> uiState.value = current.copy(
+                googleLoading = false,
+                googleAttemptId = null,
+                error = "Google Sign-In no está configurado para este entorno.",
+            )
+
+            GoogleCredentialResult.Failure -> uiState.value = current.copy(
+                googleLoading = false,
+                googleAttemptId = null,
+                error = "No pudimos iniciar sesión con Google. Intentá nuevamente.",
+            )
+
+            is GoogleCredentialResult.Success -> signInWithGoogleIdToken(attemptId, result.idToken)
+        }
     }
 
     fun deleteAccount() {
@@ -177,6 +233,7 @@ internal class SessionCoordinator(
 
             when (val result = deleteAccountUseCase()) {
                 is ApiResult.Success -> {
+                    clearLocalSessionUseCase()
                     uiState.value = RealsRootUiState.AccountDeletionScheduled(
                         deletionFinalizesAt = result.value.deletionFinalizesAt,
                     )
@@ -205,6 +262,7 @@ internal class SessionCoordinator(
 
             when (val result = deleteAccountUseCase()) {
                 is ApiResult.Success -> {
+                    clearLocalSessionUseCase()
                     uiState.value = RealsRootUiState.AccountDeletionScheduled(
                         deletionFinalizesAt = result.value.deletionFinalizesAt,
                     )
@@ -223,6 +281,15 @@ internal class SessionCoordinator(
     fun changePassword(currentPassword: String, newPassword: String) {
         val current = uiState.value as? RealsRootUiState.Ready ?: return
         if (current.changingPassword || current.deletingAccount) return
+        if (!current.session.user.passwordManagementAllowed) {
+            uiState.value = current.copy(
+                account = current.account.copy(
+                    changePasswordError = "El cambio de contraseña no está disponible para este método de inicio de sesión.",
+                    changePasswordMessage = null,
+                ),
+            )
+            return
+        }
 
         scope.launch {
             val pending = current.copy(
@@ -240,7 +307,9 @@ internal class SessionCoordinator(
                 newPassword = newPassword,
             )
             if (result == ChangePasswordResult.NotSignedIn) {
-                invalidateTerminalSession()
+                clearLocalSessionAndShowLogin(
+                    error = "Tu sesión terminó. Volvé a iniciar sesión.",
+                )
                 return@launch
             }
             uiState.value = pending.copy(
@@ -259,6 +328,7 @@ internal class SessionCoordinator(
 
     fun reactivateAccount() {
         val current = uiState.value as? RealsRootUiState.AccountDeletionPending ?: return
+        if (current.reactivating || current.finalizingDeletion) return
 
         scope.launch {
             uiState.value = current.copy(reactivating = true, error = null)
@@ -273,6 +343,25 @@ internal class SessionCoordinator(
 
                 is ApiResult.Failure -> uiState.value = current.copy(
                     reactivating = false,
+                    error = result.error,
+                )
+            }
+        }
+    }
+
+    fun finalizeAccountDeletion() {
+        val current = uiState.value as? RealsRootUiState.AccountDeletionPending ?: return
+        if (current.reactivating || current.finalizingDeletion) return
+
+        scope.launch {
+            uiState.value = current.copy(finalizingDeletion = true, error = null)
+            when (val result = finalizeAccountDeletionUseCase()) {
+                is ApiResult.Success -> {
+                    clearLocalSessionAndShowLogin()
+                }
+
+                is ApiResult.Failure -> uiState.value = current.copy(
+                    finalizingDeletion = false,
                     error = result.error,
                 )
             }
@@ -344,26 +433,67 @@ internal class SessionCoordinator(
         action: suspend (email: String, password: String) -> AuthOperationResult,
     ) {
         val cleanEmail = email.trim()
-        val loginState = uiState.value as? RealsRootUiState.Login
+        val loginState = uiState.value as? RealsRootUiState.Login ?: return
+        if (loginState.loading || loginState.googleLoading) return
         if (cleanEmail.isBlank() || password.isBlank()) {
-            uiState.value = RealsRootUiState.Login(
+            uiState.value = loginState.copy(
+                loading = false,
+                googleLoading = false,
+                googleAttemptId = null,
                 error = "Email y password son requeridos.",
-                passwordResetAvailableAtMillis = loginState?.passwordResetAvailableAtMillis,
+                passwordResetMessage = null,
             )
             return
         }
         scope.launch {
-            uiState.value = RealsRootUiState.Login(
+            uiState.value = loginState.copy(
                 loading = true,
-                passwordResetAvailableAtMillis = loginState?.passwordResetAvailableAtMillis,
+                googleLoading = false,
+                googleAttemptId = null,
+                error = null,
+                passwordResetMessage = null,
             )
             when (val result = action(cleanEmail, password)) {
-                AuthOperationResult.Success -> loadBackendSession()
+                AuthOperationResult.Success -> loadBackendSession().join()
                 is AuthOperationResult.Failure -> uiState.value =
-                    RealsRootUiState.Login(
+                    loginState.copy(
+                        loading = false,
+                        googleLoading = false,
+                        googleAttemptId = null,
                         error = result.message,
-                        passwordResetAvailableAtMillis = loginState?.passwordResetAvailableAtMillis,
+                        passwordResetMessage = null,
                     )
+            }
+        }
+    }
+
+    private fun signInWithGoogleIdToken(attemptId: Long, idToken: String) {
+        val current = uiState.value.googleLoginStateFor(attemptId) ?: return
+        scope.launch {
+            uiState.value = current.copy(
+                loading = true,
+                googleLoading = true,
+                error = null,
+                passwordResetMessage = null,
+            )
+            when (val result = authRepository.signInWithGoogleIdToken(idToken)) {
+                AuthOperationResult.Success -> {
+                    if (uiState.value.googleLoginStateFor(attemptId) != null) {
+                        loadBackendSession().join()
+                    }
+                }
+
+                is AuthOperationResult.Failure -> {
+                    if (uiState.value.googleLoginStateFor(attemptId) != null) {
+                        uiState.value = current.copy(
+                            loading = false,
+                            googleLoading = false,
+                            googleAttemptId = null,
+                            error = result.message,
+                            passwordResetMessage = null,
+                        )
+                    }
+                }
             }
         }
     }
@@ -377,7 +507,15 @@ internal class SessionCoordinator(
                 )
             }
 
-            is ApiResult.Failure -> handleSessionLoadFailure(result.error)
+            is ApiResult.Failure -> {
+                if (result.error.isProvisioningAccountAssociationConflict()) {
+                    clearLocalSessionAndShowLogin(
+                        error = "Ya existe una cuenta asociada a ese email. Iniciá sesión con el método original.",
+                    )
+                } else {
+                    handleSessionLoadFailure(result.error)
+                }
+            }
         }
     }
 
@@ -401,7 +539,9 @@ internal class SessionCoordinator(
                 onLoaded(session)
             }
 
-            LocalFirebaseEmailVerificationResult.NotSignedIn -> invalidateTerminalSession()
+            LocalFirebaseEmailVerificationResult.NotSignedIn -> clearLocalSessionAndShowLogin(
+                error = "Tu sesión terminó. Volvé a iniciar sesión.",
+            )
             is LocalFirebaseEmailVerificationResult.Failure -> {
                 uiState.value = RealsRootUiState.Failure(verification.error)
             }
@@ -409,8 +549,17 @@ internal class SessionCoordinator(
     }
 
     private suspend fun handleSessionLoadFailure(error: ApiError) {
+        if (error.isAuthenticationMethodNotAllowed()) {
+            clearLocalSessionAndShowLogin(
+                error = "Ese método de inicio de sesión no está habilitado para esta cuenta.",
+            )
+            return
+        }
+
         if (error.isTerminalAuthFailure()) {
-            invalidateTerminalSession()
+            clearLocalSessionAndShowLogin(
+                error = "Tu sesión terminó. Volvé a iniciar sesión.",
+            )
             return
         }
 
@@ -424,7 +573,12 @@ internal class SessionCoordinator(
 
     private fun ApiError.Backend?.shouldProvisionAfterGetMeFailure(): Boolean {
         if (this == null) return false
-        return statusCode == 404 || statusCode == 403
+        return statusCode == 404
+    }
+
+    private suspend fun clearLocalSessionAndShowLogin(error: String? = null) {
+        clearLocalSessionUseCase()
+        uiState.value = RealsRootUiState.Login(error = error)
     }
 
     private fun registerPushTokenBestEffort() {
@@ -442,6 +596,20 @@ internal class SessionCoordinator(
 }
 
 private fun Long?.isInFuture(nowMillis: Long): Boolean = this != null && nowMillis < this
+
+private fun RealsRootUiState.googleLoginStateFor(attemptId: Long): RealsRootUiState.Login? {
+    val login = this as? RealsRootUiState.Login ?: return null
+    return login.takeIf { it.googleLoading && it.googleAttemptId == attemptId }
+}
+
+private fun ApiError.isAuthenticationMethodNotAllowed(): Boolean {
+    return this is ApiError.Backend && backendErrorCode == BackendErrorCode.AuthMethodNotAllowed
+}
+
+private fun ApiError.isProvisioningAccountAssociationConflict(): Boolean {
+    val backend = this as? ApiError.Backend ?: return false
+    return backend.statusCode == 409
+}
 
 private fun ChangePasswordResult.toChangePasswordMessageOrNull(): String? = when (this) {
     ChangePasswordResult.Success -> null

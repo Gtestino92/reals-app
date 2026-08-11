@@ -9,6 +9,8 @@ import com.reals.app.core.time.AndroidElapsedRealtimeClock
 import com.reals.app.data.preferences.SharedPreferencesFirstChatUnansweredSuggestionDismissalStore
 import com.reals.app.data.api.RealsApiClient
 import com.reals.app.data.repository.AffinityQuestionRepository
+import com.reals.app.data.repository.AuthRepository
+import com.reals.app.data.repository.CredentialStateRepository
 import com.reals.app.data.repository.FirebaseAuthRepository
 import com.reals.app.data.repository.ChatRepository
 import com.reals.app.data.repository.LegalRepository
@@ -23,6 +25,7 @@ import com.reals.app.domain.usecase.AcceptSchedulingProposalUseCase
 import com.reals.app.domain.usecase.ActivateProfileUseCase
 import com.reals.app.domain.usecase.AddProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.CancelChatUseCase
+import com.reals.app.domain.usecase.ClearLocalSessionUseCase
 import com.reals.app.domain.usecase.BlockMatchParticipantUseCase
 import com.reals.app.domain.usecase.CreateProfileUseCase
 import com.reals.app.domain.usecase.CreateSecondChatCompletionRequestUseCase
@@ -35,6 +38,7 @@ import com.reals.app.domain.usecase.DeleteProfilePhotoUseCase
 import com.reals.app.domain.usecase.DecideSecondChatCompletionRequestUseCase
 import com.reals.app.domain.usecase.DismissSecondChatForConnectionUseCase
 import com.reals.app.domain.usecase.EnqueueMatchmakingUseCase
+import com.reals.app.domain.usecase.FinalizeAccountDeletionUseCase
 import com.reals.app.domain.usecase.GetAffinityQuestionCatalogUseCase
 import com.reals.app.domain.usecase.GetChatExitRequestsUseCase
 import com.reals.app.domain.usecase.GetChatMessagesUseCase
@@ -75,6 +79,7 @@ import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.ReplaceMyProfileQuestionSelectionsUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
 import com.reals.app.domain.usecase.RequestNextFirstChatGuidanceQuestionUseCase
+import com.reals.app.domain.usecase.RequestPasswordResetUseCase
 import com.reals.app.domain.usecase.RecordLegalDocumentActionUseCase
 import com.reals.app.domain.usecase.SafetyCancelChatUseCase
 import com.reals.app.domain.usecase.SendChatAudioMessageUseCase
@@ -110,6 +115,9 @@ class AppContainer(context: Context) {
     private val api = RealsApiClient.create(BuildConfig.REALS_BASE_URL, json, appCheckTokenProvider)
 
     val authRepository = FirebaseAuthRepository(appContext)
+    private val credentialStateRepository = CredentialStateRepository(appContext)
+    private val clearLocalSessionUseCase = ClearLocalSessionUseCase(authRepository, credentialStateRepository)
+    private val backendAuthRepository = AuthRepository(api, apiExecutor)
     val foregroundDestinationTracker = AtomicForegroundDestinationTracker()
     val notificationPresentationPolicy = NotificationPresentationPolicy()
     val homeRefreshSignal = HomeRefreshSignal()
@@ -153,7 +161,9 @@ class AppContainer(context: Context) {
     val reorderProfilePhotosUseCase = ReorderProfilePhotosUseCase(profileRepository)
     val activateProfileUseCase = ActivateProfileUseCase(profileRepository)
     val reactivateAccountUseCase = ReactivateAccountUseCase(meRepository)
-    val deleteAccountUseCase = DeleteAccountUseCase(meRepository, authRepository)
+    val deleteAccountUseCase = DeleteAccountUseCase(meRepository)
+    val finalizeAccountDeletionUseCase = FinalizeAccountDeletionUseCase(meRepository)
+    val requestPasswordResetUseCase = RequestPasswordResetUseCase(backendAuthRepository)
     val getCurrentLegalDocumentsUseCase = GetCurrentLegalDocumentsUseCase(legalRepository)
     val getLegalStatusUseCase = GetLegalStatusUseCase(legalRepository)
     val recordLegalDocumentActionUseCase = RecordLegalDocumentActionUseCase(legalRepository)
@@ -208,6 +218,8 @@ class AppContainer(context: Context) {
     val rootDependencies = RealsRootDependencies(
         session = SessionFeatureDependencies(
             authRepository = authRepository,
+            requestPasswordReset = requestPasswordResetUseCase,
+            clearLocalSession = clearLocalSessionUseCase,
             provisionAndLoadProfile = provisionAndLoadProfileUseCase,
             getMe = getMeUseCase,
             pushTokenRegistrationService = pushTokenRegistrationService,
@@ -219,6 +231,7 @@ class AppContainer(context: Context) {
         account = AccountFeatureDependencies(
             reactivateAccount = reactivateAccountUseCase,
             deleteAccount = deleteAccountUseCase,
+            finalizeAccountDeletion = finalizeAccountDeletionUseCase,
         ),
         legal = LegalFeatureDependencies(
             getCurrentDocuments = getCurrentLegalDocumentsUseCase,

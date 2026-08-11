@@ -25,6 +25,7 @@ import com.reals.app.data.dto.FirstChatGuidanceResponseDto
 import com.reals.app.data.dto.NegotiationResponseDto
 import com.reals.app.data.dto.PartnerPersonalMessageResponseDto
 import com.reals.app.data.dto.PersonalMessageRequestDto
+import com.reals.app.data.dto.PasswordResetRequestDto
 import com.reals.app.data.dto.PhotoResponseDto
 import com.reals.app.data.dto.PingResponseDto
 import com.reals.app.data.dto.PatchAffinityAnswersRequestDto
@@ -80,6 +81,11 @@ interface RealsApi {
         @Header("Authorization") authorization: String,
     ): Response<UserResponseDto>
 
+    @POST("api/auth/password-reset")
+    suspend fun requestPasswordReset(
+        @Body body: PasswordResetRequestDto,
+    ): Response<Unit>
+
     @GET("api/me/home")
     suspend fun getHome(
         @Header("Authorization") authorization: String,
@@ -110,6 +116,11 @@ interface RealsApi {
     suspend fun reactivateMe(
         @Header("Authorization") authorization: String,
     ): Response<UserResponseDto>
+
+    @POST("api/me/deletion/finalization")
+    suspend fun finalizeMyDeletion(
+        @Header("Authorization") authorization: String,
+    ): Response<Unit>
 
     @POST("api/me/local-dev/email-verification")
     suspend fun markCurrentFirebaseEmailVerifiedForLocalDevelopment(

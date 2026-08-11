@@ -197,6 +197,13 @@ class SessionCoordinatorLocalEmailVerificationTest {
             uiState = state,
             dependencies = SessionFeatureDependencies(
                 authRepository = auth,
+                requestPasswordReset = com.reals.app.domain.usecase.RequestPasswordResetUseCase(),
+                clearLocalSession = com.reals.app.domain.usecase.ClearLocalSessionUseCase(
+                    authRepository = auth,
+                    credentialStateRepository = object : com.reals.app.data.repository.CredentialStateRepository(context) {
+                        override suspend fun clearCredentialState() = Unit
+                    },
+                ),
                 provisionAndLoadProfile = ProvisionAndLoadProfileUseCase(meRepository, profileRepository),
                 getMe = GetMeUseCase(meRepository),
                 pushTokenRegistrationService = pushTokenRegistrationService,
@@ -206,7 +213,8 @@ class SessionCoordinatorLocalEmailVerificationTest {
             ),
             accountDependencies = AccountFeatureDependencies(
                 reactivateAccount = ReactivateAccountUseCase(meRepository),
-                deleteAccount = DeleteAccountUseCase(meRepository, auth),
+                deleteAccount = DeleteAccountUseCase(meRepository),
+                finalizeAccountDeletion = com.reals.app.domain.usecase.FinalizeAccountDeletionUseCase(meRepository),
             ),
             scope = this,
             onActiveSessionLoaded = { readySessions += it },

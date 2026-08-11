@@ -26,6 +26,7 @@ class LoginScreenPasswordResetTest {
         assertTrue(
             passwordResetButtonEnabled(
                 loginLoading = false,
+                googleLoading = false,
                 passwordResetLoading = false,
                 cooldownRemainingSeconds = 0L,
             )
@@ -33,6 +34,7 @@ class LoginScreenPasswordResetTest {
         assertFalse(
             passwordResetButtonEnabled(
                 loginLoading = true,
+                googleLoading = false,
                 passwordResetLoading = false,
                 cooldownRemainingSeconds = 0L,
             )
@@ -40,6 +42,7 @@ class LoginScreenPasswordResetTest {
         assertFalse(
             passwordResetButtonEnabled(
                 loginLoading = false,
+                googleLoading = false,
                 passwordResetLoading = true,
                 cooldownRemainingSeconds = 0L,
             )
@@ -47,6 +50,7 @@ class LoginScreenPasswordResetTest {
         assertFalse(
             passwordResetButtonEnabled(
                 loginLoading = false,
+                googleLoading = false,
                 passwordResetLoading = false,
                 cooldownRemainingSeconds = 60L,
             )

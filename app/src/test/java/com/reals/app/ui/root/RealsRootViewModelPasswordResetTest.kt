@@ -5,10 +5,11 @@ import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.AuthFailureReason
 import com.reals.app.core.network.BackendErrorCode
 import com.reals.app.core.network.backendErrorCode
-import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.reals.app.data.repository.AuthOperationResult
+import com.reals.app.data.repository.AuthRepository
 import com.reals.app.data.repository.ChangePasswordResult
 import com.reals.app.data.repository.ChatRepository
+import com.reals.app.data.repository.CredentialStateRepository
 import com.reals.app.data.repository.EmailVerificationCheckResult
 import com.reals.app.data.repository.EmailVerificationSendResult
 import com.reals.app.data.repository.FirebaseAuthRepository
@@ -19,6 +20,7 @@ import com.reals.app.data.repository.MeRepository
 import com.reals.app.data.repository.PasswordResetResult
 import com.reals.app.data.repository.ProfileRepository
 import com.reals.app.data.repository.SchedulingRepository
+import com.reals.app.data.mapper.toDomain
 import com.reals.app.di.AccountFeatureDependencies
 import com.reals.app.di.FirstChatFeatureDependencies
 import com.reals.app.di.HomeFeatureDependencies
@@ -34,12 +36,14 @@ import com.reals.app.domain.usecase.AcceptSchedulingProposalUseCase
 import com.reals.app.domain.usecase.ActivateProfileUseCase
 import com.reals.app.domain.usecase.AddProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.CancelChatUseCase
+import com.reals.app.domain.usecase.ClearLocalSessionUseCase
 import com.reals.app.domain.usecase.BlockMatchParticipantUseCase
 import com.reals.app.domain.usecase.CreateProfileUseCase
 import com.reals.app.domain.usecase.DeleteAccountUseCase
 import com.reals.app.domain.usecase.DeleteProfilePhotoUseCase
 import com.reals.app.domain.usecase.DismissSecondChatForConnectionUseCase
 import com.reals.app.domain.usecase.EnqueueMatchmakingUseCase
+import com.reals.app.domain.usecase.FinalizeAccountDeletionUseCase
 import com.reals.app.domain.usecase.GetChatExitRequestsUseCase
 import com.reals.app.domain.usecase.GetChatMessagesUseCase
 import com.reals.app.domain.usecase.GetChatUseCase
@@ -70,6 +74,7 @@ import com.reals.app.domain.usecase.ReorderProfilePhotosUseCase
 import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
 import com.reals.app.domain.usecase.RequestNextFirstChatGuidanceQuestionUseCase
+import com.reals.app.domain.usecase.RequestPasswordResetUseCase
 import com.reals.app.domain.usecase.RecordLegalDocumentActionUseCase
 import com.reals.app.domain.usecase.SafetyCancelChatUseCase
 import com.reals.app.domain.usecase.SendChatMessageUseCase
@@ -82,6 +87,7 @@ import com.reals.app.domain.usecase.UpdateProfileUseCase
 import com.reals.app.notifications.registration.PushTokenRegistrationService
 import com.reals.app.testutil.FakeAuthTokenProvider
 import com.reals.app.testutil.FakeRealsApi
+import com.reals.app.testutil.TestDtos
 import com.reals.app.testutil.TestDomain
 import com.reals.app.testutil.backendErrorResponse
 import com.reals.app.testutil.testApiExecutor
@@ -136,7 +142,8 @@ class RealsRootViewModelPasswordResetTest {
     @Test
     fun `generic handled password reset result shows generic message`() = runTest(dispatcher) {
         val authRepository = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
-        val viewModel = viewModel(authRepository)
+        val api = FakeRealsApi()
+        val viewModel = viewModel(authRepository, api)
         viewModel.setState(RealsRootUiState.Login(error = "stale"))
 
         viewModel.requestPasswordReset(" alex@example.com ")
@@ -151,13 +158,19 @@ class RealsRootViewModelPasswordResetTest {
         assertEquals(false, state.passwordResetLoading)
         assertNotNull(state.passwordResetAvailableAtMillis)
         assertTrue(state.passwordResetAvailableAtMillis!! > System.currentTimeMillis())
-        assertEquals(listOf("alex@example.com"), authRepository.resetRequests)
+        assertEquals(listOf("requestPasswordReset"), api.calls)
+        assertEquals("alex@example.com", api.passwordResetBody?.email)
+        assertNull(api.lastAuthorization)
+        assertEquals(emptyList<String>(), authRepository.resetRequests)
     }
 
     @Test
     fun `silent password reset failure stops loading without visible feedback`() = runTest(dispatcher) {
         val authRepository = FakeFirebaseAuthRepository(PasswordResetResult.SilentFailure)
-        val viewModel = viewModel(authRepository)
+        val api = FakeRealsApi().apply {
+            passwordResetResponse = backendErrorResponse(500, "SERVER_ERROR", "server error")
+        }
+        val viewModel = viewModel(authRepository, api)
         viewModel.setState(RealsRootUiState.Login(error = "stale", passwordResetMessage = "stale"))
 
         viewModel.requestPasswordReset("alex@example.com")
@@ -168,12 +181,15 @@ class RealsRootViewModelPasswordResetTest {
         assertNull(state.passwordResetMessage)
         assertEquals(false, state.passwordResetLoading)
         assertNotNull(state.passwordResetAvailableAtMillis)
+        assertEquals(listOf("requestPasswordReset"), api.calls)
+        assertEquals(emptyList<String>(), authRepository.resetRequests)
     }
 
     @Test
     fun `password reset during cooldown is ignored`() = runTest(dispatcher) {
         val authRepository = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
-        val viewModel = viewModel(authRepository)
+        val api = FakeRealsApi()
+        val viewModel = viewModel(authRepository, api)
         val availableAtMillis = System.currentTimeMillis() + 60_000L
         viewModel.setState(RealsRootUiState.Login(passwordResetAvailableAtMillis = availableAtMillis))
 
@@ -182,6 +198,7 @@ class RealsRootViewModelPasswordResetTest {
 
         val state = viewModel.uiState.value as RealsRootUiState.Login
         assertEquals(emptyList<String>(), authRepository.resetRequests)
+        assertEquals(emptyList<String>(), api.calls)
         assertEquals(availableAtMillis, state.passwordResetAvailableAtMillis)
     }
 
@@ -626,13 +643,11 @@ class RealsRootViewModelPasswordResetTest {
     fun `terminal auth failure during session bootstrap signs out and routes to login`() = runTest(dispatcher) {
         val authRepository = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
         val tokenProvider = FakeAuthTokenProvider().apply {
-            failure = FirebaseAuthInvalidUserException(
-                "ERROR_USER_DISABLED",
-                "Firebase user is disabled",
-            )
+            failMissingUser()
         }
         val api = FakeRealsApi()
         val viewModel = viewModel(authRepository, api, tokenProvider)
+        viewModel.setState(RealsRootUiState.Login())
 
         viewModel.signIn("alex@example.com", "password")
         advanceUntilIdle()
@@ -701,7 +716,7 @@ class RealsRootViewModelPasswordResetTest {
             canChangePassword = false,
         )
         val viewModel = viewModel(authRepository)
-        viewModel.setState(RealsRootUiState.Ready(session = TestDomain.session()))
+        viewModel.setState(RealsRootUiState.Ready(session = TestDomain.session(passwordManagementAllowed = false)))
 
         viewModel.changePassword("current-password", "new-password")
         advanceUntilIdle()
@@ -711,7 +726,137 @@ class RealsRootViewModelPasswordResetTest {
             "El cambio de contraseña no está disponible para este método de inicio de sesión.",
             state.changePasswordError,
         )
-        assertEquals(false, viewModel.currentUserHasPasswordProvider())
+        assertEquals(emptyList<Pair<String, String>>(), authRepository.changePasswordRequests)
+    }
+
+    @Test
+    fun `google credential success signs into Firebase and enters backend session loading`() = runTest(dispatcher) {
+        val api = FakeRealsApi()
+        val authRepository = FakeFirebaseAuthRepository(
+            passwordResetResult = PasswordResetResult.SentOrHandledGenerically,
+            googleSignInResult = AuthOperationResult.Success,
+        )
+        val viewModel = viewModel(authRepository, api)
+        viewModel.setState(RealsRootUiState.Login())
+
+        val attemptId = viewModel.beginGoogleSignIn()
+        assertNotNull(attemptId)
+        viewModel.completeGoogleSignIn(attemptId!!, com.reals.app.ui.auth.GoogleCredentialResult.Success("id-token"))
+        advanceUntilIdle()
+
+        assertEquals(listOf("id-token"), authRepository.googleSignInRequests)
+        assertEquals(true, api.calls.contains("getMe"))
+    }
+
+    @Test
+    fun `google chooser cancellation leaves login without error`() = runTest(dispatcher) {
+        val authRepository = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
+        val viewModel = viewModel(authRepository)
+        viewModel.setState(RealsRootUiState.Login())
+
+        val attemptId = viewModel.beginGoogleSignIn()
+        viewModel.completeGoogleSignIn(attemptId!!, com.reals.app.ui.auth.GoogleCredentialResult.Cancelled)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Login
+        assertEquals(false, state.googleLoading)
+        assertNull(state.error)
+        assertEquals(emptyList<String>(), authRepository.googleSignInRequests)
+    }
+
+    @Test
+    fun `duplicate google start is ignored while busy`() = runTest(dispatcher) {
+        val viewModel = viewModel(FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically))
+        viewModel.setState(RealsRootUiState.Login())
+
+        assertNotNull(viewModel.beginGoogleSignIn())
+        assertNull(viewModel.beginGoogleSignIn())
+    }
+
+    @Test
+    fun `auth method not allowed clears local session and returns to login`() = runTest(dispatcher) {
+        val api = FakeRealsApi().apply {
+            getMeResponse = backendErrorResponse(403, "AUTH_METHOD_NOT_ALLOWED", "not allowed")
+        }
+        val authRepository = FakeFirebaseAuthRepository(
+            passwordResetResult = PasswordResetResult.SentOrHandledGenerically,
+            googleSignInResult = AuthOperationResult.Success,
+        )
+        val viewModel = viewModel(authRepository, api)
+        viewModel.setState(RealsRootUiState.Login())
+
+        val attemptId = viewModel.beginGoogleSignIn()!!
+        viewModel.completeGoogleSignIn(attemptId, com.reals.app.ui.auth.GoogleCredentialResult.Success("id-token"))
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Login
+        assertEquals("Ese método de inicio de sesión no está habilitado para esta cuenta.", state.error)
+        assertEquals(1, authRepository.signOutCalls)
+        assertEquals(listOf("getMe"), api.calls.filter { it == "getMe" || it == "provisionMe" })
+    }
+
+    @Test
+    fun `provisioning email identity conflict clears session without rebinding`() = runTest(dispatcher) {
+        val api = FakeRealsApi().apply {
+            getMeResponse = backendErrorResponse(404, "PROFILE_NOT_FOUND", "missing")
+            provisionMeResponse = backendErrorResponse(409, "DOMAIN_CONFLICT", "conflict")
+        }
+        val authRepository = FakeFirebaseAuthRepository(
+            passwordResetResult = PasswordResetResult.SentOrHandledGenerically,
+            googleSignInResult = AuthOperationResult.Success,
+        )
+        val viewModel = viewModel(authRepository, api)
+        viewModel.setState(RealsRootUiState.Login())
+
+        val attemptId = viewModel.beginGoogleSignIn()!!
+        viewModel.completeGoogleSignIn(attemptId, com.reals.app.ui.auth.GoogleCredentialResult.Success("id-token"))
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Login
+        assertEquals("Ya existe una cuenta asociada a ese email. Iniciá sesión con el método original.", state.error)
+        assertEquals(1, authRepository.signOutCalls)
+        assertEquals(listOf("getMe", "provisionMe"), api.calls.filter { it == "getMe" || it == "provisionMe" })
+    }
+
+    @Test
+    fun `deleted google user reaches account deletion pending`() = runTest(dispatcher) {
+        val deletedUser = TestDtos.user(status = "DELETED").copy(deletionFinalizesAt = "2026-09-10T21:00:00Z")
+        val api = FakeRealsApi().apply {
+            getMeResponse = retrofit2.Response.success(deletedUser)
+        }
+        val authRepository = FakeFirebaseAuthRepository(
+            passwordResetResult = PasswordResetResult.SentOrHandledGenerically,
+            googleSignInResult = AuthOperationResult.Success,
+        )
+        val viewModel = viewModel(authRepository, api)
+        viewModel.setState(RealsRootUiState.Login())
+
+        val attemptId = viewModel.beginGoogleSignIn()!!
+        viewModel.completeGoogleSignIn(attemptId, com.reals.app.ui.auth.GoogleCredentialResult.Success("id-token"))
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.AccountDeletionPending
+        assertEquals("user-1", state.user.id)
+        assertEquals("2026-09-10T21:00:00Z", state.user.deletionFinalizesAt)
+    }
+
+    @Test
+    fun `permanent deletion finalization clears local session and returns to login`() = runTest(dispatcher) {
+        val api = FakeRealsApi()
+        val authRepository = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
+        val viewModel = viewModel(authRepository, api)
+        viewModel.setState(
+            RealsRootUiState.AccountDeletionPending(
+                user = TestDtos.user(status = "DELETED").toDomain(),
+            )
+        )
+
+        viewModel.finalizeAccountDeletion()
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value is RealsRootUiState.Login)
+        assertEquals(listOf("finalizeMyDeletion"), api.calls)
+        assertEquals(1, authRepository.signOutCalls)
     }
 
     @Test
@@ -753,6 +898,7 @@ class RealsRootViewModelPasswordResetTest {
     ): RealsRootDependencies {
         val context = ContextWrapper(null)
         val apiExecutor = testApiExecutor()
+        val backendAuthRepository = AuthRepository(api, apiExecutor)
         val meRepository = MeRepository(api, tokenProvider, apiExecutor)
         val profileRepository = ProfileRepository(context, api, tokenProvider, apiExecutor)
         val matchmakingRepository = MatchmakingRepository(api, tokenProvider, apiExecutor)
@@ -769,13 +915,21 @@ class RealsRootViewModelPasswordResetTest {
         return RealsRootDependencies(
             session = SessionFeatureDependencies(
                 authRepository = authRepository,
+                requestPasswordReset = RequestPasswordResetUseCase(backendAuthRepository),
+                clearLocalSession = ClearLocalSessionUseCase(
+                    authRepository = authRepository,
+                    credentialStateRepository = object : CredentialStateRepository(context) {
+                        override suspend fun clearCredentialState() = Unit
+                    },
+                ),
                 provisionAndLoadProfile = ProvisionAndLoadProfileUseCase(meRepository, profileRepository),
                 getMe = GetMeUseCase(meRepository),
                 pushTokenRegistrationService = PushTokenRegistrationService(context, registerPushTokenUseCase),
             ),
             account = AccountFeatureDependencies(
                 reactivateAccount = ReactivateAccountUseCase(meRepository),
-                deleteAccount = DeleteAccountUseCase(meRepository, authRepository),
+                deleteAccount = DeleteAccountUseCase(meRepository),
+                finalizeAccountDeletion = FinalizeAccountDeletionUseCase(meRepository),
             ),
             legal = LegalFeatureDependencies(
                 getCurrentDocuments = GetCurrentLegalDocumentsUseCase(legalRepository),
@@ -893,6 +1047,7 @@ class RealsRootViewModelPasswordResetTest {
         private val passwordResetResult: PasswordResetResult,
         private val signInResult: AuthOperationResult = AuthOperationResult.Success,
         private val signUpResult: AuthOperationResult = AuthOperationResult.Success,
+        private val googleSignInResult: AuthOperationResult = AuthOperationResult.Success,
         private val emailVerificationSendResult: EmailVerificationSendResult =
             EmailVerificationSendResult.Sent,
         private val emailVerificationCheckResult: EmailVerificationCheckResult =
@@ -903,6 +1058,7 @@ class RealsRootViewModelPasswordResetTest {
         val resetRequests = mutableListOf<String>()
         val signInRequests = mutableListOf<String>()
         val signUpRequests = mutableListOf<String>()
+        val googleSignInRequests = mutableListOf<String>()
         val changePasswordRequests = mutableListOf<Pair<String, String>>()
         var emailVerificationSendCalls = 0
             private set
@@ -921,9 +1077,9 @@ class RealsRootViewModelPasswordResetTest {
             return signUpResult
         }
 
-        override suspend fun sendPasswordResetEmail(email: String): PasswordResetResult {
-            resetRequests += email
-            return passwordResetResult
+        override suspend fun signInWithGoogleIdToken(idToken: String): AuthOperationResult {
+            googleSignInRequests += idToken
+            return googleSignInResult
         }
 
         override suspend fun sendEmailVerificationEmail(): EmailVerificationSendResult {

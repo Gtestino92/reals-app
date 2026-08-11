@@ -5,8 +5,8 @@ import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProvisionedSession
 
 object TestDomain {
-    fun session(): ProvisionedSession = ProvisionedSession(
-        user = TestDtos.user().toDomain(),
+    fun session(passwordManagementAllowed: Boolean = true): ProvisionedSession = ProvisionedSession(
+        user = TestDtos.user().copy(passwordManagementAllowed = passwordManagementAllowed).toDomain(),
         profileSnapshot = ProfileSnapshot.Found(TestDtos.profile().toDomain()),
     )
 }

@@ -10,18 +10,13 @@ import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.FirebaseAuthWeakPasswordException
 import com.google.firebase.auth.EmailAuthProvider
+import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.tasks.await
 
 sealed interface AuthOperationResult {
     data object Success : AuthOperationResult
     data class Failure(val message: String) : AuthOperationResult
-}
-
-sealed interface PasswordResetResult {
-    data object SentOrHandledGenerically : PasswordResetResult
-    data object InvalidEmailFormat : PasswordResetResult
-    data object SilentFailure : PasswordResetResult
 }
 
 sealed interface EmailVerificationSendResult {
@@ -87,18 +82,16 @@ open class FirebaseAuthRepository(private val context: Context) {
         )
     }
 
-    open suspend fun sendPasswordResetEmail(email: String): PasswordResetResult {
-        val cleanEmail = email.trim()
-        if (!isLocallyValidEmail(cleanEmail)) return PasswordResetResult.InvalidEmailFormat
-
+    open suspend fun signInWithGoogleIdToken(idToken: String): AuthOperationResult {
         val auth = authOrNull()
-            ?: return PasswordResetResult.SilentFailure
+            ?: return AuthOperationResult.Failure(firebaseMissingMessage)
 
         return runCatching {
-            auth.sendPasswordResetEmail(cleanEmail).await()
+            val credential = GoogleAuthProvider.getCredential(idToken, null)
+            auth.signInWithCredential(credential).await()
         }.fold(
-            onSuccess = { PasswordResetResult.SentOrHandledGenerically },
-            onFailure = { it.toPasswordResetResult() },
+            onSuccess = { AuthOperationResult.Success },
+            onFailure = { AuthOperationResult.Failure(it.toGoogleSignInMessage()) },
         )
     }
 
@@ -178,7 +171,7 @@ open class FirebaseAuthRepository(private val context: Context) {
     private fun Throwable.toSignUpMessage(): String {
         return when (this) {
             is FirebaseAuthUserCollisionException ->
-                "Ya existe una cuenta con ese email."
+                "Ya existe una cuenta con ese email. Iniciá sesión con el método con el que creaste la cuenta."
 
             is FirebaseAuthWeakPasswordException ->
                 "La contraseña es demasiado débil."
@@ -188,6 +181,15 @@ open class FirebaseAuthRepository(private val context: Context) {
 
             else ->
                 localizedMessage ?: "No se pudo crear la cuenta."
+        }
+    }
+
+    private fun Throwable.toGoogleSignInMessage(): String {
+        return when (this) {
+            is FirebaseAuthUserCollisionException ->
+                "Ya existe una cuenta asociada a ese email. Iniciá sesión con el método original."
+
+            else -> "No pudimos iniciar sesión con Google. Intentá nuevamente."
         }
     }
 
@@ -211,35 +213,6 @@ internal fun isLocallyValidEmail(email: String): Boolean {
         dotIndex < email.lastIndex - 1 &&
         !email.any(Char::isWhitespace)
 }
-
-internal fun Throwable.toPasswordResetResult(): PasswordResetResult {
-    passwordResetResultForFirebaseErrorCode((this as? FirebaseAuthException)?.errorCode)
-        .takeIf { it != PasswordResetResult.SilentFailure }
-        ?.let { return it }
-
-    return when {
-        isEnumerationProneResetFailure() -> PasswordResetResult.SentOrHandledGenerically
-        else -> PasswordResetResult.SilentFailure
-    }
-}
-
-internal fun passwordResetResultForFirebaseErrorCode(errorCode: String?): PasswordResetResult {
-    return when (errorCode) {
-        "ERROR_INVALID_EMAIL" -> PasswordResetResult.InvalidEmailFormat
-        in enumerationPronePasswordResetErrorCodes -> PasswordResetResult.SentOrHandledGenerically
-        else -> PasswordResetResult.SilentFailure
-    }
-}
-
-private fun Throwable.isEnumerationProneResetFailure(): Boolean {
-    return this is FirebaseAuthInvalidUserException
-}
-
-private val enumerationPronePasswordResetErrorCodes = setOf(
-    "ERROR_USER_NOT_FOUND",
-    "ERROR_INVALID_USER",
-    "ERROR_EMAIL_NOT_FOUND",
-)
 
 internal fun providerIdsHavePasswordProvider(providerIds: Iterable<String>): Boolean {
     return providerIds.any { it == EmailAuthProvider.PROVIDER_ID }

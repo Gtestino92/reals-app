@@ -27,6 +27,7 @@ import com.reals.app.data.dto.MatchResponseDto
 import com.reals.app.data.dto.NegotiationResponseDto
 import com.reals.app.data.dto.PartnerPersonalMessageResponseDto
 import com.reals.app.data.dto.PhotoResponseDto
+import com.reals.app.data.dto.PasswordResetRequestDto
 import com.reals.app.data.dto.PingResponseDto
 import com.reals.app.data.dto.PatchAffinityAnswersRequestDto
 import com.reals.app.data.dto.ProfileQuestionAnswersResponseDto
@@ -128,6 +129,8 @@ class FakeRealsApi : RealsApi {
         private set
     var registerPushTokenBody: RegisterPushTokenRequestDto? = null
         private set
+    var passwordResetBody: PasswordResetRequestDto? = null
+        private set
     var legalActionBody: RecordLegalDocumentActionRequestDto? = null
         private set
     var patchAffinityAnswersBody: PatchAffinityAnswersRequestDto? = null
@@ -174,6 +177,8 @@ class FakeRealsApi : RealsApi {
     var getMeResponse: Response<UserResponseDto>? = null
     var provisionMeResponse: Response<UserResponseDto>? = null
     var deleteMeResponse: Response<Unit> = Response.success(Unit)
+    var passwordResetResponse: Response<Unit> = Response.success(Unit)
+    var finalizeMyDeletionResponse: Response<Unit> = Response.success(Unit)
     var homeResponse: Response<HomeResponseDto> = Response.success(TestDtos.homeWithoutPendingEngagements())
     var homeStatusResponse: Response<HomeStatusResponseDto> = Response.success(TestDtos.homeStatus())
     var homePendingResponse: Response<HomePendingStateResponseDto> = Response.success(TestDtos.homePending())
@@ -238,6 +243,12 @@ class FakeRealsApi : RealsApi {
     override suspend fun getMe(authorization: String): Response<UserResponseDto> =
         record("getMe", authorization) { getMeResponse ?: userResponse }
 
+    override suspend fun requestPasswordReset(body: PasswordResetRequestDto): Response<Unit> =
+        record("requestPasswordReset", null) {
+            passwordResetBody = body
+            passwordResetResponse
+        }
+
     override suspend fun getHome(authorization: String): Response<HomeResponseDto> =
         record("getHome", authorization, beforeResponse = beforeGetHomeResponse) { homeResponse }
 
@@ -261,6 +272,9 @@ class FakeRealsApi : RealsApi {
 
     override suspend fun reactivateMe(authorization: String): Response<UserResponseDto> =
         record("reactivateMe", authorization) { userResponse }
+
+    override suspend fun finalizeMyDeletion(authorization: String): Response<Unit> =
+        record("finalizeMyDeletion", authorization) { finalizeMyDeletionResponse }
 
     override suspend fun markCurrentFirebaseEmailVerifiedForLocalDevelopment(
         authorization: String,

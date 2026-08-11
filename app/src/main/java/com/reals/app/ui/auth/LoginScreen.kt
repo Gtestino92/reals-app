@@ -36,6 +36,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun LoginScreen(
     loading: Boolean,
+    googleLoading: Boolean,
     error: String?,
     passwordResetLoading: Boolean,
     passwordResetMessage: String?,
@@ -43,6 +44,7 @@ fun LoginScreen(
     onSignIn: (email: String, password: String) -> Unit,
     onSignUp: (email: String, password: String) -> Unit,
     onPasswordReset: (email: String) -> Unit,
+    onGoogleSignIn: () -> Unit,
 ) {
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
@@ -51,6 +53,7 @@ fun LoginScreen(
         availableAtMillis = passwordResetAvailableAtMillis,
         nowMillis = nowMillis,
     )
+    val authBusy = loading || googleLoading
 
     LaunchedEffect(passwordResetAvailableAtMillis) {
         while (passwordResetCooldownRemainingSeconds(passwordResetAvailableAtMillis, System.currentTimeMillis()) > 0) {
@@ -76,7 +79,7 @@ fun LoginScreen(
             color = MaterialTheme.colorScheme.primary,
         )
         Text(
-            text = "Login inicial con Firebase Email/Password.",
+            text = "Ingresá o creá tu cuenta para empezar.",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -93,7 +96,7 @@ fun LoginScreen(
                     onValueChange = { email = it },
                     label = { Text("Email") },
                     singleLine = true,
-                    enabled = !loading,
+                    enabled = !authBusy,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -102,7 +105,7 @@ fun LoginScreen(
                     onValueChange = { password = it },
                     label = { Text("Password") },
                     singleLine = true,
-                    enabled = !loading,
+                    enabled = !authBusy,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     modifier = Modifier.fillMaxWidth(),
@@ -123,14 +126,14 @@ fun LoginScreen(
                 }
                 Button(
                     onClick = { onSignIn(email, password) },
-                    enabled = !loading,
+                    enabled = !authBusy,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(if (loading) "Ingresando..." else "Ingresar")
                 }
                 OutlinedButton(
                     onClick = { onSignUp(email, password) },
-                    enabled = !loading,
+                    enabled = !authBusy,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text("Crear cuenta")
@@ -139,6 +142,7 @@ fun LoginScreen(
                     onClick = { onPasswordReset(email) },
                     enabled = passwordResetButtonEnabled(
                         loginLoading = loading,
+                        googleLoading = googleLoading,
                         passwordResetLoading = passwordResetLoading,
                         cooldownRemainingSeconds = cooldownRemainingSeconds,
                     ),
@@ -150,6 +154,19 @@ fun LoginScreen(
                             cooldownRemainingSeconds = cooldownRemainingSeconds,
                         )
                     )
+                }
+                Text(
+                    text = "o",
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedButton(
+                    onClick = onGoogleSignIn,
+                    enabled = !authBusy && !passwordResetLoading,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (googleLoading) "Conectando con Google..." else "Continuar con Google")
                 }
             }
         }
@@ -175,6 +192,7 @@ internal fun passwordResetButtonText(
 
 internal fun passwordResetButtonEnabled(
     loginLoading: Boolean,
+    googleLoading: Boolean,
     passwordResetLoading: Boolean,
     cooldownRemainingSeconds: Long,
-): Boolean = !loginLoading && !passwordResetLoading && cooldownRemainingSeconds <= 0L
+): Boolean = !loginLoading && !googleLoading && !passwordResetLoading && cooldownRemainingSeconds <= 0L
