@@ -8,20 +8,44 @@ class HomeRouterTest {
 
     @Test
     fun `home with FIRST_CHAT pending action routes to first chat`() {
+        val screenModel = model(
+            pendingActions = listOf(
+                HomeActionItem.FirstChat(
+                    matchId = "match-1",
+                    chatId = "chat-1",
+                    partnerDisplayName = "Alex",
+                ),
+            )
+        )
+
+        val autoRoute = router.resolve(
+            screenModel = screenModel,
+            autoNavigate = true,
+        )
+        val manualRoute = router.resolve(
+            screenModel = screenModel,
+            autoNavigate = false,
+        )
+
+        assertEquals(HomeRoute.OpenFirstChat("match-1", "chat-1"), autoRoute)
+        assertEquals(HomeRoute.OpenFirstChat("match-1", "chat-1"), manualRoute)
+    }
+
+    @Test
+    fun `without FIRST_CHAT disabled auto navigate keeps user on Home`() {
         val route = router.resolve(
             screenModel = model(
                 pendingActions = listOf(
-                    HomeActionItem.FirstChat(
-                        matchId = "match-1",
-                        chatId = "chat-1",
-                        partnerDisplayName = "Alex",
+                    HomeActionItem.VisualReview(
+                        matchId = "match-visual",
+                        partnerDisplayName = "Taylor",
                     ),
                 )
             ),
-            autoNavigate = true,
+            autoNavigate = false,
         )
 
-        assertEquals(HomeRoute.OpenFirstChat("match-1", "chat-1"), route)
+        assertEquals(HomeRoute.StayHome, route)
     }
 
     @Test
@@ -44,17 +68,7 @@ class HomeRouterTest {
     @Test
     fun `no pending actions or disabled auto navigate keeps user on Home`() {
         assertEquals(HomeRoute.StayHome, router.resolve(model(), autoNavigate = true))
-        assertEquals(
-            HomeRoute.StayHome,
-            router.resolve(
-                model(
-                    pendingActions = listOf(
-                        HomeActionItem.FirstChat("match-1", "chat-1", null),
-                    )
-                ),
-                autoNavigate = false,
-            )
-        )
+        assertEquals(HomeRoute.StayHome, router.resolve(model(), autoNavigate = false))
     }
 
     private fun model(

@@ -42,10 +42,11 @@ class FirstChatInteractionPolicyTest {
     }
 
     @Test
-    fun `decision-only overflow hides mutual exit while keeping reject safety and block`() {
+    fun `decision-only overflow hides mutual exit and duplicate reject while keeping safety and block`() {
         val visibility = firstChatOverflowActionVisibility(
             showMutualExitActions = true,
             showDecisionActions = true,
+            decisionOnlyForCurrentUser = true,
             canRequestOrdinaryExit = false,
             canDecide = true,
             canUseSafetyActions = true,
@@ -53,7 +54,7 @@ class FirstChatInteractionPolicyTest {
         )
 
         assertFalse(visibility.showMutualExit)
-        assertTrue(visibility.showReject)
+        assertFalse(visibility.showReject)
         assertTrue(visibility.showSafety)
         assertTrue(visibility.showManualBlock)
     }
@@ -63,6 +64,7 @@ class FirstChatInteractionPolicyTest {
         val visibility = firstChatOverflowActionVisibility(
             showMutualExitActions = true,
             showDecisionActions = true,
+            decisionOnlyForCurrentUser = false,
             canRequestOrdinaryExit = true,
             canDecide = false,
             canUseSafetyActions = true,
@@ -77,6 +79,7 @@ class FirstChatInteractionPolicyTest {
         val visibility = firstChatOverflowActionVisibility(
             showMutualExitActions = true,
             showDecisionActions = true,
+            decisionOnlyForCurrentUser = false,
             canRequestOrdinaryExit = true,
             canDecide = true,
             canUseSafetyActions = false,
@@ -91,6 +94,7 @@ class FirstChatInteractionPolicyTest {
         val visibility = firstChatOverflowActionVisibility(
             showMutualExitActions = true,
             showDecisionActions = true,
+            decisionOnlyForCurrentUser = false,
             canRequestOrdinaryExit = true,
             canDecide = true,
             canUseSafetyActions = true,
@@ -105,6 +109,7 @@ class FirstChatInteractionPolicyTest {
         val visibility = firstChatOverflowActionVisibility(
             showMutualExitActions = true,
             showDecisionActions = true,
+            decisionOnlyForCurrentUser = false,
             canRequestOrdinaryExit = true,
             canDecide = true,
             canUseSafetyActions = true,
@@ -148,15 +153,101 @@ class FirstChatInteractionPolicyTest {
     }
 
     @Test
-    fun `neutral pending decision copy does not disclose partner approval`() {
+    fun `pending decision copy discloses partner approval with partner name`() {
         val copy = chatDecisionSummary(
             myDecision = ChatDecisionState.Pending,
             partnerDecision = ChatDecisionState.Approved,
             partnerName = "Alex",
         )
 
-        assertEquals("Ya no se pueden enviar mensajes. Elegí cómo querés continuar.", copy)
-        assertFalse(copy.orEmpty().contains("aprobó", ignoreCase = true))
-        assertFalse(copy.orEmpty().contains("Alex"))
+        assertEquals("Alex aprob\u00f3 el chat. Ahora te toca decidir.", copy)
+    }
+
+    @Test
+    fun `pending decision copy discloses partner approval with fallback`() {
+        val copy = chatDecisionSummary(
+            myDecision = ChatDecisionState.Pending,
+            partnerDecision = ChatDecisionState.Approved,
+            partnerName = " ",
+        )
+
+        assertEquals("La otra persona aprob\u00f3 el chat. Ahora te toca decidir.", copy)
+    }
+
+    @Test
+    fun `decision-only panel shows approval choices with partner name`() {
+        val state = firstChatDecisionOnlyPanelState(
+            chat = TestDtos.chat(
+                myDecision = "PENDING",
+                partnerDecision = "APPROVED",
+            ).toDomain(),
+            partnerName = "Alex",
+        )
+
+        assertTrue(state.visible)
+        assertEquals("Alex aprob\u00f3 el chat.", state.approvalCopy)
+        assertEquals("\u00bfQuer\u00e9s aprobar tambi\u00e9n?", state.prompt)
+    }
+
+    @Test
+    fun `decision-only panel shows fallback approval copy`() {
+        val state = firstChatDecisionOnlyPanelState(
+            chat = TestDtos.chat(
+                myDecision = "PENDING",
+                partnerDecision = "APPROVED",
+            ).toDomain(),
+            partnerName = " ",
+        )
+
+        assertTrue(state.visible)
+        assertEquals("La otra persona aprob\u00f3 el chat.", state.approvalCopy)
+    }
+
+    @Test
+    fun `normal first chat does not show decision-only panel`() {
+        val state = firstChatDecisionOnlyPanelState(
+            chat = TestDtos.chat(
+                myDecision = "PENDING",
+                partnerDecision = "PENDING",
+            ).toDomain(),
+            partnerName = "Alex",
+        )
+
+        assertFalse(state.visible)
+    }
+
+    @Test
+    fun `composer remains visible but non-interactive in decision-only`() {
+        val policy = firstChatComposerPresentationPolicy(
+            canSendMessages = false,
+            decisionOnlyForCurrentUser = true,
+            audioInteractionBusy = false,
+        )
+        val composer = messageComposerUiState(
+            canChat = true,
+            canSendMessages = policy.interactive,
+            sendingMessage = false,
+            loadingChatAction = false,
+            draft = "",
+            pausedCopy = FIRST_CHAT_DECISION_ONLY_COMPOSER_PAUSED_COPY,
+        )
+
+        assertTrue(policy.visible)
+        assertFalse(policy.interactive)
+        assertFalse(composer.canEditDraft)
+        assertFalse(composer.sendButtonEnabled)
+        assertEquals(FIRST_CHAT_DECISION_ONLY_COMPOSER_PAUSED_COPY, composer.explanatoryCopy)
+    }
+
+    @Test
+    fun `normal active first chat composer remains visible and interactive`() {
+        val policy = firstChatComposerPresentationPolicy(
+            canSendMessages = true,
+            decisionOnlyForCurrentUser = false,
+            audioInteractionBusy = false,
+        )
+
+        assertTrue(policy.visible)
+        assertTrue(policy.interactive)
     }
 }

@@ -349,6 +349,7 @@ internal fun messageComposerUiState(
     sendingMessage: Boolean,
     loadingChatAction: Boolean,
     draft: String,
+    pausedCopy: String? = null,
 ): MessageComposerUiState {
     val canEditDraft = canSendMessages && !loadingChatAction
     return MessageComposerUiState(
@@ -361,7 +362,7 @@ internal fun messageComposerUiState(
         sendingMessage = sendingMessage,
         explanatoryCopy = when {
             !canChat -> "Este chat no está disponible para enviar mensajes."
-            !canSendMessages -> MUTUAL_EXIT_CONVERSATION_PAUSED_COPY
+            !canSendMessages -> pausedCopy ?: MUTUAL_EXIT_CONVERSATION_PAUSED_COPY
             else -> null
         },
     )

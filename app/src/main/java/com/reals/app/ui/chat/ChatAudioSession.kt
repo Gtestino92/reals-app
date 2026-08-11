@@ -41,6 +41,7 @@ internal data class ChatAudioSessionInputs(
     val canSendMessages: Boolean,
     val sendingMessage: Boolean,
     val messageComposerLoading: Boolean,
+    val messageComposerPausedCopy: String? = null,
     val audioActionLoading: Boolean,
     val textDraft: String,
     val uploadState: ChatAudioUploadUiState,
@@ -165,6 +166,7 @@ internal class ChatAudioSessionState internal constructor(
             sendingMessage = currentInputs.sendingMessage,
             loadingChatAction = currentInputs.messageComposerLoading || interactionBusy,
             draft = currentInputs.textDraft,
+            pausedCopy = currentInputs.messageComposerPausedCopy,
         )
 
     private val currentInputs: ChatAudioSessionInputs

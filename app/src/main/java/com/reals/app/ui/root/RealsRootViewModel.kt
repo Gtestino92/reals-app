@@ -248,6 +248,7 @@ class RealsRootViewModel(
     fun handleExternalNotificationOpened(type: String?) {
         val normalizedType = type?.trim()
         if (!PushNotificationOpenContract.shouldHandleExternalOpen(normalizedType)) return
+        if (_uiState.value.ownsForegroundForExternalNotificationOpen()) return
         if (normalizedType == TYPE_SECOND_CHAT_STARTED) {
             handleSecondChatStartedNotificationOpened()
             return
@@ -2101,6 +2102,15 @@ private fun RealsRootUiState.clearsPendingSecondChatStartedHomeOpen(): Boolean =
     is RealsRootUiState.PartnerProfile,
     is RealsRootUiState.PendingEngagement,
     is RealsRootUiState.ActivationComplete -> false
+}
+
+private fun RealsRootUiState.ownsForegroundForExternalNotificationOpen(): Boolean = when (this) {
+    is RealsRootUiState.FirstChat ->
+        chat?.status == ChatStatus.Active &&
+            chat.myDecision == ChatDecisionState.Pending
+
+    is RealsRootUiState.SecondChat -> isJoinedActiveSecondChat()
+    else -> false
 }
 
 private fun ApiError?.isUserPairBlockedError(): Boolean =
