@@ -460,6 +460,9 @@ Deferred:
 - Compatibility/affinity explanation UI.
 - Trust/safety badges, if ever desired.
 - Premium/monetization UI, if product direction changes.
+- Explicit “share my contact” / contact-card feature for second chat only, chosen by the user, likely requiring backend
+  and Android `CONTACT` message type/contract support; the recipient should eventually be able to copy the phone number
+  or open Android's contact-save flow, with no calling action required.
 
 Constraint:
 - Do not introduce attractiveness, popularity or ELO-style ranking UI unless product principles change explicitly.

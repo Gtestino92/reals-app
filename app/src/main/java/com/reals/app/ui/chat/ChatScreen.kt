@@ -1,6 +1,7 @@
 ﻿package com.reals.app.ui.chat
 
 import android.os.SystemClock
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -36,12 +38,14 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -58,6 +62,7 @@ import com.reals.app.core.time.ServerClockSnapshot
 import com.reals.app.core.time.backendInstantOrNull
 import com.reals.app.core.time.remainingExitSeconds
 import com.reals.app.domain.model.Chat
+import com.reals.app.domain.model.ChatAudioPolicy
 import com.reals.app.domain.model.ChatDecisionState
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequest
@@ -258,10 +263,11 @@ fun ChatScreen(
     )
     val decisionOnlyForCurrentUser = chat?.isFirstChatDecisionOnlyForCurrentUser() == true
     val canSendMessages = firstChatPolicy.canSendMessages
+    val audioPolicy = effectiveChatAudioPolicy(chat, secondChatLifecycle)
     val audioSession = rememberChatAudioSessionState(
         inputs = ChatAudioSessionInputs(
             chatId = chat?.id,
-            audioPolicy = chat?.audioPolicy,
+            audioPolicy = audioPolicy,
             canChat = canChat,
             canSendMessages = canSendMessages,
             sendingMessage = sendingMessage,
@@ -1159,6 +1165,7 @@ private fun MessageList(
     val latestMessage = messageItems.lastOrNull()
     val latestMessageId = latestMessage?.stableId
     val latestMessageIsMine = latestMessage?.isMine(currentUserId) == true
+    var selectionResetGeneration by remember { mutableStateOf(0) }
 
     LaunchedEffect(latestMessageId) {
         if (latestMessageId == null) return@LaunchedEffect
@@ -1175,7 +1182,13 @@ private fun MessageList(
     ) {
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onTap = { selectionResetGeneration++ },
+                    )
+                },
             contentPadding = PaddingValues(
                 start = 18.dp,
                 top = 18.dp,
@@ -1197,6 +1210,7 @@ private fun MessageList(
                         is ChatMessageListItem.Backend -> MessageBubble(
                             message = item.message,
                             mine = item.message.senderId == currentUserId,
+                            selectionResetGeneration = selectionResetGeneration,
                             playbackState = playbackState,
                             onPlayAudio = onPlayAudio,
                             onPauseAudio = onPauseAudio,
@@ -1204,6 +1218,7 @@ private fun MessageList(
 
                         is ChatMessageListItem.Optimistic -> OptimisticMessageBubble(
                             message = item.message,
+                            selectionResetGeneration = selectionResetGeneration,
                             onRetry = onRetryOptimisticMessage,
                             canRetryFailedTextMessages = canRetryFailedTextMessages,
                         )
@@ -1539,6 +1554,7 @@ internal fun timedExitRequestBodyText(
 private fun MessageBubble(
     message: ChatMessage,
     mine: Boolean,
+    selectionResetGeneration: Int,
     playbackState: ChatAudioPlaybackUiState,
     onPlayAudio: (ChatMessage) -> Unit,
     onPauseAudio: () -> Unit,
@@ -1565,7 +1581,10 @@ private fun MessageBubble(
         ) {
             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                 when (val presentation = message.presentation) {
-                    is ChatMessagePresentation.Text -> Text(TextSafety.safeDisplay(presentation.content))
+                    is ChatMessagePresentation.Text -> SelectableMessageText(
+                        text = TextSafety.safeDisplay(presentation.content),
+                        selectionResetGeneration = selectionResetGeneration,
+                    )
                     is ChatMessagePresentation.Audio -> AudioPlaybackRow(
                         key = message.id,
                         durationMillis = presentation.audio.durationMillis ?: 0L,
@@ -1660,6 +1679,7 @@ internal fun AudioPlaybackRow(
 @Composable
 private fun OptimisticMessageBubble(
     message: OptimisticOutgoingMessage,
+    selectionResetGeneration: Int,
     onRetry: (localId: String, content: String) -> Unit,
     canRetryFailedTextMessages: Boolean,
 ) {
@@ -1681,7 +1701,10 @@ private fun OptimisticMessageBubble(
         ) {
             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                 when (message.messageType) {
-                    OptimisticOutgoingMessageType.Text -> Text(TextSafety.safeDisplay(message.content))
+                    OptimisticOutgoingMessageType.Text -> SelectableMessageText(
+                        text = TextSafety.safeDisplay(message.content),
+                        selectionResetGeneration = selectionResetGeneration,
+                    )
                     OptimisticOutgoingMessageType.Audio -> {
                         Text("Audio ${formatAudioDuration(message.audioDurationMillis ?: 0L)}")
                     }
@@ -1707,6 +1730,18 @@ private fun OptimisticMessageBubble(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SelectableMessageText(
+    text: String,
+    selectionResetGeneration: Int,
+) {
+    key(selectionResetGeneration) {
+        SelectionContainer {
+            Text(text)
         }
     }
 }
@@ -1821,6 +1856,12 @@ internal fun chatPollingEnabled(canChat: Boolean): Boolean = canChat
 
 internal fun shouldDispatchSecondChatLocalAbsoluteExpiry(secondChatLocallyExpired: Boolean): Boolean =
     secondChatLocallyExpired
+
+internal fun effectiveChatAudioPolicy(
+    chat: Chat?,
+    secondChatLifecycle: SecondChatLifecycleUiState?,
+): ChatAudioPolicy? =
+    secondChatLifecycle?.status?.audioPolicy ?: chat?.audioPolicy
 
 internal fun chatDecisionSummary(
     myDecision: ChatDecisionState?,

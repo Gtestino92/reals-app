@@ -145,18 +145,19 @@ internal object ChatMessageActionHandler {
             return ChatAudioSendPreparation.Ignored
         }
         val chat = current.chat ?: return ChatAudioSendPreparation.Ignored
+        val audioPolicy = current.lifecycle.status?.audioPolicy ?: chat.audioPolicy
         return prepareAudioSend(
             filePath = filePath,
             clientMessageId = clientMessageId,
             chatId = chat.id,
             senderId = current.session.user.id,
-            maxFileSizeBytes = chat.audioPolicy?.maxFileSizeBytes,
-            maxDurationMillis = chat.audioPolicy?.maxDurationMillis,
+            maxFileSizeBytes = audioPolicy?.maxFileSizeBytes,
+            maxDurationMillis = audioPolicy?.maxDurationMillis,
             draftDurationMillis = current.audioDraft?.takeIf {
                 it.filePath == filePath && it.clientMessageId == clientMessageId
             }?.durationMillis,
-            policyEnabled = chat.audioPolicy?.enabled == true,
-            unavailableReason = chat.audioPolicy?.unavailableReason,
+            policyEnabled = audioPolicy?.enabled == true,
+            unavailableReason = audioPolicy?.unavailableReason,
             invalidState = { error, nonRetryable ->
                 current.copy(
                     audioUpload = ChatAudioUploadUiState(error = error, nonRetryable = nonRetryable),

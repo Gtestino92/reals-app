@@ -301,6 +301,34 @@ class ChatMessageActionHandlerTest {
         assertEquals(ChatAudioSendPreparation.Ignored, result)
     }
 
+    @Test
+    fun `second chat audio send uses status policy when chat policy is absent`() {
+        val file = createTempFile()
+        val state = secondChatState(
+            lifecycle = SecondChatLifecycleUiState(
+                status = TestDtos.secondChatStatus(
+                    audioPolicy = TestDtos.audioPolicy(enabled = true),
+                ).toDomain(),
+                statusReceivedAtMillis = System.currentTimeMillis(),
+            ),
+        ).copy(
+            audioDraft = ChatAudioDraftUiState(
+                filePath = file.absolutePath,
+                clientMessageId = "client-1",
+                durationMillis = 1_000,
+                sizeBytes = file.length(),
+            ),
+        )
+
+        val result = ChatMessageActionHandler.prepareSecondChatAudioSend(
+            current = state,
+            filePath = file.absolutePath,
+            clientMessageId = "client-1",
+        )
+
+        assertTrue(result is ChatAudioSendPreparation.Accepted<*>)
+    }
+
     private fun firstChatState(
         optimisticMessages: List<OptimisticOutgoingMessage> = emptyList(),
         exitRequests: List<ChatExitRequest> = emptyList(),
