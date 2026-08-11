@@ -606,6 +606,12 @@ object TestDtos {
         passiveNotices = listOf(HomePassiveNoticeResponseDto("SCHEDULING_PREPARING")),
     )
 
+    fun homeWithoutPendingEngagements() = home().copy(
+        pendingActions = emptyList(),
+        nextSteps = emptyList(),
+        passiveNotices = emptyList(),
+    )
+
     fun homeStatus(
         version: Long = 1,
         dirty: Boolean = false,
