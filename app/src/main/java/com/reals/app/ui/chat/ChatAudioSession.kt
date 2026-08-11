@@ -261,8 +261,12 @@ internal class ChatAudioSessionState internal constructor(
                 currentCallbacks.onClearUploadState()
             },
             onSendAudio = { draftToSend: ChatAudioDraftUiState ->
-                localAudioInfo = null
-                currentCallbacks.onSendAudioMessage(draftToSend.filePath, draftToSend.clientMessageId)
+                if (currentInputs.canSendMessages) {
+                    localAudioInfo = null
+                    currentCallbacks.onSendAudioMessage(draftToSend.filePath, draftToSend.clientMessageId)
+                } else {
+                    false
+                }
             },
         )
     }

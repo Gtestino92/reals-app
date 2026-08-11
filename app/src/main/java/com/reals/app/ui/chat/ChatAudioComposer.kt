@@ -139,6 +139,7 @@ internal fun MessageComposer(
                 } else {
                     AudioDraftComposer(
                         draft = audioDraft,
+                        canSendMessages = presentation.textState.canSendMessages,
                         uploadState = presentation.uploadState,
                         playbackState = presentation.playbackState,
                         onPlay = { callbacks.onPlayDraft(audioDraft) },
@@ -274,6 +275,7 @@ private fun RecordingComposer(
 @Composable
 private fun AudioDraftComposer(
     draft: ChatAudioDraftUiState,
+    canSendMessages: Boolean,
     uploadState: ChatAudioUploadUiState,
     playbackState: ChatAudioPlaybackUiState,
     onPlay: () -> Unit,
@@ -281,6 +283,10 @@ private fun AudioDraftComposer(
     onDelete: () -> Unit,
     onSend: () -> Boolean,
 ) {
+    val actionState = audioDraftComposerActionState(
+        canSendMessages = canSendMessages,
+        uploadState = uploadState,
+    )
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Audio listo para enviar")
         AudioPlaybackRow(
@@ -293,14 +299,14 @@ private fun AudioDraftComposer(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
                 onClick = onDelete,
-                enabled = !uploadState.uploading,
+                enabled = actionState.deleteAvailable,
                 modifier = Modifier.weight(1f),
             ) {
                 Text(if (uploadState.nonRetryable) "Borrar" else "Cancelar")
             }
             Button(
                 onClick = { onSend() },
-                enabled = !uploadState.uploading && !uploadState.nonRetryable,
+                enabled = actionState.sendAvailable,
                 modifier = Modifier.weight(1f),
             ) {
                 Text(
@@ -316,6 +322,24 @@ private fun AudioDraftComposer(
         }
     }
 }
+
+internal data class AudioDraftComposerActionState(
+    val visible: Boolean,
+    val playbackAvailable: Boolean,
+    val deleteAvailable: Boolean,
+    val sendAvailable: Boolean,
+)
+
+internal fun audioDraftComposerActionState(
+    canSendMessages: Boolean,
+    uploadState: ChatAudioUploadUiState,
+): AudioDraftComposerActionState =
+    AudioDraftComposerActionState(
+        visible = true,
+        playbackAvailable = true,
+        deleteAvailable = !uploadState.uploading,
+        sendAvailable = canSendMessages && !uploadState.uploading && !uploadState.nonRetryable,
+    )
 
 internal fun formatAudioDuration(durationMillis: Long): String {
     val totalSeconds = when {
