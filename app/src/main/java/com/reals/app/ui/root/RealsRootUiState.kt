@@ -38,6 +38,7 @@ sealed interface RealsRootUiState {
         val googleAttemptId: Long? = null,
         val error: String? = null,
         val passwordResetLoading: Boolean = false,
+        val passwordResetAttemptId: Long? = null,
         val passwordResetMessage: String? = null,
         val passwordResetAvailableAtMillis: Long? = null,
     ) : RealsRootUiState

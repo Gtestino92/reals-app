@@ -53,7 +53,8 @@ class MeRepository(
             .map { it.toDomain() }
 
     suspend fun finalizeMyDeletion(): ApiResult<Unit> =
-        authorizedUnitCall { authorization -> api.finalizeMyDeletion(authorization) }
+        authorizedCall { authorization -> api.finalizeMyDeletion(authorization) }
+            .map { Unit }
 
     suspend fun markCurrentFirebaseEmailVerifiedForLocalDevelopment(): ApiResult<Unit> =
         authorizedUnitCall { authorization ->

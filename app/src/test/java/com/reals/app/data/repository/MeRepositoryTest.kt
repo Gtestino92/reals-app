@@ -75,6 +75,16 @@ class MeRepositoryTest {
     }
 
     @Test
+    fun `finalize deletion parses user response and maps to unit`() = runBlocking {
+        api.finalizeMyDeletionResponse = retrofit2.Response.success(TestDtos.user(status = "DELETED"))
+
+        repository.finalizeMyDeletion().successValue()
+
+        assertEquals(listOf("finalizeMyDeletion"), api.calls)
+        assertEquals("Bearer test-token", api.lastAuthorization)
+    }
+
+    @Test
     fun `registerPushToken sends android platform and maps registered flag`() = runBlocking {
         val registered = repository.registerPushToken("fcm-token").successValue()
 

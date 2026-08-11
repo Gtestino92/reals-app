@@ -92,12 +92,14 @@ import com.reals.app.testutil.TestDomain
 import com.reals.app.testutil.backendErrorResponse
 import com.reals.app.testutil.testApiExecutor
 import com.reals.app.testutil.testJson
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -200,6 +202,60 @@ class RealsRootViewModelPasswordResetTest {
         assertEquals(emptyList<String>(), authRepository.resetRequests)
         assertEquals(emptyList<String>(), api.calls)
         assertEquals(availableAtMillis, state.passwordResetAvailableAtMillis)
+    }
+
+    @Test
+    fun `sign in is ignored while password reset is loading`() = runTest(dispatcher) {
+        val authRepository = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
+        val viewModel = viewModel(authRepository)
+        viewModel.setState(RealsRootUiState.Login(passwordResetLoading = true))
+
+        viewModel.signIn("alex@example.com", "password")
+        advanceUntilIdle()
+
+        assertEquals(emptyList<String>(), authRepository.signInRequests)
+    }
+
+    @Test
+    fun `sign up is ignored while password reset is loading`() = runTest(dispatcher) {
+        val authRepository = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
+        val viewModel = viewModel(authRepository)
+        viewModel.setState(RealsRootUiState.Login(passwordResetLoading = true))
+
+        viewModel.signUp("alex@example.com", "password")
+        advanceUntilIdle()
+
+        assertEquals(emptyList<String>(), authRepository.signUpRequests)
+    }
+
+    @Test
+    fun `google start is ignored while password reset is loading`() = runTest(dispatcher) {
+        val viewModel = viewModel(FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically))
+        viewModel.setState(RealsRootUiState.Login(passwordResetLoading = true))
+
+        assertNull(viewModel.beginGoogleSignIn())
+    }
+
+    @Test
+    fun `stale password reset completion cannot restore login over newer root state`() = runTest(dispatcher) {
+        val resetCanComplete = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforePasswordResetResponse = { resetCanComplete.await() }
+        }
+        val viewModel = viewModel(FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically), api)
+        viewModel.setState(RealsRootUiState.Login())
+
+        viewModel.requestPasswordReset("alex@example.com")
+        runCurrent()
+        assertEquals(listOf("requestPasswordReset"), api.calls)
+        assertTrue((viewModel.uiState.value as RealsRootUiState.Login).passwordResetLoading)
+
+        val readyState = RealsRootUiState.Ready(session = TestDomain.session())
+        viewModel.setState(readyState)
+        resetCanComplete.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(readyState, viewModel.uiState.value)
     }
 
     @Test
@@ -749,6 +805,50 @@ class RealsRootViewModelPasswordResetTest {
     }
 
     @Test
+    fun `google sign in provisions after access denied get me bootstrap`() = runTest(dispatcher) {
+        val api = FakeRealsApi().apply {
+            getMeResponse = backendErrorResponse(403, "ACCESS_DENIED", "forbidden")
+            provisionMeResponse = retrofit2.Response.success(TestDtos.user())
+        }
+        val authRepository = FakeFirebaseAuthRepository(
+            passwordResetResult = PasswordResetResult.SentOrHandledGenerically,
+            googleSignInResult = AuthOperationResult.Success,
+        )
+        val viewModel = viewModel(authRepository, api)
+        viewModel.setState(RealsRootUiState.Login())
+
+        val attemptId = viewModel.beginGoogleSignIn()!!
+        viewModel.completeGoogleSignIn(attemptId, com.reals.app.ui.auth.GoogleCredentialResult.Success("id-token"))
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Ready
+        assertEquals("user-1", state.session.user.id)
+        assertEquals(listOf("id-token"), authRepository.googleSignInRequests)
+        assertEquals(listOf("getMe", "provisionMe"), api.calls.filter { it == "getMe" || it == "provisionMe" })
+        assertEquals(true, api.calls.contains("getMyProfile"))
+    }
+
+    @Test
+    fun `provisioned google sign in skips provisioning`() = runTest(dispatcher) {
+        val api = FakeRealsApi().apply {
+            getMeResponse = retrofit2.Response.success(TestDtos.user())
+        }
+        val authRepository = FakeFirebaseAuthRepository(
+            passwordResetResult = PasswordResetResult.SentOrHandledGenerically,
+            googleSignInResult = AuthOperationResult.Success,
+        )
+        val viewModel = viewModel(authRepository, api)
+        viewModel.setState(RealsRootUiState.Login())
+
+        val attemptId = viewModel.beginGoogleSignIn()!!
+        viewModel.completeGoogleSignIn(attemptId, com.reals.app.ui.auth.GoogleCredentialResult.Success("id-token"))
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value is RealsRootUiState.Ready)
+        assertEquals(listOf("getMe"), api.calls.filter { it == "getMe" || it == "provisionMe" })
+    }
+
+    @Test
     fun `google chooser cancellation leaves login without error`() = runTest(dispatcher) {
         val authRepository = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
         val viewModel = viewModel(authRepository)
@@ -799,7 +899,11 @@ class RealsRootViewModelPasswordResetTest {
     fun `provisioning email identity conflict clears session without rebinding`() = runTest(dispatcher) {
         val api = FakeRealsApi().apply {
             getMeResponse = backendErrorResponse(404, "PROFILE_NOT_FOUND", "missing")
-            provisionMeResponse = backendErrorResponse(409, "DOMAIN_CONFLICT", "conflict")
+            provisionMeResponse = backendErrorResponse(
+                409,
+                "EMAIL_ALREADY_LINKED_TO_DIFFERENT_FIREBASE_USER",
+                "conflict",
+            )
         }
         val authRepository = FakeFirebaseAuthRepository(
             passwordResetResult = PasswordResetResult.SentOrHandledGenerically,
@@ -815,6 +919,30 @@ class RealsRootViewModelPasswordResetTest {
         val state = viewModel.uiState.value as RealsRootUiState.Login
         assertEquals("Ya existe una cuenta asociada a ese email. Iniciá sesión con el método original.", state.error)
         assertEquals(1, authRepository.signOutCalls)
+        assertEquals(listOf("getMe", "provisionMe"), api.calls.filter { it == "getMe" || it == "provisionMe" })
+    }
+
+    @Test
+    fun `unrelated provisioning conflict is not treated as account association conflict`() = runTest(dispatcher) {
+        val api = FakeRealsApi().apply {
+            getMeResponse = backendErrorResponse(404, "PROFILE_NOT_FOUND", "missing")
+            provisionMeResponse = backendErrorResponse(409, "EMAIL_NOT_VERIFIED", "verify")
+        }
+        val authRepository = FakeFirebaseAuthRepository(
+            passwordResetResult = PasswordResetResult.SentOrHandledGenerically,
+            googleSignInResult = AuthOperationResult.Success,
+        )
+        val viewModel = viewModel(authRepository, api)
+        viewModel.setState(RealsRootUiState.Login())
+
+        val attemptId = viewModel.beginGoogleSignIn()!!
+        viewModel.completeGoogleSignIn(attemptId, com.reals.app.ui.auth.GoogleCredentialResult.Success("id-token"))
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Failure
+        val error = state.error as ApiError.Backend
+        assertEquals(BackendErrorCode.EmailNotVerified, error.backendErrorCode)
+        assertEquals(0, authRepository.signOutCalls)
         assertEquals(listOf("getMe", "provisionMe"), api.calls.filter { it == "getMe" || it == "provisionMe" })
     }
 

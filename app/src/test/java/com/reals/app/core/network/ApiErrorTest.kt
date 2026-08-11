@@ -130,6 +130,16 @@ class ApiErrorTest {
     }
 
     @Test
+    fun `fromRaw parses authentication policy backend codes`() {
+        assertEquals(BackendErrorCode.AccessDenied, BackendErrorCode.fromRaw("ACCESS_DENIED"))
+        assertEquals(
+            BackendErrorCode.EmailAlreadyLinkedToDifferentFirebaseUser,
+            BackendErrorCode.fromRaw("EMAIL_ALREADY_LINKED_TO_DIFFERENT_FIREBASE_USER"),
+        )
+        assertEquals(BackendErrorCode.AuthMethodNotAllowed, BackendErrorCode.fromRaw("AUTH_METHOD_NOT_ALLOWED"))
+    }
+
+    @Test
     fun `fromRaw parses chat backend codes`() {
         mapOf(
             "CHAT_NOT_FOUND" to BackendErrorCode.ChatNotFound,

@@ -168,6 +168,7 @@ class FakeRealsApi : RealsApi {
     var beforeDeleteMyAffinityAnswerResponse: suspend () -> Unit = {}
     var beforeGetProfileQuestionCatalogResponse: suspend () -> Unit = {}
     var beforeGetMyProfileQuestionAnswersResponse: suspend () -> Unit = {}
+    var beforePasswordResetResponse: suspend () -> Unit = {}
     var beforeUpsertMyProfileQuestionAnswerResponse: suspend () -> Unit = {}
     var beforeDeleteMyProfileQuestionAnswerResponse: suspend () -> Unit = {}
     var beforeReplaceMyProfileQuestionSelectionsResponse: suspend () -> Unit = {}
@@ -178,7 +179,7 @@ class FakeRealsApi : RealsApi {
     var provisionMeResponse: Response<UserResponseDto>? = null
     var deleteMeResponse: Response<Unit> = Response.success(Unit)
     var passwordResetResponse: Response<Unit> = Response.success(Unit)
-    var finalizeMyDeletionResponse: Response<Unit> = Response.success(Unit)
+    var finalizeMyDeletionResponse: Response<UserResponseDto> = Response.success(TestDtos.user(status = "DELETED"))
     var homeResponse: Response<HomeResponseDto> = Response.success(TestDtos.homeWithoutPendingEngagements())
     var homeStatusResponse: Response<HomeStatusResponseDto> = Response.success(TestDtos.homeStatus())
     var homePendingResponse: Response<HomePendingStateResponseDto> = Response.success(TestDtos.homePending())
@@ -244,7 +245,7 @@ class FakeRealsApi : RealsApi {
         record("getMe", authorization) { getMeResponse ?: userResponse }
 
     override suspend fun requestPasswordReset(body: PasswordResetRequestDto): Response<Unit> =
-        record("requestPasswordReset", null) {
+        record("requestPasswordReset", null, beforeResponse = beforePasswordResetResponse) {
             passwordResetBody = body
             passwordResetResponse
         }
@@ -273,7 +274,7 @@ class FakeRealsApi : RealsApi {
     override suspend fun reactivateMe(authorization: String): Response<UserResponseDto> =
         record("reactivateMe", authorization) { userResponse }
 
-    override suspend fun finalizeMyDeletion(authorization: String): Response<Unit> =
+    override suspend fun finalizeMyDeletion(authorization: String): Response<UserResponseDto> =
         record("finalizeMyDeletion", authorization) { finalizeMyDeletionResponse }
 
     override suspend fun markCurrentFirebaseEmailVerifiedForLocalDevelopment(

@@ -120,7 +120,7 @@ interface RealsApi {
     @POST("api/me/deletion/finalization")
     suspend fun finalizeMyDeletion(
         @Header("Authorization") authorization: String,
-    ): Response<Unit>
+    ): Response<UserResponseDto>
 
     @POST("api/me/local-dev/email-verification")
     suspend fun markCurrentFirebaseEmailVerifiedForLocalDevelopment(

@@ -50,6 +50,7 @@ internal class SessionCoordinator(
     private val finalizeAccountDeletionUseCase = accountDependencies.finalizeAccountDeletion
     private var refreshSessionJob: Job? = null
     private var googleAttemptSequence = 0L
+    private var passwordResetAttemptSequence = 0L
 
     fun refreshSession() {
         if (!authRepository.isConfigured()) {
@@ -74,7 +75,7 @@ internal class SessionCoordinator(
     fun signUp(email: String, password: String) {
         val cleanEmail = email.trim()
         val loginState = uiState.value as? RealsRootUiState.Login ?: return
-        if (loginState.loading || loginState.googleLoading) return
+        if (loginState.loading || loginState.googleLoading || loginState.passwordResetLoading) return
         if (cleanEmail.isBlank() || password.isBlank()) {
             uiState.value = loginState.copy(
                 loading = false,
@@ -129,32 +130,42 @@ internal class SessionCoordinator(
             return
         }
 
+        val attemptId = ++passwordResetAttemptSequence
+        uiState.value = current.copy(
+            error = null,
+            passwordResetLoading = true,
+            passwordResetAttemptId = attemptId,
+            passwordResetMessage = null,
+            passwordResetAvailableAtMillis = nowMillis + PASSWORD_RESET_COOLDOWN_MILLIS,
+        )
         scope.launch {
-            val pending = current.copy(
-                error = null,
-                passwordResetLoading = true,
-                passwordResetMessage = null,
-                passwordResetAvailableAtMillis = nowMillis + PASSWORD_RESET_COOLDOWN_MILLIS,
-            )
-            uiState.value = pending
             when (requestPasswordResetUseCase(cleanEmail)) {
-                PasswordResetResult.SentOrHandledGenerically -> uiState.value =
-                    pending.copy(
-                        passwordResetLoading = false,
-                        passwordResetMessage = genericPasswordResetMessage,
-                    )
+                PasswordResetResult.SentOrHandledGenerically ->
+                    uiState.value.passwordResetStateFor(attemptId)?.let { latest ->
+                        uiState.value = latest.copy(
+                            passwordResetLoading = false,
+                            passwordResetAttemptId = null,
+                            passwordResetMessage = genericPasswordResetMessage,
+                        )
+                    }
 
-                PasswordResetResult.InvalidEmailFormat -> uiState.value =
-                    pending.copy(
-                        error = invalidPasswordResetEmailMessage,
+                PasswordResetResult.InvalidEmailFormat ->
+                    uiState.value.passwordResetStateFor(attemptId)?.let { latest ->
+                        uiState.value = latest.copy(
+                            error = invalidPasswordResetEmailMessage,
+                            passwordResetLoading = false,
+                            passwordResetAttemptId = null,
+                            passwordResetMessage = null,
+                        )
+                    }
+
+                PasswordResetResult.SilentFailure -> uiState.value.passwordResetStateFor(attemptId)?.let { latest ->
+                    uiState.value = latest.copy(
                         passwordResetLoading = false,
+                        passwordResetAttemptId = null,
                         passwordResetMessage = null,
                     )
-
-                PasswordResetResult.SilentFailure -> uiState.value = pending.copy(
-                    passwordResetLoading = false,
-                    passwordResetMessage = null,
-                )
+                }
             }
         }
     }
@@ -434,7 +445,7 @@ internal class SessionCoordinator(
     ) {
         val cleanEmail = email.trim()
         val loginState = uiState.value as? RealsRootUiState.Login ?: return
-        if (loginState.loading || loginState.googleLoading) return
+        if (loginState.loading || loginState.googleLoading || loginState.passwordResetLoading) return
         if (cleanEmail.isBlank() || password.isBlank()) {
             uiState.value = loginState.copy(
                 loading = false,
@@ -573,7 +584,8 @@ internal class SessionCoordinator(
 
     private fun ApiError.Backend?.shouldProvisionAfterGetMeFailure(): Boolean {
         if (this == null) return false
-        return statusCode == 404
+        return statusCode == 404 ||
+            (statusCode == 403 && backendErrorCode == BackendErrorCode.AccessDenied)
     }
 
     private suspend fun clearLocalSessionAndShowLogin(error: String? = null) {
@@ -602,13 +614,18 @@ private fun RealsRootUiState.googleLoginStateFor(attemptId: Long): RealsRootUiSt
     return login.takeIf { it.googleLoading && it.googleAttemptId == attemptId }
 }
 
+private fun RealsRootUiState.passwordResetStateFor(attemptId: Long): RealsRootUiState.Login? {
+    val login = this as? RealsRootUiState.Login ?: return null
+    return login.takeIf { it.passwordResetLoading && it.passwordResetAttemptId == attemptId }
+}
+
 private fun ApiError.isAuthenticationMethodNotAllowed(): Boolean {
     return this is ApiError.Backend && backendErrorCode == BackendErrorCode.AuthMethodNotAllowed
 }
 
 private fun ApiError.isProvisioningAccountAssociationConflict(): Boolean {
     val backend = this as? ApiError.Backend ?: return false
-    return backend.statusCode == 409
+    return backend.backendErrorCode == BackendErrorCode.EmailAlreadyLinkedToDifferentFirebaseUser
 }
 
 private fun ChangePasswordResult.toChangePasswordMessageOrNull(): String? = when (this) {

@@ -53,7 +53,7 @@ fun LoginScreen(
         availableAtMillis = passwordResetAvailableAtMillis,
         nowMillis = nowMillis,
     )
-    val authBusy = loading || googleLoading
+    val authBusy = loading || googleLoading || passwordResetLoading
 
     LaunchedEffect(passwordResetAvailableAtMillis) {
         while (passwordResetCooldownRemainingSeconds(passwordResetAvailableAtMillis, System.currentTimeMillis()) > 0) {
@@ -163,7 +163,7 @@ fun LoginScreen(
                 )
                 OutlinedButton(
                     onClick = onGoogleSignIn,
-                    enabled = !authBusy && !passwordResetLoading,
+                    enabled = !authBusy,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(if (googleLoading) "Conectando con Google..." else "Continuar con Google")
