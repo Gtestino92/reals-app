@@ -40,6 +40,29 @@ class ChatAudioComposerUiStateTest {
     }
 
     @Test
+    fun `second chat status policy enables recording when chat policy is absent`() {
+        val chat = TestDtos.chat(audioPolicy = null).copy(chatType = "SECOND_CHAT").toDomain()
+        val lifecycle = com.reals.app.ui.root.SecondChatLifecycleUiState(
+            status = TestDtos.secondChatStatus(
+                audioPolicy = TestDtos.audioPolicy(enabled = true),
+            ).toDomain(),
+            statusReceivedAtMillis = 1L,
+        )
+        val state = chatAudioComposerUiState(
+            chat = chat,
+            audioPolicy = effectiveChatAudioPolicy(chat, lifecycle),
+            canSendMessages = true,
+            sendingMessage = false,
+            audioUploading = false,
+            recordingActive = false,
+            loadingChatAction = false,
+        )
+
+        assertTrue(state.visible)
+        assertTrue(state.startEnabled)
+    }
+
+    @Test
     fun `feature disabled hides recording control`() {
         val state = chatAudioComposerUiState(
             chat = TestDtos.chat(

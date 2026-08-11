@@ -485,6 +485,7 @@ object TestDtos {
         mustRespondToPartner: Boolean = false,
         lastMessageAt: String? = now,
         lastMessageSenderId: String? = "user-1",
+        audioPolicy: ChatAudioPolicyResponseDto? = null,
     ) = SecondChatAttendanceResponseDto(
         connectionId = "connection-1",
         chatId = chatId,
@@ -515,6 +516,7 @@ object TestDtos {
         mustRespondToPartner = mustRespondToPartner,
         lastMessageAt = lastMessageAt,
         lastMessageSenderId = lastMessageSenderId,
+        audioPolicy = audioPolicy,
     )
 
     fun visualProfile(
