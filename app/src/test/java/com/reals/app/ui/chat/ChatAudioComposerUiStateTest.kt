@@ -2,6 +2,7 @@ package com.reals.app.ui.chat
 
 import com.reals.app.testutil.TestDtos
 import com.reals.app.data.mapper.toDomain
+import com.reals.app.ui.root.ChatAudioUploadUiState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -85,5 +86,31 @@ class ChatAudioComposerUiStateTest {
         assertEquals("0:00", formatRecordingElapsedDuration(0))
         assertEquals("0:00", formatRecordingElapsedDuration(838))
         assertEquals("0:07", formatRecordingElapsedDuration(7_059))
+    }
+
+    @Test
+    fun `audio draft remains visible and deletable but cannot send when messages are disabled`() {
+        val state = audioDraftComposerActionState(
+            canSendMessages = false,
+            uploadState = ChatAudioUploadUiState(),
+        )
+
+        assertTrue(state.visible)
+        assertTrue(state.playbackAvailable)
+        assertTrue(state.deleteAvailable)
+        assertFalse(state.sendAvailable)
+    }
+
+    @Test
+    fun `audio draft can send when messages are enabled and upload state allows it`() {
+        val state = audioDraftComposerActionState(
+            canSendMessages = true,
+            uploadState = ChatAudioUploadUiState(),
+        )
+
+        assertTrue(state.visible)
+        assertTrue(state.playbackAvailable)
+        assertTrue(state.deleteAvailable)
+        assertTrue(state.sendAvailable)
     }
 }

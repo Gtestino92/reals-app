@@ -141,6 +141,7 @@ class ApiErrorTest {
             "CHAT_DECISION_ALREADY_SUBMITTED" to BackendErrorCode.ChatDecisionAlreadySubmitted,
             "CHAT_MIN_MESSAGES_REQUIRED" to BackendErrorCode.ChatMinMessagesRequired,
             "CHAT_MUTUAL_CANCELLATION_PENDING" to BackendErrorCode.ChatMutualCancellationPending,
+            "FIRST_CHAT_DECISION_ONLY" to BackendErrorCode.FirstChatDecisionOnly,
             "FIRST_CHAT_GUIDANCE_PARTICIPATION_REQUIRED" to BackendErrorCode.FirstChatGuidanceParticipationRequired,
             "FIRST_CHAT_GUIDANCE_NEXT_ALREADY_REQUESTED" to BackendErrorCode.FirstChatGuidanceNextAlreadyRequested,
             "FIRST_CHAT_GUIDANCE_COMPLETED" to BackendErrorCode.FirstChatGuidanceCompleted,
@@ -169,6 +170,8 @@ class ApiErrorTest {
                 "Antes de decidir, enviá al menos un poco más de conversación.",
             "CHAT_MUTUAL_CANCELLATION_PENDING" to
                 "La conversaci\u00f3n est\u00e1 pausada mientras se resuelve la solicitud.",
+            "FIRST_CHAT_DECISION_ONLY" to
+                "Ya no se pueden enviar mensajes. Elegí cómo querés continuar.",
             "FIRST_CHAT_GUIDANCE_PARTICIPATION_REQUIRED" to
                 "Particip\u00e1 un poco m\u00e1s antes de pedir otra pregunta.",
             "FIRST_CHAT_GUIDANCE_NEXT_ALREADY_REQUESTED" to

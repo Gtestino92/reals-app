@@ -72,6 +72,7 @@ import com.reals.app.domain.model.MatchState
 import com.reals.app.domain.model.SecondChatAttendanceStatus
 import com.reals.app.domain.model.SecondChatCompletionDecision
 import com.reals.app.domain.model.SecondChatResolutionRequestType
+import com.reals.app.domain.model.isFirstChatDecisionOnlyForCurrentUser
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
@@ -99,6 +100,8 @@ private const val MUTUAL_EXIT_TIMEOUT_SECONDS = 20L
 private const val MUTUAL_EXIT_TIMEOUT_RETRY_MILLIS = 2_000L
 internal const val MUTUAL_EXIT_CONVERSATION_PAUSED_COPY =
     "La conversaci\u00f3n est\u00e1 pausada mientras se resuelve la solicitud."
+internal const val FIRST_CHAT_DECISION_ONLY_COMPOSER_PAUSED_COPY =
+    "El chat est\u00e1 pausado mientras decid\u00eds."
 
 internal data class ChatLoadingPresentation(
     val title: String,
@@ -244,7 +247,17 @@ fun ChatScreen(
         .filter { it.status == ChatExitRequestStatus.Pending }
         .maxByOrNull { it.createdAt }
     val exitFlowLocked = pendingExitRequest != null
-    val canSendMessages = canChat && !exitFlowLocked
+    val firstChatPolicy = firstChatInteractionPolicy(
+        chat = chat,
+        canChat = canChat,
+        exitFlowLocked = exitFlowLocked,
+        showDecisionActions = showDecisionActions,
+        matchIsChatActive = match?.state == MatchState.ChatActive,
+        firstChatLocallyExpired = firstChatLocallyExpired,
+        audioInteractionBusy = false,
+    )
+    val decisionOnlyForCurrentUser = chat?.isFirstChatDecisionOnlyForCurrentUser() == true
+    val canSendMessages = firstChatPolicy.canSendMessages
     val audioSession = rememberChatAudioSessionState(
         inputs = ChatAudioSessionInputs(
             chatId = chat?.id,
@@ -253,6 +266,11 @@ fun ChatScreen(
             canSendMessages = canSendMessages,
             sendingMessage = sendingMessage,
             messageComposerLoading = loadingChatAction,
+            messageComposerPausedCopy = if (decisionOnlyForCurrentUser) {
+                FIRST_CHAT_DECISION_ONLY_COMPOSER_PAUSED_COPY
+            } else {
+                null
+            },
             audioActionLoading = loadingChatAction || guidanceActionLoading,
             textDraft = draft,
             uploadState = audioUpload,
@@ -282,13 +300,19 @@ fun ChatScreen(
         nowMillis = nowMillis,
         actionLoading = loadingChatAction || audioInteractionBusy,
     )
-    val canUseChatActions = canChat && !loadingChatAction && !audioInteractionBusy
+    val canUseChatActions = firstChatPolicy.canUseOrdinaryConversationActions &&
+            !loadingChatAction &&
+            !audioInteractionBusy
     val canUseNavigationActions = !loadingChatAction && !audioInteractionBusy &&
             secondChatTiming?.genuinelyActive != true
-    val guidancePanelState = firstChatGuidancePanelState(
-        guidance = guidance,
-        canRequestNextWhileChatOpen = canSendMessages,
-    )
+    val guidancePanelState = if (firstChatPolicy.decisionOnly) {
+        null
+    } else {
+        firstChatGuidancePanelState(
+            guidance = guidance,
+            canRequestNextWhileChatOpen = firstChatPolicy.canRequestGuidance && !audioInteractionBusy,
+        )
+    }
     val canUseExistingChatActions =
         canUseChatActions &&
             (secondChatLifecycle == null || secondChatTiming?.genuinelyActive == true) &&
@@ -305,23 +329,53 @@ fun ChatScreen(
     val manualBlockBusy =
         loading || refreshing || sending || actionLoading || guidanceActionLoading || manualBlockLoading
     val canManualBlock = !manualBlockBusy
-    val canUseSafetyActions = canChat && !loadingChatAction && !manualBlockLoading
+    val canUseSafetyActions = firstChatPolicy.safetyAvailable && !loadingChatAction && !manualBlockLoading
+    val canDecide = firstChatInteractionPolicy(
+        chat = chat,
+        canChat = canChat,
+        exitFlowLocked = exitFlowLocked,
+        showDecisionActions = showDecisionActions,
+        matchIsChatActive = match?.state == MatchState.ChatActive,
+        firstChatLocallyExpired = firstChatLocallyExpired,
+        audioInteractionBusy = audioInteractionBusy,
+    ).canDecide
+    val overflowVisibility = firstChatOverflowActionVisibility(
+        showMutualExitActions = showMutualExitActions,
+        showDecisionActions = showDecisionActions,
+        decisionOnlyForCurrentUser = decisionOnlyForCurrentUser,
+        canRequestOrdinaryExit = firstChatPolicy.canRequestOrdinaryExit,
+        canDecide = canDecide,
+        canUseSafetyActions = canUseSafetyActions,
+        canManualBlock = canManualBlock,
+    )
     val canOpenOverflowActions =
-        (!loadingChatAction && ((!exitFlowLocked && canUseChatActions) || !showMutualExitActions)) ||
-            canManualBlock
-    val canDecide = showDecisionActions &&
-            match?.state == MatchState.ChatActive &&
-            chat?.status == ChatStatus.Active &&
-            chat.myDecision == ChatDecisionState.Pending &&
-            !exitFlowLocked &&
-            !firstChatLocallyExpired &&
-            !audioInteractionBusy
+        !loadingChatAction &&
+            (
+                (overflowVisibility.showMutualExit && canUseExistingChatActions) ||
+                    (overflowVisibility.showReject && canDecide) ||
+                    (overflowVisibility.showSafety && canUseSafetyActions)
+                ) ||
+            (overflowVisibility.showManualBlock && canManualBlock)
     val partnerDisplayName = chat?.partner?.displayName
         ?.takeIf { it.isNotBlank() }
         ?: partnerNameFallback?.takeIf { it.isNotBlank() }
+    val decisionOnlyPanelState = firstChatDecisionOnlyPanelState(
+        chat = chat,
+        partnerName = partnerDisplayName,
+    )
     var bottomBarHeight by remember { mutableStateOf(0.dp) }
     val density = LocalDensity.current
-    val bottomContentPadding = bottomBarHeight.takeIf { it > 0.dp } ?: 180.dp
+    val composerPresentationPolicy = firstChatComposerPresentationPolicy(
+        canSendMessages = canSendMessages,
+        decisionOnlyForCurrentUser = decisionOnlyForCurrentUser,
+        audioInteractionBusy = audioSession.interactionBusy,
+    )
+    val showMessageComposer = composerPresentationPolicy.visible
+    val bottomContentPadding = if (showMessageComposer) {
+        bottomBarHeight.takeIf { it > 0.dp } ?: 180.dp
+    } else {
+        0.dp
+    }
 
     if (loading && chat == null) {
         val loadingPresentation = chatLoadingPresentation(loadingChatTitle, partnerNameFallback)
@@ -332,7 +386,7 @@ fun ChatScreen(
         return
     }
 
-    val pollChat = chatPollingEnabled(canChat && !audioInteractionBusy)
+    val pollChat = chatPollingEnabled(firstChatPolicy.pollingEnabled && !audioInteractionBusy)
     LaunchedEffect(chat?.id, pollChat) {
         while (pollChat) {
             delay(2000.milliseconds)
@@ -410,22 +464,23 @@ fun ChatScreen(
                 secondChatUnavailable = secondChatUnavailable,
                 myDecision = chat?.myDecision,
                 partnerDecision = chat?.partnerDecision,
-                showDecisionSummary = showDecisionActions,
+                showDecisionSummary = showDecisionActions && !decisionOnlyPanelState.visible,
                 trailingContent = if (showExitActions) {
                     {
                         ChatOverflowMenu(
                             expanded = actionsMenuExpanded,
                             enabled = canOpenOverflowActions,
                             actionLoading = loadingChatAction,
-                            canUseExistingChatActions = canUseExistingChatActions,
+                            canUseExistingChatActions = canUseExistingChatActions &&
+                                firstChatPolicy.canRequestOrdinaryExit,
                             canUseSafetyActions = canUseSafetyActions,
                             canDecide = canDecide,
                             canManualBlock = canManualBlock,
-                            showMutualExitActions = showMutualExitActions,
+                            visibility = overflowVisibility,
                             onExpandedChange = { actionsMenuExpanded = it },
                             onRequestMutualExit = {
                                 actionsMenuExpanded = false
-                                onRequestMutualExit()
+                                if (firstChatPolicy.canRequestOrdinaryExit) onRequestMutualExit()
                             },
                             onRejectChat = {
                                 actionsMenuExpanded = false
@@ -489,6 +544,14 @@ fun ChatScreen(
                 },
                 onRequestInactivityClaim = { showingSecondChatInactivityDialog = true },
             )
+            FirstChatDecisionOnlyPanel(
+                state = decisionOnlyPanelState,
+                actionLoading = loadingChatAction || audioInteractionBusy,
+                canDecide = canDecide,
+                actionLoadingLabel = actionLoadingLabel,
+                onApprove = onApprove,
+                onReject = onReject,
+            )
             ChatActionsPanel(
                 currentUserId = currentUserId,
                 activeExitRequest = if (showExitActions) pendingExitRequest else null,
@@ -496,7 +559,7 @@ fun ChatScreen(
                 actionLoadingLabel = actionLoadingLabel,
                 canDecide = canDecide,
                 canUseNavigationActions = canUseNavigationActions,
-                showDecisionActions = showDecisionActions,
+                showDecisionActions = showDecisionActions && !decisionOnlyPanelState.visible,
                 onBackHome = onBackHome,
                 onApprove = onApprove,
                 onAcceptExitRequest = onAcceptExitRequest,
@@ -515,6 +578,7 @@ fun ChatScreen(
                 bottomContentPadding = bottomContentPadding + 12.dp,
                 modifier = Modifier.weight(1f),
                 onRetryOptimisticMessage = onRetryOptimisticMessage,
+                canRetryFailedTextMessages = firstChatPolicy.canRetryFailedTextMessages,
                 playbackState = audioSession.playbackState,
                 onPlayAudio = audioSession::playRemoteMessage,
                 onPauseAudio = audioSession::pauseAudio,
@@ -532,13 +596,15 @@ fun ChatScreen(
                     bottomBarHeight = with(density) { size.height.toDp() }
                 },
             ) {
-                MessageComposer(
-                    presentation = audioSession.composerPresentation(),
-                    callbacks = audioSession.composerCallbacks(),
-                )
+                if (showMessageComposer) {
+                    MessageComposer(
+                        presentation = audioSession.composerPresentation(),
+                        callbacks = audioSession.composerCallbacks(),
+                    )
+                }
             }
         }
-    }
+}
 
     if (showingSafetyDialog && showExitActions && canUseSafetyActions) {
         SafetyReportDialog(
@@ -954,7 +1020,7 @@ private fun ChatOverflowMenu(
     canUseSafetyActions: Boolean,
     canDecide: Boolean,
     canManualBlock: Boolean,
-    showMutualExitActions: Boolean,
+    visibility: FirstChatOverflowActionVisibility,
     onExpandedChange: (Boolean) -> Unit,
     onRequestMutualExit: () -> Unit,
     onRejectChat: () -> Unit,
@@ -980,13 +1046,15 @@ private fun ChatOverflowMenu(
                 }
             },
         ) {
-            if (showMutualExitActions) {
+            if (visibility.showMutualExit) {
                 DropdownMenuItem(
                     text = { Text("Salida consensuada") },
                     enabled = !actionLoading && canUseExistingChatActions,
                     onClick = onRequestMutualExit,
                 )
+            }
 
+            if (visibility.showReject) {
                 DropdownMenuItem(
                     text = { Text("Rechazar chat") },
                     enabled = !actionLoading && canDecide,
@@ -994,17 +1062,21 @@ private fun ChatOverflowMenu(
                 )
             }
 
-            DropdownMenuItem(
-                text = { Text("Reportar y cerrar chat") },
-                enabled = !actionLoading && canUseSafetyActions,
-                onClick = onShowSafety,
-            )
+            if (visibility.showSafety) {
+                DropdownMenuItem(
+                    text = { Text("Reportar y cerrar chat") },
+                    enabled = !actionLoading && canUseSafetyActions,
+                    onClick = onShowSafety,
+                )
+            }
 
-            DropdownMenuItem(
-                text = { Text("Bloquear a ésta persona") },
-                enabled = canManualBlock,
-                onClick = onShowManualBlock,
-            )
+            if (visibility.showManualBlock) {
+                DropdownMenuItem(
+                    text = { Text("Bloquear a ésta persona") },
+                    enabled = canManualBlock,
+                    onClick = onShowManualBlock,
+                )
+            }
         }
     }
 }
@@ -1074,6 +1146,7 @@ private fun MessageList(
     bottomContentPadding: Dp,
     modifier: Modifier,
     onRetryOptimisticMessage: (localId: String, content: String) -> Unit,
+    canRetryFailedTextMessages: Boolean,
     playbackState: ChatAudioPlaybackUiState,
     onPlayAudio: (ChatMessage) -> Unit,
     onPauseAudio: () -> Unit,
@@ -1132,6 +1205,7 @@ private fun MessageList(
                         is ChatMessageListItem.Optimistic -> OptimisticMessageBubble(
                             message = item.message,
                             onRetry = onRetryOptimisticMessage,
+                            canRetryFailedTextMessages = canRetryFailedTextMessages,
                         )
                     }
                 }
@@ -1237,6 +1311,59 @@ private sealed interface ChatMessageListItem {
         override val stableId: String = "optimistic-${message.localId}"
 
         override fun isMine(currentUserId: String): Boolean = message.senderId == currentUserId
+    }
+}
+
+@Composable
+private fun FirstChatDecisionOnlyPanel(
+    state: FirstChatDecisionOnlyPanelState,
+    actionLoading: Boolean,
+    canDecide: Boolean,
+    actionLoadingLabel: String?,
+    onApprove: () -> Unit,
+    onReject: () -> Unit,
+) {
+    if (!state.visible) return
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            state.approvalCopy?.let { copy ->
+                Text(
+                    text = copy,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
+            Text(
+                text = state.prompt,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Button(
+                    onClick = onApprove,
+                    enabled = !actionLoading && canDecide,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(if (actionLoading) actionLoadingLabel ?: "Procesando..." else "Aprobar")
+                }
+                OutlinedButton(
+                    onClick = onReject,
+                    enabled = !actionLoading && canDecide,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(if (actionLoading) actionLoadingLabel ?: "Procesando..." else "No aprobar")
+                }
+            }
+        }
     }
 }
 
@@ -1534,6 +1661,7 @@ internal fun AudioPlaybackRow(
 private fun OptimisticMessageBubble(
     message: OptimisticOutgoingMessage,
     onRetry: (localId: String, content: String) -> Unit,
+    canRetryFailedTextMessages: Boolean,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1569,8 +1697,7 @@ private fun OptimisticMessageBubble(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (
-                    message.deliveryState == OutgoingMessageDeliveryState.Failed &&
-                    message.messageType == OptimisticOutgoingMessageType.Text
+                    optimisticTextRetryAvailable(message, canRetryFailedTextMessages)
                 ) {
                     TextButton(
                         onClick = { onRetry(message.localId, message.content) },
@@ -1583,6 +1710,14 @@ private fun OptimisticMessageBubble(
         }
     }
 }
+
+internal fun optimisticTextRetryAvailable(
+    message: OptimisticOutgoingMessage,
+    canRetryFailedTextMessages: Boolean,
+): Boolean =
+    canRetryFailedTextMessages &&
+        message.deliveryState == OutgoingMessageDeliveryState.Failed &&
+        message.messageType == OptimisticOutgoingMessageType.Text
 
 @Composable
 private fun SafetyReportDialog(
@@ -1687,20 +1822,23 @@ internal fun chatPollingEnabled(canChat: Boolean): Boolean = canChat
 internal fun shouldDispatchSecondChatLocalAbsoluteExpiry(secondChatLocallyExpired: Boolean): Boolean =
     secondChatLocallyExpired
 
-private fun chatDecisionSummary(
+internal fun chatDecisionSummary(
     myDecision: ChatDecisionState?,
     partnerDecision: ChatDecisionState?,
     partnerName: String?,
 ): String? {
     if (myDecision == null || partnerDecision == null) return null
-    val partnerLabel = partnerName?.takeIf { it.isNotBlank() } ?: "La otra persona"
+    val partnerLabel = partnerName
+        ?.takeIf { it.isNotBlank() }
+        ?.let { TextSafety.safeDisplay(it) }
+        ?: "La otra persona"
 
     return when {
         myDecision == ChatDecisionState.Approved && partnerDecision == ChatDecisionState.Pending ->
             "Aprobaste el chat. Esperando decisión de $partnerLabel."
 
         myDecision == ChatDecisionState.Pending && partnerDecision == ChatDecisionState.Approved ->
-            "$partnerLabel aprobó el chat. Falta tu decisión."
+            "$partnerLabel aprobó el chat. Ahora te toca decidir."
 
         myDecision == ChatDecisionState.Approved && partnerDecision == ChatDecisionState.Approved ->
             "Ambas personas aprobaron. Pasando a revisión visual."

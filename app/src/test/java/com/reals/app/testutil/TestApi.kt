@@ -174,7 +174,7 @@ class FakeRealsApi : RealsApi {
     var getMeResponse: Response<UserResponseDto>? = null
     var provisionMeResponse: Response<UserResponseDto>? = null
     var deleteMeResponse: Response<Unit> = Response.success(Unit)
-    var homeResponse: Response<HomeResponseDto> = Response.success(TestDtos.home())
+    var homeResponse: Response<HomeResponseDto> = Response.success(TestDtos.homeWithoutPendingEngagements())
     var homeStatusResponse: Response<HomeStatusResponseDto> = Response.success(TestDtos.homeStatus())
     var homePendingResponse: Response<HomePendingStateResponseDto> = Response.success(TestDtos.homePending())
     var registerPushTokenResponse: Response<RegisterPushTokenResponseDto> =

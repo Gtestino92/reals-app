@@ -1,6 +1,7 @@
 package com.reals.app.ui.chat
 
 import com.reals.app.data.mapper.toDomain
+import com.reals.app.domain.model.ChatDecisionState
 import com.reals.app.testutil.TestDtos
 import java.time.OffsetDateTime
 import org.junit.Assert.assertEquals
@@ -105,6 +106,55 @@ class ChatLifecycleUiStateTest {
 
         assertEquals(FirstChatExpiryReason.Inactivity, state?.reason)
         assertEquals("El chat se cierra por inactividad en 30s.", state?.warningCopy())
+    }
+
+    @Test
+    fun `decision-only ignores stale earlier inactivity deadline`() {
+        val chat = TestDtos.chat(
+            myDecision = "PENDING",
+            partnerDecision = "APPROVED",
+        ).copy(
+            expiresAt = "2026-06-18T21:10:00Z",
+            inactivityExpiresAt = "2026-06-18T21:05:00Z",
+        ).toDomain()
+
+        val state = firstChatLifecycleUiState(chat, millis("2026-06-18T21:04:30Z"))
+
+        assertEquals(FirstChatExpiryReason.Absolute, state?.reason)
+        assertEquals("2026-06-18T21:10:00Z", state?.deadline)
+        assertFalse(state?.showCountdown == true)
+    }
+
+    @Test
+    fun `decision-only still expires at absolute deadline`() {
+        val chat = TestDtos.chat(
+            myDecision = "APPROVED",
+            partnerDecision = "PENDING",
+        ).copy(
+            expiresAt = "2026-06-18T21:10:00Z",
+            inactivityExpiresAt = "2026-06-18T21:05:00Z",
+        ).toDomain()
+
+        val state = firstChatLifecycleUiState(chat, millis("2026-06-18T21:10:00Z"))
+
+        assertEquals(FirstChatExpiryReason.Absolute, state?.reason)
+        assertTrue(state?.expired == true)
+    }
+
+    @Test
+    fun `pending pending first chat still uses earlier inactivity deadline`() {
+        val chat = TestDtos.chat(
+            myDecision = ChatDecisionState.Pending.rawValue,
+            partnerDecision = ChatDecisionState.Pending.rawValue,
+        ).copy(
+            expiresAt = "2026-06-18T21:10:00Z",
+            inactivityExpiresAt = "2026-06-18T21:05:00Z",
+        ).toDomain()
+
+        val state = firstChatLifecycleUiState(chat, millis("2026-06-18T21:04:30Z"))
+
+        assertEquals(FirstChatExpiryReason.Inactivity, state?.reason)
+        assertEquals("2026-06-18T21:05:00Z", state?.deadline)
     }
 
     @Test

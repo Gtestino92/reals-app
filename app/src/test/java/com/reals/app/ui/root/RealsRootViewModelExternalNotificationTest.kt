@@ -67,11 +67,46 @@ class RealsRootViewModelExternalNotificationTest {
     }
 
     @Test
-    fun `second chat started from Ready with queued first chat refreshes Home without opening first chat`() =
+    fun `match found notification routes through authoritative Home pending first chat`() = runTest(dispatcher) {
+        val home = queuedHomeWithPendingFirstChat()
+        val api = FakeRealsApi().apply {
+            homeResponse = Response.success(home)
+            chatResponse = Response.success(
+                TestDtos.chat().copy(
+                    id = "chat-first",
+                    matchId = "match-first",
+                )
+            )
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(readyWithHome(TestDtos.home().copy(pendingActions = emptyList())))
+
+        viewModel.handleExternalNotificationOpened(TYPE_MATCH_FOUND)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is RealsRootUiState.FirstChat)
+        state as RealsRootUiState.FirstChat
+        assertEquals("match-first", state.matchId)
+        assertEquals("chat-first", state.chatId)
+        assertTrue(api.calls.contains("getHome"))
+        assertTrue(api.calls.contains("getFirstChatForMatch"))
+        assertFalse(api.calls.contains("getSecondChatForConnection"))
+        assertFalse(api.calls.contains("joinSecondChat"))
+    }
+
+    @Test
+    fun `second chat started from Ready with queued first chat routes to mandatory first chat`() =
         runTest(dispatcher) {
             val home = queuedHomeWithPendingFirstChat()
             val api = FakeRealsApi().apply {
                 homeResponse = Response.success(home)
+                chatResponse = Response.success(
+                    TestDtos.chat().copy(
+                        id = "chat-first",
+                        matchId = "match-first",
+                    )
+                )
             }
             val viewModel = viewModel(api)
             viewModel.setState(readyWithHome(home))
@@ -79,9 +114,9 @@ class RealsRootViewModelExternalNotificationTest {
             viewModel.handleExternalNotificationOpened(TYPE_SECOND_CHAT_STARTED)
             advanceUntilIdle()
 
-            assertTrue(viewModel.uiState.value is RealsRootUiState.Ready)
-            assertEquals(listOf("getHome"), api.calls)
-            assertFalse(api.calls.contains("getFirstChatForMatch"))
+            assertTrue(viewModel.uiState.value is RealsRootUiState.FirstChat)
+            assertTrue(api.calls.contains("getHome"))
+            assertTrue(api.calls.contains("getFirstChatForMatch"))
             assertFalse(api.calls.contains("getSecondChatForConnection"))
             assertFalse(api.calls.contains("joinSecondChat"))
         }
@@ -107,24 +142,22 @@ class RealsRootViewModelExternalNotificationTest {
         }
 
     @Test
-    fun `second chat started returns joined active second chat to Home and refreshes Home only`() = runTest(dispatcher) {
-        val api = FakeRealsApi().apply {
-            homeResponse = Response.success(TestDtos.home().copy(pendingActions = emptyList(), nextSteps = emptyList()))
-        }
+    fun `second chat started is ignored while joined active second chat owns foreground`() = runTest(dispatcher) {
+        val api = FakeRealsApi()
         val viewModel = viewModel(api)
         viewModel.setState(secondChatState())
 
         viewModel.handleExternalNotificationOpened(TYPE_SECOND_CHAT_STARTED)
         advanceUntilIdle()
 
-        assertTrue(viewModel.uiState.value is RealsRootUiState.Ready)
-        assertEquals(listOf("getHome"), api.calls)
+        assertTrue(viewModel.uiState.value is RealsRootUiState.SecondChat)
+        assertTrue(api.calls.isEmpty())
         assertFalse(api.calls.contains("getSecondChatForConnection"))
         assertFalse(api.calls.contains("joinSecondChat"))
     }
 
     @Test
-    fun `second chat started in Checking survives session loading and disables Home auto navigation once`() =
+    fun `second chat started in Checking follows mandatory Home first-chat authority after session load`() =
         runTest(dispatcher) {
             val api = FakeRealsApi().apply {
                 homeResponse = Response.success(queuedHomeWithPendingFirstChat())
@@ -134,20 +167,20 @@ class RealsRootViewModelExternalNotificationTest {
             viewModel.handleExternalNotificationOpened(TYPE_SECOND_CHAT_STARTED)
             advanceUntilIdle()
 
-            assertTrue(viewModel.uiState.value is RealsRootUiState.Ready)
+            assertTrue(viewModel.uiState.value is RealsRootUiState.FirstChat)
             assertTrue(api.calls.contains("getHome"))
-            assertFalse(api.calls.contains("getFirstChatForMatch"))
+            assertTrue(api.calls.contains("getFirstChatForMatch"))
 
             viewModel.refreshSession()
             advanceUntilIdle()
 
             assertTrue(viewModel.uiState.value is RealsRootUiState.FirstChat)
-            assertEquals(1, api.calls.count { it == "getFirstChatForMatch" })
+            assertEquals(2, api.calls.count { it == "getFirstChatForMatch" })
             assertFalse(api.calls.contains("joinSecondChat"))
         }
 
     @Test
-    fun `second chat started in LoadingSession reuses active session load and disables Home auto navigation`() =
+    fun `second chat started in LoadingSession reuses active session load then follows Home first-chat authority`() =
         runTest(dispatcher) {
             val homeStarted = CompletableDeferred<Unit>()
             val releaseHome = CompletableDeferred<Unit>()
@@ -174,13 +207,13 @@ class RealsRootViewModelExternalNotificationTest {
             releaseHome.complete(Unit)
             advanceUntilIdle()
 
-            assertTrue(viewModel.uiState.value is RealsRootUiState.Ready)
-            assertFalse(api.calls.contains("getFirstChatForMatch"))
+            assertTrue(viewModel.uiState.value is RealsRootUiState.FirstChat)
+            assertTrue(api.calls.contains("getFirstChatForMatch"))
             assertFalse(api.calls.contains("joinSecondChat"))
         }
 
     @Test
-    fun `second chat started while legal requirements are visible waits and then loads Home only`() =
+    fun `second chat started while legal requirements are visible waits and then follows Home first-chat authority`() =
         runTest(dispatcher) {
             val api = FakeRealsApi().apply {
                 homeResponse = Response.success(queuedHomeWithPendingFirstChat())
@@ -201,17 +234,15 @@ class RealsRootViewModelExternalNotificationTest {
             viewModel.deferLegalRequirements()
             advanceUntilIdle()
 
-            assertTrue(viewModel.uiState.value is RealsRootUiState.Ready)
-            assertEquals(listOf("getHome"), api.calls)
-            assertFalse(api.calls.contains("getFirstChatForMatch"))
+            assertTrue(viewModel.uiState.value is RealsRootUiState.FirstChat)
+            assertTrue(api.calls.contains("getHome"))
+            assertTrue(api.calls.contains("getFirstChatForMatch"))
             assertFalse(api.calls.contains("joinSecondChat"))
         }
 
     @Test
-    fun `second chat reminder preserves existing joined second chat refresh behavior`() = runTest(dispatcher) {
-        val api = FakeRealsApi().apply {
-            secondChatStatusResponse = Response.success(activeSecondChatStatusDto())
-        }
+    fun `generic notification is ignored while joined active second chat owns foreground`() = runTest(dispatcher) {
+        val api = FakeRealsApi()
         val viewModel = viewModel(api)
         viewModel.setState(secondChatState())
 
@@ -219,13 +250,55 @@ class RealsRootViewModelExternalNotificationTest {
         advanceUntilIdle()
 
         assertTrue(viewModel.uiState.value is RealsRootUiState.SecondChat)
-        assertTrue(api.calls.contains("getSecondChatStatus"))
-        assertFalse(api.calls.contains("getHome"))
-        assertFalse(api.calls.contains("joinSecondChat"))
+        assertTrue(api.calls.isEmpty())
     }
 
     @Test
-    fun `second chat started from first chat and pending engagement returns Home`() = runTest(dispatcher) {
+    fun `notifications are ignored while unresolved first chat owns foreground`() = runTest(dispatcher) {
+        val api = FakeRealsApi()
+        val viewModel = viewModel(api)
+        val firstChat = firstChatState(
+            chat = TestDtos.chat(
+                myDecision = "PENDING",
+                partnerDecision = "PENDING",
+            ).toDomain(),
+        )
+        viewModel.setState(firstChat)
+
+        viewModel.handleExternalNotificationOpened(TYPE_MATCH_FOUND)
+        advanceUntilIdle()
+        assertEquals(firstChat, viewModel.uiState.value)
+
+        viewModel.handleExternalNotificationOpened(TYPE_SECOND_CHAT_STARTED)
+        advanceUntilIdle()
+        assertEquals(firstChat, viewModel.uiState.value)
+        assertTrue(api.calls.isEmpty())
+    }
+
+    @Test
+    fun `already approved first chat does not own notification foreground`() = runTest(dispatcher) {
+        val api = FakeRealsApi().apply {
+            homeResponse = Response.success(TestDtos.home().copy(pendingActions = emptyList(), nextSteps = emptyList()))
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(
+            firstChatState(
+                chat = TestDtos.chat(
+                    myDecision = "APPROVED",
+                    partnerDecision = "PENDING",
+                ).toDomain(),
+            )
+        )
+
+        viewModel.handleExternalNotificationOpened(TYPE_MATCH_FOUND)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value is RealsRootUiState.Ready)
+        assertEquals(listOf("getHome"), api.calls)
+    }
+
+    @Test
+    fun `non-actionable first chat and pending engagement return Home`() = runTest(dispatcher) {
         val api = FakeRealsApi().apply {
             homeResponse = Response.success(TestDtos.home().copy(pendingActions = emptyList(), nextSteps = emptyList()))
         }
@@ -302,6 +375,17 @@ class RealsRootViewModelExternalNotificationTest {
                 status = activeSecondChatStatusDto().toDomain(),
                 statusReceivedAtMillis = System.currentTimeMillis(),
             ),
+        )
+
+    private fun firstChatState(
+        chat: com.reals.app.domain.model.Chat?,
+    ): RealsRootUiState.FirstChat =
+        RealsRootUiState.FirstChat(
+            session = TestDomain.session(),
+            matchId = chat?.matchId ?: "match-1",
+            chatId = chat?.id ?: "chat-1",
+            chat = chat,
+            match = TestDtos.match().toDomain(),
         )
 
     private fun activeSecondChatStatusDto() = TestDtos.secondChatStatus(

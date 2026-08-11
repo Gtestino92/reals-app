@@ -5,21 +5,21 @@ class HomeRouter {
         screenModel: HomeScreenModel,
         autoNavigate: Boolean,
     ): HomeRoute {
-        if (!autoNavigate) return HomeRoute.StayHome
-
         val firstChat = screenModel.pendingActions
             .filterIsInstance<HomeActionItem.FirstChat>()
             .firstOrNull()
 
-        return if (firstChat == null) {
-            val activeSecondChat = screenModel.nextSteps
-                .firstNotNullOfOrNull { it.activeSecondChatRoute() }
-            activeSecondChat ?: HomeRoute.StayHome
-        } else {
+        return if (firstChat != null) {
             HomeRoute.OpenFirstChat(
                 matchId = firstChat.matchId,
                 chatId = firstChat.chatId,
             )
+        } else if (autoNavigate) {
+            val activeSecondChat = screenModel.nextSteps
+                .firstNotNullOfOrNull { it.activeSecondChatRoute() }
+            activeSecondChat ?: HomeRoute.StayHome
+        } else {
+            HomeRoute.StayHome
         }
     }
 }

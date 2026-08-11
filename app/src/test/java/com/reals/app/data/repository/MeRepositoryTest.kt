@@ -22,6 +22,8 @@ class MeRepositoryTest {
 
     @Test
     fun `getHome maps pending actions next steps and passive notices`() = runBlocking {
+        api.homeResponse = retrofit2.Response.success(TestDtos.home())
+
         val home = repository.getHome().successValue()
 
         assertEquals("getHome", api.calls.single())

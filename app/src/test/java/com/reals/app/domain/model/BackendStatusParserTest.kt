@@ -1,5 +1,7 @@
 package com.reals.app.domain.model
 
+import com.reals.app.data.mapper.toDomain
+import com.reals.app.testutil.TestDtos
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -87,6 +89,38 @@ class BackendStatusParserTest {
         val unknown = ChatDecisionState.fromBackend("POSTPONED")
         assertTrue(unknown is ChatDecisionState.Unknown)
         assertEquals("POSTPONED", unknown.rawValue)
+    }
+
+    @Test
+    fun `first chat decision-only derivation is symmetric and exact`() {
+        val pendingPending = TestDtos.chat(
+            myDecision = "PENDING",
+            partnerDecision = "PENDING",
+        ).toDomain()
+        val myApproved = pendingPending.copy(
+            myDecision = ChatDecisionState.Approved,
+            partnerDecision = ChatDecisionState.Pending,
+        )
+        val partnerApproved = pendingPending.copy(
+            myDecision = ChatDecisionState.Pending,
+            partnerDecision = ChatDecisionState.Approved,
+        )
+        val bothApproved = pendingPending.copy(
+            myDecision = ChatDecisionState.Approved,
+            partnerDecision = ChatDecisionState.Approved,
+        )
+        val unknownDecision = pendingPending.copy(
+            myDecision = ChatDecisionState.Unknown("POSTPONED"),
+            partnerDecision = ChatDecisionState.Approved,
+        )
+
+        assertTrue(myApproved.isFirstChatDecisionOnly())
+        assertTrue(partnerApproved.isFirstChatDecisionOnly())
+        assertTrue(partnerApproved.isFirstChatDecisionOnlyForCurrentUser())
+        assertEquals(false, myApproved.isFirstChatDecisionOnlyForCurrentUser())
+        assertEquals(false, pendingPending.isFirstChatDecisionOnly())
+        assertEquals(false, bothApproved.isFirstChatDecisionOnly())
+        assertEquals(false, unknownDecision.isFirstChatDecisionOnly())
     }
 
     @Test

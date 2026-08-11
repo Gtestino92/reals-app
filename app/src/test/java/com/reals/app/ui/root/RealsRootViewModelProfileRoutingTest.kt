@@ -51,7 +51,7 @@ class RealsRootViewModelProfileRoutingTest {
     @Test
     fun `after photo add marks draft closing profile management can return to Home`() = runTest(dispatcher) {
         val api = FakeRealsApi().apply {
-            homeResponse = Response.success(draftHomeWithFirstChat())
+            homeResponse = Response.success(draftHomeWithVisualReview())
         }
         val viewModel = viewModel(api)
         val edited = photoAddedState(
@@ -107,7 +107,7 @@ class RealsRootViewModelProfileRoutingTest {
     @Test
     fun `after photo replacement marks draft closing profile management can return to Home`() = runTest(dispatcher) {
         val api = FakeRealsApi().apply {
-            homeResponse = Response.success(draftHomeWithFirstChat())
+            homeResponse = Response.success(draftHomeWithVisualReview())
         }
         val viewModel = viewModel(api)
         val edited = photoReplacedState(
@@ -129,7 +129,7 @@ class RealsRootViewModelProfileRoutingTest {
     @Test
     fun `after photo deletion returns draft closing profile management can return to Home`() = runTest(dispatcher) {
         val api = FakeRealsApi().apply {
-            homeResponse = Response.success(draftHomeWithFirstChat())
+            homeResponse = Response.success(draftHomeWithVisualReview())
         }
         val viewModel = viewModel(api)
         val edited = photoDeletedState(

@@ -4,7 +4,9 @@ import com.reals.app.core.time.ServerClockSnapshot
 import com.reals.app.data.mapper.toDomain
 import com.reals.app.data.preferences.InMemoryFirstChatUnansweredSuggestionDismissalStore
 import com.reals.app.domain.model.Chat
+import com.reals.app.domain.model.ChatDecisionState
 import com.reals.app.domain.model.ChatExitRequestStatus
+import com.reals.app.domain.model.isFirstChatDecisionOnly
 import com.reals.app.testutil.FakeRealsApi
 import com.reals.app.testutil.TestDomain
 import com.reals.app.testutil.TestDtos
@@ -318,6 +320,91 @@ class FirstChatAsyncResultReconciliationTest {
         assertEquals(period, finalState.dismissedUnansweredPeriodReference)
     }
 
+    @Test
+    fun `older in-flight refresh cannot regress newer decision-only snapshot`() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val refreshStarted = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            chatResponse = Response.success(
+                chatDto(
+                    serverTime = S1,
+                    lastMessageAt = S1,
+                    myDecision = "PENDING",
+                    partnerDecision = "PENDING",
+                )
+            )
+            exitRequestsResponse = Response.success(emptyList())
+            beforeGetFirstChatForMatchResponse = {
+                refreshStarted.complete(Unit)
+                gate.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(
+            firstChatState(
+                serverTime = S1,
+                lastMessageAt = S1,
+                myDecision = "PENDING",
+                partnerDecision = "PENDING",
+            )
+        )
+
+        viewModel.refreshFirstChat(silent = false)
+        runCurrent()
+        refreshStarted.await()
+
+        viewModel.setState(
+            firstChatState(
+                serverTime = S2,
+                lastMessageAt = S2,
+                myDecision = "PENDING",
+                partnerDecision = "APPROVED",
+            ).copy(refreshing = true)
+        )
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        val finalState = viewModel.uiState.value as RealsRootUiState.FirstChat
+        assertTrue(finalState.chat?.isFirstChatDecisionOnly() == true)
+        assertEquals(ChatDecisionState.Pending, finalState.chat?.myDecision)
+        assertEquals(ChatDecisionState.Approved, finalState.chat?.partnerDecision)
+        assertEquals(millis(S2), finalState.serverClockSnapshot?.serverTimeEpochMillis)
+    }
+
+    @Test
+    fun `equal server time still preserves first-chat decision progression`() = runTest(dispatcher) {
+        val api = FakeRealsApi().apply {
+            chatResponse = Response.success(
+                chatDto(
+                    serverTime = S1,
+                    lastMessageAt = S1,
+                    myDecision = "PENDING",
+                    partnerDecision = "APPROVED",
+                )
+            )
+            exitRequestsResponse = Response.success(emptyList())
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(
+            firstChatState(
+                serverTime = S1,
+                lastMessageAt = S1,
+                myDecision = "PENDING",
+                partnerDecision = "PENDING",
+            )
+        )
+
+        viewModel.refreshFirstChat(silent = false)
+        advanceUntilIdle()
+
+        val finalState = viewModel.uiState.value as RealsRootUiState.FirstChat
+        assertTrue(finalState.chat?.isFirstChatDecisionOnly() == true)
+        assertEquals(ChatDecisionState.Pending, finalState.chat?.myDecision)
+        assertEquals(ChatDecisionState.Approved, finalState.chat?.partnerDecision)
+        assertEquals(millis(S1), finalState.serverClockSnapshot?.serverTimeEpochMillis)
+    }
+
     private fun viewModel(
         api: FakeRealsApi,
         store: InMemoryFirstChatUnansweredSuggestionDismissalStore =
@@ -341,8 +428,15 @@ class FirstChatAsyncResultReconciliationTest {
     private fun firstChatState(
         serverTime: String,
         lastMessageAt: String,
+        myDecision: String? = "PENDING",
+        partnerDecision: String? = "PENDING",
     ): RealsRootUiState.FirstChat {
-        val chat = chatDto(serverTime = serverTime, lastMessageAt = lastMessageAt).toDomain()
+        val chat = chatDto(
+            serverTime = serverTime,
+            lastMessageAt = lastMessageAt,
+            myDecision = myDecision,
+            partnerDecision = partnerDecision,
+        ).toDomain()
         return RealsRootUiState.FirstChat(
             session = TestDomain.session(),
             matchId = "match-1",
@@ -359,7 +453,13 @@ class FirstChatAsyncResultReconciliationTest {
     private fun chatDto(
         serverTime: String,
         lastMessageAt: String,
-    ) = TestDtos.chat(serverTime = serverTime).copy(lastMessageAt = lastMessageAt)
+        myDecision: String? = "PENDING",
+        partnerDecision: String? = "PENDING",
+    ) = TestDtos.chat(
+        serverTime = serverTime,
+        myDecision = myDecision,
+        partnerDecision = partnerDecision,
+    ).copy(lastMessageAt = lastMessageAt)
 
     private fun ownMessageDto(
         id: String = "own-1",

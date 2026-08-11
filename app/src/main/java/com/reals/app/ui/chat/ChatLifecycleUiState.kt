@@ -3,6 +3,7 @@ package com.reals.app.ui.chat
 import com.reals.app.core.time.backendInstantOrNull
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatType
+import com.reals.app.domain.model.isFirstChatDecisionOnly
 
 private const val FIRST_CHAT_COUNTDOWN_WARNING_MILLIS = 60_000L
 
@@ -31,7 +32,7 @@ internal fun firstChatLifecycleUiState(
         chat.expiresAt.takeIf { it.isNotBlank() }?.let {
             FirstChatExpiryReason.Absolute to it
         },
-        chat.inactivityExpiresAt?.takeIf { it.isNotBlank() }?.let {
+        chat.inactivityExpiresAt?.takeUnless { chat.isFirstChatDecisionOnly() }?.takeIf { it.isNotBlank() }?.let {
             FirstChatExpiryReason.Inactivity to it
         },
     )
