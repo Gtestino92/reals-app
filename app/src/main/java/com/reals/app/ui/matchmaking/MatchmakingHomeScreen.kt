@@ -508,7 +508,7 @@ private fun MatchmakingIdleScreen(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
         ) {
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Encontrar un chat", style = MaterialTheme.typography.titleLarge)
+                Text("Buscar chat", style = MaterialTheme.typography.titleLarge)
                 if (screenModel.shouldShowMatchmakingLocationCopy()) {
                     Text(
                         text = "Vamos a usar tu ubicación actual para encontrar personas compatibles cerca.",
@@ -591,9 +591,9 @@ private fun MatchmakingIdleScreen(
         )
         Spacer(modifier = Modifier.height(12.dp))
         HomeManagementEntryCard(
-            title = "Tu búsqueda",
+            title = "Preferencias",
             body = "Definí qué personas querés que Reals tenga en cuenta al buscar un chat.",
-            actionLabel = "Editar búsqueda",
+            actionLabel = "Editar preferencias",
             enabled = !busy,
             onClick = onEditSearch,
         )

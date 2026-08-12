@@ -100,6 +100,59 @@ class AffinityQuestionnaireOperationHandlerTest {
     }
 
     @Test
+    fun `old home summary load cannot overwrite newer questionnaire answers`() = runTest {
+        val oldAnswers = Response.success(
+            TestDtos.affinityAnswers(
+                listOf(TestDtos.affinityAnswer("MUSIC_DISCOVERY_001", 1, "LOW")),
+            ),
+        )
+        val newerAnswers = Response.success(
+            TestDtos.affinityAnswers(
+                listOf(TestDtos.affinityAnswer("MUSIC_DISCOVERY_001", 1, "VERY_HIGH")),
+            ),
+        )
+        val oldHomeCatalogStarted = CompletableDeferred<Unit>()
+        val releaseOldHomeCatalog = CompletableDeferred<Unit>()
+        var catalogCalls = 0
+        var answersCalls = 0
+        val api = FakeRealsApi().apply {
+            affinityAnswersResponse = oldAnswers
+            beforeGetAffinityQuestionCatalogResponse = {
+                catalogCalls += 1
+                if (catalogCalls == 1) {
+                    oldHomeCatalogStarted.complete(Unit)
+                    releaseOldHomeCatalog.await()
+                }
+            }
+            beforeGetMyAffinityAnswersResponse = {
+                answersCalls += 1
+                affinityAnswersResponse = if (answersCalls == 1) oldAnswers else newerAnswers
+            }
+        }
+        val harness = harness(api)
+
+        harness.handler.loadHomeSummaryIfNeeded()
+        runCurrent()
+        oldHomeCatalogStarted.await()
+
+        harness.handler.open()
+        runCurrent()
+
+        assertEquals(
+            listOf("VERY_HIGH"),
+            harness.ready().affinityHomeSummary.answers.map { it.answerCode },
+        )
+
+        releaseOldHomeCatalog.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf("VERY_HIGH"),
+            harness.ready().affinityHomeSummary.answers.map { it.answerCode },
+        )
+    }
+
+    @Test
     fun `questionnaire open reuses home summary before refreshing`() = runTest {
         val summary = AffinityHomeSummaryUiState(
             profileId = "profile-1",

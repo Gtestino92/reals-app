@@ -114,6 +114,7 @@ class AffinityQuestionnaireOperationHandler(
             )
             return
         }
+        invalidateHomeSummaryLoadRequests()
         val requestId = ++loadRequestId
         val opening = current.copy(
             affinityQuestionnaire = AffinityQuestionnaireUiState(
@@ -125,7 +126,7 @@ class AffinityQuestionnaireOperationHandler(
                 loading = retainedCatalog == null,
                 refreshing = retainedCatalog != null,
             ),
-        )
+        ).withStoppedHomeSummaryLoad(profile.id)
         uiState.value = opening
         scope.launch {
             installLoadResult(
@@ -160,6 +161,7 @@ class AffinityQuestionnaireOperationHandler(
         val questionnaire = current.affinityQuestionnaire
         val profileId = questionnaire.profileId ?: return
         if (!questionnaire.open || questionnaire.loading || questionnaire.refreshing || questionnaire.mutation != null) return
+        invalidateHomeSummaryLoadRequests()
         val requestId = ++loadRequestId
         uiState.value = current.copy(
             affinityQuestionnaire = questionnaire.copy(
@@ -170,7 +172,7 @@ class AffinityQuestionnaireOperationHandler(
                 mutationFeedbackQuestionId = null,
                 message = null,
             ),
-        )
+        ).withStoppedHomeSummaryLoad(profileId)
         scope.launch {
             installLoadResult(
                 requestId = requestId,
@@ -588,28 +590,31 @@ class AffinityQuestionnaireOperationHandler(
             return
         }
         uiState.value = when (result) {
-            is AffinityQuestionnaireLoadResult.Success -> latest.copy(
-                affinityQuestionnaire = questionnaire.copy(
-                    catalog = result.catalog,
-                    answers = result.answers,
-                    destination = result.catalog.reconciledDestination(
-                        destination = questionnaire.destination,
+            is AffinityQuestionnaireLoadResult.Success -> {
+                invalidateHomeSummaryLoadRequests()
+                latest.copy(
+                    affinityQuestionnaire = questionnaire.copy(
+                        catalog = result.catalog,
                         answers = result.answers,
+                        destination = result.catalog.reconciledDestination(
+                            destination = questionnaire.destination,
+                            answers = result.answers,
+                        ),
+                        loading = false,
+                        refreshing = false,
+                        error = null,
+                        mutationError = null,
+                        mutationFeedbackQuestionId = null,
                     ),
-                    loading = false,
-                    refreshing = false,
-                    error = null,
-                    mutationError = null,
-                    mutationFeedbackQuestionId = null,
-                ),
-                affinityHomeSummary = AffinityHomeSummaryUiState(
-                    profileId = profileId,
-                    catalog = result.catalog,
-                    answers = result.answers,
-                    loading = false,
-                    loadAttempted = true,
-                ),
-            )
+                    affinityHomeSummary = AffinityHomeSummaryUiState(
+                        profileId = profileId,
+                        catalog = result.catalog,
+                        answers = result.answers,
+                        loading = false,
+                        loadAttempted = true,
+                    ),
+                )
+            }
 
             is AffinityQuestionnaireLoadResult.Failure -> latest.copy(
                 affinityQuestionnaire = questionnaire.copy(
@@ -720,6 +725,10 @@ class AffinityQuestionnaireOperationHandler(
             deletingAnswer &&
                     questionnaire.draftQuestionId == mutation.questionId
 
+        if (successful) {
+            invalidateHomeSummaryLoadRequests()
+        }
+
         uiState.value = when (result) {
             is ApiResult.Success -> latest.copy(
                 affinityQuestionnaire = questionnaire.copy(
@@ -795,6 +804,7 @@ class AffinityQuestionnaireOperationHandler(
         ) {
             return
         }
+        invalidateHomeSummaryLoadRequests()
         val requestId = ++loadRequestId
         uiState.value = latest.copy(
             affinityQuestionnaire = questionnaire.copy(
@@ -805,7 +815,7 @@ class AffinityQuestionnaireOperationHandler(
                 mutationFeedbackQuestionId = null,
                 message = null,
             ),
-        )
+        ).withStoppedHomeSummaryLoad(profileId)
         scope.launch {
             installLoadResult(
                 requestId = requestId,
@@ -815,6 +825,22 @@ class AffinityQuestionnaireOperationHandler(
             )
         }
     }
+
+    private fun invalidateHomeSummaryLoadRequests() {
+        homeSummaryLoadRequestId += 1
+    }
+
+    private fun RealsRootUiState.Ready.withStoppedHomeSummaryLoad(profileId: String): RealsRootUiState.Ready =
+        if (affinityHomeSummary.profileId == profileId && affinityHomeSummary.loading) {
+            copy(
+                affinityHomeSummary = affinityHomeSummary.copy(
+                    loading = false,
+                    loadAttempted = true,
+                ),
+            )
+        } else {
+            this
+        }
 }
 
 private fun AffinityQuestionnaireDestination.Question.fallbackParent(): AffinityQuestionnaireDestination =
