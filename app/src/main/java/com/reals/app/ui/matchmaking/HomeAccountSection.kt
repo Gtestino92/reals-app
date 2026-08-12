@@ -300,7 +300,7 @@ private fun AccountSectionToggleButton(
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    TextButton(
+    OutlinedButton(
         onClick = onToggle,
         enabled = enabled,
         modifier = modifier
