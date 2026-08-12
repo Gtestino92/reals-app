@@ -187,6 +187,7 @@ android {
             buildConfigField("boolean", "ENABLE_LOCAL_FIREBASE_EMAIL_AUTO_VERIFICATION", "true")
             buildConfigField("boolean", "SHOW_MANUAL_LOCATION_FALLBACK", "true")
             buildConfigField("boolean", "SHOW_EXPLICIT_REFRESH_BUTTONS", "true")
+            buildConfigField("boolean", "SHOW_CAFECITO_SUPPORT", "true")
         }
         create("dev") {
             dimension = "environment"
@@ -198,6 +199,7 @@ android {
             buildConfigField("boolean", "ENABLE_LOCAL_FIREBASE_EMAIL_AUTO_VERIFICATION", "false")
             buildConfigField("boolean", "SHOW_MANUAL_LOCATION_FALLBACK", "false")
             buildConfigField("boolean", "SHOW_EXPLICIT_REFRESH_BUTTONS", "true")
+            buildConfigField("boolean", "SHOW_CAFECITO_SUPPORT", "true")
         }
         create("prod") {
             dimension = "environment"
@@ -208,6 +210,7 @@ android {
             buildConfigField("boolean", "ENABLE_LOCAL_FIREBASE_EMAIL_AUTO_VERIFICATION", "false")
             buildConfigField("boolean", "SHOW_MANUAL_LOCATION_FALLBACK", "false")
             buildConfigField("boolean", "SHOW_EXPLICIT_REFRESH_BUTTONS", "false")
+            buildConfigField("boolean", "SHOW_CAFECITO_SUPPORT", "false")
         }
     }
 
@@ -363,6 +366,11 @@ val environmentBaseUrls = mapOf(
     "dev" to devBaseUrl,
     "prod" to prodBaseUrl,
 )
+val expectedCafecitoSupportVisibility = mapOf(
+    "local" to true,
+    "dev" to true,
+    "prod" to false,
+)
 
 environmentBaseUrls.forEach { (environment, baseUrl) ->
     val validationTask = tasks.register("validate${environment.capitalized()}Environment") {
@@ -415,6 +423,9 @@ tasks.register("validateEnvironmentIsolation") {
         }
         if (expectedAppNames != mapOf("local" to "Reals Local", "dev" to "Reals Dev", "prod" to "Reals")) {
             throw GradleException("Flavor app names must remain Reals Local, Reals Dev, and Reals.")
+        }
+        if (expectedCafecitoSupportVisibility != mapOf("local" to true, "dev" to true, "prod" to false)) {
+            throw GradleException("Cafecito support must be enabled only for local/dev and disabled for prod.")
         }
         validateBaseUrl("local", localBaseUrl)
     }

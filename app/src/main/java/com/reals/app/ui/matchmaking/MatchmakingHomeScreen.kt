@@ -55,6 +55,7 @@ import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
 private val showManualLocationFallback = BuildConfig.SHOW_MANUAL_LOCATION_FALLBACK
+private val showCafecitoSupport = BuildConfig.SHOW_CAFECITO_SUPPORT
 
 private enum class LocationPermissionRequestMode {
     None,
@@ -94,6 +95,7 @@ fun MatchmakingHomeScreen(
     onSignOut: () -> Unit,
     onChangePassword: (currentPassword: String, newPassword: String) -> Unit,
     onDeleteAccount: () -> Unit,
+    onSupportReals: () -> Unit,
 ) {
     if (screenModel == null && homeLoading) {
         LoadingHomeStateScreen()
@@ -345,6 +347,7 @@ fun MatchmakingHomeScreen(
             onSignOut = onSignOut,
             onChangePassword = onChangePassword,
             onDeleteAccount = onDeleteAccount,
+            onSupportReals = onSupportReals,
         )
     }
 }
@@ -407,6 +410,7 @@ private fun MatchmakingIdleScreen(
     onSignOut: () -> Unit,
     onChangePassword: (currentPassword: String, newPassword: String) -> Unit,
     onDeleteAccount: () -> Unit,
+    onSupportReals: () -> Unit,
 ) {
     var latitude by rememberSaveable(profile.id) { mutableStateOf("-34.6037") }
     var longitude by rememberSaveable(profile.id) { mutableStateOf("-58.3816") }
@@ -560,6 +564,13 @@ private fun MatchmakingIdleScreen(
             }
         }
         Spacer(modifier = Modifier.height(24.dp))
+        if (shouldShowSupportReals(showCafecitoSupport)) {
+            SupportRealsSection(
+                enabled = !busy,
+                onSupportReals = onSupportReals,
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+        }
         AccountSection(
             busy = busy,
             accountDeleteLoading = accountDeleteLoading,
