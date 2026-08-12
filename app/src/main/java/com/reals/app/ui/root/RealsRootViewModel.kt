@@ -368,8 +368,19 @@ class RealsRootViewModel(
 
     fun openProfileManagement() {
         val current = _uiState.value as? RealsRootUiState.Ready ?: return
-        _uiState.value = current.copy(editingActiveProfile = true)
+        _uiState.value = current.copy(
+            editingActiveProfile = true,
+            profileManagementDestination = ProfileManagementDestination.Profile,
+        )
         loadProfilePhotos()
+    }
+
+    fun openSearchManagement() {
+        val current = _uiState.value as? RealsRootUiState.Ready ?: return
+        _uiState.value = current.copy(
+            editingActiveProfile = true,
+            profileManagementDestination = ProfileManagementDestination.Search,
+        )
     }
 
     fun closeProfileManagement() {
@@ -378,6 +389,8 @@ class RealsRootViewModel(
     }
 
     fun openAffinityQuestionnaire() = affinityQuestionnaireHandler.open()
+
+    fun loadAffinityHomeSummaryIfNeeded() = affinityQuestionnaireHandler.loadHomeSummaryIfNeeded()
 
     fun closeAffinityQuestionnaire() = affinityQuestionnaireHandler.close()
 

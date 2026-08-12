@@ -1610,7 +1610,7 @@ private fun ChatActionsPanel(
                     enabled = canUseNavigationActions,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Volver a Home")
+                    Text("Volver a Inicio")
                 }
             }
             if (showDecisionActions) {

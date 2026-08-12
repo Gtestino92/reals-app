@@ -138,7 +138,7 @@ fun PartnerProfileScreen(
         if (profile != null || !loading) {
             Spacer(modifier = Modifier.height(24.dp))
             Button(onClick = onBackHome, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                Text("Volver a Home")
+                Text("Volver a Inicio")
             }
         }
     }

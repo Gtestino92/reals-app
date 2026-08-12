@@ -49,6 +49,7 @@ import com.reals.app.domain.model.SearchLocationInput
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
+import com.reals.app.ui.root.AffinityHomeSummaryUiState
 import com.reals.app.ui.root.MatchmakingSearchUiPhase
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -91,7 +92,11 @@ fun MatchmakingHomeScreen(
     onOpenSecondChat: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenConnectionPartnerProfile: (matchId: String) -> Unit,
     onDismissSecondChat: (connectionId: String) -> Unit,
+    affinityHomeSummary: AffinityHomeSummaryUiState,
+    onLoadAffinitySummary: () -> Unit,
+    onOpenAffinityQuestions: () -> Unit,
     onEditProfile: () -> Unit,
+    onEditSearch: () -> Unit,
     onSignOut: () -> Unit,
     onChangePassword: (currentPassword: String, newPassword: String) -> Unit,
     onDeleteAccount: () -> Unit,
@@ -295,6 +300,10 @@ fun MatchmakingHomeScreen(
         prewarmLocationSilently()
     }
 
+    LaunchedEffect(profile.id) {
+        onLoadAffinitySummary()
+    }
+
     PullToRefreshBox(
         isRefreshing = homeLoading,
         onRefresh = onRefreshHome,
@@ -343,7 +352,10 @@ fun MatchmakingHomeScreen(
             onOpenSecondChat = onOpenSecondChat,
             onOpenConnectionPartnerProfile = onOpenConnectionPartnerProfile,
             onDismissSecondChat = onDismissSecondChat,
+            affinityHomeSummary = affinityHomeSummary,
+            onOpenAffinityQuestions = onOpenAffinityQuestions,
             onEditProfile = onEditProfile,
+            onEditSearch = onEditSearch,
             onSignOut = onSignOut,
             onChangePassword = onChangePassword,
             onDeleteAccount = onDeleteAccount,
@@ -406,7 +418,10 @@ private fun MatchmakingIdleScreen(
     onOpenSecondChat: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenConnectionPartnerProfile: (matchId: String) -> Unit,
     onDismissSecondChat: (connectionId: String) -> Unit,
+    affinityHomeSummary: AffinityHomeSummaryUiState,
+    onOpenAffinityQuestions: () -> Unit,
     onEditProfile: () -> Unit,
+    onEditSearch: () -> Unit,
     onSignOut: () -> Unit,
     onChangePassword: (currentPassword: String, newPassword: String) -> Unit,
     onDeleteAccount: () -> Unit,
@@ -437,7 +452,7 @@ private fun MatchmakingIdleScreen(
         verticalArrangement = Arrangement.Top,
     ) {
         Text(
-            text = "Home",
+            text = "Inicio",
             style = MaterialTheme.typography.headlineLarge,
             color = MaterialTheme.colorScheme.primary,
         )
@@ -445,7 +460,7 @@ private fun MatchmakingIdleScreen(
             text = if (screenModel.draftProfileWarning == null) {
                 "${profile.displayName}, tu perfil está activo."
             } else {
-                "${profile.displayName}, tu Home sigue disponible."
+                "${profile.displayName}, Inicio sigue disponible."
             },
             modifier = Modifier.padding(top = 8.dp),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -493,7 +508,7 @@ private fun MatchmakingIdleScreen(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
         ) {
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Encontrar chat", style = MaterialTheme.typography.titleLarge)
+                Text("Encontrar un chat", style = MaterialTheme.typography.titleLarge)
                 if (screenModel.shouldShowMatchmakingLocationCopy()) {
                     Text(
                         text = "Vamos a usar tu ubicación actual para encontrar personas compatibles cerca.",
@@ -553,9 +568,6 @@ private fun MatchmakingIdleScreen(
                         },
                     )
                 }
-                OutlinedButton(onClick = onEditProfile, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                    Text("Editar perfil y filtros")
-                }
                 if (homeError != null) {
                     OutlinedButton(onClick = onRefreshHome, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
                         Text(if (homeLoading) "Actualizando..." else "Reintentar estado")
@@ -563,6 +575,28 @@ private fun MatchmakingIdleScreen(
                 }
             }
         }
+        Spacer(modifier = Modifier.height(16.dp))
+        HomeAffinityCard(
+            summary = affinityHomeSummary,
+            busy = busy,
+            onOpenAffinityQuestions = onOpenAffinityQuestions,
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        HomeManagementEntryCard(
+            title = "Tu perfil",
+            body = "Gestioná cómo te presentás: datos, bio, fotos y preguntas públicas.",
+            actionLabel = "Editar perfil",
+            enabled = !busy,
+            onClick = onEditProfile,
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        HomeManagementEntryCard(
+            title = "Tu búsqueda",
+            body = "Definí qué personas querés que Reals tenga en cuenta al buscar un chat.",
+            actionLabel = "Editar búsqueda",
+            enabled = !busy,
+            onClick = onEditSearch,
+        )
         Spacer(modifier = Modifier.height(24.dp))
         AccountSection(
             busy = busy,

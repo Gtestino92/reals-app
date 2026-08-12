@@ -33,6 +33,104 @@ import retrofit2.Response
 @OptIn(ExperimentalCoroutinesApi::class)
 class AffinityQuestionnaireOperationHandlerTest {
     @Test
+    fun `home summary load installs catalog and answers without opening questionnaire`() = runTest {
+        val api = FakeRealsApi().apply {
+            affinityAnswersResponse = Response.success(
+                TestDtos.affinityAnswers(
+                    listOf(TestDtos.affinityAnswer("MUSIC_DISCOVERY_001", 1, "VERY_HIGH")),
+                ),
+            )
+        }
+        val harness = harness(api)
+
+        harness.handler.loadHomeSummaryIfNeeded()
+        advanceUntilIdle()
+
+        val summary = harness.ready().affinityHomeSummary
+        assertFalse(harness.ready().affinityQuestionnaire.open)
+        assertEquals("profile-1", summary.profileId)
+        assertEquals("catalog-1", summary.catalog?.catalogVersion)
+        assertEquals(listOf("MUSIC_DISCOVERY_001"), summary.answers.map { it.questionId })
+        assertFalse(summary.loading)
+        assertTrue(summary.loadAttempted)
+        assertEquals(listOf("getAffinityQuestionCatalog", "getMyAffinityAnswers"), api.calls)
+    }
+
+    @Test
+    fun `home summary failure is retained as non blocking unloaded state`() = runTest {
+        val api = FakeRealsApi().apply {
+            affinityQuestionCatalogResponse = backendErrorResponse(500, "SERVER_ERROR", "failed")
+        }
+        val harness = harness(api)
+
+        harness.handler.loadHomeSummaryIfNeeded()
+        advanceUntilIdle()
+
+        val summary = harness.ready().affinityHomeSummary
+        assertFalse(harness.ready().affinityQuestionnaire.open)
+        assertNull(harness.ready().affinityQuestionnaire.error)
+        assertEquals("profile-1", summary.profileId)
+        assertNull(summary.catalog)
+        assertFalse(summary.loading)
+        assertTrue(summary.loadAttempted)
+    }
+
+    @Test
+    fun `home summary stale response for previous profile is ignored`() = runTest {
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeGetAffinityQuestionCatalogResponse = {
+                started.complete(Unit)
+                release.await()
+            }
+        }
+        val harness = harness(api)
+
+        harness.handler.loadHomeSummaryIfNeeded()
+        runCurrent()
+        started.await()
+        harness.state.value = ready(profileId = "profile-2")
+
+        release.complete(Unit)
+        advanceUntilIdle()
+
+        assertNull(harness.ready().affinityHomeSummary.catalog)
+        assertEquals(null, harness.ready().affinityHomeSummary.profileId)
+    }
+
+    @Test
+    fun `questionnaire open reuses home summary before refreshing`() = runTest {
+        val summary = AffinityHomeSummaryUiState(
+            profileId = "profile-1",
+            catalog = TestDtos.affinityQuestionCatalog().toDomain(),
+            answers = listOf(TestDtos.affinityAnswer("MUSIC_DISCOVERY_001", 1, "VERY_HIGH").toDomain()),
+            loadAttempted = true,
+        )
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeGetAffinityQuestionCatalogResponse = {
+                started.complete(Unit)
+                release.await()
+            }
+        }
+        val harness = harness(api, ready(homeSummary = summary))
+
+        harness.handler.open()
+        runCurrent()
+
+        val opened = harness.ready().affinityQuestionnaire
+        assertTrue(opened.open)
+        assertEquals("catalog-1", opened.catalog?.catalogVersion)
+        assertEquals(listOf("MUSIC_DISCOVERY_001"), opened.answers.map { it.questionId })
+        assertTrue(opened.refreshing)
+
+        release.complete(Unit)
+        advanceUntilIdle()
+    }
+
+    @Test
     fun `opening without a profile does nothing while draft and active profiles can open`() =
         runTest {
             val missing = harness(
@@ -1477,6 +1575,7 @@ class AffinityQuestionnaireOperationHandlerTest {
         profileId: String = "profile-1",
         profileStatus: String = "ACTIVE",
         editingActiveProfile: Boolean = false,
+        homeSummary: AffinityHomeSummaryUiState = AffinityHomeSummaryUiState(),
         questionnaire: AffinityQuestionnaireUiState = AffinityQuestionnaireUiState(),
     ): RealsRootUiState.Ready = RealsRootUiState.Ready(
         session = TestDomain.session().copy(
@@ -1485,6 +1584,7 @@ class AffinityQuestionnaireOperationHandlerTest {
             ),
         ),
         editingActiveProfile = editingActiveProfile,
+        affinityHomeSummary = homeSummary,
         affinityQuestionnaire = questionnaire,
     )
 
