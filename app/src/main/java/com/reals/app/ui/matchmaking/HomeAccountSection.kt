@@ -173,7 +173,7 @@ internal fun AccountSection(
                         enabled = !busy,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text("Cambiar contraseña")
+                        Text("Cambiar contraseña de Reals")
                     }
                 }
                 changePasswordMessage?.let {
@@ -314,10 +314,13 @@ private fun ChangePasswordDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Cambiar contraseña") },
+        title = { Text("Cambiar contraseña de Reals") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Ingresá tu contraseña actual y elegí una nueva.")
+                Text(
+                    "Actualizá la contraseña que usás para iniciar sesión en Reals con tu email. " +
+                        "Tu contraseña de Google no cambia."
+                )
                 OutlinedTextField(
                     value = currentPassword,
                     onValueChange = onCurrentPasswordChange,
@@ -396,7 +399,7 @@ internal const val wrongCurrentPasswordMessage = "La contraseña actual no es co
 internal fun expandedAccountActionLabels(canChangePassword: Boolean): List<String> {
     return buildList {
         add("Cerrar sesión")
-        if (canChangePassword) add("Cambiar contraseña")
+        if (canChangePassword) add("Cambiar contraseña de Reals")
         add("Eliminar cuenta")
     }
 }
