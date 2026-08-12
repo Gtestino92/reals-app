@@ -1,6 +1,7 @@
 ﻿package com.reals.app.ui.chat
 
 import android.os.SystemClock
+import android.util.Patterns
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,7 +37,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -49,12 +49,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalTextToolbar
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.reals.app.R
@@ -582,6 +585,7 @@ fun ChatScreen(
             )
             MessageList(
                 currentUserId = currentUserId,
+                chatType = chat?.chatType ?: ChatType.Unknown(""),
                 messages = messages,
                 optimisticMessages = optimisticMessages,
                 bottomContentPadding = bottomContentPadding + 12.dp,
@@ -1150,6 +1154,7 @@ private fun FirstChatUnansweredSuggestionCard(
 @Composable
 private fun MessageList(
     currentUserId: String,
+    chatType: ChatType,
     messages: List<ChatMessage>,
     optimisticMessages: List<OptimisticOutgoingMessage>,
     bottomContentPadding: Dp,
@@ -1213,6 +1218,7 @@ private fun MessageList(
                         is ChatMessageListItem.Backend -> MessageBubble(
                             message = item.message,
                             mine = item.message.senderId == currentUserId,
+                            chatType = chatType,
                             selectionResetGeneration = selectionResetGeneration,
                             playbackState = playbackState,
                             onPlayAudio = onPlayAudio,
@@ -1221,6 +1227,7 @@ private fun MessageList(
 
                         is ChatMessageListItem.Optimistic -> OptimisticMessageBubble(
                             message = item.message,
+                            chatType = chatType,
                             selectionResetGeneration = selectionResetGeneration,
                             onRetry = onRetryOptimisticMessage,
                             canRetryFailedTextMessages = canRetryFailedTextMessages,
@@ -1557,6 +1564,7 @@ internal fun timedExitRequestBodyText(
 private fun MessageBubble(
     message: ChatMessage,
     mine: Boolean,
+    chatType: ChatType,
     selectionResetGeneration: Int,
     playbackState: ChatAudioPlaybackUiState,
     onPlayAudio: (ChatMessage) -> Unit,
@@ -1585,7 +1593,10 @@ private fun MessageBubble(
             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                 when (val presentation = message.presentation) {
                     is ChatMessagePresentation.Text -> SelectableMessageText(
-                        text = TextSafety.safeDisplay(presentation.content),
+                        presentation = chatMessageTextPresentation(
+                            content = presentation.content,
+                            chatType = chatType,
+                        ),
                         selectionResetGeneration = selectionResetGeneration,
                     )
                     is ChatMessagePresentation.Audio -> AudioPlaybackRow(
@@ -1682,6 +1693,7 @@ internal fun AudioPlaybackRow(
 @Composable
 private fun OptimisticMessageBubble(
     message: OptimisticOutgoingMessage,
+    chatType: ChatType,
     selectionResetGeneration: Int,
     onRetry: (localId: String, content: String) -> Unit,
     canRetryFailedTextMessages: Boolean,
@@ -1705,7 +1717,10 @@ private fun OptimisticMessageBubble(
             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                 when (message.messageType) {
                     OptimisticOutgoingMessageType.Text -> SelectableMessageText(
-                        text = TextSafety.safeDisplay(message.content),
+                        presentation = chatMessageTextPresentation(
+                            content = message.content,
+                            chatType = chatType,
+                        ),
                         selectionResetGeneration = selectionResetGeneration,
                     )
                     OptimisticOutgoingMessageType.Audio -> {
@@ -1739,18 +1754,121 @@ private fun OptimisticMessageBubble(
 
 @Composable
 private fun SelectableMessageText(
-    text: String,
+    presentation: ChatMessageTextPresentation,
     selectionResetGeneration: Int,
 ) {
-    val view = LocalView.current
     key(selectionResetGeneration) {
-        CompositionLocalProvider(LocalTextToolbar provides PlainMessageTextToolbar(view)) {
-            SelectionContainer {
-                Text(text)
-            }
+        SelectionContainer {
+            Text(
+                text = presentation.annotatedText(
+                    linkStyle = SpanStyle(
+                        color = MaterialTheme.colorScheme.primary,
+                        textDecoration = TextDecoration.Underline,
+                    ),
+                ),
+            )
         }
     }
 }
+
+internal data class ChatMessageTextPresentation(
+    val text: String,
+    val phoneLinks: List<ChatMessagePhoneLink> = emptyList(),
+) {
+    fun annotatedText(linkStyle: SpanStyle) = buildAnnotatedString {
+        append(text)
+        val styles = TextLinkStyles(style = linkStyle)
+        phoneLinks.forEach { link ->
+            addLink(
+                url = LinkAnnotation.Url(
+                    url = link.uri,
+                    styles = styles,
+                ),
+                start = link.start,
+                end = link.end,
+            )
+        }
+    }
+}
+
+internal data class ChatMessagePhoneLink(
+    val start: Int,
+    val end: Int,
+    val uri: String,
+)
+
+internal data class PhoneNumberCandidate(
+    val start: Int,
+    val end: Int,
+)
+
+internal fun chatMessageTextPresentation(
+    content: String,
+    chatType: ChatType,
+    phoneNumberCandidates: (String) -> List<PhoneNumberCandidate> = ::platformPhoneNumberCandidates,
+): ChatMessageTextPresentation {
+    val safeText = TextSafety.safeDisplay(content)
+    if (chatType != ChatType.SecondChat) {
+        return ChatMessageTextPresentation(text = safeText)
+    }
+    return ChatMessageTextPresentation(
+        text = safeText,
+        phoneLinks = telephoneLinksFor(
+            text = safeText,
+            candidates = phoneNumberCandidates(safeText),
+        ),
+    )
+}
+
+private fun platformPhoneNumberCandidates(text: String): List<PhoneNumberCandidate> {
+    val matcher = Patterns.PHONE.matcher(text)
+    return buildList {
+        while (matcher.find()) {
+            add(PhoneNumberCandidate(start = matcher.start(), end = matcher.end()))
+        }
+    }
+}
+
+internal fun telephoneLinksFor(
+    text: String,
+    candidates: List<PhoneNumberCandidate>,
+): List<ChatMessagePhoneLink> {
+    val links = mutableListOf<ChatMessagePhoneLink>()
+    candidates
+        .sortedWith(compareBy<PhoneNumberCandidate> { it.start }.thenBy { it.end })
+        .forEach { candidate ->
+            if (candidate.start < 0 || candidate.end > text.length || candidate.start >= candidate.end) {
+                return@forEach
+            }
+            if (links.any { candidate.start < it.end && candidate.end > it.start }) {
+                return@forEach
+            }
+            normalizedTelUri(text.substring(candidate.start, candidate.end))?.let { uri ->
+                links += ChatMessagePhoneLink(
+                    start = candidate.start,
+                    end = candidate.end,
+                    uri = uri,
+                )
+            }
+        }
+    return links
+}
+
+private fun normalizedTelUri(candidate: String): String? {
+    val trimmed = candidate.trim()
+    if (trimmed.isBlank() || looksLikeDateOrTime(trimmed)) return null
+    val digits = trimmed.filter(Char::isDigit)
+    if (digits.length < MIN_TELEPHONE_DIGITS) return null
+    val hasLeadingPlus = trimmed.firstOrNull { !it.isWhitespace() } == '+'
+    return "tel:${if (hasLeadingPlus) "+$digits" else digits}"
+}
+
+private fun looksLikeDateOrTime(text: String): Boolean =
+    likelyDatePattern.matches(text) || likelyTimePattern.matches(text)
+
+private val likelyDatePattern = Regex("""\d{1,4}[-/]\d{1,2}[-/]\d{1,4}""")
+private val likelyTimePattern = Regex("""\d{1,2}:\d{2}(:\d{2})?""")
+private const val MIN_TELEPHONE_DIGITS = 8
 
 internal fun optimisticTextRetryAvailable(
     message: OptimisticOutgoingMessage,
