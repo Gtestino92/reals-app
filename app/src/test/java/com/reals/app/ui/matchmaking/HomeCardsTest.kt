@@ -3,7 +3,12 @@ package com.reals.app.ui.matchmaking
 import java.time.Instant
 import java.time.ZoneId
 import java.util.Locale
+import com.reals.app.data.mapper.toDomain
+import com.reals.app.testutil.TestDtos
+import com.reals.app.ui.root.AffinityHomeSummaryUiState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HomeCardsTest {
@@ -243,6 +248,84 @@ class HomeCardsTest {
                 locale,
             ),
         )
+    }
+
+    @Test
+    fun `affinity card remains usable before catalog loads`() {
+        val presentation = homeAffinityCardPresentation(
+            AffinityHomeSummaryUiState(loading = true),
+        )
+
+        assertEquals("Descubrí tus afinidades", presentation.title)
+        assertEquals(null, presentation.progressText)
+        assertEquals("Empezar", presentation.actionLabel)
+        assertTrue(presentation.loading)
+    }
+
+    @Test
+    fun `affinity card presents empty partial and complete progress`() {
+        val catalog = TestDtos.affinityQuestionCatalog().toDomain()
+        val empty = homeAffinityCardPresentation(
+            AffinityHomeSummaryUiState(catalog = catalog),
+        )
+        val partial = homeAffinityCardPresentation(
+            AffinityHomeSummaryUiState(
+                catalog = catalog,
+                answers = listOf(TestDtos.affinityAnswer("MUSIC_DISCOVERY_001", 1, "VERY_HIGH").toDomain()),
+            ),
+        )
+        val complete = homeAffinityCardPresentation(
+            AffinityHomeSummaryUiState(
+                catalog = catalog,
+                answers = listOf(
+                    TestDtos.affinityAnswer("MUSIC_DISCOVERY_001", 1, "VERY_HIGH").toDomain(),
+                    TestDtos.affinityAnswer("PLANS_WEEKEND_001", 1, "LOW").toDomain(),
+                ),
+            ),
+        )
+
+        assertEquals("Descubrí tus afinidades", empty.title)
+        assertEquals("0 de 2 respondidas", empty.progressText)
+        assertEquals("Empezar", empty.actionLabel)
+        assertEquals("Seguí construyendo tus afinidades", partial.title)
+        assertEquals("1 de 2 respondidas", partial.progressText)
+        assertEquals("Continuar", partial.actionLabel)
+        assertEquals("Tus afinidades", complete.title)
+        assertEquals("2 de 2 respondidas", complete.progressText)
+        assertEquals("Revisar respuestas", complete.actionLabel)
+    }
+
+    @Test
+    fun `second chat dismiss visibility follows existing can dismiss policy`() {
+        val active = HomeNextStepItem.SecondChatAvailable(
+            connectionId = "connection-1",
+            matchId = "match-1",
+            partnerDisplayName = "Alex",
+            chatId = "chat-1",
+            chatStatus = "AVAILABLE",
+            availableAt = "2026-07-15T11:00:00Z",
+            expiresAt = "2026-07-15T13:00:00Z",
+            durationMinutes = 120,
+        )
+        val expired = active.copy(
+            chatStatus = "EXPIRED",
+            expiresAt = "2026-07-15T11:30:00Z",
+        )
+        val readOnly = HomeNextStepItem.SecondChatReadOnly(
+            connectionId = "connection-2",
+            matchId = "match-2",
+            partnerDisplayName = "Sam",
+            chatId = "chat-2",
+            chatStatus = "EXPIRED",
+            availableAt = "2026-07-15T09:00:00Z",
+            expiresAt = "2026-07-15T11:00:00Z",
+            readOnlyUntil = "2026-07-16T11:00:00Z",
+            durationMinutes = 120,
+        )
+
+        assertFalse(active.canShowSecondChatDismissAction(nowMillis))
+        assertTrue(expired.canShowSecondChatDismissAction(nowMillis))
+        assertTrue(readOnly.canShowSecondChatDismissAction(nowMillis))
     }
 
     private fun HomeActionItem.matchIdForTest(): String = when (this) {

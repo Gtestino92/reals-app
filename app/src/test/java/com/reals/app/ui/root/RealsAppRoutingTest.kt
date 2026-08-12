@@ -8,6 +8,8 @@ import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.testutil.TestDomain
 import com.reals.app.testutil.TestDtos
+import com.reals.app.ui.profile.ProfileManagementSurface
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -95,6 +97,36 @@ class RealsAppRoutingTest {
     @Test
     fun `inactive profile routing remains unchanged`() {
         assertFalse(ready(status = "INACTIVE").shouldRenderHomeSurface())
+    }
+
+    @Test
+    fun `profile management destination opens profile surface`() {
+        val state = ready(status = "ACTIVE").copy(
+            editingActiveProfile = true,
+            profileManagementDestination = ProfileManagementDestination.Profile,
+        )
+
+        assertEquals(ProfileManagementSurface.Profile, state.profileManagementSurface(homeAvailable = true))
+    }
+
+    @Test
+    fun `search management destination opens search surface`() {
+        val state = ready(status = "ACTIVE").copy(
+            editingActiveProfile = true,
+            profileManagementDestination = ProfileManagementDestination.Search,
+        )
+
+        assertEquals(ProfileManagementSurface.Search, state.profileManagementSurface(homeAvailable = true))
+    }
+
+    @Test
+    fun `profile setup surface remains authoritative when Home is unavailable`() {
+        val state = ready(status = "DRAFT").copy(
+            editingActiveProfile = true,
+            profileManagementDestination = ProfileManagementDestination.Search,
+        )
+
+        assertEquals(ProfileManagementSurface.Setup, state.profileManagementSurface(homeAvailable = false))
     }
 
     private fun ready(

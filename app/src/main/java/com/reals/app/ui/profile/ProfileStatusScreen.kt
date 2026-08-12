@@ -146,6 +146,7 @@ fun ProfileStatusScreen(
     homeLoading: Boolean = false,
     homeError: ApiError? = null,
     showDraftAfterEditNotice: Boolean = false,
+    managementSurface: ProfileManagementSurface = ProfileManagementSurface.Setup,
     onUpdateProfile: (UpdateProfileInput) -> Unit,
     onLoadCountries: () -> Unit,
     onUpdateMatchFilters: (UpdateMatchFiltersInput) -> Unit,
@@ -157,7 +158,6 @@ fun ProfileStatusScreen(
     onActivateProfile: (Profile) -> Unit,
     onResendEmailVerification: () -> Unit,
     onCheckEmailVerification: () -> Unit,
-    onOpenAffinityQuestions: () -> Unit,
     onOpenProfileQuestions: () -> Unit,
     onRefresh: () -> Unit,
     onSignOut: () -> Unit,
@@ -174,6 +174,10 @@ fun ProfileStatusScreen(
         emailVerificationChecking ||
         accountDeleteLoading ||
         homeLoading
+    val presentationPolicy = profileManagementPresentationPolicy(
+        managementSurface = managementSurface,
+        profileStatus = (session.profileSnapshot as? ProfileSnapshot.Found)?.profile?.status,
+    )
     val scrollState = rememberScrollState()
     var accountExpanded by rememberSaveable(session.user.id) { mutableStateOf(false) }
 
@@ -197,12 +201,12 @@ fun ProfileStatusScreen(
         verticalArrangement = Arrangement.Center,
     ) {
         Text(
-            text = if (onBackHome == null) "Estado de Reals" else "Perfil y preferencias",
+            text = managementSurface.screenTitle(onBackHome == null),
             style = MaterialTheme.typography.headlineLarge,
             color = MaterialTheme.colorScheme.primary,
         )
         Text(
-            text = "Gestioná tu perfil, tus preferencias y tus fotos.",
+            text = managementSurface.screenBody(),
             modifier = Modifier.padding(top = 8.dp),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -224,7 +228,7 @@ fun ProfileStatusScreen(
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (homeLoading) "Actualizando Home..." else "Reintentar Home")
+                Text(if (homeLoading) "Actualizando Inicio..." else "Reintentar Inicio")
             }
             Spacer(modifier = Modifier.height(12.dp))
         }
@@ -260,6 +264,7 @@ fun ProfileStatusScreen(
                 emailVerificationLocallyVerified = emailVerificationLocallyVerified,
                 resendEmailVerificationAvailableAtMillis = resendEmailVerificationAvailableAtMillis,
                 checkEmailVerificationAvailableAtMillis = checkEmailVerificationAvailableAtMillis,
+                managementSurface = managementSurface,
                 onUpdateProfile = onUpdateProfile,
                 onLoadCountries = onLoadCountries,
                 onUpdateMatchFilters = onUpdateMatchFilters,
@@ -271,7 +276,6 @@ fun ProfileStatusScreen(
                 onActivateProfile = onActivateProfile,
                 onResendEmailVerification = onResendEmailVerification,
                 onCheckEmailVerification = onCheckEmailVerification,
-                onOpenAffinityQuestions = onOpenAffinityQuestions,
                 onOpenProfileQuestions = onOpenProfileQuestions,
             )
         }
@@ -281,23 +285,83 @@ fun ProfileStatusScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Button(onClick = onBackHome, enabled = !busy) {
-                    Text("Volver a Home")
+                    Text("Volver a Inicio")
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        if (presentationPolicy.showAccountManagement) {
+            Spacer(modifier = Modifier.height(16.dp))
 
-        DeleteAccountSection(
-            busy = busy,
-            loading = accountDeleteLoading,
-            error = accountDeleteError,
-            expanded = accountExpanded,
-            onExpandedChange = { accountExpanded = it },
-            onSignOut = onSignOut,
-            onDeleteAccount = onDeleteAccount,
-        )
+            DeleteAccountSection(
+                busy = busy,
+                loading = accountDeleteLoading,
+                error = accountDeleteError,
+                expanded = accountExpanded,
+                onExpandedChange = { accountExpanded = it },
+                onSignOut = onSignOut,
+                onDeleteAccount = onDeleteAccount,
+            )
+        }
     }
+}
+
+enum class ProfileManagementSurface {
+    Setup,
+    Profile,
+    Search,
+}
+
+private fun ProfileManagementSurface.screenTitle(defaultSetup: Boolean): String = when (this) {
+    ProfileManagementSurface.Setup -> if (defaultSetup) "Estado de Reals" else "Perfil y preferencias"
+    ProfileManagementSurface.Profile -> "Tu perfil"
+    ProfileManagementSurface.Search -> "Preferencias"
+}
+
+private fun ProfileManagementSurface.screenBody(): String = when (this) {
+    ProfileManagementSurface.Setup -> "Completá tu presentación y tus preferencias para activar Reals."
+    ProfileManagementSurface.Profile -> "Gestioná cómo te presentás ante otras personas."
+    ProfileManagementSurface.Search ->
+        "Definí qué personas querés que Reals tenga en cuenta al buscar un chat."
+}
+
+internal data class ProfileManagementPresentationPolicy(
+    val showProfileSection: Boolean,
+    val showSearchSection: Boolean,
+    val profileSectionCollapsible: Boolean,
+    val searchSectionCollapsible: Boolean,
+    val showAccountManagement: Boolean,
+    val initialExpandedSection: ProfileSection?,
+)
+
+internal fun profileManagementPresentationPolicy(
+    managementSurface: ProfileManagementSurface,
+    profileStatus: ProfileStatus?,
+): ProfileManagementPresentationPolicy = when (managementSurface) {
+    ProfileManagementSurface.Setup -> ProfileManagementPresentationPolicy(
+        showProfileSection = true,
+        showSearchSection = true,
+        profileSectionCollapsible = true,
+        searchSectionCollapsible = true,
+        showAccountManagement = true,
+        initialExpandedSection = if (profileStatus == ProfileStatus.Draft) ProfileSection.Photos else null,
+    )
+    ProfileManagementSurface.Profile -> ProfileManagementPresentationPolicy(
+        showProfileSection = true,
+        showSearchSection = false,
+        profileSectionCollapsible = false,
+        searchSectionCollapsible = false,
+        showAccountManagement = false,
+        initialExpandedSection = ProfileSection.Profile,
+    )
+    ProfileManagementSurface.Search -> ProfileManagementPresentationPolicy(
+        showProfileSection = false,
+        showSearchSection = true,
+        profileSectionCollapsible = false,
+        searchSectionCollapsible = false,
+        showAccountManagement = false,
+        initialExpandedSection = ProfileSection.Filters,
+    )
 }
 
 @Composable
@@ -355,6 +419,7 @@ private fun ProfileCard(
     emailVerificationLocallyVerified: Boolean,
     resendEmailVerificationAvailableAtMillis: Long?,
     checkEmailVerificationAvailableAtMillis: Long?,
+    managementSurface: ProfileManagementSurface,
     onUpdateProfile: (UpdateProfileInput) -> Unit,
     onLoadCountries: () -> Unit,
     onUpdateMatchFilters: (UpdateMatchFiltersInput) -> Unit,
@@ -366,11 +431,14 @@ private fun ProfileCard(
     onActivateProfile: (Profile) -> Unit,
     onResendEmailVerification: () -> Unit,
     onCheckEmailVerification: () -> Unit,
-    onOpenAffinityQuestions: () -> Unit,
     onOpenProfileQuestions: () -> Unit,
 ) {
-    var expandedSection by rememberSaveable(profile.id) {
-        mutableStateOf(if (profile.status == ProfileStatus.Draft) ProfileSection.Photos else null)
+    val presentationPolicy = profileManagementPresentationPolicy(
+        managementSurface = managementSurface,
+        profileStatus = profile.status,
+    )
+    var expandedSection by rememberSaveable(profile.id, managementSurface) {
+        mutableStateOf(presentationPolicy.initialExpandedSection)
     }
     var profileSaveRequested by rememberSaveable(profile.id) { mutableStateOf(false) }
     var profileSaveInFlight by rememberSaveable(profile.id) { mutableStateOf(false) }
@@ -399,7 +467,11 @@ private fun ProfileCard(
     val matchFiltersSaveSucceeded = matchFiltersSaveInFlight && !matchFiltersLoading && matchFiltersMessage != null
 
     LaunchedEffect(profileUpdateLoading, profileUpdateMessage, profileUpdateError) {
-        if (profileSaveSucceeded && expandedSection == ProfileSection.Profile) {
+        if (
+            profileSaveSucceeded &&
+            expandedSection == ProfileSection.Profile &&
+            presentationPolicy.profileSectionCollapsible
+        ) {
             expandedSection = null
         }
         if (profileSaveInFlight && !profileUpdateLoading && (profileUpdateMessage != null || profileUpdateError != null)) {
@@ -408,7 +480,11 @@ private fun ProfileCard(
         }
     }
     LaunchedEffect(matchFiltersLoading, matchFiltersMessage, matchFiltersError) {
-        if (matchFiltersSaveSucceeded && expandedSection == ProfileSection.Filters) {
+        if (
+            matchFiltersSaveSucceeded &&
+            expandedSection == ProfileSection.Filters &&
+            presentationPolicy.searchSectionCollapsible
+        ) {
             expandedSection = null
         }
         if (matchFiltersSaveInFlight && !matchFiltersLoading && (matchFiltersMessage != null || matchFiltersError != null)) {
@@ -417,123 +493,94 @@ private fun ProfileCard(
         }
     }
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        ProfileDetailsCard(
-            profile = profile,
-            countries = countries,
-            countriesLoading = countriesLoading,
-            countriesError = countriesError,
-            loading = profileUpdateLoading,
-            busy = busy,
-            error = profileUpdateError,
-            message = profileUpdateMessage,
-            expanded = expandedSection == ProfileSection.Profile && !profileSaveSucceeded,
-            onToggleExpanded = {
-                expandedSection = if (expandedSection == ProfileSection.Profile) null else ProfileSection.Profile
-            },
-            onUpdateProfile = {
-                profileSaveRequested = true
-                onUpdateProfile(it)
-            },
-            onLoadCountries = onLoadCountries,
-        )
-        MatchPreferencesCard(
-            profile = profile,
-            loading = matchFiltersLoading,
-            busy = busy,
-            error = matchFiltersError,
-            message = matchFiltersMessage,
-            expanded = expandedSection == ProfileSection.Filters && !matchFiltersSaveSucceeded,
-            onToggleExpanded = {
-                expandedSection = if (expandedSection == ProfileSection.Filters) null else ProfileSection.Filters
-            },
-            onUpdateMatchFilters = {
-                matchFiltersSaveRequested = true
-                onUpdateMatchFilters(it)
-            },
-        )
-        AffinityQuestionsEntryCard(
-            busy = busy,
-            onOpenAffinityQuestions = onOpenAffinityQuestions,
-        )
-        ProfileQuestionsEntryCard(
-            busy = busy,
-            onOpenProfileQuestions = onOpenProfileQuestions,
-        )
-        PhotosCard(
-            profile = profile,
-            photosLoading = photosLoading,
-            photos = photos,
-            photosError = photosError,
-            photoActionLoading = photoActionLoading,
-            photoActionError = photoActionError,
-            photoActionMessage = photoActionMessage,
-            photoReorderLoading = photoReorderLoading,
-            photoReorderError = photoReorderError,
-            photoReorderMessage = photoReorderMessage,
-            activationLoading = activationLoading,
-            activationError = activationError,
-            emailVerificationSending = emailVerificationSending,
-            emailVerificationChecking = emailVerificationChecking,
-            emailVerificationMessage = emailVerificationMessage,
-            emailVerificationError = emailVerificationError,
-            emailVerificationRequired = emailVerificationRequired,
-            emailVerificationLocallyVerified = emailVerificationLocallyVerified,
-            resendEmailVerificationAvailableAtMillis = resendEmailVerificationAvailableAtMillis,
-            checkEmailVerificationAvailableAtMillis = checkEmailVerificationAvailableAtMillis,
-            busy = busy,
-            expanded = expandedSection == ProfileSection.Photos,
-            onToggleExpanded = {
-                expandedSection = if (expandedSection == ProfileSection.Photos) null else ProfileSection.Photos
-            },
-            onLoadPhotos = onLoadPhotos,
-            onAddPhotoFile = onAddPhotoFile,
-            onReplacePhotoFile = onReplacePhotoFile,
-            onDeletePhoto = onDeletePhoto,
-            onMovePhoto = onMovePhoto,
-            onActivateProfile = onActivateProfile,
-            onResendEmailVerification = onResendEmailVerification,
-            onCheckEmailVerification = onCheckEmailVerification,
-        )
+        if (presentationPolicy.showProfileSection) {
+            ProfileDetailsCard(
+                profile = profile,
+                countries = countries,
+                countriesLoading = countriesLoading,
+                countriesError = countriesError,
+                loading = profileUpdateLoading,
+                busy = busy,
+                error = profileUpdateError,
+                message = profileUpdateMessage,
+                expanded = !presentationPolicy.profileSectionCollapsible ||
+                    (expandedSection == ProfileSection.Profile && !profileSaveSucceeded),
+                collapsible = presentationPolicy.profileSectionCollapsible,
+                onToggleExpanded = {
+                    expandedSection = if (expandedSection == ProfileSection.Profile) null else ProfileSection.Profile
+                },
+                onUpdateProfile = {
+                    profileSaveRequested = true
+                    onUpdateProfile(it)
+                },
+                onLoadCountries = onLoadCountries,
+            )
+            PhotosCard(
+                profile = profile,
+                photosLoading = photosLoading,
+                photos = photos,
+                photosError = photosError,
+                photoActionLoading = photoActionLoading,
+                photoActionError = photoActionError,
+                photoActionMessage = photoActionMessage,
+                photoReorderLoading = photoReorderLoading,
+                photoReorderError = photoReorderError,
+                photoReorderMessage = photoReorderMessage,
+                activationLoading = activationLoading,
+                activationError = activationError,
+                emailVerificationSending = emailVerificationSending,
+                emailVerificationChecking = emailVerificationChecking,
+                emailVerificationMessage = emailVerificationMessage,
+                emailVerificationError = emailVerificationError,
+                emailVerificationRequired = emailVerificationRequired,
+                emailVerificationLocallyVerified = emailVerificationLocallyVerified,
+                resendEmailVerificationAvailableAtMillis = resendEmailVerificationAvailableAtMillis,
+                checkEmailVerificationAvailableAtMillis = checkEmailVerificationAvailableAtMillis,
+                busy = busy,
+                expanded = expandedSection == ProfileSection.Photos,
+                onToggleExpanded = {
+                    expandedSection = if (expandedSection == ProfileSection.Photos) null else ProfileSection.Photos
+                },
+                onLoadPhotos = onLoadPhotos,
+                onAddPhotoFile = onAddPhotoFile,
+                onReplacePhotoFile = onReplacePhotoFile,
+                onDeletePhoto = onDeletePhoto,
+                onMovePhoto = onMovePhoto,
+                onActivateProfile = onActivateProfile,
+                onResendEmailVerification = onResendEmailVerification,
+                onCheckEmailVerification = onCheckEmailVerification,
+            )
+            ProfileQuestionsEntryCard(
+                busy = busy,
+                onOpenProfileQuestions = onOpenProfileQuestions,
+            )
+        }
+        if (presentationPolicy.showSearchSection) {
+            MatchPreferencesCard(
+                profile = profile,
+                loading = matchFiltersLoading,
+                busy = busy,
+                error = matchFiltersError,
+                message = matchFiltersMessage,
+                expanded = !presentationPolicy.searchSectionCollapsible ||
+                    (expandedSection == ProfileSection.Filters && !matchFiltersSaveSucceeded),
+                collapsible = presentationPolicy.searchSectionCollapsible,
+                onToggleExpanded = {
+                    expandedSection = if (expandedSection == ProfileSection.Filters) null else ProfileSection.Filters
+                },
+                onUpdateMatchFilters = {
+                    matchFiltersSaveRequested = true
+                    onUpdateMatchFilters(it)
+                },
+            )
+        }
     }
 }
 
-private enum class ProfileSection {
+internal enum class ProfileSection {
     Profile,
     Filters,
     Photos,
-}
-
-@Composable
-private fun AffinityQuestionsEntryCard(
-    busy: Boolean,
-    onOpenAffinityQuestions: () -> Unit,
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-    ) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text(
-                text = "Preguntas de afinidad",
-                style = MaterialTheme.typography.titleLarge,
-            )
-            Text(
-                text = "Son opcionales y privadas. Ayudan a encontrar temas y afinidades compartidas.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            OutlinedButton(
-                onClick = onOpenAffinityQuestions,
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Responder o editar")
-            }
-        }
-    }
 }
 
 @Composable
@@ -592,6 +639,7 @@ private val IntentionOptions = listOf(
 private fun SectionHeader(
     title: String,
     expanded: Boolean,
+    collapsible: Boolean = true,
     closeEnabled: Boolean,
     onClose: () -> Unit,
 ) {
@@ -604,7 +652,7 @@ private fun SectionHeader(
             modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.titleLarge,
         )
-        if (expanded) {
+        if (expanded && collapsible) {
             TextButton(
                 onClick = onClose,
                 enabled = closeEnabled,
@@ -626,6 +674,7 @@ private fun ProfileDetailsCard(
     error: ApiError?,
     message: String?,
     expanded: Boolean,
+    collapsible: Boolean,
     onToggleExpanded: () -> Unit,
     onUpdateProfile: (UpdateProfileInput) -> Unit,
     onLoadCountries: () -> Unit,
@@ -644,6 +693,7 @@ private fun ProfileDetailsCard(
             SectionHeader(
                 title = "Tu perfil",
                 expanded = expanded,
+                collapsible = collapsible,
                 closeEnabled = !loading && !busy,
                 onClose = onToggleExpanded,
             )
@@ -699,6 +749,7 @@ private fun MatchPreferencesCard(
     error: ApiError?,
     message: String?,
     expanded: Boolean,
+    collapsible: Boolean,
     onToggleExpanded: () -> Unit,
     onUpdateMatchFilters: (UpdateMatchFiltersInput) -> Unit,
 ) {
@@ -714,8 +765,9 @@ private fun MatchPreferencesCard(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             SectionHeader(
-                title = "Preferencias de match",
+                title = "Preferencias",
                 expanded = expanded,
+                collapsible = collapsible,
                 closeEnabled = !loading && !busy,
                 onClose = onToggleExpanded,
             )
@@ -950,7 +1002,7 @@ private fun MatchPreferencesEditor(
 
     Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Text(
-            text = "Definí con quién querés que te conectemos.",
+            text = "Definí qué personas querés que Reals tenga en cuenta al buscar un chat.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium,
         )

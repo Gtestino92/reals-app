@@ -380,7 +380,10 @@ internal class HomeCoordinator(
             when (val homeResult = dependencies.getHome()) {
                 is ApiResult.Success -> {
                     val refreshed = readyWithHomeSuccess(
-                        ready = loading.copy(editingActiveProfile = false),
+                        ready = loading.copy(
+                            editingActiveProfile = false,
+                            profileManagementDestination = null,
+                        ),
                         home = homeResult.value,
                         homeStatusVersion = loading.home.homeStatusVersion,
                     )

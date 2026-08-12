@@ -12,11 +12,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -32,6 +31,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -46,6 +47,11 @@ import com.reals.app.ui.common.formatBackendContextualDateTime
 import com.reals.app.ui.common.formatVisualReviewHomeDeadline
 import com.reals.app.ui.common.visualReviewProgressUrgency
 import com.reals.app.ui.common.visualReviewRemainingFraction
+import com.reals.app.ui.profile.AffinityOverviewPrimaryAction
+import com.reals.app.ui.profile.overviewActionPolicy
+import com.reals.app.ui.profile.progress
+import com.reals.app.ui.profile.reviewRows
+import com.reals.app.ui.root.AffinityHomeSummaryUiState
 import kotlinx.coroutines.delay
 import java.time.ZoneId
 import java.util.Locale
@@ -211,6 +217,157 @@ internal fun homeCollapsibleSectionStateKey(title: String): String =
     "home-section:$title"
 
 @Composable
+internal fun HomeAffinityCard(
+    summary: AffinityHomeSummaryUiState,
+    busy: Boolean,
+    onOpenAffinityQuestions: () -> Unit,
+) {
+    val presentation = homeAffinityCardPresentation(summary)
+    Card(
+        onClick = onOpenAffinityQuestions,
+        enabled = !busy,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = presentation.title,
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                Text(
+                    text = presentation.body,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                presentation.progressText?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                if (presentation.loading) {
+                    Text(
+                        text = "Actualizando afinidades...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    text = presentation.actionLabel,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            HomeTrailingChevron()
+        }
+    }
+}
+
+@Composable
+internal fun HomeManagementEntryCard(
+    title: String,
+    body: String,
+    actionLabel: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Card(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(text = title, style = MaterialTheme.typography.titleLarge)
+                Text(
+                    text = body,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = actionLabel,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            HomeTrailingChevron()
+        }
+    }
+}
+
+internal data class HomeAffinityCardPresentation(
+    val title: String,
+    val body: String,
+    val progressText: String?,
+    val actionLabel: String,
+    val loading: Boolean,
+)
+
+internal fun homeAffinityCardPresentation(
+    summary: AffinityHomeSummaryUiState,
+): HomeAffinityCardPresentation {
+    val catalog = summary.catalog ?: return HomeAffinityCardPresentation(
+        title = "Descubrí tus afinidades",
+        body = HomeAffinityBody,
+        progressText = null,
+        actionLabel = "Empezar",
+        loading = summary.loading,
+    )
+    val progress = catalog.progress(summary.answers)
+    val actionPolicy = progress.overviewActionPolicy(
+        hasReviewRows = catalog.reviewRows(summary.answers).isNotEmpty(),
+    )
+    val allAnswered = progress.totalQuestionCount > 0 &&
+        progress.answeredCount == progress.totalQuestionCount
+    val primaryAction = actionPolicy.primaryAction
+
+    return HomeAffinityCardPresentation(
+        title = when {
+            allAnswered -> "Tus afinidades"
+            progress.answeredCount == 0 -> "Descubrí tus afinidades"
+            else -> "Seguí construyendo tus afinidades"
+        },
+        body = HomeAffinityBody,
+        progressText = if (progress.totalQuestionCount > 0) {
+            "${progress.answeredCount} de ${progress.totalQuestionCount} respondidas"
+        } else {
+            null
+        },
+        actionLabel = when (primaryAction) {
+            AffinityOverviewPrimaryAction.Start -> "Empezar"
+            AffinityOverviewPrimaryAction.Continue -> "Continuar"
+            AffinityOverviewPrimaryAction.Review -> "Revisar respuestas"
+            null -> "Abrir"
+        },
+        loading = summary.loading,
+    )
+}
+
+private const val HomeAffinityBody =
+    "Tus respuestas son opcionales y privadas. Ayudan a Reals a encontrar afinidades compartidas y contexto para conversar sin mostrar tus respuestas exactas."
+
+@Composable
 private fun HomeSectionChevron(expanded: Boolean) {
     val color = MaterialTheme.colorScheme.onSurfaceVariant
     Canvas(modifier = Modifier.size(18.dp)) {
@@ -255,28 +412,38 @@ private fun FirstChatItem(
     busy: Boolean,
     onOpenFirstChat: (matchId: String, chatId: String) -> Unit,
 ) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Card(
+        onClick = { onOpenFirstChat(action.matchId, action.chatId) },
+        enabled = !busy,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = 64.dp)
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             val partnerName = action.partnerDisplayName
                 ?.takeIf { it.isNotBlank() }
                 ?.let(TextSafety::safeDisplay)
 
-            Text(
-                text = partnerName?.let { "Con $it" } ?: "Chat inicial activo",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = "Podés entrar cuando quieras.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Button(
-                onClick = { onOpenFirstChat(action.matchId, action.chatId) },
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth(),
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                Text("Entrar al chat")
+                Text(
+                    text = partnerName?.let { "Chat inicial con $it" } ?: "Chat inicial activo",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = "Entrar al chat",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
+            HomeTrailingChevron()
         }
     }
 }
@@ -334,7 +501,7 @@ private fun VisualApprovalItem(
                         )
                     }
                 }
-                VisualReviewTrailingChevron()
+                HomeTrailingChevron()
             }
             remainingFraction?.let {
                 VisualReviewProgressLine(
@@ -349,7 +516,7 @@ private fun VisualApprovalItem(
 }
 
 @Composable
-private fun VisualReviewTrailingChevron() {
+private fun HomeTrailingChevron() {
     val color = MaterialTheme.colorScheme.onSurfaceVariant
     Canvas(
         modifier = Modifier
@@ -444,82 +611,140 @@ private fun NextStepItem(
 ) {
     val partnerName = item.partnerDisplayName()
         ?.let(TextSafety::safeDisplay)
-
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+    val secondChatPresentation =
+        if (
+            item is HomeNextStepItem.SecondChatScheduled ||
+            item is HomeNextStepItem.SecondChatAvailable ||
+            item is HomeNextStepItem.SecondChatReadOnly
         ) {
-            if (item is HomeNextStepItem.Unknown) {
-                Text("Conexión no disponible", style = MaterialTheme.typography.titleMedium)
+            item.secondChatHomePresentation(nowMillis)
+        } else {
+            null
+        }
+    val primaryAction: (() -> Unit)? = when {
+        item is HomeNextStepItem.Scheduling -> {
+            {
+                onOpenScheduling(
+                    item.connectionId,
+                    item.matchId,
+                    item.partnerDisplayName,
+                )
             }
-            Text(
-                text = partnerName?.let { "Con $it" } ?: "Con la otra persona",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = item.homeNextStepBody(nowMillis),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (item is HomeNextStepItem.Scheduling) {
-                Button(
-                    onClick = {
-                        onOpenScheduling(
-                            item.connectionId,
-                            item.matchId,
-                            item.partnerDisplayName,
-                        )
-                    },
-                    enabled = !busy && item.connectionId.isNotBlank() && item.matchId.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Coordinar horarios")
-                }
+        }
+
+        secondChatPresentation?.canOpenChat == true -> {
+            {
+                onOpenSecondChat(
+                    item.connectionIdForSecondChat(),
+                    item.matchIdForProfile(),
+                    item.partnerDisplayName(),
+                )
             }
-            if (
-                item is HomeNextStepItem.SecondChatScheduled ||
-                item is HomeNextStepItem.SecondChatAvailable ||
-                item is HomeNextStepItem.SecondChatReadOnly
+        }
+
+        else -> null
+    }
+    val primaryEnabled = !busy &&
+        when {
+            item is HomeNextStepItem.Scheduling ->
+                item.connectionId.isNotBlank() && item.matchId.isNotBlank()
+
+            secondChatPresentation?.canOpenChat == true ->
+                item.connectionIdForSecondChat().isNotBlank() && item.matchIdForProfile().isNotBlank()
+
+            else -> false
+        }
+    val primaryLabel = when {
+        item is HomeNextStepItem.Scheduling -> "Coordinar horarios"
+        secondChatPresentation?.canOpenChat == true -> secondChatPresentation.primaryCtaLabel
+        else -> secondChatPresentation?.primaryCtaLabel
+    }
+    val showPartnerProfile = item.canShowPartnerProfile(nowMillis)
+    val showDismiss = item.canShowSecondChatDismissAction(nowMillis)
+
+    @Composable
+    fun Content(showPrimaryChevron: Boolean) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = 64.dp)
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
-                val secondChatPresentation = item.secondChatHomePresentation(nowMillis)
-                secondChatPresentation?.primaryCtaLabel?.let { label ->
-                    Button(
-                        onClick = {
-                            onOpenSecondChat(
-                                item.connectionIdForSecondChat(),
-                                item.matchIdForProfile(),
-                                item.partnerDisplayName(),
-                            )
+                Text(
+                    text = if (item is HomeNextStepItem.Unknown) {
+                        "Conexión no disponible"
+                    } else {
+                        partnerName?.let { "Con $it" } ?: "Con la otra persona"
+                    },
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = item.homeNextStepBody(nowMillis),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                primaryLabel?.let { label ->
+                    Text(
+                        text = label,
+                        color = if (primaryAction != null) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
                         },
-                        enabled = !busy &&
-                            secondChatPresentation.canOpenChat &&
-                            item.connectionIdForSecondChat().isNotBlank() &&
-                            item.matchIdForProfile().isNotBlank(),
-                        modifier = Modifier.fillMaxWidth(),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+                if (showPartnerProfile) {
+                    TextButton(
+                        onClick = { onOpenPartnerProfile(item.matchIdForProfile()) },
+                        enabled = !busy,
                     ) {
-                        Text(label)
+                        Text("Ver perfil")
                     }
                 }
             }
-            if (item.canShowPartnerProfile(nowMillis)) {
-                Button(
-                    onClick = { onOpenPartnerProfile(item.matchIdForProfile()) },
-                    enabled = !busy,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Ver perfil")
-                }
-            }
-            if (item.canDismissSecondChat(nowMillis)) {
-                OutlinedButton(
+            if (showDismiss) {
+                IconButton(
                     onClick = { onDismissSecondChat(item.connectionIdForSecondChat()) },
                     enabled = !busy && item.connectionIdForSecondChat().isNotBlank(),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .size(48.dp)
+                        .semantics { contentDescription = "Quitar de Inicio" },
                 ) {
-                    Text("Eliminar")
+                    Text(
+                        text = "×",
+                        modifier = Modifier.clearAndSetSemantics {},
+                        style = MaterialTheme.typography.titleLarge,
+                    )
                 }
             }
+            if (showPrimaryChevron) {
+                HomeTrailingChevron()
+            }
+        }
+    }
+
+    if (primaryAction != null) {
+        Card(
+            onClick = primaryAction,
+            enabled = primaryEnabled,
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        ) {
+            Content(showPrimaryChevron = true)
+        }
+    } else {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        ) {
+            Content(showPrimaryChevron = false)
         }
     }
 }
@@ -551,7 +776,7 @@ private fun HomeNextStepItem.canShowPartnerProfile(nowMillis: Long = System.curr
     }
 }
 
-private fun HomeNextStepItem.canDismissSecondChat(nowMillis: Long = System.currentTimeMillis()): Boolean =
+internal fun HomeNextStepItem.canShowSecondChatDismissAction(nowMillis: Long = System.currentTimeMillis()): Boolean =
     secondChatHomePresentation(nowMillis)?.canDismiss == true
 
 internal fun HomeNextStepItem.homeNextStepBody(

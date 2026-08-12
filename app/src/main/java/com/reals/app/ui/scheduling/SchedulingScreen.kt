@@ -289,7 +289,7 @@ fun SchedulingScreen(
                     enabled = !interactionBusy,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(if (submitting) submittingLabel ?: "Procesando..." else "Volver a Home")
+                    Text(if (submitting) submittingLabel ?: "Procesando..." else "Volver a Inicio")
                 }
             }
         }

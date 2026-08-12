@@ -45,7 +45,7 @@ fun ProfileActivationResultScreen(
             color = MaterialTheme.colorScheme.primary,
         )
         Text(
-            text = "Ya podés entrar a Home y buscar un chat cuando quieras.",
+            text = "Ya podés entrar a Inicio y buscar un chat cuando quieras.",
             modifier = Modifier.padding(top = 8.dp),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -69,7 +69,7 @@ fun ProfileActivationResultScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Button(onClick = onContinueHome) {
-                Text("Ir a Home")
+                Text("Ir a Inicio")
             }
             OutlinedButton(onClick = onSignOut) {
                 Text("Cerrar sesión")

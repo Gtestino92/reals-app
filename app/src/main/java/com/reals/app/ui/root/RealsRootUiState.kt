@@ -75,6 +75,8 @@ sealed interface RealsRootUiState {
         val home: HomeUiState = HomeUiState(),
         val account: AccountUiState = AccountUiState(),
         val editingActiveProfile: Boolean = false,
+        val profileManagementDestination: ProfileManagementDestination? = null,
+        val affinityHomeSummary: AffinityHomeSummaryUiState = AffinityHomeSummaryUiState(),
         val affinityQuestionnaire: AffinityQuestionnaireUiState = AffinityQuestionnaireUiState(),
         val profileQuestions: ProfileQuestionUiState = ProfileQuestionUiState(),
     ) : RealsRootUiState {
@@ -327,6 +329,19 @@ data class AccountUiState(
     val changingPassword: Boolean = false,
     val changePasswordError: String? = null,
     val changePasswordMessage: String? = null,
+)
+
+enum class ProfileManagementDestination {
+    Profile,
+    Search,
+}
+
+data class AffinityHomeSummaryUiState(
+    val profileId: String? = null,
+    val catalog: AffinityQuestionCatalog? = null,
+    val answers: List<AffinityAnswer> = emptyList(),
+    val loading: Boolean = false,
+    val loadAttempted: Boolean = false,
 )
 
 data class AffinityQuestionnaireUiState(

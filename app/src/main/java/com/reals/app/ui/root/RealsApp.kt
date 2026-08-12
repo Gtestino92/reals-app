@@ -50,6 +50,7 @@ import com.reals.app.ui.profile.AffinityQuestionnaireScreen
 import com.reals.app.ui.profile.CreateProfileScreen
 import com.reals.app.ui.profile.ProfileActivationResultScreen
 import com.reals.app.ui.profile.ProfileQuestionScreen
+import com.reals.app.ui.profile.ProfileManagementSurface
 import com.reals.app.ui.profile.ProfileStatusScreen
 import com.reals.app.ui.scheduling.SchedulingScreen
 import kotlinx.coroutines.launch
@@ -247,6 +248,7 @@ fun RealsApp(
                                 current.checkEmailVerificationAvailableAtMillis,
                             showDraftAfterEditNotice = current.editingActiveProfile &&
                                 profile.status != ProfileStatus.Active,
+                            managementSurface = current.profileManagementSurface(homeAvailable),
                             onUpdateProfile = viewModel::updateProfile,
                             onLoadCountries = viewModel::loadCountriesIfNeeded,
                             onUpdateMatchFilters = viewModel::updateMatchFilters,
@@ -258,7 +260,6 @@ fun RealsApp(
                             onActivateProfile = { viewModel.activateProfile() },
                             onResendEmailVerification = viewModel::resendEmailVerification,
                             onCheckEmailVerification = viewModel::checkEmailVerification,
-                            onOpenAffinityQuestions = viewModel::openAffinityQuestionnaire,
                             onOpenProfileQuestions = viewModel::openProfileQuestions,
                             onRefresh = viewModel::refreshSession,
                             onSignOut = viewModel::signOut,
@@ -305,7 +306,11 @@ fun RealsApp(
                             onOpenSecondChat = viewModel::openSecondChat,
                             onOpenConnectionPartnerProfile = viewModel::openConnectionPartnerProfile,
                             onDismissSecondChat = viewModel::dismissSecondChatFromHome,
+                            affinityHomeSummary = current.affinityHomeSummary,
+                            onLoadAffinitySummary = viewModel::loadAffinityHomeSummaryIfNeeded,
+                            onOpenAffinityQuestions = viewModel::openAffinityQuestionnaire,
                             onEditProfile = viewModel::openProfileManagement,
+                            onEditSearch = viewModel::openSearchManagement,
                             onSignOut = viewModel::signOut,
                             onChangePassword = viewModel::changePassword,
                             onDeleteAccount = viewModel::deleteAccount,
@@ -492,7 +497,7 @@ fun RealsApp(
             is RealsRootUiState.PendingEngagement -> FullScreenMessage(
                 title = current.title,
                 body = current.body,
-                primaryActionLabel = "Volver a Home",
+                primaryActionLabel = "Volver a Inicio",
                 onPrimaryAction = viewModel::returnToHomeFromPendingEngagement,
                 secondaryActionLabel = "Cerrar sesión",
                 onSecondaryAction = viewModel::signOut,
@@ -569,6 +574,17 @@ private fun HomeUiState.hasRenderableDraftHomeSurface(): Boolean {
 
 internal fun RealsRootUiState.Ready.shouldRenderAffinityQuestionnaireSurface(): Boolean =
     affinityQuestionnaire.open && session.profileSnapshot is ProfileSnapshot.Found
+
+internal fun RealsRootUiState.Ready.profileManagementSurface(
+    homeAvailable: Boolean,
+): ProfileManagementSurface {
+    if (!homeAvailable) return ProfileManagementSurface.Setup
+    return when (profileManagementDestination) {
+        ProfileManagementDestination.Search -> ProfileManagementSurface.Search
+        ProfileManagementDestination.Profile,
+        null -> ProfileManagementSurface.Profile
+    }
+}
 
 @Composable
 private fun NotificationPermissionGate(enabled: Boolean) {

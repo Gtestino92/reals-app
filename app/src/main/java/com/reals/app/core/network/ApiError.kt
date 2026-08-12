@@ -310,7 +310,7 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.PartnerPersonalMessageNotRead,
     BackendErrorCode.VisualReviewPartnerMessageNotRead ->
         "No pudimos registrar la decisión visual. Actualizá el estado e intentá nuevamente."
-    BackendErrorCode.VisualContentNotAvailable -> "El contenido visual ya no está disponible. Actualizá tu Home."
+        BackendErrorCode.VisualContentNotAvailable -> "El contenido visual ya no está disponible. Actualizá Inicio."
     BackendErrorCode.ChatNotFound -> "No encontramos ésta conversación. Actualizá el estado."
     BackendErrorCode.ChatNotAvailable -> "Esta conversación ya no está disponible. Actualizá el estado."
     BackendErrorCode.ChatExpired -> "La conversaci\u00f3n venci\u00f3."

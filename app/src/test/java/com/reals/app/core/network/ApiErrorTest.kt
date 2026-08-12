@@ -54,7 +54,7 @@ class ApiErrorTest {
 
         assertEquals(BackendErrorCode.VisualContentNotAvailable, error.backendErrorCode)
         assertEquals(
-            "El contenido visual ya no est\u00e1 disponible. Actualiz\u00e1 tu Home.",
+            "El contenido visual ya no est\u00e1 disponible. Actualiz\u00e1 Inicio.",
             error.toUserMessage(ErrorContext.VisualReview),
         )
     }

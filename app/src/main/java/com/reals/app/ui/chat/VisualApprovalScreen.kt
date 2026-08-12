@@ -261,7 +261,7 @@ fun VisualApprovalScreen(
             )
             Spacer(modifier = Modifier.height(24.dp))
             OutlinedButton(onClick = onBackHome, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                Text("Volver a Home")
+                Text("Volver a Inicio")
             }
         } else {
         StatusCard(
@@ -380,7 +380,7 @@ fun VisualApprovalScreen(
         }
         Spacer(modifier = Modifier.height(24.dp))
         OutlinedButton(onClick = onBackHome, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-            Text("Volver a Home")
+            Text("Volver a Inicio")
         }
         }
     }
