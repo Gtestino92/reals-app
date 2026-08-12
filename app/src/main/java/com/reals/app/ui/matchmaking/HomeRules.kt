@@ -4,7 +4,7 @@ import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.BackendErrorCode
 import com.reals.app.core.network.backendErrorCode
 
-private const val SECOND_CHAT_NEAR_WINDOW_MILLIS = 15 * 60 * 1000L
+internal const val SECOND_CHAT_NEAR_WINDOW_MILLIS = 15 * 60 * 1000L
 internal const val HOME_POLL_INTERVAL_MILLIS = 5 * 1000L
 private const val SECOND_CHAT_POLL_INTERVAL_MILLIS = HOME_POLL_INTERVAL_MILLIS
 

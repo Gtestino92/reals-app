@@ -407,7 +407,7 @@ private fun HomeSectionChevron(expanded: Boolean) {
 }
 
 @Composable
-private fun FirstChatItem(
+internal fun FirstChatItem(
     action: HomeActionItem.FirstChat,
     busy: Boolean,
     onOpenFirstChat: (matchId: String, chatId: String) -> Unit,
@@ -449,7 +449,7 @@ private fun FirstChatItem(
 }
 
 @Composable
-private fun VisualApprovalItem(
+internal fun VisualApprovalItem(
     action: HomeActionItem.VisualReview,
     busy: Boolean,
     nowMillis: Long,
@@ -516,7 +516,7 @@ private fun VisualApprovalItem(
 }
 
 @Composable
-private fun HomeTrailingChevron() {
+internal fun HomeTrailingChevron() {
     val color = MaterialTheme.colorScheme.onSurfaceVariant
     Canvas(
         modifier = Modifier
@@ -600,10 +600,11 @@ private fun rememberVisualReviewNowMillis(enabled: Boolean): Long {
 }
 
 @Composable
-private fun NextStepItem(
+internal fun NextStepItem(
     item: HomeNextStepItem,
     busy: Boolean,
     nowMillis: Long,
+    dismissContentDescription: String = "Quitar de Inicio",
     onOpenScheduling: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenSecondChat: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenPartnerProfile: (matchId: String) -> Unit,
@@ -715,7 +716,7 @@ private fun NextStepItem(
                     enabled = !busy && item.connectionIdForSecondChat().isNotBlank(),
                     modifier = Modifier
                         .size(48.dp)
-                        .semantics { contentDescription = "Quitar de Inicio" },
+                        .semantics { contentDescription = dismissContentDescription },
                 ) {
                     Text(
                         text = "×",
@@ -749,7 +750,7 @@ private fun NextStepItem(
     }
 }
 
-private fun HomeNextStepItem.partnerDisplayName(): String? = when (this) {
+internal fun HomeNextStepItem.partnerDisplayName(): String? = when (this) {
     is HomeNextStepItem.Scheduling -> partnerDisplayName
     is HomeNextStepItem.SecondChatScheduled -> partnerDisplayName
     is HomeNextStepItem.SecondChatAvailable -> partnerDisplayName
@@ -757,7 +758,7 @@ private fun HomeNextStepItem.partnerDisplayName(): String? = when (this) {
     is HomeNextStepItem.Unknown -> partnerDisplayName
 }
 
-private fun HomeNextStepItem.matchIdForProfile(): String = when (this) {
+internal fun HomeNextStepItem.matchIdForProfile(): String = when (this) {
     is HomeNextStepItem.Scheduling -> matchId
     is HomeNextStepItem.SecondChatScheduled -> matchId
     is HomeNextStepItem.SecondChatAvailable -> matchId

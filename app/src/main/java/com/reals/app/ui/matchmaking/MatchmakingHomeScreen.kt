@@ -64,6 +64,11 @@ private enum class LocationPermissionRequestMode {
     Search,
 }
 
+private enum class HomeSurface {
+    Overview,
+    Pending,
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MatchmakingHomeScreen(
@@ -119,6 +124,7 @@ fun MatchmakingHomeScreen(
         mutableStateOf(LocationPermissionRequestMode.None)
     }
     var autoLocationPermissionRequested by rememberSaveable(profile.id) { mutableStateOf(false) }
+    var homeSurface by rememberSaveable(profile.id) { mutableStateOf(HomeSurface.Overview) }
     var prewarmedProfileId by rememberSaveable { mutableStateOf<String?>(null) }
 
     fun prewarmLocationSilently() {
@@ -360,6 +366,9 @@ fun MatchmakingHomeScreen(
             onChangePassword = onChangePassword,
             onDeleteAccount = onDeleteAccount,
             onSupportReals = onSupportReals,
+            homeSurface = homeSurface,
+            onOpenPendingSurface = { homeSurface = HomeSurface.Pending },
+            onBackHome = { homeSurface = HomeSurface.Overview },
         )
     }
 }
@@ -426,6 +435,9 @@ private fun MatchmakingIdleScreen(
     onChangePassword: (currentPassword: String, newPassword: String) -> Unit,
     onDeleteAccount: () -> Unit,
     onSupportReals: () -> Unit,
+    homeSurface: HomeSurface,
+    onOpenPendingSurface: () -> Unit,
+    onBackHome: () -> Unit,
 ) {
     var latitude by rememberSaveable(profile.id) { mutableStateOf("-34.6037") }
     var longitude by rememberSaveable(profile.id) { mutableStateOf("-58.3816") }
@@ -435,6 +447,22 @@ private fun MatchmakingIdleScreen(
     val busy = homeLoading || accountDeleteLoading || changePasswordLoading
     val canSearch = screenModel.matchmaking.canSearch
     val blockedReason = screenModel.matchmaking.blockedReason
+    val pendingPresentation = homePendingPresentation(screenModel, nowMillis)
+
+    if (homeSurface == HomeSurface.Pending) {
+        PendingInteractionsScreen(
+            presentation = pendingPresentation,
+            busy = busy,
+            nowMillis = nowMillis,
+            onBackHome = onBackHome,
+            onOpenVisualApproval = onOpenVisualApproval,
+            onOpenScheduling = onOpenScheduling,
+            onOpenSecondChat = onOpenSecondChat,
+            onOpenPartnerProfile = onOpenConnectionPartnerProfile,
+            onDismissSecondChat = onDismissSecondChat,
+        )
+        return
+    }
 
     LaunchedEffect(accountExpanded) {
         if (!accountExpanded) return@LaunchedEffect
@@ -482,26 +510,23 @@ private fun MatchmakingIdleScreen(
             }
             Spacer(modifier = Modifier.height(12.dp))
         }
-        val initiallyExpandedSection = initiallyExpandedHomeSection(
-            actions = screenModel.pendingActions,
-            nextSteps = screenModel.nextSteps,
-        )
-        PendingActionsCard(
-            actions = screenModel.pendingActions,
-            initiallyExpandedSection = initiallyExpandedSection,
-            busy = busy,
-            onOpenFirstChat = onOpenFirstChat,
-            onOpenVisualApproval = onOpenVisualApproval,
-        )
-        NextStepCard(
-            nextSteps = screenModel.nextSteps,
-            initiallyExpandedSection = initiallyExpandedSection,
+        HomePriorityBlock(
+            presentation = pendingPresentation,
             busy = busy,
             nowMillis = nowMillis,
-            onOpenScheduling = onOpenScheduling,
+            onOpenPending = onOpenPendingSurface,
+            onOpenVisualApproval = onOpenVisualApproval,
             onOpenSecondChat = onOpenSecondChat,
-            onOpenPartnerProfile = onOpenConnectionPartnerProfile,
-            onDismissSecondChat = onDismissSecondChat,
+        )
+        HomeFirstChatsBlock(
+            firstChats = pendingPresentation.firstChats,
+            busy = busy,
+            onOpenFirstChat = onOpenFirstChat,
+        )
+        HomePendingSummaryCard(
+            presentation = pendingPresentation,
+            busy = busy,
+            onOpenPending = onOpenPendingSurface,
         )
         Card(
             modifier = Modifier.fillMaxWidth(),
