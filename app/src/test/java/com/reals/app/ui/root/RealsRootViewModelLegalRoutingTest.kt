@@ -121,6 +121,7 @@ class RealsRootViewModelLegalRoutingTest {
         }
         val viewModel = viewModel(api)
         runCurrent()
+        viewModel.setState(RealsRootUiState.Login())
 
         viewModel.signIn("user@example.com", "password")
         advanceUntilIdle()

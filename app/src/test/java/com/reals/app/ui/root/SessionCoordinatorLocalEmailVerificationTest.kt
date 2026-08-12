@@ -190,7 +190,7 @@ class SessionCoordinatorLocalEmailVerificationTest {
             RegisterPushTokenUseCase(meRepository),
         )
         val localCoordinator = LocalFirebaseEmailVerificationCoordinator(localEnabled, auth, mark)
-        val state = MutableStateFlow<RealsRootUiState>(RealsRootUiState.Checking)
+        val state = MutableStateFlow<RealsRootUiState>(RealsRootUiState.Login())
         val readySessions = mutableListOf<ProvisionedSession>()
         val reactivatedSessions = mutableListOf<ProvisionedSession>()
         val coordinator = SessionCoordinator(
