@@ -9,5 +9,11 @@ data class UserResponseDto(
     val status: String,
     val deletedAt: String? = null,
     val deletionFinalizesAt: String? = null,
+    val passwordManagementAllowed: Boolean = false,
     val createdAt: String,
+)
+
+@Serializable
+data class PasswordResetRequestDto(
+    val email: String,
 )

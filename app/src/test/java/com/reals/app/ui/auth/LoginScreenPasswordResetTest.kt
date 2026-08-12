@@ -22,10 +22,17 @@ class LoginScreenPasswordResetTest {
     }
 
     @Test
+    fun `google button text keeps continue copy and loading copy`() {
+        assertEquals("Continuar con Google", googleSignInButtonText(googleLoading = false))
+        assertEquals("Conectando con Google...", googleSignInButtonText(googleLoading = true))
+    }
+
+    @Test
     fun `password reset button is disabled only for login loading reset loading or cooldown`() {
         assertTrue(
             passwordResetButtonEnabled(
                 loginLoading = false,
+                googleLoading = false,
                 passwordResetLoading = false,
                 cooldownRemainingSeconds = 0L,
             )
@@ -33,6 +40,7 @@ class LoginScreenPasswordResetTest {
         assertFalse(
             passwordResetButtonEnabled(
                 loginLoading = true,
+                googleLoading = false,
                 passwordResetLoading = false,
                 cooldownRemainingSeconds = 0L,
             )
@@ -40,6 +48,7 @@ class LoginScreenPasswordResetTest {
         assertFalse(
             passwordResetButtonEnabled(
                 loginLoading = false,
+                googleLoading = false,
                 passwordResetLoading = true,
                 cooldownRemainingSeconds = 0L,
             )
@@ -47,6 +56,7 @@ class LoginScreenPasswordResetTest {
         assertFalse(
             passwordResetButtonEnabled(
                 loginLoading = false,
+                googleLoading = false,
                 passwordResetLoading = false,
                 cooldownRemainingSeconds = 60L,
             )

@@ -34,8 +34,11 @@ sealed interface RealsRootUiState {
 
     data class Login(
         val loading: Boolean = false,
+        val googleLoading: Boolean = false,
+        val googleAttemptId: Long? = null,
         val error: String? = null,
         val passwordResetLoading: Boolean = false,
+        val passwordResetAttemptId: Long? = null,
         val passwordResetMessage: String? = null,
         val passwordResetAvailableAtMillis: Long? = null,
     ) : RealsRootUiState
@@ -49,6 +52,7 @@ sealed interface RealsRootUiState {
     data class AccountDeletionPending(
         val user: BackendUser,
         val reactivating: Boolean = false,
+        val finalizingDeletion: Boolean = false,
         val error: ApiError? = null,
     ) : RealsRootUiState
 

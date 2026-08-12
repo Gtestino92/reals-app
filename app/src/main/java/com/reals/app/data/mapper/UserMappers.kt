@@ -10,5 +10,6 @@ fun UserResponseDto.toDomain(): BackendUser = BackendUser(
     status = BackendUserStatus.fromBackend(status),
     deletedAt = deletedAt,
     deletionFinalizesAt = deletionFinalizesAt,
+    passwordManagementAllowed = passwordManagementAllowed,
     createdAt = createdAt,
 )

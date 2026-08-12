@@ -7,6 +7,7 @@ import com.reals.app.domain.usecase.AcceptSchedulingProposalUseCase
 import com.reals.app.domain.usecase.ActivateProfileUseCase
 import com.reals.app.domain.usecase.AddProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.CancelChatUseCase
+import com.reals.app.domain.usecase.ClearLocalSessionUseCase
 import com.reals.app.domain.usecase.BlockMatchParticipantUseCase
 import com.reals.app.domain.usecase.CreateProfileUseCase
 import com.reals.app.domain.usecase.CreateSecondChatCompletionRequestUseCase
@@ -43,6 +44,7 @@ import com.reals.app.domain.usecase.GetSchedulingProposalsUseCase
 import com.reals.app.domain.usecase.GetSecondChatForConnectionUseCase
 import com.reals.app.domain.usecase.GetSecondChatStatusUseCase
 import com.reals.app.domain.usecase.GetVisualProfileUseCase
+import com.reals.app.domain.usecase.FinalizeAccountDeletionUseCase
 import com.reals.app.domain.usecase.JoinSecondChatUseCase
 import com.reals.app.domain.usecase.LeaveQueueUseCase
 import com.reals.app.domain.usecase.MarkLocalFirebaseEmailVerified
@@ -58,6 +60,7 @@ import com.reals.app.domain.usecase.ReplaceProfilePhotoFileUseCase
 import com.reals.app.domain.usecase.ReplaceMyProfileQuestionSelectionsUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
 import com.reals.app.domain.usecase.RequestNextFirstChatGuidanceQuestionUseCase
+import com.reals.app.domain.usecase.RequestPasswordResetUseCase
 import com.reals.app.domain.usecase.SafetyCancelChatUseCase
 import com.reals.app.domain.usecase.SendChatAudioMessageUseCase
 import com.reals.app.domain.usecase.SendChatMessageUseCase
@@ -92,6 +95,8 @@ data class ManualBlockFeatureDependencies(
 
 data class SessionFeatureDependencies(
     val authRepository: FirebaseAuthRepository,
+    val requestPasswordReset: RequestPasswordResetUseCase,
+    val clearLocalSession: ClearLocalSessionUseCase,
     val provisionAndLoadProfile: ProvisionAndLoadProfileUseCase,
     val getMe: GetMeUseCase,
     val pushTokenRegistrationService: PushTokenRegistrationService,
@@ -109,6 +114,7 @@ data class SessionFeatureDependencies(
 data class AccountFeatureDependencies(
     val reactivateAccount: ReactivateAccountUseCase,
     val deleteAccount: DeleteAccountUseCase,
+    val finalizeAccountDeletion: FinalizeAccountDeletionUseCase,
 )
 
 data class LegalFeatureDependencies(

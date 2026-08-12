@@ -646,6 +646,8 @@ dependencies {
     implementation(platform(libs.firebase.bom))
 
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services.auth)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
@@ -659,6 +661,7 @@ dependencies {
     implementation(libs.firebase.auth)
     implementation(libs.firebase.appcheck)
     implementation(libs.firebase.messaging)
+    implementation(libs.googleid)
     add("devDebugImplementation", libs.firebase.appcheck.debug)
     add("devReleaseImplementation", libs.firebase.appcheck.playintegrity)
     add("prodImplementation", libs.firebase.appcheck.playintegrity)

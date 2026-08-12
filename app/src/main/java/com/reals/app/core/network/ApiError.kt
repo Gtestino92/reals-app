@@ -52,6 +52,9 @@ enum class BackendErrorCode(val raw: String) {
     ProfileNotFound("PROFILE_NOT_FOUND"),
     ProfileNotActivatable("PROFILE_NOT_ACTIVATABLE"),
     EmailNotVerified("EMAIL_NOT_VERIFIED"),
+    EmailAlreadyLinkedToDifferentFirebaseUser("EMAIL_ALREADY_LINKED_TO_DIFFERENT_FIREBASE_USER"),
+    AccessDenied("ACCESS_DENIED"),
+    AuthMethodNotAllowed("AUTH_METHOD_NOT_ALLOWED"),
     InvalidToken("INVALID_TOKEN"),
     MissingAppCheckToken("MISSING_APP_CHECK_TOKEN"),
     InvalidAppCheckToken("INVALID_APP_CHECK_TOKEN"),
@@ -72,7 +75,7 @@ enum class BackendErrorCode(val raw: String) {
     InvalidProfilePhoto("INVALID_PROFILE_PHOTO"),
     ProfilePhotoUploadBusy("PROFILE_PHOTO_UPLOAD_BUSY"),
     ProfilePhotoNotFound("PROFILE_PHOTO_NOT_FOUND"),
-    AccountDeleted("ACCOUNT_DELETED"),
+    AccountDeleted("ACCOUNT_PENDING_DELETION"),
     AccountDeletionFinalized("ACCOUNT_DELETION_FINALIZED"),
     LegalActionRequired("LEGAL_ACTION_REQUIRED"),
     LegalDocumentActionInvalid("LEGAL_DOCUMENT_ACTION_INVALID"),
@@ -148,6 +151,7 @@ enum class BackendErrorCode(val raw: String) {
     companion object {
         fun fromRaw(value: String?): BackendErrorCode {
             val rawValue = value?.takeIf { it.isNotBlank() } ?: return Unknown
+            if (rawValue == "ACCOUNT_DELETED") return AccountDeleted
             return entries.firstOrNull { it.raw == rawValue } ?: Unknown
         }
     }
@@ -186,7 +190,8 @@ fun ApiError.isAccountDeletionFinalized(): Boolean {
 }
 
 fun ApiError.isTerminalAuthFailure(): Boolean {
-    return this is ApiError.Auth && reason == AuthFailureReason.NOT_SIGNED_IN
+    return (this is ApiError.Auth && reason == AuthFailureReason.NOT_SIGNED_IN) ||
+        (this is ApiError.Backend && backendErrorCode == BackendErrorCode.AuthMethodNotAllowed)
 }
 
 fun ApiError.isLegalActionRequired(): Boolean {
@@ -262,6 +267,10 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.ProfileNotFound -> "No encontramos tu perfil. Actualizá la sesión e intentá nuevamente."
     BackendErrorCode.ProfileNotActivatable -> "Tu perfil necesita completarse antes de activarlo."
     BackendErrorCode.EmailNotVerified -> "Verificá tu email antes de activar el perfil."
+    BackendErrorCode.EmailAlreadyLinkedToDifferentFirebaseUser ->
+        "Ya existe una cuenta asociada a ese email. Iniciá sesión con el método original."
+    BackendErrorCode.AccessDenied -> "No tenés permisos para realizar ésta acción."
+    BackendErrorCode.AuthMethodNotAllowed -> "Ese método de inicio de sesión no está habilitado para esta cuenta."
     BackendErrorCode.InvalidToken -> "Tu sesión necesita renovarse. Volvé a iniciar sesión."
     BackendErrorCode.MissingAppCheckToken,
     BackendErrorCode.InvalidAppCheckToken,

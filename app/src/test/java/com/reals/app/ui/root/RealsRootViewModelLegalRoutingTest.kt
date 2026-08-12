@@ -121,6 +121,7 @@ class RealsRootViewModelLegalRoutingTest {
         }
         val viewModel = viewModel(api)
         runCurrent()
+        viewModel.setState(RealsRootUiState.Login())
 
         viewModel.signIn("user@example.com", "password")
         advanceUntilIdle()
@@ -381,13 +382,21 @@ class RealsRootViewModelLegalRoutingTest {
         return RealsRootDependencies(
             session = SessionFeatureDependencies(
                 authRepository = authRepository,
+                requestPasswordReset = com.reals.app.domain.usecase.RequestPasswordResetUseCase(),
+                clearLocalSession = com.reals.app.domain.usecase.ClearLocalSessionUseCase(
+                    authRepository = authRepository,
+                    credentialStateRepository = object : com.reals.app.data.repository.CredentialStateRepository(context) {
+                        override suspend fun clearCredentialState() = Unit
+                    },
+                ),
                 provisionAndLoadProfile = ProvisionAndLoadProfileUseCase(meRepository, profileRepository),
                 getMe = GetMeUseCase(meRepository),
                 pushTokenRegistrationService = PushTokenRegistrationService(context, registerPushTokenUseCase),
             ),
             account = AccountFeatureDependencies(
                 reactivateAccount = ReactivateAccountUseCase(meRepository),
-                deleteAccount = DeleteAccountUseCase(meRepository, authRepository),
+                deleteAccount = DeleteAccountUseCase(meRepository),
+                finalizeAccountDeletion = com.reals.app.domain.usecase.FinalizeAccountDeletionUseCase(meRepository),
             ),
             legal = LegalFeatureDependencies(
                 getCurrentDocuments = GetCurrentLegalDocumentsUseCase(legalRepository),
