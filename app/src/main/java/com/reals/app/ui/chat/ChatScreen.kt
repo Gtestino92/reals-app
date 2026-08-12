@@ -2,6 +2,8 @@
 
 import android.os.SystemClock
 import android.util.Patterns
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,8 +36,14 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TooltipAnchorPosition
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -46,6 +54,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -104,7 +113,9 @@ import com.reals.app.ui.root.remainingMillisFromServerSnapshot
 import com.reals.app.ui.root.resolutionPresentation
 import com.reals.app.ui.root.secondChatResultCopy
 import com.reals.app.ui.root.timingPresentation
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
 private const val MUTUAL_EXIT_TIMEOUT_SECONDS = 20L
@@ -113,6 +124,8 @@ internal const val MUTUAL_EXIT_CONVERSATION_PAUSED_COPY =
     "La conversaci\u00f3n est\u00e1 pausada mientras se resuelve la solicitud."
 internal const val FIRST_CHAT_DECISION_ONLY_COMPOSER_PAUSED_COPY =
     "El chat est\u00e1 pausado mientras decid\u00eds."
+internal const val SECOND_CHAT_COMPLETION_COACHMARK_COPY =
+    "Ya podés finalizar la charla de común acuerdo desde acá."
 
 internal data class ChatLoadingPresentation(
     val title: String,
@@ -219,6 +232,10 @@ fun ChatScreen(
     var showingSecondChatCompletionDialog by rememberSaveable(chat?.id) { mutableStateOf(false) }
     var showingSecondChatInactivityDialog by rememberSaveable(chat?.id) { mutableStateOf(false) }
     var secondChatResolutionRefreshHandledKey by rememberSaveable(chat?.id) { mutableStateOf<String?>(null) }
+    var mutualCompletionCoachmarkState by remember(chat?.id) {
+        mutableStateOf(MutualCompletionCoachmarkState())
+    }
+    var showingMutualCompletionCoachmark by remember(chat?.id) { mutableStateOf(false) }
     var nowMillis by rememberSaveable(chat?.id) { mutableStateOf(System.currentTimeMillis()) }
     var elapsedRealtimeMillis by remember(chat?.id) { mutableStateOf(SystemClock.elapsedRealtime()) }
     var firstChatExpiryHandled by rememberSaveable(chat?.id) { mutableStateOf(false) }
@@ -312,6 +329,7 @@ fun ChatScreen(
         nowMillis = nowMillis,
         actionLoading = loadingChatAction || audioInteractionBusy,
     )
+    val secondChatCompletionOverflow = secondChatCompletionOverflowPresentation(secondChatResolution)
     val canUseChatActions = firstChatPolicy.canUseOrdinaryConversationActions &&
             !loadingChatAction &&
             !audioInteractionBusy
@@ -360,14 +378,15 @@ fun ChatScreen(
         canUseSafetyActions = canUseSafetyActions,
         canManualBlock = canManualBlock,
     )
-    val canOpenOverflowActions =
-        !loadingChatAction &&
-            (
-                (overflowVisibility.showMutualExit && canUseExistingChatActions) ||
-                    (overflowVisibility.showReject && canDecide) ||
-                    (overflowVisibility.showSafety && canUseSafetyActions)
-                ) ||
-            (overflowVisibility.showManualBlock && canManualBlock)
+    val canOpenOverflowActions = chatOverflowCanOpen(
+        loadingChatAction = loadingChatAction,
+        canUseExistingChatActions = canUseExistingChatActions,
+        canDecide = canDecide,
+        canUseSafetyActions = canUseSafetyActions,
+        canManualBlock = canManualBlock,
+        visibility = overflowVisibility,
+        secondChatCompletion = secondChatCompletionOverflow,
+    )
     val partnerDisplayName = chat?.partner?.displayName
         ?.takeIf { it.isNotBlank() }
         ?: partnerNameFallback?.takeIf { it.isNotBlank() }
@@ -457,6 +476,18 @@ fun ChatScreen(
         }
     }
 
+    val observedMutualCompletionEligibility = secondChatLifecycle
+        ?.takeIf { it.statusReceivedAtMillis != null }
+        ?.let { secondChatCompletionOverflow.visible }
+    LaunchedEffect(chat?.id, observedMutualCompletionEligibility) {
+        val observed = observedMutualCompletionEligibility ?: return@LaunchedEffect
+        val update = mutualCompletionCoachmarkState.next(observed)
+        mutualCompletionCoachmarkState = update.state
+        if (update.showCoachmark) {
+            showingMutualCompletionCoachmark = true
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -483,16 +514,32 @@ fun ChatScreen(
                             expanded = actionsMenuExpanded,
                             enabled = canOpenOverflowActions,
                             actionLoading = loadingChatAction,
+                            secondChatCompletion = secondChatCompletionOverflow,
+                            showMutualCompletionCoachmark = showingMutualCompletionCoachmark,
                             canUseExistingChatActions = canUseExistingChatActions &&
                                 firstChatPolicy.canRequestOrdinaryExit,
                             canUseSafetyActions = canUseSafetyActions,
                             canDecide = canDecide,
                             canManualBlock = canManualBlock,
                             visibility = overflowVisibility,
-                            onExpandedChange = { actionsMenuExpanded = it },
+                            onExpandedChange = {
+                                if (it) showingMutualCompletionCoachmark = false
+                                actionsMenuExpanded = it
+                            },
+                            onMutualCompletionCoachmarkDismissed = {
+                                showingMutualCompletionCoachmark = false
+                            },
                             onRequestMutualExit = {
                                 actionsMenuExpanded = false
                                 if (firstChatPolicy.canRequestOrdinaryExit) onRequestMutualExit()
+                            },
+                            onRequestSecondChatCompletion = {
+                                handleSecondChatCompletionOverflowClick(
+                                    action = secondChatCompletionOverflow,
+                                    actionLoading = loadingChatAction,
+                                    onCloseMenu = { actionsMenuExpanded = false },
+                                    onShowConfirmation = { showingSecondChatCompletionDialog = true },
+                                )
                             },
                             onRejectChat = {
                                 actionsMenuExpanded = false
@@ -547,7 +594,6 @@ fun ChatScreen(
                 presentation = secondChatResolution,
                 actionLoading = loadingChatAction || audioInteractionBusy,
                 actionLoadingLabel = actionLoadingLabel,
-                onRequestCompletion = { showingSecondChatCompletionDialog = true },
                 onAcceptCompletion = { requestId ->
                     onDecideSecondChatCompletion(requestId, SecondChatCompletionDecision.Accepted)
                 },
@@ -859,20 +905,12 @@ private fun SecondChatResolutionPanel(
     presentation: SecondChatResolutionPresentation?,
     actionLoading: Boolean,
     actionLoadingLabel: String?,
-    onRequestCompletion: () -> Unit,
     onAcceptCompletion: (String) -> Unit,
     onRejectCompletion: (String) -> Unit,
     onRequestInactivityClaim: () -> Unit,
 ) {
     val state = presentation ?: return
-    if (
-        state.createCompletion == null &&
-        state.completionCooldown == null &&
-        state.createInactivityClaim == null &&
-        state.activeRequest == null
-    ) {
-        return
-    }
+    if (!secondChatResolutionBodyVisible(state)) return
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -937,16 +975,6 @@ private fun SecondChatResolutionPanel(
                     text = cooldown.message,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
-            }
-
-            state.createCompletion?.let { create ->
-                OutlinedButton(
-                    onClick = onRequestCompletion,
-                    enabled = create.enabled,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(create.label)
-                }
             }
 
             state.createInactivityClaim?.let { create ->
@@ -1024,31 +1052,162 @@ private fun ChatHeader(
     }
 }
 
+internal data class SecondChatCompletionOverflowPresentation(
+    val visible: Boolean,
+    val enabled: Boolean,
+    val label: String,
+)
+
+internal fun secondChatCompletionOverflowPresentation(
+    presentation: SecondChatResolutionPresentation?,
+): SecondChatCompletionOverflowPresentation {
+    val createCompletion = presentation?.createCompletion
+    return SecondChatCompletionOverflowPresentation(
+        visible = createCompletion != null,
+        enabled = createCompletion?.enabled == true,
+        label = createCompletion?.label.orEmpty(),
+    )
+}
+
+internal fun chatOverflowCanOpen(
+    loadingChatAction: Boolean,
+    canUseExistingChatActions: Boolean,
+    canDecide: Boolean,
+    canUseSafetyActions: Boolean,
+    canManualBlock: Boolean,
+    visibility: FirstChatOverflowActionVisibility,
+    secondChatCompletion: SecondChatCompletionOverflowPresentation,
+): Boolean =
+    !loadingChatAction &&
+        (
+            (visibility.showMutualExit && canUseExistingChatActions) ||
+                secondChatCompletion.visible ||
+                (visibility.showReject && canDecide) ||
+                (visibility.showSafety && canUseSafetyActions)
+            ) ||
+        (visibility.showManualBlock && canManualBlock)
+
+internal fun secondChatCompletionOverflowMenuItemEnabled(
+    action: SecondChatCompletionOverflowPresentation,
+    actionLoading: Boolean,
+): Boolean = action.visible && action.enabled && !actionLoading
+
+internal fun handleSecondChatCompletionOverflowClick(
+    action: SecondChatCompletionOverflowPresentation,
+    actionLoading: Boolean,
+    onCloseMenu: () -> Unit,
+    onShowConfirmation: () -> Unit,
+): Boolean {
+    if (!secondChatCompletionOverflowMenuItemEnabled(action, actionLoading)) return false
+    onCloseMenu()
+    onShowConfirmation()
+    return true
+}
+
+internal fun secondChatResolutionBodyVisible(
+    presentation: SecondChatResolutionPresentation?,
+): Boolean =
+    presentation?.activeRequest != null ||
+        presentation?.completionCooldown != null ||
+        presentation?.createInactivityClaim != null
+
+internal data class MutualCompletionCoachmarkState(
+    val baselineEstablished: Boolean = false,
+    val previouslyEligible: Boolean = false,
+    val alreadyShown: Boolean = false,
+) {
+    fun next(eligible: Boolean): MutualCompletionCoachmarkUpdate =
+        when {
+            !baselineEstablished -> MutualCompletionCoachmarkUpdate(
+                state = copy(
+                    baselineEstablished = true,
+                    previouslyEligible = eligible,
+                ),
+                showCoachmark = false,
+            )
+            !alreadyShown && !previouslyEligible && eligible -> MutualCompletionCoachmarkUpdate(
+                state = copy(
+                    previouslyEligible = true,
+                    alreadyShown = true,
+                ),
+                showCoachmark = true,
+            )
+            else -> MutualCompletionCoachmarkUpdate(
+                state = copy(previouslyEligible = eligible),
+                showCoachmark = false,
+            )
+        }
+}
+
+internal data class MutualCompletionCoachmarkUpdate(
+    val state: MutualCompletionCoachmarkState,
+    val showCoachmark: Boolean,
+)
+
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun ChatOverflowMenu(
     expanded: Boolean,
     enabled: Boolean,
     actionLoading: Boolean,
+    secondChatCompletion: SecondChatCompletionOverflowPresentation,
+    showMutualCompletionCoachmark: Boolean,
     canUseExistingChatActions: Boolean,
     canUseSafetyActions: Boolean,
     canDecide: Boolean,
     canManualBlock: Boolean,
     visibility: FirstChatOverflowActionVisibility,
     onExpandedChange: (Boolean) -> Unit,
+    onMutualCompletionCoachmarkDismissed: () -> Unit,
     onRequestMutualExit: () -> Unit,
+    onRequestSecondChatCompletion: () -> Unit,
     onRejectChat: () -> Unit,
     onShowSafety: () -> Unit,
     onShowManualBlock: () -> Unit,
 ) {
+    val tooltipState = rememberTooltipState()
+    val overflowScale = remember { Animatable(1f) }
+    LaunchedEffect(showMutualCompletionCoachmark) {
+        if (!showMutualCompletionCoachmark) return@LaunchedEffect
+        coroutineScope {
+            launch {
+                overflowScale.snapTo(1f)
+                overflowScale.animateTo(1.08f, animationSpec = tween(durationMillis = 180))
+                overflowScale.animateTo(1f, animationSpec = tween(durationMillis = 220))
+            }
+            launch {
+                tooltipState.show()
+                onMutualCompletionCoachmarkDismissed()
+            }
+        }
+    }
+
     Box(contentAlignment = Alignment.TopEnd) {
-        IconButton(
-            onClick = { onExpandedChange(true) },
-            enabled = enabled,
+        TooltipBox(
+            positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+            tooltip = {
+                PlainTooltip {
+                    Text(SECOND_CHAT_COMPLETION_COACHMARK_COPY)
+                }
+            },
+            state = tooltipState,
+            focusable = false,
+            enableUserInput = false,
         ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_more_vert),
-                contentDescription = "Más acciones",
-            )
+            IconButton(
+                onClick = {
+                    tooltipState.dismiss()
+                    onMutualCompletionCoachmarkDismissed()
+                    onExpandedChange(true)
+                },
+                enabled = enabled,
+                modifier = Modifier.scale(overflowScale.value),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_more_vert),
+                    contentDescription = "Más acciones",
+                )
+            }
         }
 
         DropdownMenu(
@@ -1064,6 +1223,17 @@ private fun ChatOverflowMenu(
                     text = { Text("Salida consensuada") },
                     enabled = !actionLoading && canUseExistingChatActions,
                     onClick = onRequestMutualExit,
+                )
+            }
+
+            if (secondChatCompletion.visible) {
+                DropdownMenuItem(
+                    text = { Text(secondChatCompletion.label) },
+                    enabled = secondChatCompletionOverflowMenuItemEnabled(
+                        action = secondChatCompletion,
+                        actionLoading = actionLoading,
+                    ),
+                    onClick = onRequestSecondChatCompletion,
                 )
             }
 
