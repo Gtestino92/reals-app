@@ -366,11 +366,6 @@ val environmentBaseUrls = mapOf(
     "dev" to devBaseUrl,
     "prod" to prodBaseUrl,
 )
-val expectedCafecitoSupportVisibility = mapOf(
-    "local" to true,
-    "dev" to true,
-    "prod" to false,
-)
 
 environmentBaseUrls.forEach { (environment, baseUrl) ->
     val validationTask = tasks.register("validate${environment.capitalized()}Environment") {
@@ -423,9 +418,6 @@ tasks.register("validateEnvironmentIsolation") {
         }
         if (expectedAppNames != mapOf("local" to "Reals Local", "dev" to "Reals Dev", "prod" to "Reals")) {
             throw GradleException("Flavor app names must remain Reals Local, Reals Dev, and Reals.")
-        }
-        if (expectedCafecitoSupportVisibility != mapOf("local" to true, "dev" to true, "prod" to false)) {
-            throw GradleException("Cafecito support must be enabled only for local/dev and disabled for prod.")
         }
         validateBaseUrl("local", localBaseUrl)
     }

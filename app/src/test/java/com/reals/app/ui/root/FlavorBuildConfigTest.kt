@@ -75,7 +75,6 @@ class FlavorBuildConfigTest {
         assertTrue(flavorBlockHasCafecitoSupportFlag(gradleFile, "local", "true"))
         assertTrue(flavorBlockHasCafecitoSupportFlag(gradleFile, "dev", "true"))
         assertTrue(flavorBlockHasCafecitoSupportFlag(gradleFile, "prod", "false"))
-        assertTrue(gradleFile.contains("Cafecito support must be enabled only for local/dev and disabled for prod."))
     }
 
     @Test

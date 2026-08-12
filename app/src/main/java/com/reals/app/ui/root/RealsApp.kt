@@ -60,7 +60,6 @@ fun RealsApp(
     notificationOpenNonce: Long = 0L,
     notificationOpenType: String? = null,
 ) {
-    val context = LocalContext.current
     val viewModel: RealsRootViewModel = viewModel(
         factory = RealsRootViewModelFactory(appContainer),
     )
