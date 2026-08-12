@@ -6,11 +6,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -192,17 +190,10 @@ private fun TextComposerRow(
             onClick = callbacks.onSendText,
             enabled = presentation.textState.sendButtonEnabled,
         ) {
-            if (presentation.textState.sendingMessage) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    strokeWidth = 2.dp,
-                )
-            } else {
-                Icon(
-                    painter = painterResource(R.drawable.ic_send),
-                    contentDescription = "Enviar",
-                )
-            }
+            Icon(
+                painter = painterResource(R.drawable.ic_send),
+                contentDescription = "Enviar",
+            )
         }
     }
 
@@ -418,10 +409,11 @@ internal fun chatAudioComposerUiState(
         !audioUploading &&
         !recordingActive &&
         !loadingChatAction
+    val policyUnavailable = visible && policy?.enabled != true
     return ChatAudioComposerUiState(
         visible = visible,
         startEnabled = startEnabled,
-        disabledCopy = if (visible && !startEnabled) {
+        disabledCopy = if (policyUnavailable) {
             audioUnavailableCopy(policy?.unavailableReason)
         } else {
             null

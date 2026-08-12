@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -303,6 +304,7 @@ private fun AccountSectionToggleButton(
     OutlinedButton(
         onClick = onToggle,
         enabled = enabled,
+        border = ButtonDefaults.outlinedButtonBorder(enabled = enabled),
         modifier = modifier
             .heightIn(min = AccountSectionToggleMinHeight)
             .testTag(AccountSectionToggleTag),

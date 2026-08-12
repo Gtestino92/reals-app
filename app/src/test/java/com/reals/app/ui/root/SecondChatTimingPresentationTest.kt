@@ -715,6 +715,43 @@ class SecondChatTimingPresentationTest {
     }
 
     @Test
+    fun `post message authoritative status removes inactivity claim CTA`() = runTest(dispatcher) {
+        val api = FakeRealsApi().apply {
+            secondChatStatusResponse = Response.success(
+                TestDtos.secondChatStatus(
+                    canClaimPartnerInactivity = false,
+                    lastMessageAt = "2026-06-18T21:10:20Z",
+                    lastMessageSenderId = "user-1",
+                    serverTime = "2026-06-18T21:10:20Z",
+                )
+            )
+        }
+        val coordinator = coordinator(api, mutableListOf(2_350L))
+
+        val state = coordinator.sendMessage(
+            current = secondChatState(
+                lifecycle = lifecycle(
+                    serverTime = "2026-06-18T21:10:00Z",
+                    absoluteExpiresAt = "2026-06-18T22:00:00Z",
+                    receivedAtMillis = 111L,
+                    canClaimPartnerInactivity = true,
+                )
+            ),
+            cleanContent = "hola",
+            localId = "local-1",
+        )
+
+        assertEquals(false, state.lifecycle.status?.canClaimPartnerInactivity)
+        assertNull(
+            state.lifecycle.resolutionPresentation(
+                currentUserId = state.session.user.id,
+                nowMillis = 2_350L,
+            ).createInactivityClaim
+        )
+        assertEquals(2_350L, state.lifecycle.statusReceivedAtMillis)
+    }
+
+    @Test
     fun `post message status failure retains previous status snapshot`() = runTest(dispatcher) {
         val api = FakeRealsApi().apply {
             secondChatStatusResponse = backendErrorResponse(500, "SERVER_ERROR")

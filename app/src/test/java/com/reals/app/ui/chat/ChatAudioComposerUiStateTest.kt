@@ -40,6 +40,75 @@ class ChatAudioComposerUiStateTest {
     }
 
     @Test
+    fun `enabled policy with in-flight text send disables recording without disabled copy`() {
+        val state = chatAudioComposerUiState(
+            chat = TestDtos.chat(audioPolicy = TestDtos.audioPolicy(enabled = true)).toDomain(),
+            canSendMessages = true,
+            sendingMessage = true,
+            audioUploading = false,
+            recordingActive = false,
+            loadingChatAction = false,
+        )
+
+        assertTrue(state.visible)
+        assertFalse(state.startEnabled)
+        assertEquals(null, state.disabledCopy)
+    }
+
+    @Test
+    fun `enabled policy with transient busy gates disables recording without disabled copy`() {
+        val policy = TestDtos.audioPolicy(enabled = true)
+        val states = listOf(
+            chatAudioComposerUiState(
+                chat = TestDtos.chat(audioPolicy = policy).toDomain(),
+                canSendMessages = true,
+                sendingMessage = false,
+                audioUploading = true,
+                recordingActive = false,
+                loadingChatAction = false,
+            ),
+            chatAudioComposerUiState(
+                chat = TestDtos.chat(audioPolicy = policy).toDomain(),
+                canSendMessages = true,
+                sendingMessage = false,
+                audioUploading = false,
+                recordingActive = true,
+                loadingChatAction = false,
+            ),
+            chatAudioComposerUiState(
+                chat = TestDtos.chat(audioPolicy = policy).toDomain(),
+                canSendMessages = true,
+                sendingMessage = false,
+                audioUploading = false,
+                recordingActive = false,
+                loadingChatAction = true,
+            ),
+        )
+
+        states.forEach { state ->
+            assertTrue(state.visible)
+            assertFalse(state.startEnabled)
+            assertEquals(null, state.disabledCopy)
+        }
+    }
+
+    @Test
+    fun `enabled policy with messages disabled does not show generic audio unavailable copy`() {
+        val state = chatAudioComposerUiState(
+            chat = TestDtos.chat(audioPolicy = TestDtos.audioPolicy(enabled = true)).toDomain(),
+            canSendMessages = false,
+            sendingMessage = false,
+            audioUploading = false,
+            recordingActive = false,
+            loadingChatAction = false,
+        )
+
+        assertTrue(state.visible)
+        assertFalse(state.startEnabled)
+        assertEquals(null, state.disabledCopy)
+    }
+
+    @Test
     fun `second chat status policy enables recording when chat policy is absent`() {
         val chat = TestDtos.chat(audioPolicy = null).copy(chatType = "SECOND_CHAT").toDomain()
         val lifecycle = com.reals.app.ui.root.SecondChatLifecycleUiState(
