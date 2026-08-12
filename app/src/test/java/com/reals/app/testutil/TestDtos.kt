@@ -69,6 +69,7 @@ object TestDtos {
         status = status,
         deletedAt = null,
         deletionFinalizesAt = null,
+        passwordManagementAllowed = true,
         createdAt = now,
     )
 

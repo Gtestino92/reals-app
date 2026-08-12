@@ -10,17 +10,19 @@ the Windows localhost services used by Reals local development:
   Android http://127.0.0.1:9000 -> Windows localhost:9000 -> MinIO
 
 The script supports emulators, USB debugging, wireless debugging, and multiple
-connected devices. It is safe to run repeatedly and does not require
+connected ADB transports. It is safe to run repeatedly and does not require
 Administrator privileges.
 
 .PARAMETER Serial
-Optional ADB serial. When supplied, only that exact device is configured. The
-serial must exist in `adb devices` and its state must be exactly `device`.
+Optional ADB serial. When supplied, only that exact device/transport is
+configured. The serial must exist in `adb devices` and its state must be exactly
+`device`.
 
 .EXAMPLE
 .\tools\setup-android-local.ps1
 
-Configures every connected device or emulator whose ADB state is `device`.
+Configures every connected device, emulator, or wireless ADB transport whose
+ADB state is `device`.
 
 .EXAMPLE
 .\tools\setup-android-local.ps1 -Serial emulator-5554
@@ -50,14 +52,23 @@ function Resolve-AdbPath {
     }
 
     $candidatePaths = @()
+
     if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
-        $candidatePaths += Join-Path $env:LOCALAPPDATA "Android\Sdk\platform-tools\adb.exe"
+        $candidatePaths += Join-Path `
+            $env:LOCALAPPDATA `
+            "Android\Sdk\platform-tools\adb.exe"
     }
+
     if (-not [string]::IsNullOrWhiteSpace($env:ANDROID_SDK_ROOT)) {
-        $candidatePaths += Join-Path $env:ANDROID_SDK_ROOT "platform-tools\adb.exe"
+        $candidatePaths += Join-Path `
+            $env:ANDROID_SDK_ROOT `
+            "platform-tools\adb.exe"
     }
+
     if (-not [string]::IsNullOrWhiteSpace($env:ANDROID_HOME)) {
-        $candidatePaths += Join-Path $env:ANDROID_HOME "platform-tools\adb.exe"
+        $candidatePaths += Join-Path `
+            $env:ANDROID_HOME `
+            "platform-tools\adb.exe"
     }
 
     foreach ($candidatePath in $candidatePaths) {
@@ -77,10 +88,12 @@ function Invoke-Adb {
 
     $output = & $script:adbPath @Arguments 2>&1
     $exitCode = $LASTEXITCODE
+
     if ($exitCode -ne 0) {
         $joinedArguments = $Arguments -join " "
         throw "$script:adbPath $joinedArguments failed with exit code $exitCode.`n$output"
     }
+
     return $output
 }
 
@@ -97,12 +110,23 @@ function Test-HostPort {
     $reachable = $false
 
     if (Get-Command Test-NetConnection -ErrorAction SilentlyContinue) {
-        $reachable = Test-NetConnection -ComputerName "127.0.0.1" -Port $Port -InformationLevel Quiet
+        $reachable = Test-NetConnection `
+            -ComputerName "127.0.0.1" `
+            -Port $Port `
+            -InformationLevel Quiet
     } else {
         $client = New-Object System.Net.Sockets.TcpClient
+
         try {
-            $asyncResult = $client.BeginConnect("127.0.0.1", $Port, $null, $null)
+            $asyncResult = $client.BeginConnect(
+                "127.0.0.1",
+                $Port,
+                $null,
+                $null
+            )
+
             $reachable = $asyncResult.AsyncWaitHandle.WaitOne(1000, $false)
+
             if ($reachable) {
                 $client.EndConnect($asyncResult)
             }
@@ -126,20 +150,33 @@ function Get-AdbDeviceRows {
         Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
 
     $rows = @()
-    foreach ($line in $deviceLines) {
-        $parts = $line -split "\s+"
-        if ($parts.Count -ge 2) {
+
+    foreach ($rawLine in $deviceLines) {
+        $line = ([string]$rawLine).TrimEnd()
+
+        # Wireless ADB/mDNS serials can contain whitespace, for example:
+        #
+        # adb-ZY326JCRNR-PCfch2 (2)._adb-tls-connect._tcp device
+        #
+        # Therefore we cannot split the entire line on whitespace and assume
+        # that the second token is the ADB state. Parse the known state from
+        # the end of the row instead.
+        if ($line -match '^(?<serial>.+?)\s+(?<state>device|offline|unauthorized)$') {
             $rows += [PSCustomObject]@{
-                Serial = $parts[0]
-                State = $parts[1]
-                Raw = $line
+                Serial = $Matches["serial"].Trim()
+                State  = $Matches["state"]
+                Raw    = $line
             }
+        } else {
+            Write-Warning "Skipping unrecognized adb devices row: $line"
         }
     }
+
     return $rows
 }
 
 Write-Host "Checking ADB..."
+
 $script:adbPath = Resolve-AdbPath
 Write-Host "Using ADB: $script:adbPath"
 
@@ -147,21 +184,35 @@ Write-Host "Starting ADB server..."
 Invoke-Adb -Arguments @("start-server") | Out-Null
 
 $devices = @(Get-AdbDeviceRows)
-$usableDevices = @($devices | Where-Object { $_.State -eq "device" })
-$unusableDevices = @($devices | Where-Object { $_.State -ne "device" })
+
+$usableDevices = @(
+    $devices |
+        Where-Object { $_.State -eq "device" }
+)
+
+$unusableDevices = @(
+    $devices |
+        Where-Object { $_.State -ne "device" }
+)
 
 foreach ($device in $unusableDevices) {
     Write-Warning "Skipping device $($device.Serial) because its state is '$($device.State)'."
 }
 
 if (-not [string]::IsNullOrWhiteSpace($Serial)) {
-    $matching = @($devices | Where-Object { $_.Serial -eq $Serial })
+    $matching = @(
+        $devices |
+            Where-Object { $_.Serial -eq $Serial }
+    )
+
     if ($matching.Count -eq 0) {
         throw "Device '$Serial' was not found in adb devices."
     }
+
     if ($matching[0].State -ne "device") {
         throw "Device '$Serial' is in state '$($matching[0].State)', not 'device'."
     }
+
     $usableDevices = @($matching[0])
 }
 
@@ -180,13 +231,31 @@ foreach ($device in $usableDevices) {
     Write-Host "Configuring device $($device.Serial)..."
 
     Write-Host "Configuring tcp:8080 -> tcp:8080..."
-    Invoke-Adb -Arguments @("-s", $device.Serial, "reverse", "tcp:8080", "tcp:8080") | Out-Null
+    Invoke-Adb -Arguments @(
+        "-s",
+        $device.Serial,
+        "reverse",
+        "tcp:8080",
+        "tcp:8080"
+    ) | Out-Null
 
     Write-Host "Configuring tcp:9000 -> tcp:9000..."
-    Invoke-Adb -Arguments @("-s", $device.Serial, "reverse", "tcp:9000", "tcp:9000") | Out-Null
+    Invoke-Adb -Arguments @(
+        "-s",
+        $device.Serial,
+        "reverse",
+        "tcp:9000",
+        "tcp:9000"
+    ) | Out-Null
 
     Write-Host "Configured mappings for $($device.Serial):"
-    Invoke-Adb -Arguments @("-s", $device.Serial, "reverse", "--list") | ForEach-Object {
+
+    Invoke-Adb -Arguments @(
+        "-s",
+        $device.Serial,
+        "reverse",
+        "--list"
+    ) | ForEach-Object {
         Write-Host $_
     }
 }

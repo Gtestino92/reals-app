@@ -1,6 +1,9 @@
 package com.reals.app.ui.root
 
 import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.BackHandler
@@ -14,6 +17,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -32,6 +36,7 @@ import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.VisualDecision
 import com.reals.app.foreground.ForegroundDestinationLifecyclePublisher
 import com.reals.app.ui.account.AccountDeletionRecoveryScreen
+import com.reals.app.ui.auth.GoogleCredentialClient
 import com.reals.app.ui.auth.LoginScreen
 import com.reals.app.ui.chat.ChatScreen
 import com.reals.app.ui.chat.PartnerProfileScreen
@@ -47,6 +52,7 @@ import com.reals.app.ui.profile.ProfileActivationResultScreen
 import com.reals.app.ui.profile.ProfileQuestionScreen
 import com.reals.app.ui.profile.ProfileStatusScreen
 import com.reals.app.ui.scheduling.SchedulingScreen
+import kotlinx.coroutines.launch
 
 @Composable
 fun RealsApp(
@@ -58,6 +64,9 @@ fun RealsApp(
         factory = RealsRootViewModelFactory(appContainer),
     )
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val googleCredentialClient = remember(context) { GoogleCredentialClient(context) }
     PublishForegroundDestination(
         appContainer = appContainer,
         state = state,
@@ -101,9 +110,19 @@ fun RealsApp(
                 passwordResetLoading = current.passwordResetLoading,
                 passwordResetMessage = current.passwordResetMessage,
                 passwordResetAvailableAtMillis = current.passwordResetAvailableAtMillis,
+                googleLoading = current.googleLoading,
                 onSignIn = viewModel::signIn,
                 onSignUp = viewModel::signUp,
                 onPasswordReset = viewModel::requestPasswordReset,
+                onGoogleSignIn = {
+                    val attemptId = viewModel.beginGoogleSignIn() ?: return@LoginScreen
+                    coroutineScope.launch {
+                        viewModel.completeGoogleSignIn(
+                            attemptId = attemptId,
+                            result = googleCredentialClient.getGoogleIdToken(context.findActivity()),
+                        )
+                    }
+                },
             )
 
             is RealsRootUiState.LoadingSession -> FullScreenMessage(
@@ -125,9 +144,11 @@ fun RealsApp(
             is RealsRootUiState.AccountDeletionPending -> AccountDeletionRecoveryScreen(
                 user = current.user,
                 reactivating = current.reactivating,
+                finalizingDeletion = current.finalizingDeletion,
                 error = current.error,
                 onReactivate = viewModel::reactivateAccount,
                 onKeepDeletion = viewModel::signOut,
+                onFinalizeDeletion = viewModel::finalizeAccountDeletion,
             )
 
             is RealsRootUiState.LegalRequirements -> LegalRequirementsScreen(
@@ -270,7 +291,7 @@ fun RealsApp(
                             changePasswordLoading = current.changingPassword,
                             changePasswordError = current.changePasswordError,
                             changePasswordMessage = current.changePasswordMessage,
-                            canChangePassword = viewModel.currentUserHasPasswordProvider(),
+                            canChangePassword = current.session.user.passwordManagementAllowed,
                             onEnqueue = viewModel::enqueueMatchmaking,
                             onDeviceLocationResolved = viewModel::enqueueMatchmakingFromResolvedDeviceLocation,
                             onCancelSearch = viewModel::cancelMatchmakingSearch,
@@ -572,3 +593,10 @@ private fun NotificationPermissionGate(enabled: Boolean) {
         launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 }
+
+private tailrec fun Context.findActivity(): Activity? =
+    when (this) {
+        is Activity -> this
+        is ContextWrapper -> baseContext.findActivity()
+        else -> null
+    }

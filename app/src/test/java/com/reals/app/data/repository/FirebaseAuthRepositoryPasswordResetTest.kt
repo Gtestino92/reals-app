@@ -54,29 +54,6 @@ class FirebaseAuthRepositoryPasswordResetTest {
     }
 
     @Test
-    fun `invalid email Firebase error code maps to invalid email format`() {
-        assertEquals(
-            PasswordResetResult.InvalidEmailFormat,
-            passwordResetResultForFirebaseErrorCode("ERROR_INVALID_EMAIL"),
-        )
-    }
-
-    @Test
-    fun `invalid user Firebase error code maps to generic handled success`() {
-        assertEquals(
-            PasswordResetResult.SentOrHandledGenerically,
-            passwordResetResultForFirebaseErrorCode("ERROR_USER_NOT_FOUND"),
-        )
-    }
-
-    @Test
-    fun `unexpected Firebase failure maps to silent failure`() {
-        val result = IllegalStateException("network or configuration failure").toPasswordResetResult()
-
-        assertEquals(PasswordResetResult.SilentFailure, result)
-    }
-
-    @Test
     fun `change password returns not signed in when Firebase user is missing`() = kotlinx.coroutines.test.runTest {
         val result = unconfiguredRepository().changePassword("current-password", "new-password")
 

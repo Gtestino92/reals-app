@@ -30,6 +30,7 @@ import com.reals.app.domain.model.UpdateProfileInput
 import com.reals.app.domain.model.VisualDecision
 import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_STARTED
 import com.reals.app.notifications.PushNotificationOpenContract
+import com.reals.app.ui.auth.GoogleCredentialResult
 import com.reals.app.ui.chat.firstChatUnansweredPeriodReference
 import java.io.File
 import kotlinx.coroutines.Job
@@ -135,7 +136,10 @@ class RealsRootViewModel(
 
     fun requestPasswordReset(email: String) = sessionCoordinator.requestPasswordReset(email)
 
-    fun currentUserHasPasswordProvider(): Boolean = authRepository.currentUserHasPasswordProvider()
+    fun beginGoogleSignIn(): Long? = sessionCoordinator.beginGoogleSignIn()
+
+    fun completeGoogleSignIn(attemptId: Long, result: GoogleCredentialResult) =
+        sessionCoordinator.completeGoogleSignIn(attemptId, result)
 
     fun signOut() {
         pendingSecondChatStartedHomeOpen = false
@@ -202,6 +206,8 @@ class RealsRootViewModel(
         sessionCoordinator.changePassword(currentPassword, newPassword)
 
     fun reactivateAccount() = sessionCoordinator.reactivateAccount()
+
+    fun finalizeAccountDeletion() = sessionCoordinator.finalizeAccountDeletion()
 
     fun onSystemBack() {
         val current = _uiState.value

@@ -6,6 +6,7 @@ data class BackendUser(
     val status: BackendUserStatus,
     val deletedAt: String?,
     val deletionFinalizesAt: String?,
+    val passwordManagementAllowed: Boolean,
     val createdAt: String,
 )
 
