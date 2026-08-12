@@ -36,6 +36,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -48,6 +49,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalTextToolbar
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -1739,9 +1742,12 @@ private fun SelectableMessageText(
     text: String,
     selectionResetGeneration: Int,
 ) {
+    val view = LocalView.current
     key(selectionResetGeneration) {
-        SelectionContainer {
-            Text(text)
+        CompositionLocalProvider(LocalTextToolbar provides PlainMessageTextToolbar(view)) {
+            SelectionContainer {
+                Text(text)
+            }
         }
     }
 }
