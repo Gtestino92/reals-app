@@ -4,7 +4,8 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import com.reals.app.ui.matchmaking.CafecitoSupportUrl
+
+internal const val CafecitoSupportUrl = "https://cafecito.app/reals-app"
 
 internal fun openCafecitoSupport(context: Context): Boolean {
     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(CafecitoSupportUrl))

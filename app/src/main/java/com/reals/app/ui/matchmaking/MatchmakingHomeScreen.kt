@@ -564,13 +564,6 @@ private fun MatchmakingIdleScreen(
             }
         }
         Spacer(modifier = Modifier.height(24.dp))
-        if (shouldShowSupportReals(showCafecitoSupport)) {
-            SupportRealsSection(
-                enabled = !busy,
-                onSupportReals = onSupportReals,
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-        }
         AccountSection(
             busy = busy,
             accountDeleteLoading = accountDeleteLoading,
@@ -579,11 +572,13 @@ private fun MatchmakingIdleScreen(
             changePasswordError = changePasswordError,
             changePasswordMessage = changePasswordMessage,
             canChangePassword = canChangePassword,
+            showSupportReals = shouldShowSupportReals(showCafecitoSupport),
             expanded = accountExpanded,
             onExpandedChange = { accountExpanded = it },
             onSignOut = onSignOut,
             onChangePassword = onChangePassword,
             onDeleteAccount = onDeleteAccount,
+            onSupportReals = onSupportReals,
         )
     }
 }

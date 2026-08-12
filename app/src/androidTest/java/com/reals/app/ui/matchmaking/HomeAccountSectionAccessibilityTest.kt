@@ -11,8 +11,10 @@ import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -39,7 +41,7 @@ class HomeAccountSectionAccessibilityTest {
 
         composeRule.onNodeWithTag(AccountSectionHeaderNormalTag).assertIsDisplayed()
         composeRule.onNodeWithText("Cuenta").assertIsDisplayed()
-        composeRule.onNodeWithText("Sesión y acciones sensibles.").assertIsDisplayed()
+        composeRule.onNodeWithText(AccountSectionSubtitle).assertIsDisplayed()
         composeRule.onNodeWithText("Abrir").assertIsDisplayed()
         assertToggleAccessibleAndSeparate()
     }
@@ -92,8 +94,63 @@ class HomeAccountSectionAccessibilityTest {
         setAccountSection(width = 276.dp, fontScale = 1.5f, expanded = true)
 
         composeRule.onNodeWithText("Cerrar sesión").assertIsDisplayed()
-        composeRule.onNodeWithText("Cambiar contraseña").assertIsDisplayed()
+        composeRule.onNodeWithText("Cambiar contraseña de Reals").assertIsDisplayed()
         composeRule.onNodeWithText("Eliminar cuenta").assertIsDisplayed()
+    }
+
+    @Test
+    fun collapsedAccountDoesNotShowSupport() {
+        setAccountSection(width = 327.dp, fontScale = 1f, expanded = false, showSupportReals = true)
+
+        composeRule.onAllNodesWithText(SupportRealsTitle).assertCountEquals(0)
+        composeRule.onAllNodesWithText(SupportRealsCta).assertCountEquals(0)
+    }
+
+    @Test
+    fun expandedAccountShowsSupportWhenEnabled() {
+        setAccountSection(width = 276.dp, fontScale = 1.8f, expanded = true, showSupportReals = true)
+
+        composeRule.onNodeWithText(SupportRealsTitle).assertIsDisplayed()
+        composeRule.onNodeWithText(SupportRealsBody).assertIsDisplayed()
+        composeRule.onNodeWithText(SupportRealsCta).assertIsDisplayed().assertHasClickAction()
+    }
+
+    @Test
+    fun expandedAccountHidesSupportWhenDisabled() {
+        setAccountSection(width = 327.dp, fontScale = 1f, expanded = true, showSupportReals = false)
+
+        composeRule.onAllNodesWithText(SupportRealsTitle).assertCountEquals(0)
+        composeRule.onAllNodesWithText(SupportRealsCta).assertCountEquals(0)
+    }
+
+    @Test
+    fun supportCtaClickFiresOnce() {
+        var supportCount = 0
+        setAccountSection(
+            width = 327.dp,
+            fontScale = 1f,
+            expanded = true,
+            showSupportReals = true,
+            onSupportReals = { supportCount++ },
+        )
+
+        composeRule.onNodeWithText(SupportRealsCta).performClick()
+
+        assertEquals(1, supportCount)
+    }
+
+    @Test
+    fun supportDoesNotChangePasswordCapability() {
+        setAccountSection(
+            width = 327.dp,
+            fontScale = 1f,
+            expanded = true,
+            canChangePassword = false,
+            showSupportReals = true,
+        )
+
+        composeRule.onAllNodesWithText("Cambiar contraseña de Reals").assertCountEquals(0)
+        composeRule.onNodeWithText(SupportRealsCta).assertIsDisplayed()
     }
 
     private fun setHeader(
@@ -122,7 +179,14 @@ class HomeAccountSectionAccessibilityTest {
         }
     }
 
-    private fun setAccountSection(width: Dp, fontScale: Float, expanded: Boolean) {
+    private fun setAccountSection(
+        width: Dp,
+        fontScale: Float,
+        expanded: Boolean,
+        canChangePassword: Boolean = true,
+        showSupportReals: Boolean = false,
+        onSupportReals: () -> Unit = {},
+    ) {
         composeRule.setContent {
             MaterialTheme {
                 CompositionLocalProvider(LocalDensity provides Density(density = 1f, fontScale = fontScale)) {
@@ -138,12 +202,14 @@ class HomeAccountSectionAccessibilityTest {
                             changePasswordLoading = false,
                             changePasswordError = null,
                             changePasswordMessage = null,
-                            canChangePassword = true,
+                            canChangePassword = canChangePassword,
+                            showSupportReals = showSupportReals,
                             expanded = expanded,
                             onExpandedChange = {},
                             onSignOut = {},
                             onChangePassword = { _, _ -> },
                             onDeleteAccount = {},
+                            onSupportReals = onSupportReals,
                         )
                     }
                 }

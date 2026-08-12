@@ -12,6 +12,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -46,11 +47,13 @@ internal fun AccountSection(
     changePasswordError: String?,
     changePasswordMessage: String?,
     canChangePassword: Boolean,
+    showSupportReals: Boolean,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     onSignOut: () -> Unit,
     onChangePassword: (currentPassword: String, newPassword: String) -> Unit,
     onDeleteAccount: () -> Unit,
+    onSupportReals: () -> Unit,
 ) {
     var changingPassword by rememberSaveable { mutableStateOf(false) }
     var confirmingDelete by rememberSaveable { mutableStateOf(false) }
@@ -183,6 +186,12 @@ internal fun AccountSection(
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
+                if (showSupportReals) {
+                    SupportRealsAccountSubsection(
+                        enabled = !busy,
+                        onSupportReals = onSupportReals,
+                    )
+                }
                 Text(
                     text = "Eliminar la cuenta programa una eliminación recuperable durante 30 días y cierra la sesión.",
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -251,11 +260,37 @@ private fun AccountSectionHeaderText(
     Column(modifier = modifier.testTag(AccountSectionHeaderTextTag)) {
         Text("Cuenta", style = MaterialTheme.typography.titleMedium)
         Text(
-            text = "Sesión y acciones sensibles.",
+            text = AccountSectionSubtitle,
             color = MaterialTheme.colorScheme.onSecondaryContainer,
             style = MaterialTheme.typography.bodyMedium,
         )
     }
+}
+
+@Composable
+private fun SupportRealsAccountSubsection(
+    enabled: Boolean,
+    onSupportReals: () -> Unit,
+) {
+    HorizontalDivider(modifier = Modifier.padding(top = 4.dp))
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(SupportRealsTitle, style = MaterialTheme.typography.titleSmall)
+        Text(
+            text = SupportRealsBody,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        OutlinedButton(
+            onClick = onSupportReals,
+            enabled = enabled,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp),
+        ) {
+            Text(SupportRealsCta)
+        }
+    }
+    HorizontalDivider()
 }
 
 @Composable
@@ -292,11 +327,19 @@ internal fun accountSectionHeaderLayout(maxWidth: Dp, fontScale: Float): Account
     return if (constrained) AccountSectionHeaderLayout.Constrained else AccountSectionHeaderLayout.Normal
 }
 
+internal fun shouldShowSupportReals(showCafecitoSupport: Boolean): Boolean = showCafecitoSupport
+
 internal val AccountSectionToggleMinHeight = 48.dp
 internal const val AccountSectionHeaderNormalTag = "account_section_header_normal"
 internal const val AccountSectionHeaderConstrainedTag = "account_section_header_constrained"
 internal const val AccountSectionHeaderTextTag = "account_section_header_text"
 internal const val AccountSectionToggleTag = "account_section_toggle"
+internal const val AccountSectionSubtitle = "Sesión y otras opciones."
+internal const val SupportRealsTitle = "Apoyar Reals"
+internal const val SupportRealsBody =
+    "Si te gusta Reals y querés ayudar a sostener el proyecto, podés hacer un aporte voluntario. " +
+        "No te da beneficios dentro de la app."
+internal const val SupportRealsCta = "Apoyar en Cafecito"
 
 @Composable
 private fun ChangePasswordDialog(
