@@ -187,6 +187,7 @@ android {
             buildConfigField("boolean", "ENABLE_LOCAL_FIREBASE_EMAIL_AUTO_VERIFICATION", "true")
             buildConfigField("boolean", "SHOW_MANUAL_LOCATION_FALLBACK", "true")
             buildConfigField("boolean", "SHOW_EXPLICIT_REFRESH_BUTTONS", "true")
+            buildConfigField("boolean", "SHOW_CAFECITO_SUPPORT", "true")
         }
         create("dev") {
             dimension = "environment"
@@ -198,6 +199,7 @@ android {
             buildConfigField("boolean", "ENABLE_LOCAL_FIREBASE_EMAIL_AUTO_VERIFICATION", "false")
             buildConfigField("boolean", "SHOW_MANUAL_LOCATION_FALLBACK", "false")
             buildConfigField("boolean", "SHOW_EXPLICIT_REFRESH_BUTTONS", "true")
+            buildConfigField("boolean", "SHOW_CAFECITO_SUPPORT", "true")
         }
         create("prod") {
             dimension = "environment"
@@ -208,6 +210,7 @@ android {
             buildConfigField("boolean", "ENABLE_LOCAL_FIREBASE_EMAIL_AUTO_VERIFICATION", "false")
             buildConfigField("boolean", "SHOW_MANUAL_LOCATION_FALLBACK", "false")
             buildConfigField("boolean", "SHOW_EXPLICIT_REFRESH_BUTTONS", "false")
+            buildConfigField("boolean", "SHOW_CAFECITO_SUPPORT", "false")
         }
     }
 

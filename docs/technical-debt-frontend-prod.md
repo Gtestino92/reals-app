@@ -304,6 +304,10 @@ Acceptance criteria:
 
 Before Play Store distribution:
 - Review Google Play user-generated content requirements.
+- Before enabling the Cafecito voluntary-support CTA in production / Google Play builds, consult Google Play Developer
+  Support and confirm that linking to Cafecito is compliant with the current Payments policy. The contribution grants
+  no digital content or service, but Cafecito may retain a platform/payment fee, so production enablement requires
+  explicit policy confirmation. The CTA is intentionally disabled in `prod` until that question is resolved.
 - Provide report/block mechanisms where required.
 - Ensure privacy policy and data safety information are accurate.
 - Review permissions:

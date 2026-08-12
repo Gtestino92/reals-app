@@ -69,6 +69,15 @@ class FlavorBuildConfigTest {
     }
 
     @Test
+    fun `cafecito support build flag is disabled for prod only`() {
+        val gradleFile = appFile("build.gradle.kts").readText()
+
+        assertTrue(flavorBlockHasCafecitoSupportFlag(gradleFile, "local", "true"))
+        assertTrue(flavorBlockHasCafecitoSupportFlag(gradleFile, "dev", "true"))
+        assertTrue(flavorBlockHasCafecitoSupportFlag(gradleFile, "prod", "false"))
+    }
+
+    @Test
     fun `firebase app check build flag is disabled only for local`() {
         val gradleFile = appFile("build.gradle.kts").readText()
 
@@ -135,6 +144,16 @@ class FlavorBuildConfigTest {
     ): Boolean {
         return Regex(
             """create\("$flavor"\)\s*\{[\s\S]*?buildConfigField\("boolean", "ENABLE_FIREBASE_APP_CHECK", "$enabled"\)""",
+        ).containsMatchIn(gradleFile)
+    }
+
+    private fun flavorBlockHasCafecitoSupportFlag(
+        gradleFile: String,
+        flavor: String,
+        enabled: String,
+    ): Boolean {
+        return Regex(
+            """create\("$flavor"\)\s*\{[\s\S]*?buildConfigField\("boolean", "SHOW_CAFECITO_SUPPORT", "$enabled"\)""",
         ).containsMatchIn(gradleFile)
     }
 

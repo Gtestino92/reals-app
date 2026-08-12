@@ -309,6 +309,7 @@ fun RealsApp(
                             onSignOut = viewModel::signOut,
                             onChangePassword = viewModel::changePassword,
                             onDeleteAccount = viewModel::deleteAccount,
+                            onSupportReals = { openCafecitoSupport(context) },
                         )
                     }
                 }
