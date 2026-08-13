@@ -24,6 +24,20 @@ internal data class SecondChatTimingPresentation(
     val showAbsoluteExpiryWarning: Boolean,
 )
 
+internal enum class SecondChatEntryAvailabilityState {
+    BeforeStart,
+    Joinable,
+    EntryClosed,
+    Unavailable,
+    Joined,
+}
+
+internal data class SecondChatEntryAvailabilityPresentation(
+    val state: SecondChatEntryAvailabilityState,
+    val title: String,
+    val message: String,
+)
+
 internal data class SecondChatResolutionPresentation(
     val createCompletion: SecondChatCreateResolutionPresentation? = null,
     val completionCooldown: SecondChatCooldownPresentation? = null,
@@ -98,6 +112,58 @@ internal fun SecondChatStatus.secondChatTimingPresentation(
         showAbsoluteExpiryWarning = genuinelyActive &&
             remainingMillis <= SECOND_CHAT_ABSOLUTE_EXPIRY_WARNING_MILLIS,
     )
+}
+
+internal fun SecondChatStatus.entryAvailabilityPresentation(
+    statusReceivedAtMillis: Long?,
+    nowMillis: Long = System.currentTimeMillis(),
+): SecondChatEntryAvailabilityPresentation? {
+    if (myAttendanceStatus != SecondChatAttendanceStatus.Pending) {
+        return SecondChatEntryAvailabilityPresentation(
+            state = SecondChatEntryAvailabilityState.Joined,
+            title = "",
+            message = "",
+        )
+    }
+    if (canJoin) {
+        return SecondChatEntryAvailabilityPresentation(
+            state = SecondChatEntryAvailabilityState.Joinable,
+            title = "",
+            message = "",
+        )
+    }
+
+    val synchronizedNow = synchronizedNowMillis(
+        statusReceivedAtMillis = statusReceivedAtMillis,
+        nowMillis = nowMillis,
+    )
+    val scheduledAtMillis = backendInstantOrNull(scheduledAt)?.toEpochMilli()
+    val entryClosesAtMillis = backendInstantOrNull(entryClosesAt)?.toEpochMilli()
+
+    return when {
+        synchronizedNow != null &&
+            scheduledAtMillis != null &&
+            synchronizedNow < scheduledAtMillis ->
+            SecondChatEntryAvailabilityPresentation(
+                state = SecondChatEntryAvailabilityState.BeforeStart,
+                title = "Todavía no está disponible",
+                message = "El segundo chat abre a las ${com.reals.app.ui.common.formatBackendTime(scheduledAt)}.",
+            )
+        synchronizedNow != null &&
+            entryClosesAtMillis != null &&
+            synchronizedNow >= entryClosesAtMillis ->
+            SecondChatEntryAvailabilityPresentation(
+                state = SecondChatEntryAvailabilityState.EntryClosed,
+                title = "Segundo chat vencido",
+                message = "La ventana para entrar terminó.",
+            )
+        else ->
+            SecondChatEntryAvailabilityPresentation(
+                state = SecondChatEntryAvailabilityState.Unavailable,
+                title = "Segundo chat no disponible",
+                message = "No se puede entrar en este momento.",
+            )
+    }
 }
 
 internal fun SecondChatLifecycleUiState.resolutionPresentation(
@@ -187,10 +253,21 @@ internal fun SecondChatStatus.remainingMillisFromServerSnapshot(
     statusReceivedAtMillis: Long,
     nowMillis: Long = System.currentTimeMillis(),
 ): Long? {
-    val server = backendInstantOrNull(serverTime) ?: return null
     val target = backendInstantOrNull(targetTime) ?: return null
-    val synchronizedNow = server.toEpochMilli() + (nowMillis - statusReceivedAtMillis)
+    val synchronizedNow = synchronizedNowMillis(
+        statusReceivedAtMillis = statusReceivedAtMillis,
+        nowMillis = nowMillis,
+    ) ?: return null
     return target.toEpochMilli() - synchronizedNow
+}
+
+private fun SecondChatStatus.synchronizedNowMillis(
+    statusReceivedAtMillis: Long?,
+    nowMillis: Long,
+): Long? {
+    val receivedAtMillis = statusReceivedAtMillis ?: return null
+    val server = backendInstantOrNull(serverTime) ?: return null
+    return server.toEpochMilli() + (nowMillis - receivedAtMillis)
 }
 
 internal fun ReceivedSecondChatStatus.remainingMillisAtReceipt(targetTime: String): Long? =

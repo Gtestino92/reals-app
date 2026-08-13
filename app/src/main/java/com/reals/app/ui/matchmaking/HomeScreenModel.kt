@@ -49,6 +49,8 @@ sealed interface HomeNextStepItem {
         val availableAt: String?,
         val expiresAt: String?,
         val durationMinutes: Long?,
+        val entryClosesAt: String? = null,
+        val myAttendanceStatus: String? = null,
     ) : HomeNextStepItem
 
     data class SecondChatAvailable(
@@ -60,6 +62,21 @@ sealed interface HomeNextStepItem {
         val availableAt: String?,
         val expiresAt: String?,
         val durationMinutes: Long?,
+        val entryClosesAt: String? = null,
+        val myAttendanceStatus: String? = null,
+    ) : HomeNextStepItem
+
+    data class SecondChatExpired(
+        val connectionId: String,
+        val matchId: String,
+        val partnerDisplayName: String?,
+        val chatId: String?,
+        val chatStatus: String?,
+        val availableAt: String?,
+        val entryClosesAt: String?,
+        val expiresAt: String?,
+        val durationMinutes: Long?,
+        val myAttendanceStatus: String?,
     ) : HomeNextStepItem
 
     data class SecondChatReadOnly(
@@ -72,6 +89,8 @@ sealed interface HomeNextStepItem {
         val expiresAt: String?,
         val readOnlyUntil: String?,
         val durationMinutes: Long?,
+        val entryClosesAt: String? = null,
+        val myAttendanceStatus: String? = null,
     ) : HomeNextStepItem
 
     data class Unknown(

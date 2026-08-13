@@ -33,6 +33,7 @@ internal fun HomeNextStepItem.secondChatHomePresentation(
     when (this) {
         is HomeNextStepItem.SecondChatScheduled,
         is HomeNextStepItem.SecondChatAvailable -> activeSecondChatPresentation(nowMillis)
+        is HomeNextStepItem.SecondChatExpired -> expiredSecondChatPresentation()
         is HomeNextStepItem.SecondChatReadOnly -> readOnlySecondChatPresentation(nowMillis)
         else -> null
     }
@@ -67,6 +68,15 @@ private fun HomeNextStepItem.activeSecondChatPresentation(
     )
 }
 
+private fun HomeNextStepItem.SecondChatExpired.expiredSecondChatPresentation(): HomeSecondChatPresentation =
+    HomeSecondChatPresentation(
+        state = SecondChatHomeState.Expired,
+        canOpenChat = false,
+        canOpenPartnerProfile = false,
+        canDismiss = connectionId.isNotBlank(),
+        primaryCtaLabel = null,
+    )
+
 private fun HomeNextStepItem.SecondChatReadOnly.readOnlySecondChatPresentation(
     nowMillis: Long,
 ): HomeSecondChatPresentation {
@@ -88,6 +98,7 @@ internal fun HomeNextStepItem.secondChatAvailableAt(): String? =
     when (this) {
         is HomeNextStepItem.SecondChatScheduled -> availableAt
         is HomeNextStepItem.SecondChatAvailable -> availableAt
+        is HomeNextStepItem.SecondChatExpired -> availableAt
         is HomeNextStepItem.SecondChatReadOnly -> availableAt
         else -> null
     }
@@ -99,6 +110,7 @@ internal fun HomeNextStepItem.secondChatExpiresAtInstant(): Instant? {
     val explicitExpiresAt = when (this) {
         is HomeNextStepItem.SecondChatScheduled -> expiresAt
         is HomeNextStepItem.SecondChatAvailable -> expiresAt
+        is HomeNextStepItem.SecondChatExpired -> expiresAt
         is HomeNextStepItem.SecondChatReadOnly -> expiresAt
         else -> null
     }.toInstantOrNull()
@@ -112,6 +124,7 @@ private fun HomeNextStepItem.secondChatRawExpiresAtInstant(): Instant? =
     when (this) {
         is HomeNextStepItem.SecondChatScheduled -> expiresAt
         is HomeNextStepItem.SecondChatAvailable -> expiresAt
+        is HomeNextStepItem.SecondChatExpired -> expiresAt
         is HomeNextStepItem.SecondChatReadOnly -> expiresAt
         else -> null
     }.toInstantOrNull()
@@ -120,6 +133,7 @@ internal fun HomeNextStepItem.secondChatDurationMinutes(): Long =
     when (this) {
         is HomeNextStepItem.SecondChatScheduled -> durationMinutes
         is HomeNextStepItem.SecondChatAvailable -> durationMinutes
+        is HomeNextStepItem.SecondChatExpired -> durationMinutes
         is HomeNextStepItem.SecondChatReadOnly -> durationMinutes
         else -> null
     } ?: DEFAULT_SECOND_CHAT_DURATION_MINUTES
@@ -137,6 +151,7 @@ internal fun HomeNextStepItem.hasExpiredSecondChatStatus(): Boolean =
     when (this) {
         is HomeNextStepItem.SecondChatScheduled -> chatStatus == "EXPIRED"
         is HomeNextStepItem.SecondChatAvailable -> chatStatus == "EXPIRED"
+        is HomeNextStepItem.SecondChatExpired -> true
         is HomeNextStepItem.SecondChatReadOnly -> chatStatus == "EXPIRED"
         else -> false
     }
@@ -144,6 +159,7 @@ internal fun HomeNextStepItem.hasExpiredSecondChatStatus(): Boolean =
 internal fun HomeNextStepItem.connectionIdForSecondChat(): String = when (this) {
     is HomeNextStepItem.SecondChatScheduled -> connectionId
     is HomeNextStepItem.SecondChatAvailable -> connectionId
+    is HomeNextStepItem.SecondChatExpired -> connectionId
     is HomeNextStepItem.SecondChatReadOnly -> connectionId
     else -> ""
 }

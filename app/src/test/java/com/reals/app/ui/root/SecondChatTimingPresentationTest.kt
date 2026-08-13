@@ -108,6 +108,86 @@ class SecondChatTimingPresentationTest {
     }
 
     @Test
+    fun `pending unjoined second chat before scheduled time presents not available yet`() {
+        val presentation = status(
+            serverTime = "2026-06-18T20:59:00Z",
+            absoluteExpiresAt = "2026-06-18T23:00:00Z",
+            scheduledAt = "2026-06-18T21:00:00Z",
+            entryClosesAt = "2026-06-18T21:20:00Z",
+            canJoin = false,
+            myAttendanceStatus = "PENDING",
+            chatId = null,
+            chatStatus = null,
+        ).entryAvailabilityPresentation(
+            statusReceivedAtMillis = 1_000L,
+            nowMillis = 1_000L,
+        )
+
+        assertEquals(SecondChatEntryAvailabilityState.BeforeStart, presentation?.state)
+        assertEquals("Todavía no está disponible", presentation?.title)
+        assertEquals("El segundo chat abre a las 21:00.", presentation?.message)
+    }
+
+    @Test
+    fun `pending unjoined second chat after entry closes presents expired entry`() {
+        val presentation = status(
+            serverTime = "2026-06-18T21:21:00Z",
+            absoluteExpiresAt = "2026-06-18T23:00:00Z",
+            scheduledAt = "2026-06-18T21:00:00Z",
+            entryClosesAt = "2026-06-18T21:20:00Z",
+            canJoin = false,
+            myAttendanceStatus = "PENDING",
+            chatId = null,
+            chatStatus = null,
+        ).entryAvailabilityPresentation(
+            statusReceivedAtMillis = 1_000L,
+            nowMillis = 1_000L,
+        )
+
+        assertEquals(SecondChatEntryAvailabilityState.EntryClosed, presentation?.state)
+        assertEquals("Segundo chat vencido", presentation?.title)
+        assertEquals("La ventana para entrar terminó.", presentation?.message)
+    }
+
+    @Test
+    fun `pending second chat inside entry window remains joinable`() {
+        val presentation = status(
+            serverTime = "2026-06-18T21:05:00Z",
+            absoluteExpiresAt = "2026-06-18T23:00:00Z",
+            scheduledAt = "2026-06-18T21:00:00Z",
+            entryClosesAt = "2026-06-18T21:20:00Z",
+            canJoin = true,
+            myAttendanceStatus = "PENDING",
+            chatId = null,
+            chatStatus = null,
+        ).entryAvailabilityPresentation(
+            statusReceivedAtMillis = 1_000L,
+            nowMillis = 1_000L,
+        )
+
+        assertEquals(SecondChatEntryAvailabilityState.Joinable, presentation?.state)
+    }
+
+    @Test
+    fun `joined second chat after entry closes is not entry expired`() {
+        val presentation = status(
+            serverTime = "2026-06-18T21:21:00Z",
+            absoluteExpiresAt = "2026-06-18T23:00:00Z",
+            scheduledAt = "2026-06-18T21:00:00Z",
+            entryClosesAt = "2026-06-18T21:20:00Z",
+            canJoin = false,
+            myAttendanceStatus = "ON_TIME",
+            chatId = "chat-1",
+            chatStatus = "ACTIVE",
+        ).entryAvailabilityPresentation(
+            statusReceivedAtMillis = 1_000L,
+            nowMillis = 1_000L,
+        )
+
+        assertEquals(SecondChatEntryAvailabilityState.Joined, presentation?.state)
+    }
+
+    @Test
     fun `replacing snapshot resets elapsed origin`() {
         val oldLifecycle = lifecycle(
             serverTime = "2026-06-18T21:00:00Z",
@@ -395,6 +475,35 @@ class SecondChatTimingPresentationTest {
         assertEquals("2026-06-18T21:00:00Z", state.lifecycle.status?.serverTime)
         assertEquals(100L, state.lifecycle.statusReceivedAtMillis)
         assertFalse(state.lifecycle.joining)
+    }
+
+    @Test
+    fun `stale home race does not join when status says entry closed`() = runTest(dispatcher) {
+        val api = FakeRealsApi().apply {
+            secondChatStatusResponse = Response.success(
+                TestDtos.secondChatStatus(
+                    chatId = null,
+                    myAttendanceStatus = "PENDING",
+                    canJoin = false,
+                    chatStatus = null,
+                    serverTime = "2026-06-18T21:21:00Z",
+                )
+            )
+        }
+        val coordinator = coordinator(api, mutableListOf(100L))
+
+        val result = coordinator.load(
+            session = TestDomain.session(),
+            connectionId = "connection-1",
+            matchId = "match-1",
+            partnerName = "Alex",
+            joinIfAllowed = true,
+        )
+
+        val state = (result as SecondChatLoadResult.Show).state
+        assertEquals(null, state.chat)
+        assertEquals(SecondChatEntryAvailabilityState.EntryClosed, state.lifecycle.status?.entryAvailabilityPresentation(100L, 100L)?.state)
+        assertFalse(api.calls.contains("joinSecondChat"))
     }
 
     @Test
@@ -1184,8 +1293,12 @@ class SecondChatTimingPresentationTest {
         chatId: String? = "chat-1",
         serverTime: String,
         absoluteExpiresAt: String,
+        scheduledAt: String = "2026-06-18T21:00:00Z",
+        entryClosesAt: String = "2026-06-18T21:20:00Z",
         chatStatus: String? = "ACTIVE",
         readOnlyUntil: String? = null,
+        myAttendanceStatus: String = "ON_TIME",
+        canJoin: Boolean = false,
         canClaimPartnerNoShow: Boolean = false,
         activeResolutionRequest: SecondChatResolutionRequest? = null,
         canRequestMutualCompletion: Boolean = false,
@@ -1193,8 +1306,12 @@ class SecondChatTimingPresentationTest {
         canClaimPartnerInactivity: Boolean = false,
     ): SecondChatStatus = TestDtos.secondChatStatus(
         chatId = chatId,
+        scheduledAt = scheduledAt,
+        entryClosesAt = entryClosesAt,
         chatStatus = chatStatus,
         readOnlyUntil = readOnlyUntil,
+        myAttendanceStatus = myAttendanceStatus,
+        canJoin = canJoin,
         canClaimPartnerNoShow = canClaimPartnerNoShow,
         activeResolutionRequest = activeResolutionRequest?.let {
             TestDtos.secondChatResolutionRequest(

@@ -112,6 +112,7 @@ import com.reals.app.ui.root.ChatAudioDraftUiState
 import com.reals.app.ui.root.ChatAudioUploadUiState
 import com.reals.app.ui.root.SecondChatLifecycleUiState
 import com.reals.app.ui.root.SecondChatResolutionPresentation
+import com.reals.app.ui.root.entryAvailabilityPresentation
 import com.reals.app.ui.root.hasPendingNoShowClaim
 import com.reals.app.ui.root.isWaitingForPartner
 import com.reals.app.ui.root.remainingMillisFromServerSnapshot
@@ -847,9 +848,13 @@ private fun SecondChatLifecyclePanel(
             )
         }
         status.myAttendanceStatus == SecondChatAttendanceStatus.Pending && !status.canJoin -> {
+            val presentation = status.entryAvailabilityPresentation(
+                statusReceivedAtMillis = lifecycle.statusReceivedAtMillis,
+                nowMillis = nowMillis,
+            )
             FeedbackCard(
-                title = "Todavía no está disponible",
-                message = "El segundo chat abre a las ${formatBackendTime(status.scheduledAt)}.",
+                title = presentation?.title ?: "Segundo chat no disponible",
+                message = presentation?.message ?: "No se puede entrar en este momento.",
                 tone = FeedbackTone.Info,
             )
         }

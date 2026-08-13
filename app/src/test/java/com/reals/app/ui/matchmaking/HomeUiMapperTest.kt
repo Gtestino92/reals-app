@@ -124,6 +124,12 @@ class HomeUiMapperTest {
                         partner = null,
                         secondChat = homeChat("read-only-chat", ChatStatus.Expired, "Riley"),
                     ),
+                    HomeNextStep.SecondChatExpired(
+                        connectionId = "connection-expired",
+                        matchId = "match-expired",
+                        partner = partner("Expired"),
+                        secondChat = homeChat("expired-chat", ChatStatus.Available, "Expired"),
+                    ),
                 ),
             ),
             localHidden = noHiddenInteractions(),
@@ -136,6 +142,8 @@ class HomeUiMapperTest {
         assertEquals("Jordan", (model.nextSteps[1] as HomeNextStepItem.SecondChatAvailable).partnerDisplayName)
         assertTrue(model.nextSteps[2] is HomeNextStepItem.SecondChatReadOnly)
         assertEquals("Riley", (model.nextSteps[2] as HomeNextStepItem.SecondChatReadOnly).partnerDisplayName)
+        assertTrue(model.nextSteps[3] is HomeNextStepItem.SecondChatExpired)
+        assertEquals("Expired", (model.nextSteps[3] as HomeNextStepItem.SecondChatExpired).partnerDisplayName)
     }
 
     @Test
@@ -371,6 +379,7 @@ class HomeUiMapperTest {
         is HomeNextStepItem.Scheduling -> connectionId
         is HomeNextStepItem.SecondChatScheduled -> connectionId
         is HomeNextStepItem.SecondChatAvailable -> connectionId
+        is HomeNextStepItem.SecondChatExpired -> connectionId
         is HomeNextStepItem.SecondChatReadOnly -> connectionId
         is HomeNextStepItem.Unknown -> connectionId
     }

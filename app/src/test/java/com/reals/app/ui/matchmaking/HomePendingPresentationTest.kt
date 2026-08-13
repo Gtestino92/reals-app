@@ -32,6 +32,7 @@ class HomePendingPresentationTest {
             availableAt = "2026-07-15T09:00:00Z",
             expiresAt = "2026-07-15T10:00:00Z",
         )
+        val entryExpired = expired("connection-entry-expired")
         val unknown = HomeNextStepItem.Unknown("connection-unknown", "match-unknown", "NEW", "Taylor")
 
         val presentation = presentation(
@@ -39,7 +40,7 @@ class HomePendingPresentationTest {
                 HomeActionItem.FirstChat("match-first", "chat-first", "Alex"),
                 visualReview,
             ),
-            nextSteps = listOf(scheduling, waiting, open, readOnly, readOnlyEnded, expired, unknown),
+            nextSteps = listOf(scheduling, waiting, open, readOnly, readOnlyEnded, expired, entryExpired, unknown),
         )
 
         assertSection(
@@ -52,7 +53,12 @@ class HomePendingPresentationTest {
         assertSection(
             presentation,
             HomePendingSectionType.Recent,
-            listOf("next:connection-expired", "next:connection-read-only", "next:connection-read-only-ended"),
+            listOf(
+                "next:connection-expired",
+                "next:connection-entry-expired",
+                "next:connection-read-only",
+                "next:connection-read-only-ended",
+            ),
         )
         assertSection(presentation, HomePendingSectionType.Other, listOf("next:connection-unknown"))
     }
@@ -63,6 +69,7 @@ class HomePendingPresentationTest {
         assertEquals(HomePendingItemKind.Scheduling, scheduling("connection-scheduling").pendingItemKind())
         assertEquals(HomePendingItemKind.SecondChat, scheduled("connection-scheduled").pendingItemKind())
         assertEquals(HomePendingItemKind.SecondChat, available("connection-available").pendingItemKind())
+        assertEquals(HomePendingItemKind.SecondChat, expired("connection-expired").pendingItemKind())
         assertEquals(
             HomePendingItemKind.SecondChat,
             readOnly("connection-read-only", readOnlyUntil = "2026-07-15T13:00:00Z").pendingItemKind(),
@@ -247,10 +254,11 @@ class HomePendingPresentationTest {
             availableAt = "2026-07-15T09:00:00Z",
             expiresAt = "2026-07-15T10:00:00Z",
         )
+        val explicitExpiredSecondChat = expired("connection-entry-expired")
 
         val presentation = presentation(
             actions = listOf(warningVisualReview, expiredVisualReview, criticalVisualReview),
-            nextSteps = listOf(open, startingSoon, outsideNearWindow, readOnly, expiredSecondChat),
+            nextSteps = listOf(open, startingSoon, outsideNearWindow, readOnly, expiredSecondChat, explicitExpiredSecondChat),
         )
 
         assertEquals(
@@ -258,6 +266,15 @@ class HomePendingPresentationTest {
             presentation.priorityItems.map { it.idForTest() },
         )
         assertEquals(1, presentation.priorityOverflowCount)
+    }
+
+    @Test
+    fun `open second chat priority body does not duplicate action label`() {
+        val open = available("connection-open")
+        val presentation = presentation(nextSteps = listOf(open))
+        val priority = presentation.priorityItems.single() as HomePriorityItem.SecondChatOpen
+
+        assertEquals("Ya está disponible.", priority.homePriorityBody(nowMillis))
     }
 
     @Test
@@ -381,6 +398,22 @@ class HomePendingPresentationTest {
             durationMinutes = 120,
         )
 
+    private fun expired(
+        connectionId: String,
+    ): HomeNextStepItem.SecondChatExpired =
+        HomeNextStepItem.SecondChatExpired(
+            connectionId = connectionId,
+            matchId = "match-$connectionId",
+            partnerDisplayName = "Alex",
+            chatId = null,
+            chatStatus = null,
+            availableAt = "2026-07-15T09:00:00Z",
+            entryClosesAt = "2026-07-15T09:20:00Z",
+            expiresAt = "2026-07-15T11:00:00Z",
+            durationMinutes = 120,
+            myAttendanceStatus = "NO_SHOW",
+        )
+
     private fun readOnly(
         connectionId: String,
         readOnlyUntil: String?,
@@ -430,6 +463,7 @@ class HomePendingPresentationTest {
             is HomeNextStepItem.Scheduling -> connectionId
             is HomeNextStepItem.SecondChatScheduled -> connectionId
             is HomeNextStepItem.SecondChatAvailable -> connectionId
+            is HomeNextStepItem.SecondChatExpired -> connectionId
             is HomeNextStepItem.SecondChatReadOnly -> connectionId
             is HomeNextStepItem.Unknown -> connectionId
         }

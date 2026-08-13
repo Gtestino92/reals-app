@@ -96,6 +96,30 @@ class HomeSecondChatAvailabilityTest {
     }
 
     @Test
+    fun `explicit expired second chat cannot open profile or chat and has no cta`() {
+        val item = HomeNextStepItem.SecondChatExpired(
+            connectionId = "connection-second",
+            matchId = "match-second",
+            partnerDisplayName = "Partner",
+            chatId = null,
+            chatStatus = null,
+            availableAt = "2026-06-20T18:00:00-03:00",
+            entryClosesAt = "2026-06-20T18:20:00-03:00",
+            expiresAt = "2026-06-20T20:00:00-03:00",
+            durationMinutes = 120,
+            myAttendanceStatus = "NO_SHOW",
+        )
+
+        val presentation = item.secondChatHomePresentation(millis("2026-06-20T18:21:00-03:00"))
+
+        assertEquals(SecondChatHomeState.Expired, presentation?.state)
+        assertFalse(presentation?.canOpenChat == true)
+        assertFalse(presentation?.canOpenPartnerProfile == true)
+        assertTrue(presentation?.canDismiss == true)
+        assertNull(presentation?.primaryCtaLabel)
+    }
+
+    @Test
     fun `read only second chat closes after read only window`() {
         val item = HomeNextStepItem.SecondChatReadOnly(
             connectionId = "connection-second",

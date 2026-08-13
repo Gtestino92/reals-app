@@ -51,11 +51,13 @@ private fun HomeNextStepItem.activeSecondChatRoute(): HomeRoute.OpenSecondChat? 
         matchId = when (this) {
             is HomeNextStepItem.SecondChatScheduled -> matchId
             is HomeNextStepItem.SecondChatAvailable -> matchId
+            is HomeNextStepItem.SecondChatExpired -> matchId
             else -> ""
         },
         partnerName = when (this) {
             is HomeNextStepItem.SecondChatScheduled -> partnerDisplayName
             is HomeNextStepItem.SecondChatAvailable -> partnerDisplayName
+            is HomeNextStepItem.SecondChatExpired -> partnerDisplayName
             else -> null
         },
     )

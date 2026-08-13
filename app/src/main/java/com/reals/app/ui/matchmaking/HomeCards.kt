@@ -641,6 +641,7 @@ internal fun NextStepItem(
         if (
             item is HomeNextStepItem.SecondChatScheduled ||
             item is HomeNextStepItem.SecondChatAvailable ||
+            item is HomeNextStepItem.SecondChatExpired ||
             item is HomeNextStepItem.SecondChatReadOnly
         ) {
             item.secondChatHomePresentation(nowMillis)
@@ -790,6 +791,7 @@ internal fun HomeNextStepItem.partnerDisplayName(): String? = when (this) {
     is HomeNextStepItem.Scheduling -> partnerDisplayName
     is HomeNextStepItem.SecondChatScheduled -> partnerDisplayName
     is HomeNextStepItem.SecondChatAvailable -> partnerDisplayName
+    is HomeNextStepItem.SecondChatExpired -> partnerDisplayName
     is HomeNextStepItem.SecondChatReadOnly -> partnerDisplayName
     is HomeNextStepItem.Unknown -> partnerDisplayName
 }
@@ -798,6 +800,7 @@ internal fun HomeNextStepItem.matchIdForProfile(): String = when (this) {
     is HomeNextStepItem.Scheduling -> matchId
     is HomeNextStepItem.SecondChatScheduled -> matchId
     is HomeNextStepItem.SecondChatAvailable -> matchId
+    is HomeNextStepItem.SecondChatExpired -> matchId
     is HomeNextStepItem.SecondChatReadOnly -> matchId
     is HomeNextStepItem.Unknown -> matchId.orEmpty()
 }
@@ -808,6 +811,7 @@ private fun HomeNextStepItem.canShowPartnerProfile(nowMillis: Long = System.curr
     return when (this) {
         is HomeNextStepItem.SecondChatScheduled,
         is HomeNextStepItem.SecondChatAvailable,
+        is HomeNextStepItem.SecondChatExpired,
         is HomeNextStepItem.SecondChatReadOnly -> secondChatHomePresentation(nowMillis)?.canOpenPartnerProfile == true
         else -> true
     }
@@ -823,7 +827,7 @@ internal fun HomeNextStepItem.homeNextStepBody(
 ): String =
     when (secondChatHomePresentation(nowMillis)?.state) {
         SecondChatHomeState.ReadOnlyEnded -> "El período de solo lectura terminó."
-        SecondChatHomeState.Expired -> "El horario ya venció y el segundo chat no está disponible."
+        SecondChatHomeState.Expired -> "La ventana para entrar terminó."
         else ->
         when (this) {
             is HomeNextStepItem.Scheduling -> "Coordinando próximo encuentro."
@@ -845,6 +849,7 @@ internal fun HomeNextStepItem.homeNextStepBody(
                         locale,
                     )
                 }. Duración máxima: ${durationLabel()}."
+            is HomeNextStepItem.SecondChatExpired -> "La ventana para entrar terminó."
             is HomeNextStepItem.SecondChatReadOnly ->
                 readOnlyUntil?.let {
                     "Disponible solo para lectura hasta ${
@@ -865,6 +870,7 @@ private fun HomeNextStepItem.durationLabel(): String {
     val minutes = when (this) {
         is HomeNextStepItem.SecondChatScheduled -> durationMinutes
         is HomeNextStepItem.SecondChatAvailable -> durationMinutes
+        is HomeNextStepItem.SecondChatExpired -> durationMinutes
         is HomeNextStepItem.SecondChatReadOnly -> durationMinutes
         else -> null
     } ?: return "2 horas"

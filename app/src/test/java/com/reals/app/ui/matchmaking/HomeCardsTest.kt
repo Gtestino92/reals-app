@@ -337,6 +337,7 @@ class HomeCardsTest {
         is HomeNextStepItem.Scheduling -> connectionId
         is HomeNextStepItem.SecondChatScheduled -> connectionId
         is HomeNextStepItem.SecondChatAvailable -> connectionId
+        is HomeNextStepItem.SecondChatExpired -> connectionId
         is HomeNextStepItem.SecondChatReadOnly -> connectionId
         is HomeNextStepItem.Unknown -> connectionId
     }

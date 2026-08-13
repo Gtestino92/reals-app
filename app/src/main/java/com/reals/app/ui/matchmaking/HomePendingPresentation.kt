@@ -300,6 +300,7 @@ internal fun HomeNextStepItem.pendingItemKind(): HomePendingItemKind? =
         is HomeNextStepItem.Scheduling -> HomePendingItemKind.Scheduling
         is HomeNextStepItem.SecondChatScheduled,
         is HomeNextStepItem.SecondChatAvailable,
+        is HomeNextStepItem.SecondChatExpired,
         is HomeNextStepItem.SecondChatReadOnly -> HomePendingItemKind.SecondChat
         is HomeNextStepItem.Unknown -> null
     }
@@ -321,6 +322,7 @@ internal fun HomeNextStepItem.pendingNextStepTitle(): String =
                 ?: "Coordinación pendiente"
         is HomeNextStepItem.SecondChatScheduled,
         is HomeNextStepItem.SecondChatAvailable,
+        is HomeNextStepItem.SecondChatExpired,
         is HomeNextStepItem.SecondChatReadOnly ->
             partnerDisplayName()
                 ?.takeIf { it.isNotBlank() }
