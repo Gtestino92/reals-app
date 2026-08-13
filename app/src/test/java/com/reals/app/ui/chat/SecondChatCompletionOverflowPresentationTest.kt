@@ -1,5 +1,7 @@
 package com.reals.app.ui.chat
 
+import com.reals.app.domain.model.ChatType
+import com.reals.app.domain.model.SecondChatAttendanceStatus
 import com.reals.app.domain.model.SecondChatResolutionRequestType
 import com.reals.app.ui.root.SecondChatActiveResolutionPresentation
 import com.reals.app.ui.root.SecondChatCreateResolutionPresentation
@@ -11,6 +13,72 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SecondChatCompletionOverflowPresentationTest {
+    @Test
+    fun `first chat remains eligible for safety actions without second-chat lifecycle`() {
+        assertTrue(
+            secondChatSafetyActionsAllowed(
+                chatType = ChatType.FirstChat,
+                attendanceStatus = null,
+            )
+        )
+    }
+
+    @Test
+    fun `second chat on time attendance is eligible for safety actions`() {
+        assertTrue(
+            secondChatSafetyActionsAllowed(
+                chatType = ChatType.SecondChat,
+                attendanceStatus = SecondChatAttendanceStatus.OnTime,
+            )
+        )
+    }
+
+    @Test
+    fun `second chat late attendance is eligible for safety actions`() {
+        assertTrue(
+            secondChatSafetyActionsAllowed(
+                chatType = ChatType.SecondChat,
+                attendanceStatus = SecondChatAttendanceStatus.Late,
+            )
+        )
+    }
+
+    @Test
+    fun `second chat pending attendance is ineligible for safety actions`() {
+        assertFalse(
+            secondChatSafetyActionsAllowed(
+                chatType = ChatType.SecondChat,
+                attendanceStatus = SecondChatAttendanceStatus.Pending,
+            )
+        )
+    }
+
+    @Test
+    fun `second chat no show attendance is ineligible for safety actions`() {
+        assertFalse(
+            secondChatSafetyActionsAllowed(
+                chatType = ChatType.SecondChat,
+                attendanceStatus = SecondChatAttendanceStatus.NoShow,
+            )
+        )
+    }
+
+    @Test
+    fun `second chat missing or unknown attendance fails closed for safety actions`() {
+        assertFalse(
+            secondChatSafetyActionsAllowed(
+                chatType = ChatType.SecondChat,
+                attendanceStatus = null,
+            )
+        )
+        assertFalse(
+            secondChatSafetyActionsAllowed(
+                chatType = ChatType.SecondChat,
+                attendanceStatus = SecondChatAttendanceStatus.Unknown("NEW_STATUS"),
+            )
+        )
+    }
+
     @Test
     fun `eligible second-chat completion creates overflow action`() {
         val action = secondChatCompletionOverflowPresentation(

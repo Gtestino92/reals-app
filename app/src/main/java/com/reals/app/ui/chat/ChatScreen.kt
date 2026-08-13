@@ -365,8 +365,16 @@ fun ChatScreen(
     )
     val manualBlockBusy =
         loading || refreshing || sending || actionLoading || guidanceActionLoading || manualBlockLoading
-    val canManualBlock = !manualBlockBusy
-    val canUseSafetyActions = firstChatPolicy.safetyAvailable && !loadingChatAction && !manualBlockLoading
+    val secondChatSafetyEligible = secondChatSafetyActionsAllowed(
+        chatType = chat?.chatType,
+        attendanceStatus = secondChatLifecycle?.status?.myAttendanceStatus,
+    )
+    val canManualBlock = !manualBlockBusy && secondChatSafetyEligible
+    val canUseSafetyActions =
+        firstChatPolicy.safetyAvailable &&
+            !loadingChatAction &&
+            !manualBlockLoading &&
+            secondChatSafetyEligible
     val canDecide = firstChatInteractionPolicy(
         chat = chat,
         canChat = canChat,
@@ -909,11 +917,16 @@ private fun SecondChatLifecyclePanel(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     if (status.canClaimPartnerNoShow) {
+                        Text(
+                            "Si pasa el tiempo de espera, podés reclamar. " +
+                                    "Si la otra persona no entra durante el plazo de confirmación, la cita termina sin penalizarte.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         Button(
                             onClick = onClaimNoShow,
                             enabled = !actionLoading && lifecycle.claimingNoShow.not(),
                         ) {
-                            Text("La otra persona no llegó")
+                            Text("$safePartnerName no se presentó")
                         }
                     }
                 }
@@ -1114,6 +1127,14 @@ internal fun chatOverflowCanOpen(
                 (visibility.showSafety && canUseSafetyActions)
             ) ||
         (visibility.showManualBlock && canManualBlock)
+
+internal fun secondChatSafetyActionsAllowed(
+    chatType: ChatType?,
+    attendanceStatus: SecondChatAttendanceStatus?,
+): Boolean =
+    chatType != ChatType.SecondChat ||
+        attendanceStatus == SecondChatAttendanceStatus.OnTime ||
+        attendanceStatus == SecondChatAttendanceStatus.Late
 
 internal fun secondChatCompletionOverflowMenuItemEnabled(
     action: SecondChatCompletionOverflowPresentation,
