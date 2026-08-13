@@ -58,6 +58,129 @@ class HomePendingPresentationTest {
     }
 
     @Test
+    fun `secondary kind mapping identifies known pending interaction types`() {
+        assertEquals(HomePendingItemKind.VisualReview, visualReview().asHubItem().pendingItemKind())
+        assertEquals(HomePendingItemKind.Scheduling, scheduling("connection-scheduling").pendingItemKind())
+        assertEquals(HomePendingItemKind.SecondChat, scheduled("connection-scheduled").pendingItemKind())
+        assertEquals(HomePendingItemKind.SecondChat, available("connection-available").pendingItemKind())
+        assertEquals(
+            HomePendingItemKind.SecondChat,
+            readOnly("connection-read-only", readOnlyUntil = "2026-07-15T13:00:00Z").pendingItemKind(),
+        )
+        assertEquals(
+            null,
+            HomeNextStepItem.Unknown("connection-unknown", "match-unknown", "NEW", "Taylor").pendingItemKind(),
+        )
+    }
+
+    @Test
+    fun `action required keeps one primary section with visual review and scheduling subgroups`() {
+        val presentation = presentation(
+            actions = listOf(visualReview(matchId = "match-visual")),
+            nextSteps = listOf(scheduling("connection-scheduling")),
+        )
+
+        val section = presentation.hubSections.single()
+
+        assertEquals(HomePendingSectionType.ActionRequired, section.type)
+        assertEquals(
+            listOf(HomePendingItemKind.VisualReview, HomePendingItemKind.Scheduling),
+            section.secondaryGroups.map { it.kind },
+        )
+        assertEquals(listOf("Perfiles por descubrir", "Coordinación"), section.secondaryGroups.map { it.title })
+        assertEquals(listOf("visual:match-visual"), section.secondaryGroups[0].items.map { it.idForTest() })
+        assertEquals(listOf("next:connection-scheduling"), section.secondaryGroups[1].items.map { it.idForTest() })
+    }
+
+    @Test
+    fun `unknown pending state stays under other without semantic subgroup title`() {
+        val presentation = presentation(
+            nextSteps = listOf(HomeNextStepItem.Unknown("connection-unknown", "match-unknown", "NEW", "Taylor")),
+        )
+
+        val section = presentation.hubSections.single()
+
+        assertEquals(HomePendingSectionType.Other, section.type)
+        assertEquals(listOf(null), section.secondaryGroups.map { it.kind })
+        assertEquals(listOf(null), section.secondaryGroups.map { it.title })
+        assertEquals(listOf("next:connection-unknown"), section.secondaryGroups.single().items.map { it.idForTest() })
+    }
+
+    @Test
+    fun `primary classification remains unchanged after secondary grouping`() {
+        val presentation = presentation(
+            actions = listOf(HomeActionItem.FirstChat("match-first", "chat-first", "Alex"), visualReview()),
+            nextSteps = listOf(
+                scheduling("connection-scheduling"),
+                scheduled("connection-waiting", availableAt = "2026-07-15T12:30:00Z"),
+                available("connection-open"),
+                readOnly("connection-read-only", readOnlyUntil = "2026-07-15T13:00:00Z"),
+                HomeNextStepItem.Unknown("connection-unknown", "match-unknown", "NEW", "Taylor"),
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                HomePendingSectionType.ActionRequired,
+                HomePendingSectionType.InProgress,
+                HomePendingSectionType.Upcoming,
+                HomePendingSectionType.Recent,
+                HomePendingSectionType.Other,
+            ),
+            presentation.hubSections.map { it.type },
+        )
+        assertEquals(1, presentation.firstChats.size)
+    }
+
+    @Test
+    fun `secondary grouping preserves deterministic order inside each type`() {
+        val laterVisualReview = visualReview(
+            matchId = "match-later",
+            visualExpiresAt = "2026-07-15T14:00:00Z",
+        )
+        val earlierVisualReview = visualReview(
+            matchId = "match-earlier",
+            visualExpiresAt = "2026-07-15T13:00:00Z",
+        )
+
+        val presentation = presentation(
+            actions = listOf(laterVisualReview, earlierVisualReview),
+            nextSteps = listOf(scheduling("connection-a"), scheduling("connection-b")),
+        )
+
+        val groups = presentation.hubSections.single { it.type == HomePendingSectionType.ActionRequired }
+            .secondaryGroups
+
+        assertEquals(listOf("visual:match-earlier", "visual:match-later"), groups[0].items.map { it.idForTest() })
+        assertEquals(listOf("next:connection-a", "next:connection-b"), groups[1].items.map { it.idForTest() })
+    }
+
+    @Test
+    fun `pending row titles identify interaction type`() {
+        assertEquals(
+            "Descubrí el perfil de Ana",
+            visualReview(partnerDisplayName = "Ana").pendingVisualReviewTitle(),
+        )
+        assertEquals("Descubrí el perfil", visualReview(partnerDisplayName = null).pendingVisualReviewTitle())
+        assertEquals(
+            "Coordinación con Ana",
+            scheduling("connection-scheduling", partnerDisplayName = "Ana").pendingNextStepTitle(),
+        )
+        assertEquals(
+            "Segundo chat con Ana",
+            scheduled("connection-scheduled", partnerDisplayName = "Ana").pendingNextStepTitle(),
+        )
+    }
+
+    @Test
+    fun `pending scheduling body is specific to second chat coordination`() {
+        assertEquals(
+            "Elegí horarios para el segundo chat.",
+            scheduling("connection-scheduling").pendingNextStepBody(nowMillis),
+        )
+    }
+
+    @Test
     fun `summary copy uses singular plural and priority order`() {
         assertEquals(
             "1 requiere tu acción",
@@ -205,31 +328,36 @@ class HomePendingPresentationTest {
 
     private fun visualReview(
         matchId: String = "match-visual",
+        partnerDisplayName: String? = "Sam",
         visualStartedAt: String? = "2026-07-15T10:00:00Z",
         visualExpiresAt: String? = "2026-07-15T14:00:00Z",
     ): HomeActionItem.VisualReview = HomeActionItem.VisualReview(
         matchId = matchId,
-        partnerDisplayName = "Sam",
+        partnerDisplayName = partnerDisplayName,
         visualStartedAt = visualStartedAt,
         visualExpiresAt = visualExpiresAt,
     )
 
-    private fun scheduling(connectionId: String): HomeNextStepItem.Scheduling =
+    private fun scheduling(
+        connectionId: String,
+        partnerDisplayName: String? = "Alex",
+    ): HomeNextStepItem.Scheduling =
         HomeNextStepItem.Scheduling(
             connectionId = connectionId,
             matchId = "match-$connectionId",
-            partnerDisplayName = "Alex",
+            partnerDisplayName = partnerDisplayName,
         )
 
     private fun scheduled(
         connectionId: String = "connection-scheduled",
+        partnerDisplayName: String? = "Alex",
         availableAt: String? = "2026-07-15T13:00:00Z",
         expiresAt: String? = "2026-07-15T15:00:00Z",
     ): HomeNextStepItem.SecondChatScheduled =
         HomeNextStepItem.SecondChatScheduled(
             connectionId = connectionId,
             matchId = "match-$connectionId",
-            partnerDisplayName = "Alex",
+            partnerDisplayName = partnerDisplayName,
             chatId = null,
             chatStatus = "SCHEDULED",
             availableAt = availableAt,
@@ -282,6 +410,13 @@ class HomePendingPresentationTest {
             is HomePendingHubItem.VisualReview -> "visual:${action.matchId}"
             is HomePendingHubItem.NextStep -> "next:${item.connectionIdForTest()}"
         }
+
+    private fun HomeActionItem.VisualReview.asHubItem(): HomePendingHubItem.VisualReview =
+        HomePendingHubItem.VisualReview(
+            action = this,
+            sourceIndex = 0,
+            expiresAtMillis = visualExpiresAt.toInstantOrNull()?.toEpochMilli(),
+        )
 
     private fun HomePriorityItem.idForTest(): String =
         when (this) {

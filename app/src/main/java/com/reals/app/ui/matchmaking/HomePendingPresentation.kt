@@ -1,5 +1,6 @@
 package com.reals.app.ui.matchmaking
 
+import com.reals.app.core.security.TextSafety
 import com.reals.app.ui.common.VisualReviewProgressUrgency
 import com.reals.app.ui.common.visualReviewProgressUrgency
 import com.reals.app.ui.common.visualReviewRemainingFraction
@@ -17,7 +18,22 @@ internal data class HomePendingPresentation(
 internal data class HomePendingSection(
     val type: HomePendingSectionType,
     val items: List<HomePendingHubItem>,
-)
+) {
+    val secondaryGroups: List<HomePendingSecondaryGroup> = items.toPendingSecondaryGroups()
+}
+
+internal data class HomePendingSecondaryGroup(
+    val kind: HomePendingItemKind?,
+    val items: List<HomePendingHubItem>,
+) {
+    val title: String? = kind?.title
+}
+
+internal enum class HomePendingItemKind(val title: String) {
+    VisualReview("Perfiles por descubrir"),
+    Scheduling("Coordinación"),
+    SecondChat("Segundos chats"),
+}
 
 internal enum class HomePendingSectionType(val title: String) {
     ActionRequired("Requiere tu acción"),
@@ -253,6 +269,72 @@ private fun List<HomePendingHubItem.NextStep>.sortedByEventThenSource(): List<Ho
             { it.sourceIndex },
         ),
     )
+
+private fun List<HomePendingHubItem>.toPendingSecondaryGroups(): List<HomePendingSecondaryGroup> {
+    val groups = mutableListOf<HomePendingSecondaryGroupBuilder>()
+    for (item in this) {
+        val kind = item.pendingItemKind()
+        val existingGroup = groups.firstOrNull { it.kind == kind }
+        if (existingGroup != null) {
+            existingGroup.items += item
+        } else {
+            groups += HomePendingSecondaryGroupBuilder(kind = kind, items = mutableListOf(item))
+        }
+    }
+    return groups.map { HomePendingSecondaryGroup(kind = it.kind, items = it.items) }
+}
+
+private data class HomePendingSecondaryGroupBuilder(
+    val kind: HomePendingItemKind?,
+    val items: MutableList<HomePendingHubItem>,
+)
+
+internal fun HomePendingHubItem.pendingItemKind(): HomePendingItemKind? =
+    when (this) {
+        is HomePendingHubItem.VisualReview -> HomePendingItemKind.VisualReview
+        is HomePendingHubItem.NextStep -> item.pendingItemKind()
+    }
+
+internal fun HomeNextStepItem.pendingItemKind(): HomePendingItemKind? =
+    when (this) {
+        is HomeNextStepItem.Scheduling -> HomePendingItemKind.Scheduling
+        is HomeNextStepItem.SecondChatScheduled,
+        is HomeNextStepItem.SecondChatAvailable,
+        is HomeNextStepItem.SecondChatReadOnly -> HomePendingItemKind.SecondChat
+        is HomeNextStepItem.Unknown -> null
+    }
+
+internal fun HomeActionItem.VisualReview.pendingVisualReviewTitle(): String =
+    partnerDisplayName
+        ?.takeIf { it.isNotBlank() }
+        ?.let(TextSafety::safeDisplay)
+        ?.let { "Descubrí el perfil de $it" }
+        ?: "Descubrí el perfil"
+
+internal fun HomeNextStepItem.pendingNextStepTitle(): String =
+    when (this) {
+        is HomeNextStepItem.Scheduling ->
+            partnerDisplayName
+                ?.takeIf { it.isNotBlank() }
+                ?.let(TextSafety::safeDisplay)
+                ?.let { "Coordinación con $it" }
+                ?: "Coordinación pendiente"
+        is HomeNextStepItem.SecondChatScheduled,
+        is HomeNextStepItem.SecondChatAvailable,
+        is HomeNextStepItem.SecondChatReadOnly ->
+            partnerDisplayName()
+                ?.takeIf { it.isNotBlank() }
+                ?.let(TextSafety::safeDisplay)
+                ?.let { "Segundo chat con $it" }
+                ?: "Segundo chat"
+        is HomeNextStepItem.Unknown -> "Conexión no disponible"
+    }
+
+internal fun HomeNextStepItem.pendingNextStepBody(nowMillis: Long): String =
+    when (this) {
+        is HomeNextStepItem.Scheduling -> "Elegí horarios para el segundo chat."
+        else -> homeNextStepBody(nowMillis)
+    }
 
 private fun HomePriorityItem.priorityTypeOrder(): Int =
     when (this) {
