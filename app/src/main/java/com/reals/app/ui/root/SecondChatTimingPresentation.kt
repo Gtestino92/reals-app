@@ -118,14 +118,16 @@ internal fun SecondChatStatus.entryAvailabilityPresentation(
     statusReceivedAtMillis: Long?,
     nowMillis: Long = System.currentTimeMillis(),
 ): SecondChatEntryAvailabilityPresentation? {
-    if (myAttendanceStatus != SecondChatAttendanceStatus.Pending) {
+    if (myAttendanceStatus == SecondChatAttendanceStatus.OnTime ||
+        myAttendanceStatus == SecondChatAttendanceStatus.Late
+    ) {
         return SecondChatEntryAvailabilityPresentation(
             state = SecondChatEntryAvailabilityState.Joined,
             title = "",
             message = "",
         )
     }
-    if (canJoin) {
+    if (myAttendanceStatus == SecondChatAttendanceStatus.Pending && canJoin) {
         return SecondChatEntryAvailabilityPresentation(
             state = SecondChatEntryAvailabilityState.Joinable,
             title = "",
@@ -139,8 +141,17 @@ internal fun SecondChatStatus.entryAvailabilityPresentation(
     )
     val scheduledAtMillis = backendInstantOrNull(scheduledAt)?.toEpochMilli()
     val entryClosesAtMillis = backendInstantOrNull(entryClosesAt)?.toEpochMilli()
+    val canUseEntryWindowPresentation =
+        myAttendanceStatus == SecondChatAttendanceStatus.Pending ||
+            myAttendanceStatus == SecondChatAttendanceStatus.NoShow
 
     return when {
+        !canUseEntryWindowPresentation ->
+            SecondChatEntryAvailabilityPresentation(
+                state = SecondChatEntryAvailabilityState.Unavailable,
+                title = "Segundo chat no disponible",
+                message = "No se puede entrar en este momento.",
+            )
         synchronizedNow != null &&
             scheduledAtMillis != null &&
             synchronizedNow < scheduledAtMillis ->

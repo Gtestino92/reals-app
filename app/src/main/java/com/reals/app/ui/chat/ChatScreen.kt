@@ -110,6 +110,7 @@ import com.reals.app.ui.root.OptimisticOutgoingMessageType
 import com.reals.app.ui.root.OutgoingMessageDeliveryState
 import com.reals.app.ui.root.ChatAudioDraftUiState
 import com.reals.app.ui.root.ChatAudioUploadUiState
+import com.reals.app.ui.root.SecondChatEntryAvailabilityState
 import com.reals.app.ui.root.SecondChatLifecycleUiState
 import com.reals.app.ui.root.SecondChatResolutionPresentation
 import com.reals.app.ui.root.entryAvailabilityPresentation
@@ -847,7 +848,14 @@ private fun SecondChatLifecyclePanel(
                 tone = FeedbackTone.Info,
             )
         }
-        status.myAttendanceStatus == SecondChatAttendanceStatus.Pending && !status.canJoin -> {
+        status.entryAvailabilityPresentation(
+            statusReceivedAtMillis = lifecycle.statusReceivedAtMillis,
+            nowMillis = nowMillis,
+        )?.state in listOf(
+            SecondChatEntryAvailabilityState.BeforeStart,
+            SecondChatEntryAvailabilityState.EntryClosed,
+            SecondChatEntryAvailabilityState.Unavailable,
+        ) -> {
             val presentation = status.entryAvailabilityPresentation(
                 statusReceivedAtMillis = lifecycle.statusReceivedAtMillis,
                 nowMillis = nowMillis,

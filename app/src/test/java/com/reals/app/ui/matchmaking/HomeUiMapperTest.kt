@@ -281,6 +281,66 @@ class HomeUiMapperTest {
     }
 
     @Test
+    fun `expired second chat remains visible but does not count active or actionable`() {
+        val model = mapper.toScreenModel(
+            home = homeState(
+                activeInteractionsSummary = summary(
+                    activeInitialCount = 0,
+                    activeConnectionCount = 0,
+                    actionableConnectionCount = 0,
+                ),
+                nextSteps = listOf(
+                    HomeNextStep.SecondChatExpired(
+                        connectionId = "connection-expired",
+                        matchId = "match-expired",
+                        partner = partner("Expired"),
+                        secondChat = homeChat("expired-chat", ChatStatus.Available, "Expired"),
+                    ),
+                ),
+            ),
+            localHidden = noHiddenInteractions(),
+            localMatchmakingBlockedReason = null,
+        )
+
+        assertTrue(model.nextSteps.single() is HomeNextStepItem.SecondChatExpired)
+        assertEquals(0, model.activeInteractionsSummary?.activeConnectionCount)
+        assertEquals(0, model.activeInteractionsSummary?.actionableConnectionCount)
+    }
+
+    @Test
+    fun `active counts include active next step and exclude expired recent item`() {
+        val model = mapper.toScreenModel(
+            home = homeState(
+                activeInteractionsSummary = summary(
+                    activeInitialCount = 0,
+                    activeConnectionCount = 2,
+                    actionableConnectionCount = 2,
+                ),
+                nextSteps = listOf(
+                    HomeNextStep.SecondChatAvailable(
+                        connectionId = "connection-active",
+                        matchId = "match-active",
+                        partner = partner("Active"),
+                        secondChat = homeChat("active-chat", ChatStatus.Available, "Active"),
+                    ),
+                    HomeNextStep.SecondChatExpired(
+                        connectionId = "connection-expired",
+                        matchId = "match-expired",
+                        partner = partner("Expired"),
+                        secondChat = homeChat("expired-chat", ChatStatus.Available, "Expired"),
+                    ),
+                ),
+            ),
+            localHidden = noHiddenInteractions(),
+            localMatchmakingBlockedReason = null,
+        )
+
+        assertEquals(2, model.nextSteps.size)
+        assertEquals(1, model.activeInteractionsSummary?.activeConnectionCount)
+        assertEquals(1, model.activeInteractionsSummary?.actionableConnectionCount)
+    }
+
+    @Test
     fun `matchmaking remains disabled when backend reports canSearch false`() {
         val model = mapper.toScreenModel(
             home = homeState(

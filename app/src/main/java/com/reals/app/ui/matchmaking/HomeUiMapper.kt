@@ -22,10 +22,11 @@ class HomeUiMapper {
     ): HomeScreenModel {
         val pendingActionItems = home.pendingActionItems(localHidden)
         val nextStepItems = home.nextStepItems()
+        val activeNextStepCount = nextStepItems.count { it !is HomeNextStepItem.SecondChatExpired }
         val displayedSummary = home?.activeInteractionsSummary?.copy(
             activeInitialCount = pendingActionItems.size,
-            activeConnectionCount = nextStepItems.size,
-            actionableConnectionCount = nextStepItems.size,
+            activeConnectionCount = activeNextStepCount,
+            actionableConnectionCount = activeNextStepCount,
         )
 
         return HomeScreenModel(

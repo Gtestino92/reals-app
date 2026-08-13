@@ -150,6 +150,27 @@ class SecondChatTimingPresentationTest {
     }
 
     @Test
+    fun `no show second chat after entry closes without chat presents expired entry`() {
+        val presentation = status(
+            serverTime = "2026-06-18T21:21:00Z",
+            absoluteExpiresAt = "2026-06-18T23:00:00Z",
+            scheduledAt = "2026-06-18T21:00:00Z",
+            entryClosesAt = "2026-06-18T21:20:00Z",
+            canJoin = false,
+            myAttendanceStatus = "NO_SHOW",
+            chatId = null,
+            chatStatus = null,
+        ).entryAvailabilityPresentation(
+            statusReceivedAtMillis = 1_000L,
+            nowMillis = 1_000L,
+        )
+
+        assertEquals(SecondChatEntryAvailabilityState.EntryClosed, presentation?.state)
+        assertEquals("Segundo chat vencido", presentation?.title)
+        assertEquals("La ventana para entrar terminó.", presentation?.message)
+    }
+
+    @Test
     fun `pending second chat inside entry window remains joinable`() {
         val presentation = status(
             serverTime = "2026-06-18T21:05:00Z",
@@ -169,22 +190,44 @@ class SecondChatTimingPresentationTest {
     }
 
     @Test
-    fun `joined second chat after entry closes is not entry expired`() {
+    fun `on time and late attendance are joined after entry closes`() {
+        listOf("ON_TIME", "LATE").forEach { attendance ->
+            val presentation = status(
+                serverTime = "2026-06-18T21:21:00Z",
+                absoluteExpiresAt = "2026-06-18T23:00:00Z",
+                scheduledAt = "2026-06-18T21:00:00Z",
+                entryClosesAt = "2026-06-18T21:20:00Z",
+                canJoin = false,
+                myAttendanceStatus = attendance,
+                chatId = "chat-1",
+                chatStatus = "ACTIVE",
+            ).entryAvailabilityPresentation(
+                statusReceivedAtMillis = 1_000L,
+                nowMillis = 1_000L,
+            )
+
+            assertEquals(SecondChatEntryAvailabilityState.Joined, presentation?.state)
+        }
+    }
+
+    @Test
+    fun `unknown attendance after cutoff falls back unavailable`() {
         val presentation = status(
             serverTime = "2026-06-18T21:21:00Z",
             absoluteExpiresAt = "2026-06-18T23:00:00Z",
             scheduledAt = "2026-06-18T21:00:00Z",
             entryClosesAt = "2026-06-18T21:20:00Z",
             canJoin = false,
-            myAttendanceStatus = "ON_TIME",
-            chatId = "chat-1",
-            chatStatus = "ACTIVE",
+            myAttendanceStatus = "NEW_STATUS",
+            chatId = null,
+            chatStatus = null,
         ).entryAvailabilityPresentation(
             statusReceivedAtMillis = 1_000L,
             nowMillis = 1_000L,
         )
 
-        assertEquals(SecondChatEntryAvailabilityState.Joined, presentation?.state)
+        assertEquals(SecondChatEntryAvailabilityState.Unavailable, presentation?.state)
+        assertEquals("Segundo chat no disponible", presentation?.title)
     }
 
     @Test
