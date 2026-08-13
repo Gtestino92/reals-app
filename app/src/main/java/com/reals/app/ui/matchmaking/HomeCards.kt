@@ -1,5 +1,6 @@
 package com.reals.app.ui.matchmaking
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
@@ -52,6 +53,7 @@ import com.reals.app.ui.profile.overviewActionPolicy
 import com.reals.app.ui.profile.progress
 import com.reals.app.ui.profile.reviewRows
 import com.reals.app.ui.root.AffinityHomeSummaryUiState
+import com.reals.app.ui.theme.RealsRadii
 import kotlinx.coroutines.delay
 import java.time.ZoneId
 import java.util.Locale
@@ -74,8 +76,10 @@ internal fun PendingActionsCard(
             .fillMaxWidth()
             .padding(bottom = 16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            containerColor = MaterialTheme.colorScheme.surface,
         ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier.padding(18.dp),
@@ -126,8 +130,10 @@ internal fun NextStepCard(
             .fillMaxWidth()
             .padding(bottom = 16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            containerColor = MaterialTheme.colorScheme.surface,
         ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier.padding(18.dp),
@@ -227,7 +233,10 @@ internal fun HomeAffinityCard(
         onClick = onOpenAffinityQuestions,
         enabled = !busy,
         modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(RealsRadii.Row),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Row(
             modifier = Modifier
@@ -286,7 +295,10 @@ internal fun HomeManagementEntryCard(
         onClick = onClick,
         enabled = enabled,
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        shape = RoundedCornerShape(RealsRadii.Row),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Row(
             modifier = Modifier
@@ -519,7 +531,7 @@ internal fun VisualApprovalItem(
 
 @Composable
 internal fun HomeTrailingChevron() {
-    val color = MaterialTheme.colorScheme.onSurfaceVariant
+    val color = MaterialTheme.colorScheme.secondary
     Canvas(
         modifier = Modifier
             .size(22.dp)
@@ -740,14 +752,20 @@ internal fun NextStepItem(
             onClick = primaryAction,
             enabled = primaryEnabled,
             modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(RealsRadii.Row),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {
             Content(showPrimaryChevron = true)
         }
     } else {
         Card(
             modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(RealsRadii.Row),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {
             Content(showPrimaryChevron = false)
         }

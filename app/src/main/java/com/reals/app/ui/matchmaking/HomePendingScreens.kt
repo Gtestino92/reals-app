@@ -1,6 +1,7 @@
 package com.reals.app.ui.matchmaking
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -24,6 +26,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.reals.app.ui.common.RealsScreenHeader
+import com.reals.app.ui.common.RealsSectionLabel
+import com.reals.app.ui.common.RealsThinDivider
+import com.reals.app.ui.theme.RealsRadii
 
 @Composable
 internal fun HomeFirstChatsBlock(
@@ -59,7 +65,10 @@ internal fun HomePendingSummaryCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        shape = RoundedCornerShape(RealsRadii.Row),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Row(
             modifier = Modifier
@@ -100,7 +109,10 @@ internal fun HomePriorityBlock(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+        shape = RoundedCornerShape(RealsRadii.Card),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.72f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier.padding(18.dp),
@@ -109,7 +121,7 @@ internal fun HomePriorityBlock(
             Text(
                 text = "Prioridad ahora",
                 style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onErrorContainer,
+                color = MaterialTheme.colorScheme.primary,
             )
             presentation.priorityItems.forEach { item ->
                 HomePriorityRow(
@@ -192,7 +204,10 @@ private fun HomePriorityRow(
         onClick = onClick,
         enabled = enabled,
         modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(RealsRadii.Row),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Row(
             modifier = Modifier
@@ -246,21 +261,18 @@ internal fun PendingInteractionsScreen(
             .padding(24.dp),
         verticalArrangement = Arrangement.Top,
     ) {
-        Text(
-            text = "Pendientes",
-            style = MaterialTheme.typography.headlineLarge,
-            color = MaterialTheme.colorScheme.primary,
+        RealsScreenHeader(
+            title = "Pendientes",
+            subtitle = "Tus revisiones, próximos pasos y segundos chats en un solo lugar.",
         )
-        Text(
-            text = "Tus revisiones, próximos pasos y segundos chats en un solo lugar.",
-            modifier = Modifier.padding(top = 8.dp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(24.dp))
         if (presentation.hubSections.isEmpty()) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(RealsRadii.Card),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
             ) {
                 Text(
                     text = "No tenés pendientes por ahora.",
@@ -280,7 +292,7 @@ internal fun PendingInteractionsScreen(
                     onOpenPartnerProfile = onOpenPartnerProfile,
                     onDismissSecondChat = onDismissSecondChat,
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(22.dp))
             }
         }
         Button(
@@ -304,46 +316,43 @@ private fun PendingHubSection(
     onOpenPartnerProfile: (matchId: String) -> Unit,
     onDismissSecondChat: (connectionId: String) -> Unit,
 ) {
-    Card(
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text(section.type.title, style = MaterialTheme.typography.titleLarge)
-            section.secondaryGroups.forEach { group ->
-                group.title?.let { title ->
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 2.dp),
+        Text(section.type.title, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+        RealsThinDivider()
+        section.secondaryGroups.forEach { group ->
+            group.title?.let { title ->
+                RealsSectionLabel(
+                    text = title,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            group.items.forEachIndexed { index, item ->
+                when (item) {
+                    is HomePendingHubItem.VisualReview -> VisualApprovalItem(
+                        action = item.action,
+                        busy = busy,
+                        nowMillis = nowMillis,
+                        titleOverride = item.action.pendingVisualReviewTitle(),
+                        onOpenVisualApproval = onOpenVisualApproval,
+                    )
+                    is HomePendingHubItem.NextStep -> NextStepItem(
+                        item = item.item,
+                        busy = busy,
+                        nowMillis = nowMillis,
+                        dismissContentDescription = "Quitar de Pendientes",
+                        titleOverride = item.item.pendingNextStepTitle(),
+                        bodyOverride = item.item.pendingNextStepBody(nowMillis),
+                        onOpenScheduling = onOpenScheduling,
+                        onOpenSecondChat = onOpenSecondChat,
+                        onOpenPartnerProfile = onOpenPartnerProfile,
+                        onDismissSecondChat = onDismissSecondChat,
                     )
                 }
-                group.items.forEach { item ->
-                    when (item) {
-                        is HomePendingHubItem.VisualReview -> VisualApprovalItem(
-                            action = item.action,
-                            busy = busy,
-                            nowMillis = nowMillis,
-                            titleOverride = item.action.pendingVisualReviewTitle(),
-                            onOpenVisualApproval = onOpenVisualApproval,
-                        )
-                        is HomePendingHubItem.NextStep -> NextStepItem(
-                            item = item.item,
-                            busy = busy,
-                            nowMillis = nowMillis,
-                            dismissContentDescription = "Quitar de Pendientes",
-                            titleOverride = item.item.pendingNextStepTitle(),
-                            bodyOverride = item.item.pendingNextStepBody(nowMillis),
-                            onOpenScheduling = onOpenScheduling,
-                            onOpenSecondChat = onOpenSecondChat,
-                            onOpenPartnerProfile = onOpenPartnerProfile,
-                            onDismissSecondChat = onDismissSecondChat,
-                        )
-                    }
+                if (index < group.items.lastIndex) {
+                    RealsThinDivider(modifier = Modifier.padding(horizontal = 12.dp))
                 }
             }
         }

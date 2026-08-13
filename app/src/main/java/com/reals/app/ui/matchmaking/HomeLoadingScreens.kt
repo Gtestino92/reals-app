@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -23,7 +24,10 @@ import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
 import com.reals.app.ui.common.ApiErrorFeedbackCard
+import com.reals.app.ui.common.RealsBrandDivider
+import com.reals.app.ui.common.RealsBrandSeal
 import com.reals.app.ui.common.SearchingDotsIndicator
+import com.reals.app.ui.theme.RealsType
 import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -83,20 +87,27 @@ internal fun SearchingChatScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        RealsBrandSeal(modifier = Modifier.size(58.dp))
+        Spacer(modifier = Modifier.height(28.dp))
         SearchingDotsIndicator()
         Text(
             text = title,
             modifier = Modifier
-                .padding(top = 56.dp)
+                .padding(top = 34.dp)
                 .fillMaxWidth(),
-            style = MaterialTheme.typography.headlineLarge,
+            style = RealsType.ScreenTitle,
             color = MaterialTheme.colorScheme.primary,
             textAlign = TextAlign.Center,
+        )
+        RealsBrandDivider(
+            modifier = Modifier
+                .padding(top = 16.dp)
+                .fillMaxWidth(),
         )
         Text(
             text = body,
             modifier = Modifier
-                .padding(top = 12.dp)
+                .padding(top = 18.dp)
                 .fillMaxWidth(),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
