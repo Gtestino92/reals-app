@@ -278,6 +278,63 @@ class HomePendingPresentationTest {
     }
 
     @Test
+    fun `priority titles include safe partner names when available`() {
+        val visual = HomePriorityItem.VisualReview(
+            action = visualReview(partnerDisplayName = "Julia"),
+            sourceIndex = 0,
+            eventMillis = nowMillis,
+        )
+        val open = HomePriorityItem.SecondChatOpen(
+            item = available("connection-open", partnerDisplayName = "Ana"),
+            sourceIndex = 1,
+            eventMillis = nowMillis,
+        )
+        val soon = HomePriorityItem.SecondChatStartingSoon(
+            item = scheduled("connection-soon", partnerDisplayName = "Sofía"),
+            sourceIndex = 2,
+            eventMillis = nowMillis,
+        )
+
+        assertEquals("El perfil de Julia está por vencer", visual.homePriorityTitle())
+        assertEquals("Tu segundo chat con Ana ya empezó", open.homePriorityTitle())
+        assertEquals("Tu segundo chat con Sofía empieza pronto", soon.homePriorityTitle())
+    }
+
+    @Test
+    fun `priority titles keep fallbacks for missing or blank partner names`() {
+        val visualMissing = HomePriorityItem.VisualReview(
+            action = visualReview(partnerDisplayName = null),
+            sourceIndex = 0,
+            eventMillis = nowMillis,
+        )
+        val openBlank = HomePriorityItem.SecondChatOpen(
+            item = available("connection-open", partnerDisplayName = " "),
+            sourceIndex = 1,
+            eventMillis = nowMillis,
+        )
+        val soonMissing = HomePriorityItem.SecondChatStartingSoon(
+            item = scheduled("connection-soon", partnerDisplayName = null),
+            sourceIndex = 2,
+            eventMillis = nowMillis,
+        )
+
+        assertEquals("Revisión visual por vencer", visualMissing.homePriorityTitle())
+        assertEquals("Tu segundo chat ya empezó", openBlank.homePriorityTitle())
+        assertEquals("Tu segundo chat empieza pronto", soonMissing.homePriorityTitle())
+    }
+
+    @Test
+    fun `priority titles sanitize partner names`() {
+        val open = HomePriorityItem.SecondChatOpen(
+            item = available("connection-open", partnerDisplayName = " Ana\nMaría "),
+            sourceIndex = 0,
+            eventMillis = nowMillis,
+        )
+
+        assertEquals("Tu segundo chat con Ana María ya empezó", open.homePriorityTitle())
+    }
+
+    @Test
     fun `priority ordering uses event timestamps and exposes at most two`() {
         val laterCritical = visualReview(
             matchId = "match-later-critical",
@@ -384,13 +441,14 @@ class HomePendingPresentationTest {
 
     private fun available(
         connectionId: String,
+        partnerDisplayName: String? = "Alex",
         availableAt: String? = "2026-07-15T11:00:00Z",
         expiresAt: String? = "2026-07-15T13:00:00Z",
     ): HomeNextStepItem.SecondChatAvailable =
         HomeNextStepItem.SecondChatAvailable(
             connectionId = connectionId,
             matchId = "match-$connectionId",
-            partnerDisplayName = "Alex",
+            partnerDisplayName = partnerDisplayName,
             chatId = "chat-$connectionId",
             chatStatus = "ACTIVE",
             availableAt = availableAt,
