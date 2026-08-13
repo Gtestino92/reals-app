@@ -5,7 +5,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -135,40 +134,6 @@ fun RealsEditorialSurface(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         content()
-    }
-}
-
-@Composable
-fun RealsEditorialSection(
-    title: String,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
-) {
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Text(
-            text = title,
-            style = RealsType.SectionTitle,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        RealsThinDivider()
-        content()
-    }
-}
-
-@Composable
-fun RealsEditorialRow(
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
-) {
-    RealsEditorialSurface(
-        modifier = modifier.fillMaxWidth(),
-    ) {
-        Box(modifier = Modifier.padding(14.dp)) {
-            content()
-        }
     }
 }
 

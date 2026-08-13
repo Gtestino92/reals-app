@@ -633,11 +633,7 @@ private fun PartnerMessageCard(
             if (messageState.emphasized) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outlineVariant,
         ),
         colors = CardDefaults.cardColors(
-            containerColor = if (messageState.emphasized) {
-                MaterialTheme.colorScheme.surface
-            } else {
-                MaterialTheme.colorScheme.surface
-            },
+            containerColor = MaterialTheme.colorScheme.surface,
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {

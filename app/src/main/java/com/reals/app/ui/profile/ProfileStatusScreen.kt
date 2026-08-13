@@ -1602,13 +1602,13 @@ internal fun ProfilePhotoActionProgressCard(
                     text = action.progressTitle(),
                     modifier = Modifier.testTag(ProfilePhotoActionProgressTitleTag),
                     style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
                     text = action.progressMessage(),
                     modifier = Modifier.testTag(ProfilePhotoActionProgressMessageTag),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }

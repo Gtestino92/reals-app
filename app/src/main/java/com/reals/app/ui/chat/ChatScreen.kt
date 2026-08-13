@@ -1917,7 +1917,6 @@ private fun OptimisticMessageBubble(
                 bottomStart = RealsRadii.Row,
                 bottomEnd = 4.dp,
             ),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
             ),
