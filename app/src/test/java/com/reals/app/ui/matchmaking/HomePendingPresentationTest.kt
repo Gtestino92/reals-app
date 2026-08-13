@@ -326,7 +326,7 @@ class HomePendingPresentationTest {
     @Test
     fun `priority titles sanitize partner names`() {
         val open = HomePriorityItem.SecondChatOpen(
-            item = available("connection-open", partnerDisplayName = " Ana\nMaría "),
+            item = available("connection-open", partnerDisplayName = " Ana\tMaría "),
             sourceIndex = 0,
             eventMillis = nowMillis,
         )
