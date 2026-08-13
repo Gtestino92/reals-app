@@ -4,6 +4,7 @@ import android.os.SystemClock
 import android.util.Patterns
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -97,9 +98,13 @@ import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
 import com.reals.app.ui.common.ManualBlockConfirmationDialog
+import com.reals.app.ui.common.RealsBrandDivider
 import com.reals.app.ui.common.SearchingDotsIndicator
 import com.reals.app.ui.common.formatBackendDateTime
 import com.reals.app.ui.common.formatBackendTime
+import com.reals.app.ui.common.realsOutlinedTextFieldColors
+import com.reals.app.ui.theme.RealsRadii
+import com.reals.app.ui.theme.RealsType
 import com.reals.app.ui.root.OptimisticOutgoingMessage
 import com.reals.app.ui.root.OptimisticOutgoingMessageType
 import com.reals.app.ui.root.OutgoingMessageDeliveryState
@@ -785,9 +790,10 @@ private fun LoadingChatScreen(
         Text(
             text = title,
             modifier = Modifier.padding(top = 28.dp),
-            style = MaterialTheme.typography.headlineLarge,
+            style = RealsType.ScreenTitle,
             color = MaterialTheme.colorScheme.primary,
         )
+        RealsBrandDivider(modifier = Modifier.padding(top = 16.dp))
         Text(
             text = body,
             modifier = Modifier.padding(top = 12.dp),
@@ -866,7 +872,10 @@ private fun SecondChatLifecyclePanel(
         status.isWaitingForPartner() -> {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                shape = RoundedCornerShape(RealsRadii.Card),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -914,7 +923,10 @@ private fun SecondChatResolutionPanel(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        shape = RoundedCornerShape(RealsRadii.Card),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -924,7 +936,7 @@ private fun SecondChatResolutionPanel(
                 Text(request.title, style = MaterialTheme.typography.titleMedium)
                 Text(
                     text = request.message,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 request.remainingMillis?.let { remainingMillis ->
                     Text(
@@ -933,14 +945,14 @@ private fun SecondChatResolutionPanel(
                         } else {
                             "Quedan ${((remainingMillis + 999) / 1000).coerceAtLeast(0)}s."
                         },
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
                 if (request.type == SecondChatResolutionRequestType.MutualCompletion) {
                     Text(
                         text = "Pueden seguir conversando; un nuevo mensaje cancela ésta solicitud.",
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -973,7 +985,7 @@ private fun SecondChatResolutionPanel(
             state.completionCooldown?.let { cooldown ->
                 Text(
                     text = cooldown.message,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
@@ -1005,7 +1017,10 @@ private fun ChatHeader(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        shape = RoundedCornerShape(RealsRadii.Card),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier
@@ -1020,7 +1035,7 @@ private fun ChatHeader(
                 Text(
                     text = chatHeaderTitle(titlePrefix, partnerName),
                     modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = RealsType.SectionTitle,
                     color = MaterialTheme.colorScheme.primary,
                 )
 
@@ -1275,8 +1290,11 @@ private fun FirstChatUnansweredSuggestionCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer
+            containerColor = MaterialTheme.colorScheme.surface
         ),
+        shape = RoundedCornerShape(RealsRadii.Card),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier
@@ -1292,7 +1310,7 @@ private fun FirstChatUnansweredSuggestionCard(
                     text = "Todavía no recibiste respuesta",
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    color = MaterialTheme.colorScheme.primary,
                 )
                 IconButton(
                     onClick = { state.periodReference?.let(onDismiss) },
@@ -1301,14 +1319,14 @@ private fun FirstChatUnansweredSuggestionCard(
                     Icon(
                         painter = painterResource(R.drawable.ic_close),
                         contentDescription = "Ocultar sugerencia",
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        tint = MaterialTheme.colorScheme.primary,
                     )
                 }
             }
             Text(
                 text = "Podés solicitar el cierre de la conversación. Si la otra persona no responde a la solicitud, el chat se cerrará sin penalizarte.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Button(
                 onClick = onRequestMutualExit,
@@ -1356,7 +1374,10 @@ private fun MessageList(
 
     Card(
         modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        shape = RoundedCornerShape(RealsRadii.Card),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.52f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         LazyColumn(
             state = listState,
@@ -1453,8 +1474,11 @@ private fun FirstChatGuidancePanel(
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer
+            containerColor = MaterialTheme.colorScheme.surface
         ),
+        shape = RoundedCornerShape(RealsRadii.Card),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.55f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier
@@ -1465,7 +1489,7 @@ private fun FirstChatGuidancePanel(
             Text(
                 text = TextSafety.safeDisplay(state.questionText),
                 style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                color = MaterialTheme.colorScheme.primary,
             )
 
             if (state.showButton) {
@@ -1484,7 +1508,7 @@ private fun FirstChatGuidancePanel(
                 Text(
                     text = "Cambiaremos la pregunta cuando ambos quieran seguir.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -1522,7 +1546,10 @@ private fun FirstChatDecisionOnlyPanel(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        shape = RoundedCornerShape(RealsRadii.Card),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -1532,12 +1559,12 @@ private fun FirstChatDecisionOnlyPanel(
                 Text(
                     text = copy,
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
             Text(
                 text = state.prompt,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1587,7 +1614,10 @@ private fun ChatActionsPanel(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        shape = RoundedCornerShape(RealsRadii.Card),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -1661,7 +1691,12 @@ private fun TimedExitRequestCard(
         }
     }
 
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+    Card(
+        shape = RoundedCornerShape(RealsRadii.Row),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
         Column(
             modifier = Modifier.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -1672,11 +1707,11 @@ private fun TimedExitRequestCard(
                     requestedByMe = requestedByMe,
                     remainingSeconds = remainingSeconds,
                 ),
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
                 text = MUTUAL_EXIT_CONVERSATION_PAUSED_COPY,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall,
             )
             if (showExitRequestResponseActions(requestedByMe, remainingSeconds)) {
@@ -1747,18 +1782,20 @@ private fun MessageBubble(
         Card(
             modifier = Modifier.widthIn(max = 300.dp),
             shape = RoundedCornerShape(
-                topStart = 18.dp,
-                topEnd = 18.dp,
-                bottomStart = if (mine) 18.dp else 4.dp,
-                bottomEnd = if (mine) 4.dp else 18.dp,
+                topStart = RealsRadii.Row,
+                topEnd = RealsRadii.Row,
+                bottomStart = if (mine) RealsRadii.Row else 4.dp,
+                bottomEnd = if (mine) 4.dp else RealsRadii.Row,
             ),
+            border = if (mine) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             colors = CardDefaults.cardColors(
                 containerColor = if (mine) {
-                    MaterialTheme.colorScheme.primaryContainer
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
                 } else {
-                    MaterialTheme.colorScheme.tertiaryContainer
+                    MaterialTheme.colorScheme.surface
                 },
             ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {
             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                 when (val presentation = message.presentation) {
@@ -1875,14 +1912,16 @@ private fun OptimisticMessageBubble(
         Card(
             modifier = Modifier.widthIn(max = 300.dp),
             shape = RoundedCornerShape(
-                topStart = 18.dp,
-                topEnd = 18.dp,
-                bottomStart = 18.dp,
+                topStart = RealsRadii.Row,
+                topEnd = RealsRadii.Row,
+                bottomStart = RealsRadii.Row,
                 bottomEnd = 4.dp,
             ),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
             ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {
             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                 when (message.messageType) {
@@ -2102,6 +2141,8 @@ private fun SafetyReportDialog(
                     label = { Text("Detalle") },
                     enabled = !actionLoading,
                     minLines = 3,
+                    shape = RoundedCornerShape(RealsRadii.Button),
+                    colors = realsOutlinedTextFieldColors(),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }

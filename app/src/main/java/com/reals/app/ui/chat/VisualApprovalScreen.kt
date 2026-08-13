@@ -1,6 +1,7 @@
 package com.reals.app.ui.chat
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -45,9 +47,13 @@ import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
 import com.reals.app.ui.common.ManualBlockConfirmationDialog
 import com.reals.app.ui.common.ManualBlockOverflowMenu
+import com.reals.app.ui.common.RealsBrandDivider
+import com.reals.app.ui.common.realsOutlinedTextFieldColors
 import com.reals.app.ui.common.VisualReviewDetailDeadlineStrings
 import com.reals.app.ui.common.formatVisualReviewDetailDeadline
 import com.reals.app.ui.common.userLabel
+import com.reals.app.ui.theme.RealsRadii
+import com.reals.app.ui.theme.RealsType
 
 internal data class VisualApprovalPresentationState(
     val showInitialLoading: Boolean,
@@ -224,7 +230,7 @@ fun VisualApprovalScreen(
                 Text(
                     text = "Aprobación visual",
                     modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.headlineLarge,
+                    style = RealsType.ScreenTitle,
                     color = MaterialTheme.colorScheme.primary,
                 )
                 ManualBlockOverflowMenu(
@@ -248,6 +254,7 @@ fun VisualApprovalScreen(
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
+            RealsBrandDivider(modifier = Modifier.padding(top = 16.dp))
         }
         Spacer(modifier = Modifier.height(16.dp))
         if (presentationState.showInitialLoading) {
@@ -290,7 +297,10 @@ fun VisualApprovalScreen(
         if (profile == null) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                shape = RoundedCornerShape(RealsRadii.Card),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
             ) {
                 Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Perfil visual", style = MaterialTheme.typography.titleLarge)
@@ -327,7 +337,10 @@ fun VisualApprovalScreen(
         Spacer(modifier = Modifier.height(16.dp))
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+            shape = RoundedCornerShape(RealsRadii.Card),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Mi mensaje personal", style = MaterialTheme.typography.titleMedium)
@@ -344,6 +357,8 @@ fun VisualApprovalScreen(
                         enabled = !busy,
                         minLines = 2,
                         supportingText = { Text("${personalMessage.length}/280") },
+                        shape = RoundedCornerShape(RealsRadii.Button),
+                        colors = realsOutlinedTextFieldColors(),
                         modifier = Modifier.fillMaxWidth(),
                     )
                     OutlinedButton(
@@ -361,13 +376,16 @@ fun VisualApprovalScreen(
         Spacer(modifier = Modifier.height(16.dp))
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+            shape = RoundedCornerShape(RealsRadii.Card),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Decisión visual", style = MaterialTheme.typography.titleMedium)
                 Text(
                     text = "Si aprobás y la otra persona también aprueba, se crea la conexión para la siguiente etapa.",
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 VisualDecisionActions(
                     deciding = deciding,
@@ -519,7 +537,10 @@ internal const val VisualDecisionRejectTag = "visual_decision_reject"
 private fun VisualApprovalInitialLoadingCard() {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        shape = RoundedCornerShape(RealsRadii.Card),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Cargando revisión visual", style = MaterialTheme.typography.titleLarge)
@@ -540,7 +561,10 @@ private fun VisualApprovalInitialFailureCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        shape = RoundedCornerShape(RealsRadii.Card),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("No pudimos cargar la revisión visual", style = MaterialTheme.typography.titleLarge)
@@ -562,7 +586,10 @@ private fun StatusCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        shape = RoundedCornerShape(RealsRadii.Row),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Estado", style = MaterialTheme.typography.titleLarge)
@@ -600,27 +627,33 @@ private fun PartnerMessageCard(
     )
     Card(
         modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(RealsRadii.Card),
+        border = BorderStroke(
+            1.dp,
+            if (messageState.emphasized) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outlineVariant,
+        ),
         colors = CardDefaults.cardColors(
             containerColor = if (messageState.emphasized) {
-                MaterialTheme.colorScheme.tertiaryContainer
+                MaterialTheme.colorScheme.surface
             } else {
-                MaterialTheme.colorScheme.surfaceContainerHigh
+                MaterialTheme.colorScheme.surface
             },
         ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Mensaje personal de la otra persona", style = MaterialTheme.typography.titleMedium)
             messageState.badgeLabel?.let {
                 Text(
                     text = it,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    color = MaterialTheme.colorScheme.secondary,
                     style = MaterialTheme.typography.labelLarge,
                 )
             }
             Text(
                 text = messageState.body,
                 color = if (messageState.emphasized) {
-                    MaterialTheme.colorScheme.onTertiaryContainer
+                    MaterialTheme.colorScheme.onSurface
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
                 },

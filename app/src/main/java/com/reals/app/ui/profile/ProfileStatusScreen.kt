@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -94,7 +95,11 @@ import com.reals.app.core.security.TextSafety
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
+import com.reals.app.ui.common.RealsBrandDivider
+import com.reals.app.ui.common.realsOutlinedTextFieldColors
 import com.reals.app.ui.common.userDescription
+import com.reals.app.ui.theme.RealsRadii
+import com.reals.app.ui.theme.RealsType
 import com.reals.app.domain.model.CountryReference
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfilePhoto
@@ -202,7 +207,7 @@ fun ProfileStatusScreen(
     ) {
         Text(
             text = managementSurface.screenTitle(onBackHome == null),
-            style = MaterialTheme.typography.headlineLarge,
+            style = RealsType.ScreenTitle,
             color = MaterialTheme.colorScheme.primary,
         )
         Text(
@@ -211,6 +216,7 @@ fun ProfileStatusScreen(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        RealsBrandDivider(modifier = Modifier.padding(top = 18.dp))
         Spacer(modifier = Modifier.height(20.dp))
         if (showDraftAfterEditNotice) {
             FeedbackCard(
@@ -368,7 +374,10 @@ internal fun profileManagementPresentationPolicy(
 private fun MissingProfileCard() {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        shape = RoundedCornerShape(RealsRadii.Card),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier.padding(18.dp),
@@ -377,12 +386,12 @@ private fun MissingProfileCard() {
             Text(
                 text = "Todavía no tenés perfil",
                 style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                color = MaterialTheme.colorScheme.primary,
             )
             Text(
                 text = "Tu cuenta ya está autenticada y provisionada. El proximo pasó es crear el perfil para completar el onboarding.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -590,7 +599,10 @@ private fun ProfileQuestionsEntryCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        shape = RoundedCornerShape(RealsRadii.Card),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier.padding(18.dp),
@@ -684,7 +696,10 @@ private fun ProfileDetailsCard(
         modifier = Modifier
             .fillMaxWidth()
             .bringIntoViewRequester(bringIntoViewRequester),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        shape = RoundedCornerShape(RealsRadii.Card),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier.padding(18.dp),
@@ -758,7 +773,10 @@ private fun MatchPreferencesCard(
         modifier = Modifier
             .fillMaxWidth()
             .bringIntoViewRequester(bringIntoViewRequester),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        shape = RoundedCornerShape(RealsRadii.Card),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier.padding(18.dp),
@@ -842,7 +860,10 @@ private fun PhotosCard(
         modifier = Modifier
             .fillMaxWidth()
             .bringIntoViewRequester(bringIntoViewRequester),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        shape = RoundedCornerShape(RealsRadii.Card),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier.padding(18.dp),
@@ -929,9 +950,9 @@ private fun ProfileEditActions(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
-            OutlinedTextField(displayName, { displayName = it.take(100) }, label = { Text("Nombre visible") }, enabled = !loading, singleLine = true, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(bio, { bio = it.take(1_000) }, label = { Text("Bio") }, enabled = !loading, minLines = 3, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(city, { city = it.take(100) }, label = { Text("Ciudad") }, enabled = !loading, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(displayName, { displayName = it.take(100) }, label = { Text("Nombre visible") }, enabled = !loading, singleLine = true, shape = RoundedCornerShape(RealsRadii.Button), colors = realsOutlinedTextFieldColors(), modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(bio, { bio = it.take(1_000) }, label = { Text("Bio") }, enabled = !loading, minLines = 3, shape = RoundedCornerShape(RealsRadii.Button), colors = realsOutlinedTextFieldColors(), modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(city, { city = it.take(100) }, label = { Text("Ciudad") }, enabled = !loading, singleLine = true, shape = RoundedCornerShape(RealsRadii.Button), colors = realsOutlinedTextFieldColors(), modifier = Modifier.fillMaxWidth())
             CountrySelector(
                 countries = countries,
                 selectedCountryCode = selectedCountryCode,
@@ -1485,7 +1506,10 @@ private fun EmailVerificationActions(
     }
 
     Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        shape = RoundedCornerShape(RealsRadii.Row),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -1550,9 +1574,11 @@ internal fun ProfilePhotoActionProgressCard(
             }
             .testTag(ProfilePhotoActionProgressTag),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
         ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Row(
             modifier = Modifier
@@ -1786,8 +1812,8 @@ internal fun FilledPhotoSlot(
     onDragEnd: () -> Unit,
     onDragCancel: () -> Unit,
 ) {
-    val imageShape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
-    val actionShape = RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp)
+    val imageShape = RoundedCornerShape(topStart = RealsRadii.Row, topEnd = RealsRadii.Row)
+    val actionShape = RoundedCornerShape(bottomStart = RealsRadii.Row, bottomEnd = RealsRadii.Row)
     val dragModifier = if (!busy) {
         Modifier.pointerInput(photo.id, slotBounds) {
             detectDragGesturesAfterLongPress(
@@ -1828,13 +1854,13 @@ internal fun FilledPhotoSlot(
                 .fillMaxWidth()
                 .aspectRatio(1f)
                 .clip(imageShape)
-                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .background(MaterialTheme.colorScheme.surface)
                 .border(
                     width = if (isDragTarget) 2.dp else 1.dp,
                     color = if (isDragTarget) {
                         MaterialTheme.colorScheme.primary
                     } else {
-                        MaterialTheme.colorScheme.outlineVariant
+                        MaterialTheme.colorScheme.outline
                     },
                     shape = imageShape,
                 ),
@@ -1927,10 +1953,10 @@ internal fun FilledPhotoSlot(
                     .fillMaxWidth()
                     .heightIn(min = ProfilePhotoReplaceActionMinHeight)
                     .clip(actionShape)
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .background(MaterialTheme.colorScheme.surface)
                     .border(
                         width = 1.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant,
+                        color = MaterialTheme.colorScheme.outline,
                         shape = actionShape,
                     )
                     .clickable(
@@ -1965,7 +1991,7 @@ internal fun EmptyPhotoSlot(
     modifier: Modifier = Modifier,
     onPickNewFile: (position: Int) -> Unit,
 ) {
-    val shape = RoundedCornerShape(8.dp)
+    val shape = RoundedCornerShape(RealsRadii.Row)
     val actionStateDescription = pendingAction.slotStateDescription()
     Box(
         modifier = modifier
@@ -1977,13 +2003,13 @@ internal fun EmptyPhotoSlot(
                 }
             }
             .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .background(MaterialTheme.colorScheme.surface)
             .border(
                 width = if (isDragTarget) 2.dp else 1.dp,
                 color = if (isDragTarget) {
                     MaterialTheme.colorScheme.primary
                 } else {
-                    MaterialTheme.colorScheme.outlineVariant
+                    MaterialTheme.colorScheme.outline
                 },
                 shape = shape,
             )
@@ -2066,7 +2092,7 @@ internal fun DraggedPhotoGhost(
 ) {
     val sizePx = sourceBounds.width.coerceAtLeast(1f)
     val sizeDp = with(LocalDensity.current) { sizePx.toDp() }
-    val shape = RoundedCornerShape(8.dp)
+    val shape = RoundedCornerShape(RealsRadii.Row)
     Box(
         modifier = Modifier
             .offset {
@@ -2078,7 +2104,7 @@ internal fun DraggedPhotoGhost(
             .size(sizeDp)
             .alpha(0.82f)
             .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .background(MaterialTheme.colorScheme.surface)
             .border(2.dp, MaterialTheme.colorScheme.primary, shape),
     ) {
         ProfilePhotoImage(

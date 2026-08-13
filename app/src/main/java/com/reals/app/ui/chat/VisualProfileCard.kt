@@ -1,11 +1,13 @@
 package com.reals.app.ui.chat
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -18,7 +20,11 @@ import coil3.compose.AsyncImage
 import com.reals.app.domain.model.PublicProfileQuestion
 import com.reals.app.core.security.TextSafety
 import com.reals.app.domain.model.VisualProfile
+import com.reals.app.ui.common.RealsSectionLabel
+import com.reals.app.ui.common.RealsThinDivider
 import com.reals.app.ui.profile.ProfilePhotoPresentationAspectRatio
+import com.reals.app.ui.theme.RealsRadii
+import com.reals.app.ui.theme.RealsType
 
 @Composable
 fun VisualProfileCard(
@@ -27,13 +33,17 @@ fun VisualProfileCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        shape = RoundedCornerShape(RealsRadii.Card),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (showHeader) {
                 Text(
                     text = TextSafety.safeDisplay(profile.displayName, maxLength = 100),
-                    style = MaterialTheme.typography.titleLarge,
+                    style = RealsType.SectionTitle,
+                    color = MaterialTheme.colorScheme.primary,
                 )
                 Text("Edad: ${profile.age}")
             }
@@ -44,8 +54,14 @@ fun VisualProfileCard(
             if (profile.photos.isEmpty()) {
                 Text("No hay fotos para revisar.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
+                RealsSectionLabel("Fotos")
                 profile.photos.forEach { photo ->
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                    Card(
+                        shape = RoundedCornerShape(RealsRadii.Row),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                    ) {
                         Column(
                             modifier = Modifier.padding(12.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -82,9 +98,15 @@ private fun VisualProfileQuestionsSection(
     if (visibleQuestions.isEmpty()) return
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Preguntas del perfil", style = MaterialTheme.typography.titleMedium)
+        RealsSectionLabel("Preguntas del perfil")
+        RealsThinDivider()
         visibleQuestions.forEach { question ->
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+            Card(
+                shape = RoundedCornerShape(RealsRadii.Row),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
