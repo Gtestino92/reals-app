@@ -90,9 +90,11 @@ data class HomeNextStepLiteResponseDto(
 data class HomePendingSecondChatLiteResponseDto(
     val chatId: String? = null,
     val availableAt: String? = null,
+    val entryClosesAt: String? = null,
     val expiresAt: String? = null,
     val readOnlyUntil: String? = null,
     val durationMinutes: Long? = null,
+    val myAttendanceStatus: String? = null,
 )
 
 @Serializable
@@ -106,9 +108,11 @@ data class HomeChatResponseDto(
     val chatType: String? = null,
     val chatStatus: String? = null,
     val availableAt: String,
+    val entryClosesAt: String? = null,
     val expiresAt: String,
     val readOnlyUntil: String? = null,
     val durationMinutes: Long,
+    val myAttendanceStatus: String? = null,
     val partner: ChatPartnerResponseDto? = null,
 )
 

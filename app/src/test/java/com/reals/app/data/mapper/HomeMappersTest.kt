@@ -18,6 +18,7 @@ import com.reals.app.domain.model.ChatType
 import com.reals.app.domain.model.HomeNextStep
 import com.reals.app.domain.model.HomePassiveNotice
 import com.reals.app.domain.model.HomePendingAction
+import com.reals.app.domain.model.SecondChatAttendanceStatus
 import com.reals.app.testutil.testJson
 import kotlinx.serialization.Serializable
 import org.junit.Assert.assertEquals
@@ -211,6 +212,7 @@ class HomeMappersTest {
                     is HomeNextStep.Scheduling -> it.connectionId
                     is HomeNextStep.SecondChatScheduled -> it.connectionId
                     is HomeNextStep.SecondChatAvailable -> it.connectionId
+                    is HomeNextStep.SecondChatExpired -> it.connectionId
                     is HomeNextStep.SecondChatReadOnly -> it.connectionId
                     is HomeNextStep.Unknown -> it.connectionId
                 }
@@ -275,6 +277,7 @@ class HomeMappersTest {
                     is HomeNextStep.Scheduling -> it.connectionId
                     is HomeNextStep.SecondChatScheduled -> it.connectionId
                     is HomeNextStep.SecondChatAvailable -> it.connectionId
+                    is HomeNextStep.SecondChatExpired -> it.connectionId
                     is HomeNextStep.SecondChatReadOnly -> it.connectionId
                     is HomeNextStep.Unknown -> it.connectionId
                 }
@@ -523,6 +526,67 @@ class HomeMappersTest {
         assertEquals(null, legacy.visualStartedAt)
         assertEquals(null, legacy.visualExpiresAt)
         assertTrue(firstChat is HomePendingAction.FirstChat)
+    }
+
+    @Test
+    fun `Home DTO maps full second chat expired metadata`() {
+        val home = minimalHome(
+            nextSteps = listOf(
+                HomeNextStepResponseDto(
+                    type = "SECOND_CHAT_EXPIRED",
+                    connectionId = "connection-expired",
+                    matchId = "match-expired",
+                    partner = partnerDto("expired-partner"),
+                    secondChat = HomeChatResponseDto(
+                        chatId = null,
+                        chatType = "SECOND_CHAT",
+                        chatStatus = null,
+                        availableAt = "2026-06-20T18:00:00-03:00",
+                        entryClosesAt = "2026-06-20T18:20:00-03:00",
+                        expiresAt = "2026-06-20T20:00:00-03:00",
+                        durationMinutes = 120,
+                        myAttendanceStatus = "NO_SHOW",
+                    ),
+                ),
+            ),
+        ).toDomain()
+
+        val expired = home.nextSteps.single() as HomeNextStep.SecondChatExpired
+
+        assertEquals("connection-expired", expired.connectionId)
+        assertEquals("match-expired", expired.matchId)
+        assertEquals("expired-partner", expired.partner?.displayName)
+        assertEquals("2026-06-20T18:20:00-03:00", expired.secondChat?.entryClosesAt)
+        assertEquals(SecondChatAttendanceStatus.NoShow, expired.secondChat?.myAttendanceStatus)
+    }
+
+    @Test
+    fun `Home pending state DTO maps lite second chat expired metadata`() {
+        val pending = HomePendingStateResponseDto(
+            version = 16,
+            nextSteps = listOf(
+                HomeNextStepLiteResponseDto(
+                    type = "SECOND_CHAT_EXPIRED",
+                    connectionId = "connection-expired",
+                    matchId = "match-expired",
+                    secondChat = HomePendingSecondChatLiteResponseDto(
+                        chatId = null,
+                        availableAt = "2026-06-20T18:00:00-03:00",
+                        entryClosesAt = "2026-06-20T18:20:00-03:00",
+                        expiresAt = "2026-06-20T20:00:00-03:00",
+                        durationMinutes = 120,
+                        myAttendanceStatus = "PENDING",
+                    ),
+                ),
+            ),
+            serverTime = "2026-06-20T18:21:00-03:00",
+        ).toDomain()
+
+        val expired = pending.nextSteps.single() as HomeNextStep.SecondChatExpired
+
+        assertEquals("connection-expired", expired.connectionId)
+        assertEquals("2026-06-20T18:20:00-03:00", expired.secondChat?.entryClosesAt)
+        assertEquals(SecondChatAttendanceStatus.Pending, expired.secondChat?.myAttendanceStatus)
     }
 
     @Test

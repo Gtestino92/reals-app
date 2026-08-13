@@ -110,8 +110,11 @@ import com.reals.app.ui.root.OptimisticOutgoingMessageType
 import com.reals.app.ui.root.OutgoingMessageDeliveryState
 import com.reals.app.ui.root.ChatAudioDraftUiState
 import com.reals.app.ui.root.ChatAudioUploadUiState
+import com.reals.app.ui.root.SecondChatEntryAvailabilityState
 import com.reals.app.ui.root.SecondChatLifecycleUiState
 import com.reals.app.ui.root.SecondChatResolutionPresentation
+import com.reals.app.ui.root.canReturnHomeAfterPartnerEntryCutoff
+import com.reals.app.ui.root.entryAvailabilityPresentation
 import com.reals.app.ui.root.hasPendingNoShowClaim
 import com.reals.app.ui.root.isWaitingForPartner
 import com.reals.app.ui.root.remainingMillisFromServerSnapshot
@@ -335,11 +338,21 @@ fun ChatScreen(
         actionLoading = loadingChatAction || audioInteractionBusy,
     )
     val secondChatCompletionOverflow = secondChatCompletionOverflowPresentation(secondChatResolution)
+    val canReturnHomeAfterPartnerCutoff = secondChatLifecycle?.status?.canReturnHomeAfterPartnerEntryCutoff(
+        statusReceivedAtMillis = secondChatLifecycle.statusReceivedAtMillis,
+        nowMillis = nowMillis,
+    ) == true
     val canUseChatActions = firstChatPolicy.canUseOrdinaryConversationActions &&
             !loadingChatAction &&
             !audioInteractionBusy
     val canUseNavigationActions = !loadingChatAction && !audioInteractionBusy &&
-            secondChatTiming?.genuinelyActive != true
+            (secondChatTiming?.genuinelyActive != true || canReturnHomeAfterPartnerCutoff)
+    val showBackHomeAction = shouldShowBackHomeAction(
+        hasBackHomeCallback = onBackHome != null,
+        hasSecondChatLifecycle = secondChatLifecycle != null,
+        genuinelyActive = secondChatTiming?.genuinelyActive == true,
+        canReturnAfterPartnerCutoff = canReturnHomeAfterPartnerCutoff,
+    )
     val guidancePanelState = if (firstChatPolicy.decisionOnly) {
         null
     } else {
@@ -363,8 +376,16 @@ fun ChatScreen(
     )
     val manualBlockBusy =
         loading || refreshing || sending || actionLoading || guidanceActionLoading || manualBlockLoading
-    val canManualBlock = !manualBlockBusy
-    val canUseSafetyActions = firstChatPolicy.safetyAvailable && !loadingChatAction && !manualBlockLoading
+    val secondChatSafetyEligible = secondChatSafetyActionsAllowed(
+        chatType = chat?.chatType,
+        attendanceStatus = secondChatLifecycle?.status?.myAttendanceStatus,
+    )
+    val canManualBlock = !manualBlockBusy && secondChatSafetyEligible
+    val canUseSafetyActions =
+        firstChatPolicy.safetyAvailable &&
+            !loadingChatAction &&
+            !manualBlockLoading &&
+            secondChatSafetyEligible
     val canDecide = firstChatInteractionPolicy(
         chat = chat,
         canChat = canChat,
@@ -592,6 +613,7 @@ fun ChatScreen(
                 lifecycle = secondChatLifecycle,
                 partnerName = partnerDisplayName,
                 actionLoading = loadingChatAction || audioInteractionBusy,
+                partnerEntryCutoffReached = canReturnHomeAfterPartnerCutoff,
                 onClaimNoShow = onClaimSecondChatNoShow,
                 onRefresh = onRefresh,
             )
@@ -623,7 +645,7 @@ fun ChatScreen(
                 canDecide = canDecide,
                 canUseNavigationActions = canUseNavigationActions,
                 showDecisionActions = showDecisionActions && !decisionOnlyPanelState.visible,
-                onBackHome = onBackHome,
+                onBackHome = onBackHome.takeIf { showBackHomeAction },
                 onApprove = onApprove,
                 onAcceptExitRequest = onAcceptExitRequest,
                 onRejectExitRequest = onRejectExitRequest,
@@ -809,6 +831,7 @@ private fun SecondChatLifecyclePanel(
     lifecycle: SecondChatLifecycleUiState?,
     partnerName: String?,
     actionLoading: Boolean,
+    partnerEntryCutoffReached: Boolean,
     onClaimNoShow: () -> Unit,
     onRefresh: () -> Unit,
 ) {
@@ -846,10 +869,21 @@ private fun SecondChatLifecyclePanel(
                 tone = FeedbackTone.Info,
             )
         }
-        status.myAttendanceStatus == SecondChatAttendanceStatus.Pending && !status.canJoin -> {
+        status.entryAvailabilityPresentation(
+            statusReceivedAtMillis = lifecycle.statusReceivedAtMillis,
+            nowMillis = nowMillis,
+        )?.state in listOf(
+            SecondChatEntryAvailabilityState.BeforeStart,
+            SecondChatEntryAvailabilityState.EntryClosed,
+            SecondChatEntryAvailabilityState.Unavailable,
+        ) -> {
+            val presentation = status.entryAvailabilityPresentation(
+                statusReceivedAtMillis = lifecycle.statusReceivedAtMillis,
+                nowMillis = nowMillis,
+            )
             FeedbackCard(
-                title = "Todavía no está disponible",
-                message = "El segundo chat abre a las ${formatBackendTime(status.scheduledAt)}.",
+                title = presentation?.title ?: "Segundo chat no disponible",
+                message = presentation?.message ?: "No se puede entrar en este momento.",
                 tone = FeedbackTone.Info,
             )
         }
@@ -895,12 +929,17 @@ private fun SecondChatLifecyclePanel(
                         "Podés mandar mensajes mientras esperás. Eso no significa que la otra persona haya llegado.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    if (status.canClaimPartnerNoShow) {
+                    if (shouldShowPartnerNoShowClaim(status.canClaimPartnerNoShow, partnerEntryCutoffReached)) {
+                        Text(
+                            "Si pasa el tiempo de espera, podés reclamar. " +
+                                    "Si la otra persona no entra durante el plazo de confirmación, la cita termina sin penalizarte.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         Button(
                             onClick = onClaimNoShow,
                             enabled = !actionLoading && lifecycle.claimingNoShow.not(),
                         ) {
-                            Text("La otra persona no llegó")
+                            Text("$safePartnerName no se presentó")
                         }
                     }
                 }
@@ -1101,6 +1140,32 @@ internal fun chatOverflowCanOpen(
                 (visibility.showSafety && canUseSafetyActions)
             ) ||
         (visibility.showManualBlock && canManualBlock)
+
+internal fun secondChatSafetyActionsAllowed(
+    chatType: ChatType?,
+    attendanceStatus: SecondChatAttendanceStatus?,
+): Boolean =
+    chatType != ChatType.SecondChat ||
+        attendanceStatus == SecondChatAttendanceStatus.OnTime ||
+        attendanceStatus == SecondChatAttendanceStatus.Late
+
+internal fun shouldShowBackHomeAction(
+    hasBackHomeCallback: Boolean,
+    hasSecondChatLifecycle: Boolean,
+    genuinelyActive: Boolean,
+    canReturnAfterPartnerCutoff: Boolean,
+): Boolean =
+    hasBackHomeCallback &&
+        (
+            !hasSecondChatLifecycle ||
+                !genuinelyActive ||
+                canReturnAfterPartnerCutoff
+            )
+
+internal fun shouldShowPartnerNoShowClaim(
+    backendCanClaim: Boolean,
+    partnerEntryCutoffReached: Boolean,
+): Boolean = backendCanClaim && !partnerEntryCutoffReached
 
 internal fun secondChatCompletionOverflowMenuItemEnabled(
     action: SecondChatCompletionOverflowPresentation,

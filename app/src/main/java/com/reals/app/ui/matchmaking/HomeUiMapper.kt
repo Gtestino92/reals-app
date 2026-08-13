@@ -22,10 +22,11 @@ class HomeUiMapper {
     ): HomeScreenModel {
         val pendingActionItems = home.pendingActionItems(localHidden)
         val nextStepItems = home.nextStepItems()
+        val activeNextStepCount = nextStepItems.count { it !is HomeNextStepItem.SecondChatExpired }
         val displayedSummary = home?.activeInteractionsSummary?.copy(
             activeInitialCount = pendingActionItems.size,
-            activeConnectionCount = nextStepItems.size,
-            actionableConnectionCount = nextStepItems.size,
+            activeConnectionCount = activeNextStepCount,
+            actionableConnectionCount = activeNextStepCount,
         )
 
         return HomeScreenModel(
@@ -105,8 +106,10 @@ class HomeUiMapper {
                             chatId = nextStep.secondChat?.chatId,
                             chatStatus = nextStep.secondChat?.chatStatus?.rawValue,
                             availableAt = nextStep.secondChat?.availableAt,
+                            entryClosesAt = nextStep.secondChat?.entryClosesAt,
                             expiresAt = nextStep.secondChat?.expiresAt,
                             durationMinutes = nextStep.secondChat?.durationMinutes,
+                            myAttendanceStatus = nextStep.secondChat?.myAttendanceStatus?.rawValue,
                         )
                     }
 
@@ -121,8 +124,28 @@ class HomeUiMapper {
                             chatId = nextStep.secondChat?.chatId,
                             chatStatus = nextStep.secondChat?.chatStatus?.rawValue,
                             availableAt = nextStep.secondChat?.availableAt,
+                            entryClosesAt = nextStep.secondChat?.entryClosesAt,
                             expiresAt = nextStep.secondChat?.expiresAt,
                             durationMinutes = nextStep.secondChat?.durationMinutes,
+                            myAttendanceStatus = nextStep.secondChat?.myAttendanceStatus?.rawValue,
+                        )
+                    }
+
+                is HomeNextStep.SecondChatExpired ->
+                    if (nextStep.secondChat?.chatStatus.isDismissedSecondChatStatus()) {
+                        null
+                    } else {
+                        HomeNextStepItem.SecondChatExpired(
+                            connectionId = nextStep.connectionId,
+                            matchId = nextStep.matchId,
+                            partnerDisplayName = nextStep.partnerDisplayName(),
+                            chatId = nextStep.secondChat?.chatId,
+                            chatStatus = nextStep.secondChat?.chatStatus?.rawValue,
+                            availableAt = nextStep.secondChat?.availableAt,
+                            entryClosesAt = nextStep.secondChat?.entryClosesAt,
+                            expiresAt = nextStep.secondChat?.expiresAt,
+                            durationMinutes = nextStep.secondChat?.durationMinutes,
+                            myAttendanceStatus = nextStep.secondChat?.myAttendanceStatus?.rawValue,
                         )
                     }
 
@@ -137,9 +160,11 @@ class HomeUiMapper {
                             chatId = nextStep.secondChat?.chatId,
                             chatStatus = nextStep.secondChat?.chatStatus?.rawValue,
                             availableAt = nextStep.secondChat?.availableAt,
+                            entryClosesAt = nextStep.secondChat?.entryClosesAt,
                             expiresAt = nextStep.secondChat?.expiresAt,
                             readOnlyUntil = nextStep.secondChat?.readOnlyUntil,
                             durationMinutes = nextStep.secondChat?.durationMinutes,
+                            myAttendanceStatus = nextStep.secondChat?.myAttendanceStatus?.rawValue,
                         )
                     }
 
@@ -198,6 +223,10 @@ class HomeUiMapper {
             ?: partner?.displayName?.takeIf { it.isNotBlank() }
 
     private fun HomeNextStep.SecondChatAvailable.partnerDisplayName(): String? =
+        secondChat?.partner?.displayName?.takeIf { it.isNotBlank() }
+            ?: partner?.displayName?.takeIf { it.isNotBlank() }
+
+    private fun HomeNextStep.SecondChatExpired.partnerDisplayName(): String? =
         secondChat?.partner?.displayName?.takeIf { it.isNotBlank() }
             ?: partner?.displayName?.takeIf { it.isNotBlank() }
 

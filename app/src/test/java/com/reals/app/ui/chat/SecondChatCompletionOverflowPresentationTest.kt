@@ -1,5 +1,7 @@
 package com.reals.app.ui.chat
 
+import com.reals.app.domain.model.ChatType
+import com.reals.app.domain.model.SecondChatAttendanceStatus
 import com.reals.app.domain.model.SecondChatResolutionRequestType
 import com.reals.app.ui.root.SecondChatActiveResolutionPresentation
 import com.reals.app.ui.root.SecondChatCreateResolutionPresentation
@@ -11,6 +13,182 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SecondChatCompletionOverflowPresentationTest {
+    @Test
+    fun `first chat remains eligible for safety actions without second-chat lifecycle`() {
+        assertTrue(
+            secondChatSafetyActionsAllowed(
+                chatType = ChatType.FirstChat,
+                attendanceStatus = null,
+            )
+        )
+    }
+
+    @Test
+    fun `second chat on time attendance is eligible for safety actions`() {
+        assertTrue(
+            secondChatSafetyActionsAllowed(
+                chatType = ChatType.SecondChat,
+                attendanceStatus = SecondChatAttendanceStatus.OnTime,
+            )
+        )
+    }
+
+    @Test
+    fun `second chat late attendance is eligible for safety actions`() {
+        assertTrue(
+            secondChatSafetyActionsAllowed(
+                chatType = ChatType.SecondChat,
+                attendanceStatus = SecondChatAttendanceStatus.Late,
+            )
+        )
+    }
+
+    @Test
+    fun `second chat pending attendance is ineligible for safety actions`() {
+        assertFalse(
+            secondChatSafetyActionsAllowed(
+                chatType = ChatType.SecondChat,
+                attendanceStatus = SecondChatAttendanceStatus.Pending,
+            )
+        )
+    }
+
+    @Test
+    fun `second chat no show attendance is ineligible for safety actions`() {
+        assertFalse(
+            secondChatSafetyActionsAllowed(
+                chatType = ChatType.SecondChat,
+                attendanceStatus = SecondChatAttendanceStatus.NoShow,
+            )
+        )
+    }
+
+    @Test
+    fun `second chat missing or unknown attendance fails closed for safety actions`() {
+        assertFalse(
+            secondChatSafetyActionsAllowed(
+                chatType = ChatType.SecondChat,
+                attendanceStatus = null,
+            )
+        )
+        assertFalse(
+            secondChatSafetyActionsAllowed(
+                chatType = ChatType.SecondChat,
+                attendanceStatus = SecondChatAttendanceStatus.Unknown("NEW_STATUS"),
+            )
+        )
+    }
+
+    @Test
+    fun `back home action hides for genuinely active second chat before partner cutoff`() {
+        assertFalse(
+            shouldShowBackHomeAction(
+                hasBackHomeCallback = true,
+                hasSecondChatLifecycle = true,
+                genuinelyActive = true,
+                canReturnAfterPartnerCutoff = false,
+            )
+        )
+    }
+
+    @Test
+    fun `back home action shows for genuinely active second chat after partner cutoff`() {
+        assertTrue(
+            shouldShowBackHomeAction(
+                hasBackHomeCallback = true,
+                hasSecondChatLifecycle = true,
+                genuinelyActive = true,
+                canReturnAfterPartnerCutoff = true,
+            )
+        )
+    }
+
+    @Test
+    fun `back home action hides for genuinely active second chat when both joined`() {
+        assertFalse(
+            shouldShowBackHomeAction(
+                hasBackHomeCallback = true,
+                hasSecondChatLifecycle = true,
+                genuinelyActive = true,
+                canReturnAfterPartnerCutoff = false,
+            )
+        )
+    }
+
+    @Test
+    fun `back home action shows for non-active second chat`() {
+        assertTrue(
+            shouldShowBackHomeAction(
+                hasBackHomeCallback = true,
+                hasSecondChatLifecycle = true,
+                genuinelyActive = false,
+                canReturnAfterPartnerCutoff = false,
+            )
+        )
+    }
+
+    @Test
+    fun `back home action hides without callback`() {
+        assertFalse(
+            shouldShowBackHomeAction(
+                hasBackHomeCallback = false,
+                hasSecondChatLifecycle = true,
+                genuinelyActive = false,
+                canReturnAfterPartnerCutoff = true,
+            )
+        )
+    }
+
+    @Test
+    fun `back home action preserves first-chat callback-driven rendering`() {
+        assertTrue(
+            shouldShowBackHomeAction(
+                hasBackHomeCallback = true,
+                hasSecondChatLifecycle = false,
+                genuinelyActive = false,
+                canReturnAfterPartnerCutoff = false,
+            )
+        )
+        assertFalse(
+            shouldShowBackHomeAction(
+                hasBackHomeCallback = false,
+                hasSecondChatLifecycle = false,
+                genuinelyActive = false,
+                canReturnAfterPartnerCutoff = true,
+            )
+        )
+    }
+
+    @Test
+    fun `partner no show claim shows before partner entry cutoff when backend allows`() {
+        assertTrue(
+            shouldShowPartnerNoShowClaim(
+                backendCanClaim = true,
+                partnerEntryCutoffReached = false,
+            )
+        )
+    }
+
+    @Test
+    fun `partner no show claim hides at local partner entry cutoff`() {
+        assertFalse(
+            shouldShowPartnerNoShowClaim(
+                backendCanClaim = true,
+                partnerEntryCutoffReached = true,
+            )
+        )
+    }
+
+    @Test
+    fun `partner no show claim hides when backend disallows`() {
+        assertFalse(
+            shouldShowPartnerNoShowClaim(
+                backendCanClaim = false,
+                partnerEntryCutoffReached = false,
+            )
+        )
+    }
+
     @Test
     fun `eligible second-chat completion creates overflow action`() {
         val action = secondChatCompletionOverflowPresentation(

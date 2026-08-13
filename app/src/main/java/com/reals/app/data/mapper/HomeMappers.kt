@@ -26,6 +26,7 @@ import com.reals.app.domain.model.HomePendingAction
 import com.reals.app.domain.model.HomeState
 import com.reals.app.domain.model.HomeStatus
 import com.reals.app.domain.model.ProfileStatus
+import com.reals.app.domain.model.SecondChatAttendanceStatus
 
 fun HomeResponseDto.toDomain(): HomeState = HomeState(
     profileStatus = profileStatus?.let { ProfileStatus.fromBackend(it) },
@@ -130,6 +131,13 @@ fun HomeNextStepResponseDto.toDomain(): HomeNextStep = when (type.uppercase()) {
         secondChat = secondChat?.toDomain(),
     )
 
+    "SECOND_CHAT_EXPIRED" -> HomeNextStep.SecondChatExpired(
+        connectionId = connectionId,
+        matchId = matchId,
+        partner = partner?.toDomain(),
+        secondChat = secondChat?.toDomain(),
+    )
+
     "SECOND_CHAT_READ_ONLY" -> HomeNextStep.SecondChatReadOnly(
         connectionId = connectionId,
         matchId = matchId,
@@ -166,6 +174,13 @@ fun HomeNextStepLiteResponseDto.toDomain(): HomeNextStep = when (type.uppercase(
         secondChat = secondChat?.toDomain(),
     )
 
+    "SECOND_CHAT_EXPIRED" -> HomeNextStep.SecondChatExpired(
+        connectionId = connectionId,
+        matchId = matchId,
+        partner = null,
+        secondChat = secondChat?.toDomain(),
+    )
+
     "SECOND_CHAT_READ_ONLY" -> HomeNextStep.SecondChatReadOnly(
         connectionId = connectionId,
         matchId = matchId,
@@ -191,9 +206,11 @@ fun HomeChatResponseDto.toDomain(): HomeChat = HomeChat(
     chatType = chatType?.let { ChatType.fromBackend(it) },
     chatStatus = chatStatus?.let { ChatStatus.fromBackend(it) },
     availableAt = availableAt,
+    entryClosesAt = entryClosesAt,
     expiresAt = expiresAt,
     readOnlyUntil = readOnlyUntil,
     durationMinutes = durationMinutes,
+    myAttendanceStatus = myAttendanceStatus?.let { SecondChatAttendanceStatus.fromBackend(it) },
     partner = partner?.toDomain(),
 )
 
@@ -206,9 +223,11 @@ fun HomePendingSecondChatLiteResponseDto.toDomain(): HomeChat? {
         chatType = ChatType.SecondChat,
         chatStatus = null,
         availableAt = availableAt,
+        entryClosesAt = entryClosesAt,
         expiresAt = expiresAt,
         readOnlyUntil = readOnlyUntil,
         durationMinutes = durationMinutes,
+        myAttendanceStatus = myAttendanceStatus?.let { SecondChatAttendanceStatus.fromBackend(it) },
         partner = null,
     )
 }

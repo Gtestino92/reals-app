@@ -189,16 +189,12 @@ private fun HomePriorityRow(
         is HomePriorityItem.SecondChatOpen -> "Tu segundo chat ya empezó"
         is HomePriorityItem.SecondChatStartingSoon -> "Tu segundo chat empieza pronto"
     }
-    val body = when (item) {
-        is HomePriorityItem.VisualReview -> "Revisá antes de que venza."
-        is HomePriorityItem.SecondChatOpen -> "Entrar al chat"
-        is HomePriorityItem.SecondChatStartingSoon -> item.item.homeNextStepBody(nowMillis)
-    }
     val actionLabel = when (item) {
         is HomePriorityItem.VisualReview -> "Revisar ahora"
         is HomePriorityItem.SecondChatOpen -> "Entrar al chat"
         is HomePriorityItem.SecondChatStartingSoon -> "Ver en Pendientes"
     }
+    val body = item.homePriorityBody(nowMillis)
 
     Card(
         onClick = onClick,
@@ -237,6 +233,13 @@ private fun HomePriorityRow(
         }
     }
 }
+
+internal fun HomePriorityItem.homePriorityBody(nowMillis: Long): String =
+    when (this) {
+        is HomePriorityItem.VisualReview -> "Revisá antes de que venza."
+        is HomePriorityItem.SecondChatOpen -> "Ya está disponible."
+        is HomePriorityItem.SecondChatStartingSoon -> item.homeNextStepBody(nowMillis)
+    }
 
 @Composable
 internal fun PendingInteractionsScreen(

@@ -743,7 +743,7 @@ class RealsRootViewModel(
 
     fun closeSecondChat() {
         val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
-        if (current.isJoinedActiveSecondChat()) return
+        if (!current.canReturnHomeNow()) return
         current.audioDraft?.deleteFile()
         viewModelScope.launch {
             homeCoordinator.returnHome(current.session)
