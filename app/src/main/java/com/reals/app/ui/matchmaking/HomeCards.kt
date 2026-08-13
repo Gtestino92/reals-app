@@ -453,6 +453,7 @@ internal fun VisualApprovalItem(
     action: HomeActionItem.VisualReview,
     busy: Boolean,
     nowMillis: Long,
+    titleOverride: String? = null,
     onOpenVisualApproval: (matchId: String) -> Unit,
 ) {
     val deadlineText = formatVisualReviewHomeDeadline(
@@ -490,7 +491,8 @@ internal fun VisualApprovalItem(
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     Text(
-                        text = partnerName?.let { "Con $it" } ?: "Revisión pendiente",
+                        text = titleOverride
+                            ?: (partnerName?.let { "Con $it" } ?: "Revisión pendiente"),
                         style = MaterialTheme.typography.titleMedium,
                     )
                     deadlineText?.let {
@@ -605,6 +607,8 @@ internal fun NextStepItem(
     busy: Boolean,
     nowMillis: Long,
     dismissContentDescription: String = "Quitar de Inicio",
+    titleOverride: String? = null,
+    bodyOverride: String? = null,
     onOpenScheduling: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenSecondChat: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenPartnerProfile: (matchId: String) -> Unit,
@@ -678,7 +682,7 @@ internal fun NextStepItem(
                 verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
                 Text(
-                    text = if (item is HomeNextStepItem.Unknown) {
+                    text = titleOverride ?: if (item is HomeNextStepItem.Unknown) {
                         "Conexión no disponible"
                     } else {
                         partnerName?.let { "Con $it" } ?: "Con la otra persona"
@@ -686,7 +690,7 @@ internal fun NextStepItem(
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
-                    text = item.homeNextStepBody(nowMillis),
+                    text = bodyOverride ?: item.homeNextStepBody(nowMillis),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )

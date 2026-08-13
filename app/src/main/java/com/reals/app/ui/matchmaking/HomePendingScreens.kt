@@ -313,24 +313,37 @@ private fun PendingHubSection(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(section.type.title, style = MaterialTheme.typography.titleLarge)
-            section.items.forEach { item ->
-                when (item) {
-                    is HomePendingHubItem.VisualReview -> VisualApprovalItem(
-                        action = item.action,
-                        busy = busy,
-                        nowMillis = nowMillis,
-                        onOpenVisualApproval = onOpenVisualApproval,
+            section.secondaryGroups.forEach { group ->
+                group.title?.let { title ->
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp),
                     )
-                    is HomePendingHubItem.NextStep -> NextStepItem(
-                        item = item.item,
-                        busy = busy,
-                        nowMillis = nowMillis,
-                        dismissContentDescription = "Quitar de Pendientes",
-                        onOpenScheduling = onOpenScheduling,
-                        onOpenSecondChat = onOpenSecondChat,
-                        onOpenPartnerProfile = onOpenPartnerProfile,
-                        onDismissSecondChat = onDismissSecondChat,
-                    )
+                }
+                group.items.forEach { item ->
+                    when (item) {
+                        is HomePendingHubItem.VisualReview -> VisualApprovalItem(
+                            action = item.action,
+                            busy = busy,
+                            nowMillis = nowMillis,
+                            titleOverride = item.action.pendingVisualReviewTitle(),
+                            onOpenVisualApproval = onOpenVisualApproval,
+                        )
+                        is HomePendingHubItem.NextStep -> NextStepItem(
+                            item = item.item,
+                            busy = busy,
+                            nowMillis = nowMillis,
+                            dismissContentDescription = "Quitar de Pendientes",
+                            titleOverride = item.item.pendingNextStepTitle(),
+                            bodyOverride = item.item.pendingNextStepBody(nowMillis),
+                            onOpenScheduling = onOpenScheduling,
+                            onOpenSecondChat = onOpenSecondChat,
+                            onOpenPartnerProfile = onOpenPartnerProfile,
+                            onDismissSecondChat = onDismissSecondChat,
+                        )
+                    }
                 }
             }
         }
