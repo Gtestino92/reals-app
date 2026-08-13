@@ -80,6 +80,86 @@ class SecondChatCompletionOverflowPresentationTest {
     }
 
     @Test
+    fun `back home action hides for genuinely active second chat before partner cutoff`() {
+        assertFalse(
+            shouldShowBackHomeAction(
+                hasBackHomeCallback = true,
+                hasSecondChatLifecycle = true,
+                genuinelyActive = true,
+                canReturnAfterPartnerCutoff = false,
+            )
+        )
+    }
+
+    @Test
+    fun `back home action shows for genuinely active second chat after partner cutoff`() {
+        assertTrue(
+            shouldShowBackHomeAction(
+                hasBackHomeCallback = true,
+                hasSecondChatLifecycle = true,
+                genuinelyActive = true,
+                canReturnAfterPartnerCutoff = true,
+            )
+        )
+    }
+
+    @Test
+    fun `back home action hides for genuinely active second chat when both joined`() {
+        assertFalse(
+            shouldShowBackHomeAction(
+                hasBackHomeCallback = true,
+                hasSecondChatLifecycle = true,
+                genuinelyActive = true,
+                canReturnAfterPartnerCutoff = false,
+            )
+        )
+    }
+
+    @Test
+    fun `back home action shows for non-active second chat`() {
+        assertTrue(
+            shouldShowBackHomeAction(
+                hasBackHomeCallback = true,
+                hasSecondChatLifecycle = true,
+                genuinelyActive = false,
+                canReturnAfterPartnerCutoff = false,
+            )
+        )
+    }
+
+    @Test
+    fun `back home action hides without callback`() {
+        assertFalse(
+            shouldShowBackHomeAction(
+                hasBackHomeCallback = false,
+                hasSecondChatLifecycle = true,
+                genuinelyActive = false,
+                canReturnAfterPartnerCutoff = true,
+            )
+        )
+    }
+
+    @Test
+    fun `back home action preserves first-chat callback-driven rendering`() {
+        assertTrue(
+            shouldShowBackHomeAction(
+                hasBackHomeCallback = true,
+                hasSecondChatLifecycle = false,
+                genuinelyActive = false,
+                canReturnAfterPartnerCutoff = false,
+            )
+        )
+        assertFalse(
+            shouldShowBackHomeAction(
+                hasBackHomeCallback = false,
+                hasSecondChatLifecycle = false,
+                genuinelyActive = false,
+                canReturnAfterPartnerCutoff = true,
+            )
+        )
+    }
+
+    @Test
     fun `eligible second-chat completion creates overflow action`() {
         val action = secondChatCompletionOverflowPresentation(
             SecondChatResolutionPresentation(createCompletion = completionCreate(enabled = true))

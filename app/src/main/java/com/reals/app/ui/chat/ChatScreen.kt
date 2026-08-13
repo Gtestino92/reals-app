@@ -347,6 +347,12 @@ fun ChatScreen(
             !audioInteractionBusy
     val canUseNavigationActions = !loadingChatAction && !audioInteractionBusy &&
             (secondChatTiming?.genuinelyActive != true || canReturnHomeAfterPartnerCutoff)
+    val showBackHomeAction = shouldShowBackHomeAction(
+        hasBackHomeCallback = onBackHome != null,
+        hasSecondChatLifecycle = secondChatLifecycle != null,
+        genuinelyActive = secondChatTiming?.genuinelyActive == true,
+        canReturnAfterPartnerCutoff = canReturnHomeAfterPartnerCutoff,
+    )
     val guidancePanelState = if (firstChatPolicy.decisionOnly) {
         null
     } else {
@@ -638,7 +644,7 @@ fun ChatScreen(
                 canDecide = canDecide,
                 canUseNavigationActions = canUseNavigationActions,
                 showDecisionActions = showDecisionActions && !decisionOnlyPanelState.visible,
-                onBackHome = onBackHome,
+                onBackHome = onBackHome.takeIf { showBackHomeAction },
                 onApprove = onApprove,
                 onAcceptExitRequest = onAcceptExitRequest,
                 onRejectExitRequest = onRejectExitRequest,
@@ -1140,6 +1146,19 @@ internal fun secondChatSafetyActionsAllowed(
     chatType != ChatType.SecondChat ||
         attendanceStatus == SecondChatAttendanceStatus.OnTime ||
         attendanceStatus == SecondChatAttendanceStatus.Late
+
+internal fun shouldShowBackHomeAction(
+    hasBackHomeCallback: Boolean,
+    hasSecondChatLifecycle: Boolean,
+    genuinelyActive: Boolean,
+    canReturnAfterPartnerCutoff: Boolean,
+): Boolean =
+    hasBackHomeCallback &&
+        (
+            !hasSecondChatLifecycle ||
+                !genuinelyActive ||
+                canReturnAfterPartnerCutoff
+            )
 
 internal fun secondChatCompletionOverflowMenuItemEnabled(
     action: SecondChatCompletionOverflowPresentation,
