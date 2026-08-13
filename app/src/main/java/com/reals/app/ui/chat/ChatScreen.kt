@@ -113,6 +113,7 @@ import com.reals.app.ui.root.ChatAudioUploadUiState
 import com.reals.app.ui.root.SecondChatEntryAvailabilityState
 import com.reals.app.ui.root.SecondChatLifecycleUiState
 import com.reals.app.ui.root.SecondChatResolutionPresentation
+import com.reals.app.ui.root.canReturnHomeAfterPartnerEntryCutoff
 import com.reals.app.ui.root.entryAvailabilityPresentation
 import com.reals.app.ui.root.hasPendingNoShowClaim
 import com.reals.app.ui.root.isWaitingForPartner
@@ -337,11 +338,15 @@ fun ChatScreen(
         actionLoading = loadingChatAction || audioInteractionBusy,
     )
     val secondChatCompletionOverflow = secondChatCompletionOverflowPresentation(secondChatResolution)
+    val canReturnHomeAfterPartnerCutoff = secondChatLifecycle?.status?.canReturnHomeAfterPartnerEntryCutoff(
+        statusReceivedAtMillis = secondChatLifecycle.statusReceivedAtMillis,
+        nowMillis = nowMillis,
+    ) == true
     val canUseChatActions = firstChatPolicy.canUseOrdinaryConversationActions &&
             !loadingChatAction &&
             !audioInteractionBusy
     val canUseNavigationActions = !loadingChatAction && !audioInteractionBusy &&
-            secondChatTiming?.genuinelyActive != true
+            (secondChatTiming?.genuinelyActive != true || canReturnHomeAfterPartnerCutoff)
     val guidancePanelState = if (firstChatPolicy.decisionOnly) {
         null
     } else {

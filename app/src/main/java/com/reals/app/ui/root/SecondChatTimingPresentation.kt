@@ -177,6 +177,25 @@ internal fun SecondChatStatus.entryAvailabilityPresentation(
     }
 }
 
+internal fun SecondChatStatus.canReturnHomeAfterPartnerEntryCutoff(
+    statusReceivedAtMillis: Long?,
+    nowMillis: Long = System.currentTimeMillis(),
+): Boolean {
+    if (!isJoinedSecondChatAttendance(myAttendanceStatus)) return false
+    if (isJoinedSecondChatAttendance(partnerAttendanceStatus)) return false
+    if (partnerAttendanceStatus != SecondChatAttendanceStatus.Pending &&
+        partnerAttendanceStatus != SecondChatAttendanceStatus.NoShow
+    ) {
+        return false
+    }
+    val synchronizedNow = synchronizedNowMillis(
+        statusReceivedAtMillis = statusReceivedAtMillis,
+        nowMillis = nowMillis,
+    ) ?: return false
+    val entryClosesAtMillis = backendInstantOrNull(entryClosesAt)?.toEpochMilli() ?: return false
+    return synchronizedNow >= entryClosesAtMillis
+}
+
 internal fun SecondChatLifecycleUiState.resolutionPresentation(
     currentUserId: String,
     nowMillis: Long = System.currentTimeMillis(),
@@ -299,10 +318,11 @@ private fun SecondChatStatus.remainingAbsoluteMillis(
 
 private fun SecondChatStatus.isJoinedSecondChat(): Boolean =
     chatId?.isNotBlank() == true &&
-        (
-            myAttendanceStatus == SecondChatAttendanceStatus.OnTime ||
-                myAttendanceStatus == SecondChatAttendanceStatus.Late
-            )
+        isJoinedSecondChatAttendance(myAttendanceStatus)
+
+private fun isJoinedSecondChatAttendance(status: SecondChatAttendanceStatus): Boolean =
+    status == SecondChatAttendanceStatus.OnTime ||
+        status == SecondChatAttendanceStatus.Late
 
 private fun SecondChatStatus.actionableResolutionRequest(
     currentUserId: String,

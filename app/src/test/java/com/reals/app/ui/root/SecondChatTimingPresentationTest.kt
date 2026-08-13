@@ -231,6 +231,132 @@ class SecondChatTimingPresentationTest {
     }
 
     @Test
+    fun `return home after partner cutoff stays locked before entry closes`() {
+        val canReturn = status(
+            serverTime = "2026-06-18T21:19:59Z",
+            absoluteExpiresAt = "2026-06-18T23:00:00Z",
+            myAttendanceStatus = "ON_TIME",
+            partnerAttendanceStatus = "PENDING",
+        ).canReturnHomeAfterPartnerEntryCutoff(
+            statusReceivedAtMillis = 1_000L,
+            nowMillis = 1_000L,
+        )
+
+        assertFalse(canReturn)
+    }
+
+    @Test
+    fun `return home after partner cutoff unlocks exactly at entry closes`() {
+        val canReturn = status(
+            serverTime = "2026-06-18T21:20:00Z",
+            absoluteExpiresAt = "2026-06-18T23:00:00Z",
+            myAttendanceStatus = "ON_TIME",
+            partnerAttendanceStatus = "PENDING",
+        ).canReturnHomeAfterPartnerEntryCutoff(
+            statusReceivedAtMillis = 1_000L,
+            nowMillis = 1_000L,
+        )
+
+        assertTrue(canReturn)
+    }
+
+    @Test
+    fun `return home after partner cutoff unlocks late attendee after entry closes`() {
+        val canReturn = status(
+            serverTime = "2026-06-18T21:21:00Z",
+            absoluteExpiresAt = "2026-06-18T23:00:00Z",
+            myAttendanceStatus = "LATE",
+            partnerAttendanceStatus = "PENDING",
+        ).canReturnHomeAfterPartnerEntryCutoff(
+            statusReceivedAtMillis = 1_000L,
+            nowMillis = 1_000L,
+        )
+
+        assertTrue(canReturn)
+    }
+
+    @Test
+    fun `return home after partner cutoff unlocks when partner is no show`() {
+        val canReturn = status(
+            serverTime = "2026-06-18T21:21:00Z",
+            absoluteExpiresAt = "2026-06-18T23:00:00Z",
+            myAttendanceStatus = "ON_TIME",
+            partnerAttendanceStatus = "NO_SHOW",
+        ).canReturnHomeAfterPartnerEntryCutoff(
+            statusReceivedAtMillis = 1_000L,
+            nowMillis = 1_000L,
+        )
+
+        assertTrue(canReturn)
+    }
+
+    @Test
+    fun `return home after partner cutoff stays locked when partner joined`() {
+        listOf("ON_TIME", "LATE").forEach { partnerAttendance ->
+            val canReturn = status(
+                serverTime = "2026-06-18T21:21:00Z",
+                absoluteExpiresAt = "2026-06-18T23:00:00Z",
+                myAttendanceStatus = "ON_TIME",
+                partnerAttendanceStatus = partnerAttendance,
+            ).canReturnHomeAfterPartnerEntryCutoff(
+                statusReceivedAtMillis = 1_000L,
+                nowMillis = 1_000L,
+            )
+
+            assertFalse(canReturn)
+        }
+    }
+
+    @Test
+    fun `return home after partner cutoff does not apply when current user never joined`() {
+        listOf("PENDING", "NO_SHOW").forEach { myAttendance ->
+            val canReturn = status(
+                serverTime = "2026-06-18T21:21:00Z",
+                absoluteExpiresAt = "2026-06-18T23:00:00Z",
+                myAttendanceStatus = myAttendance,
+                partnerAttendanceStatus = "ON_TIME",
+            ).canReturnHomeAfterPartnerEntryCutoff(
+                statusReceivedAtMillis = 1_000L,
+                nowMillis = 1_000L,
+            )
+
+            assertFalse(canReturn)
+        }
+    }
+
+    @Test
+    fun `return home after partner cutoff fails closed for invalid entry cutoff`() {
+        val canReturn = status(
+            serverTime = "2026-06-18T21:21:00Z",
+            absoluteExpiresAt = "2026-06-18T23:00:00Z",
+            entryClosesAt = "not-a-date",
+            myAttendanceStatus = "ON_TIME",
+            partnerAttendanceStatus = "PENDING",
+        ).canReturnHomeAfterPartnerEntryCutoff(
+            statusReceivedAtMillis = 1_000L,
+            nowMillis = 1_000L,
+        )
+
+        assertFalse(canReturn)
+    }
+
+    @Test
+    fun `return home after partner cutoff uses synchronized server elapsed time`() {
+        val canReturn = status(
+            serverTime = "2026-06-18T21:19:50Z",
+            absoluteExpiresAt = "2026-06-18T23:00:00Z",
+            entryClosesAt = "2026-06-18T21:20:00Z",
+            myAttendanceStatus = "ON_TIME",
+            partnerAttendanceStatus = "PENDING",
+        ).canReturnHomeAfterPartnerEntryCutoff(
+            statusReceivedAtMillis = 1_000L,
+            nowMillis = 11_000L,
+        )
+
+        assertTrue(canReturn)
+    }
+
+    @Test
     fun `replacing snapshot resets elapsed origin`() {
         val oldLifecycle = lifecycle(
             serverTime = "2026-06-18T21:00:00Z",
@@ -1341,6 +1467,7 @@ class SecondChatTimingPresentationTest {
         chatStatus: String? = "ACTIVE",
         readOnlyUntil: String? = null,
         myAttendanceStatus: String = "ON_TIME",
+        partnerAttendanceStatus: String = "ON_TIME",
         canJoin: Boolean = false,
         canClaimPartnerNoShow: Boolean = false,
         activeResolutionRequest: SecondChatResolutionRequest? = null,
@@ -1354,6 +1481,7 @@ class SecondChatTimingPresentationTest {
         chatStatus = chatStatus,
         readOnlyUntil = readOnlyUntil,
         myAttendanceStatus = myAttendanceStatus,
+        partnerAttendanceStatus = partnerAttendanceStatus,
         canJoin = canJoin,
         canClaimPartnerNoShow = canClaimPartnerNoShow,
         activeResolutionRequest = activeResolutionRequest?.let {
