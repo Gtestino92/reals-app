@@ -149,8 +149,8 @@ internal fun homePendingPresentation(
         .sortedBy { it.sourceIndex }
 
     val sections = listOf(
-        HomePendingSection(HomePendingSectionType.ActionRequired, actionRequired),
         HomePendingSection(HomePendingSectionType.InProgress, inProgress),
+        HomePendingSection(HomePendingSectionType.ActionRequired, actionRequired),
         HomePendingSection(HomePendingSectionType.Upcoming, upcoming),
         HomePendingSection(HomePendingSectionType.Recent, recent),
         HomePendingSection(HomePendingSectionType.Other, other),

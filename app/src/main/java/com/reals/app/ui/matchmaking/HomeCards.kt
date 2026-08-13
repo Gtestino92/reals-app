@@ -466,6 +466,7 @@ internal fun VisualApprovalItem(
     busy: Boolean,
     nowMillis: Long,
     titleOverride: String? = null,
+    usePendingRowOutline: Boolean = false,
     onOpenVisualApproval: (matchId: String) -> Unit,
 ) {
     val deadlineText = formatVisualReviewHomeDeadline(
@@ -485,7 +486,14 @@ internal fun VisualApprovalItem(
         modifier = Modifier
             .fillMaxWidth()
             .defaultMinSize(minHeight = 64.dp),
+        shape = RoundedCornerShape(RealsRadii.Row),
+        border = if (usePendingRowOutline) {
+            BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        } else {
+            null
+        },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             val partnerName = action.partnerDisplayName
@@ -621,6 +629,7 @@ internal fun NextStepItem(
     dismissContentDescription: String = "Quitar de Inicio",
     titleOverride: String? = null,
     bodyOverride: String? = null,
+    usePendingRowOutline: Boolean = false,
     onOpenScheduling: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenSecondChat: (connectionId: String, matchId: String, partnerName: String?) -> Unit,
     onOpenPartnerProfile: (matchId: String) -> Unit,
@@ -678,6 +687,11 @@ internal fun NextStepItem(
     }
     val showPartnerProfile = item.canShowPartnerProfile(nowMillis)
     val showDismiss = item.canShowSecondChatDismissAction(nowMillis)
+    val rowBorderColor = if (usePendingRowOutline) {
+        MaterialTheme.colorScheme.outline
+    } else {
+        MaterialTheme.colorScheme.outlineVariant
+    }
 
     @Composable
     fun Content(showPrimaryChevron: Boolean) {
@@ -753,7 +767,7 @@ internal fun NextStepItem(
             enabled = primaryEnabled,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(RealsRadii.Row),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            border = BorderStroke(1.dp, rowBorderColor),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {
@@ -763,7 +777,7 @@ internal fun NextStepItem(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(RealsRadii.Row),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            border = BorderStroke(1.dp, rowBorderColor),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {

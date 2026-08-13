@@ -336,6 +336,7 @@ private fun PendingHubSection(
                         busy = busy,
                         nowMillis = nowMillis,
                         titleOverride = item.action.pendingVisualReviewTitle(),
+                        usePendingRowOutline = true,
                         onOpenVisualApproval = onOpenVisualApproval,
                     )
                     is HomePendingHubItem.NextStep -> NextStepItem(
@@ -345,6 +346,7 @@ private fun PendingHubSection(
                         dismissContentDescription = "Quitar de Pendientes",
                         titleOverride = item.item.pendingNextStepTitle(),
                         bodyOverride = item.item.pendingNextStepBody(nowMillis),
+                        usePendingRowOutline = true,
                         onOpenScheduling = onOpenScheduling,
                         onOpenSecondChat = onOpenSecondChat,
                         onOpenPartnerProfile = onOpenPartnerProfile,
