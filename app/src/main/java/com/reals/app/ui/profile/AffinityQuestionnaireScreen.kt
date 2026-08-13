@@ -1,6 +1,7 @@
 package com.reals.app.ui.profile
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -38,6 +40,12 @@ import com.reals.app.core.network.ErrorContext
 import com.reals.app.domain.model.AffinityQuestion
 import com.reals.app.domain.model.AffinityQuestionCatalog
 import com.reals.app.ui.common.ApiErrorFeedbackCard
+import com.reals.app.ui.common.RealsBrandDivider
+import com.reals.app.ui.common.RealsPrimaryButton
+import com.reals.app.ui.common.RealsSecondaryButton
+import com.reals.app.ui.common.RealsThinDivider
+import com.reals.app.ui.theme.RealsRadii
+import com.reals.app.ui.theme.RealsType
 import com.reals.app.ui.root.AffinityQuestionSource
 import com.reals.app.ui.root.AffinityQuestionnaireDestination
 import com.reals.app.ui.root.AffinityQuestionnaireUiState
@@ -162,7 +170,8 @@ private fun AffinityQuestionnaireOverview(
                     style = MaterialTheme.typography.titleMedium,
                 )
                 if (primaryLabel != null) {
-                    Button(
+                    RealsPrimaryButton(
+                        text = primaryLabel,
                         onClick = if (actionPolicy.primaryAction == AffinityOverviewPrimaryAction.Review) {
                             onOpenReview
                         } else {
@@ -170,9 +179,7 @@ private fun AffinityQuestionnaireOverview(
                         },
                         enabled = actionsEnabled,
                         modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(primaryLabel)
-                    }
+                    )
                 } else {
                     Text(
                         text = "No hay preguntas disponibles por ahora.",
@@ -181,13 +188,12 @@ private fun AffinityQuestionnaireOverview(
                     )
                 }
                 if (actionPolicy.showExploreCategories) {
-                    OutlinedButton(
+                    RealsSecondaryButton(
+                        text = "Explorar por categoría",
                         onClick = onOpenCategories,
                         enabled = actionsEnabled,
                         modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Explorar por categoría")
-                    }
+                    )
                 }
                 if (actionPolicy.showEmptyReviewText) {
                     Text(
@@ -197,13 +203,12 @@ private fun AffinityQuestionnaireOverview(
                     )
                 }
                 if (actionPolicy.showSecondaryReview) {
-                    OutlinedButton(
+                    RealsSecondaryButton(
+                        text = "Revisar mis respuestas",
                         onClick = onOpenReview,
                         enabled = actionsEnabled,
                         modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Revisar mis respuestas")
-                    }
+                    )
                 }
             }
         }
@@ -260,7 +265,10 @@ private fun AffinityCategoryRow(
     }
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        shape = RoundedCornerShape(RealsRadii.Row),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier.padding(18.dp),
@@ -282,13 +290,12 @@ private fun AffinityCategoryRow(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Button(
+            RealsSecondaryButton(
+                text = actionLabel,
                 onClick = { onOpenCategory(group.category.id) },
                 enabled = actionsEnabled,
                 modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(actionLabel)
-            }
+            )
         }
     }
 }
@@ -321,13 +328,12 @@ private fun AffinityQuestionnaireReview(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     if (progress.totalQuestionCount > 0) {
-                        Button(
+                        RealsPrimaryButton(
+                            text = "Empezar a responder",
                             onClick = onStartContinue,
                             enabled = actionsEnabled,
                             modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text("Empezar a responder")
-                        }
+                        )
                     }
                 }
             }
@@ -362,7 +368,10 @@ private fun AffinityReviewRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(enabled = enabled) { onOpenReviewedAnswer(row.question.id) },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        shape = RoundedCornerShape(RealsRadii.Row),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -462,36 +471,31 @@ private fun AffinitySingleQuestionScreen(
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (isReviewQuestion) {
-                        Button(
+                        RealsPrimaryButton(
+                            text = when {
+                                mutationActive -> "Guardando..."
+                                draftChanged -> "Guardar cambios"
+                                else -> "Volver a mis respuestas"
+                            },
                             onClick = if (draftChanged) onNextQuestion else onBack,
                             enabled = !mutationActive,
                             modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(
-                                when {
-                                    mutationActive -> "Guardando..."
-                                    draftChanged -> "Guardar cambios"
-                                    else -> "Volver a mis respuestas"
-                                }
-                            )
-                        }
+                        )
                     } else {
                         if (selectedCode == null) {
-                            OutlinedButton(
+                            RealsSecondaryButton(
+                                text = "Omitir",
                                 onClick = onSkipQuestion,
                                 enabled = !mutationActive,
                                 modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Text("Omitir")
-                            }
+                            )
                         }
-                        Button(
+                        RealsPrimaryButton(
+                            text = if (mutationActive) "Guardando..." else "Siguiente",
                             onClick = onNextQuestion,
                             enabled = selectedCode != null && !mutationActive,
                             modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(if (mutationActive) "Guardando..." else "Siguiente")
-                        }
+                        )
                     }
                 }
             }
@@ -521,18 +525,16 @@ private fun AffinityQuestionCard(
         }
     }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-    ) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
                 text = question.prompt,
-                style = MaterialTheme.typography.titleLarge,
+                style = RealsType.SectionTitle,
+                color = MaterialTheme.colorScheme.primary,
             )
+            RealsThinDivider()
             question.options.forEach { option ->
                 val selected = selectedCode == option.code
                 Row(
@@ -547,7 +549,7 @@ private fun AffinityQuestionCard(
                         .semantics {
                             stateDescription = if (selected) "Seleccionada" else "No seleccionada"
                         }
-                        .padding(vertical = 8.dp),
+                        .padding(vertical = 10.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.Top,
                 ) {
@@ -626,13 +628,14 @@ private fun AffinityQuestionnaireLazySurface(
                 Text(
                     text = title,
                     modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.headlineMedium,
+                    style = RealsType.ScreenTitle,
                     color = MaterialTheme.colorScheme.primary,
                 )
                 TextButton(onClick = onBack) {
                     Text("Volver")
                 }
             }
+            RealsBrandDivider(modifier = Modifier.padding(top = 14.dp))
         }
         content()
     }
@@ -689,9 +692,10 @@ private fun AffinityQuestionnaireLoading(onBack: () -> Unit) {
     ) {
         Text(
             text = "Preguntas de afinidad",
-            style = MaterialTheme.typography.headlineMedium,
+            style = RealsType.ScreenTitle,
             color = MaterialTheme.colorScheme.primary,
         )
+        RealsBrandDivider()
         CircularProgressIndicator()
         Text(
             text = "Cargando preguntas...",
@@ -719,9 +723,10 @@ private fun AffinityQuestionnaireInitialFailure(
     ) {
         Text(
             text = "Preguntas de afinidad",
-            style = MaterialTheme.typography.headlineMedium,
+            style = RealsType.ScreenTitle,
             color = MaterialTheme.colorScheme.primary,
         )
+        RealsBrandDivider()
         state.error?.let {
             ApiErrorFeedbackCard(it, ErrorContext.AffinityQuestions)
         }

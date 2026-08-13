@@ -1,6 +1,7 @@
 package com.reals.app.ui.chat
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -32,6 +34,9 @@ import com.reals.app.domain.model.VisualProfile
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.ManualBlockConfirmationDialog
 import com.reals.app.ui.common.ManualBlockOverflowMenu
+import com.reals.app.ui.common.RealsBrandDivider
+import com.reals.app.ui.theme.RealsRadii
+import com.reals.app.ui.theme.RealsType
 
 @Composable
 fun PartnerProfileScreen(
@@ -72,7 +77,7 @@ fun PartnerProfileScreen(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = headerTitle,
-                    style = MaterialTheme.typography.headlineLarge,
+                    style = RealsType.ScreenTitle,
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
@@ -84,6 +89,7 @@ fun PartnerProfileScreen(
                 },
             )
         }
+        RealsBrandDivider(modifier = Modifier.padding(top = 14.dp))
         Spacer(modifier = Modifier.height(16.dp))
         error?.let {
             ApiErrorFeedbackCard(it, ErrorContext.VisualReview)
@@ -98,7 +104,10 @@ fun PartnerProfileScreen(
         if (profile == null) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                shape = RoundedCornerShape(RealsRadii.Card),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
             ) {
                 Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
@@ -173,7 +182,10 @@ private fun PartnerProfilePersonalMessageSection(
     Spacer(modifier = Modifier.height(12.dp))
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        shape = RoundedCornerShape(RealsRadii.Card),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Mensaje personal", style = MaterialTheme.typography.titleMedium)

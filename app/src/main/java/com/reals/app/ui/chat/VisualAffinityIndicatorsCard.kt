@@ -1,5 +1,6 @@
 package com.reals.app.ui.chat
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -16,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.reals.app.core.security.TextSafety
 import com.reals.app.domain.model.VisualAffinityIndicator
+import com.reals.app.ui.theme.RealsRadii
 
 internal fun affinityIndicatorsForDisplay(
     indicators: List<VisualAffinityIndicator>,
@@ -39,7 +41,10 @@ internal fun VisualAffinityIndicatorsCard(
 
     Card(
         modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        shape = RoundedCornerShape(RealsRadii.Card),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier.padding(18.dp),
@@ -66,8 +71,9 @@ internal fun VisualAffinityIndicatorsCard(
 private fun VisualAffinityIndicatorPill(indicator: VisualAffinityIndicator) {
     Surface(
         shape = RoundedCornerShape(percent = 50),
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.primary,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
     ) {
         Text(
             text = TextSafety.safeDisplay(indicator.title, maxLength = 100),

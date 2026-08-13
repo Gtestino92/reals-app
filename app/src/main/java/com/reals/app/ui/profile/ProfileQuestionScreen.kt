@@ -1,6 +1,7 @@
 package com.reals.app.ui.profile
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -34,6 +36,13 @@ import com.reals.app.core.network.ErrorContext
 import com.reals.app.core.security.TextSafety
 import com.reals.app.domain.model.ProfileQuestionCatalog
 import com.reals.app.ui.common.ApiErrorFeedbackCard
+import com.reals.app.ui.common.RealsBrandDivider
+import com.reals.app.ui.common.RealsPrimaryButton
+import com.reals.app.ui.common.RealsSecondaryButton
+import com.reals.app.ui.common.RealsThinDivider
+import com.reals.app.ui.common.realsOutlinedTextFieldColors
+import com.reals.app.ui.theme.RealsRadii
+import com.reals.app.ui.theme.RealsType
 import com.reals.app.ui.root.ProfileQuestionDestination
 import com.reals.app.ui.root.ProfileQuestionMutationKind
 import com.reals.app.ui.root.ProfileQuestionUiState
@@ -129,22 +138,20 @@ private fun ProfileQuestionOverview(
             }
         }
         item {
-            Button(
+            RealsPrimaryButton(
+                text = "Responder o editar preguntas",
                 onClick = onOpenQuestions,
                 enabled = actionsEnabled && overview.totalQuestionCount > 0,
                 modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Responder o editar preguntas")
-            }
+            )
         }
         item {
-            OutlinedButton(
+            RealsSecondaryButton(
+                text = "Elegir preguntas públicas",
                 onClick = onOpenSelection,
                 enabled = actionsEnabled && state.answers.any { it.current && it.answer.isNotBlank() },
                 modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Elegir preguntas públicas")
-            }
+            )
         }
     }
 }
@@ -174,7 +181,10 @@ private fun ProfileQuestionList(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable(enabled = enabled) { onOpenEditor(row.question.id) },
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                    shape = RoundedCornerShape(RealsRadii.Row),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
@@ -285,18 +295,16 @@ private fun ProfileQuestionEditorCard(
             showSaving = false
         }
     }
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-    ) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
                 TextSafety.safeDisplay(prompt, maxLength = 180),
-                style = MaterialTheme.typography.titleLarge
+                style = RealsType.SectionTitle,
+                color = MaterialTheme.colorScheme.primary,
             )
+            RealsThinDivider()
             OutlinedTextField(
                 value = text,
                 onValueChange = onTextChange,
@@ -306,12 +314,22 @@ private fun ProfileQuestionEditorCard(
                     Text("${validation.characterCount}/$ProfileQuestionAnswerMaxLength")
                 },
                 isError = validation.error != null,
+                shape = RoundedCornerShape(RealsRadii.Button),
+                colors = realsOutlinedTextFieldColors(),
                 modifier = Modifier.fillMaxWidth(),
             )
             validation.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(onClick = onSave, enabled = canSave) { Text("Guardar") }
-                OutlinedButton(onClick = onDelete, enabled = canDelete) { Text("Eliminar") }
+                Button(
+                    onClick = onSave,
+                    enabled = canSave,
+                    shape = RoundedCornerShape(RealsRadii.Button),
+                ) { Text("Guardar") }
+                OutlinedButton(
+                    onClick = onDelete,
+                    enabled = canDelete,
+                    shape = RoundedCornerShape(RealsRadii.Button),
+                ) { Text("Eliminar") }
             }
             Column(
                 modifier = Modifier.heightIn(min = 32.dp),
@@ -370,7 +388,10 @@ private fun ProfileQuestionSelectionEditor(
                 val selected = selectedIndex >= 0
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                    shape = RoundedCornerShape(RealsRadii.Row),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
@@ -431,22 +452,20 @@ private fun ProfileQuestionSelectionEditor(
             }
         }
         item {
-            OutlinedButton(
+            RealsSecondaryButton(
+                text = "Limpiar selección",
                 onClick = { onSelectionDraftChange(emptyList()) },
                 enabled = state.mutation == null && draft.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Limpiar selección")
-            }
+            )
         }
         item {
-            Button(
+            RealsPrimaryButton(
+                text = "Guardar selección",
                 onClick = onSaveSelection,
                 enabled = canSave,
                 modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Guardar selección")
-            }
+            )
         }
     }
 }
@@ -472,11 +491,12 @@ private fun ProfileQuestionLazySurface(
                 Text(
                     text = title,
                     modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.headlineMedium,
+                    style = RealsType.ScreenTitle,
                     color = MaterialTheme.colorScheme.primary,
                 )
                 TextButton(onClick = onBack) { Text("Volver") }
             }
+            RealsBrandDivider(modifier = Modifier.padding(top = 14.dp))
         }
         content()
     }
@@ -533,7 +553,8 @@ private fun ProfileQuestionLoading(onBack: () -> Unit) {
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text("Preguntas del perfil", style = MaterialTheme.typography.headlineMedium)
+        Text("Preguntas del perfil", style = RealsType.ScreenTitle, color = MaterialTheme.colorScheme.primary)
+        RealsBrandDivider()
         CircularProgressIndicator(
             modifier = Modifier.size(18.dp),
         )
@@ -554,7 +575,8 @@ private fun ProfileQuestionInitialFailure(
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text("Preguntas del perfil", style = MaterialTheme.typography.headlineMedium)
+        Text("Preguntas del perfil", style = RealsType.ScreenTitle, color = MaterialTheme.colorScheme.primary)
+        RealsBrandDivider()
         state.error?.let { ApiErrorFeedbackCard(it, ErrorContext.ProfileQuestions) }
         Button(
             onClick = onRetry,

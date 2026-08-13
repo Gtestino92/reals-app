@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -60,7 +61,10 @@ import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
 import com.reals.app.ui.common.ManualBlockConfirmationDialog
 import com.reals.app.ui.common.ManualBlockOverflowMenu
+import com.reals.app.ui.common.RealsBrandDivider
 import com.reals.app.ui.common.formatBackendContextualDateTime
+import com.reals.app.ui.theme.RealsRadii
+import com.reals.app.ui.theme.RealsType
 import java.time.Instant
 import java.time.ZoneId
 import kotlin.time.Duration.Companion.seconds
@@ -167,7 +171,7 @@ fun SchedulingScreen(
                     Text(
                         text = "Coordinar horarios",
                         modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.headlineLarge,
+                        style = RealsType.ScreenTitle,
                         color = MaterialTheme.colorScheme.primary,
                     )
                     ManualBlockOverflowMenu(
@@ -183,6 +187,7 @@ fun SchedulingScreen(
                     modifier = Modifier.padding(top = 8.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                RealsBrandDivider(modifier = Modifier.padding(top = 16.dp))
             }
             if (negotiation != null && stage != SchedulingStage.Loading) {
                 Spacer(modifier = Modifier.height(12.dp))
@@ -312,7 +317,13 @@ fun SchedulingScreen(
 
 @Composable
 private fun LoadingCard() {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(RealsRadii.Card),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -431,7 +442,10 @@ internal fun ProposalSelectorCard(
         )
         Card(
             modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(RealsRadii.Card),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Elegir horarios", style = MaterialTheme.typography.titleMedium)
@@ -1019,7 +1033,13 @@ private fun WaitingPartnerCard(
     myPendingProposals: List<SchedulingProposal>,
     nowMillis: Long,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(RealsRadii.Card),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Esperando propuestas de la otra persona", style = MaterialTheme.typography.titleMedium)
             Text(
@@ -1055,7 +1075,13 @@ private fun ReviewProposalsCard(
     onRejectPartnerProposals: () -> Unit,
 ) {
     val reviewState = schedulingReceivedProposalReviewState(partnerPendingProposals, nowMillis, availability)
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(RealsRadii.Card),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Revisá las opciones recibidas", style = MaterialTheme.typography.titleMedium)
             Text(
@@ -1191,13 +1217,16 @@ private fun ScheduledCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        shape = RoundedCornerShape(RealsRadii.Card),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("Horario confirmado", style = MaterialTheme.typography.titleMedium)
             Text(
                 text = formatBackendContextualDateTime(confirmedDateTime, nowMillis),
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                color = MaterialTheme.colorScheme.primary,
             )
         }
     }
@@ -1205,7 +1234,13 @@ private fun ScheduledCard(
 
 @Composable
 private fun FailedCard() {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(RealsRadii.Card),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
         Text(
             text = "No hubo acuerdo. La coordinación ya no está disponible.",
             modifier = Modifier.padding(16.dp),
@@ -1216,7 +1251,13 @@ private fun FailedCard() {
 
 @Composable
 private fun UnknownCard() {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(RealsRadii.Card),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
         Text(
             text = "No pudimos interpretar el estado actual. Actualizá para intentarlo de nuevo.",
             modifier = Modifier.padding(16.dp),
