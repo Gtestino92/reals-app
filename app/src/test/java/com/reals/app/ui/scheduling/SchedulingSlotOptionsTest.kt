@@ -341,6 +341,40 @@ class SchedulingSlotOptionsTest {
     }
 
     @Test
+    fun `past minute remains visible as disabled rather than blocked`() {
+        val pickerNow = OffsetDateTime.parse("2026-07-30T21:10:00-03:00")
+
+        val options = schedulingMinuteOptions(pickerNow.toLocalDate(), 21, pickerNow, zoneId)
+
+        assertEquals(listOf(0, 30), options.map { it.minute })
+        assertEquals(listOf(false, true), options.map { it.selectable })
+        assertEquals(listOf(false, true), options.map { it.timeValid })
+        assertEquals(
+            SchedulingPickerOptionEmphasis.Disabled,
+            schedulingPickerOptionEmphasis(
+                optionEnabled = options.first { it.minute == 0 }.selectable,
+                optionBlocked = options.first { it.minute == 0 }.conflicting,
+            ),
+        )
+    }
+
+    @Test
+    fun `conflicting option emphasis remains blocked while elapsed option is disabled`() {
+        assertEquals(
+            SchedulingPickerOptionEmphasis.Enabled,
+            schedulingPickerOptionEmphasis(optionEnabled = true, optionBlocked = false),
+        )
+        assertEquals(
+            SchedulingPickerOptionEmphasis.Disabled,
+            schedulingPickerOptionEmphasis(optionEnabled = false, optionBlocked = false),
+        )
+        assertEquals(
+            SchedulingPickerOptionEmphasis.Blocked,
+            schedulingPickerOptionEmphasis(optionEnabled = false, optionBlocked = true),
+        )
+    }
+
+    @Test
     fun `hour remains enabled when one half hour option is available`() {
         val pickerNow = OffsetDateTime.parse("2026-07-30T10:00:00-03:00")
         val availability = availability(

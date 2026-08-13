@@ -34,6 +34,22 @@ internal data class SchedulingMinuteOption(
     val selectable: Boolean get() = timeValid && !conflicting
 }
 
+internal enum class SchedulingPickerOptionEmphasis {
+    Enabled,
+    Disabled,
+    Blocked,
+}
+
+internal fun schedulingPickerOptionEmphasis(
+    optionEnabled: Boolean,
+    optionBlocked: Boolean,
+): SchedulingPickerOptionEmphasis =
+    when {
+        optionBlocked -> SchedulingPickerOptionEmphasis.Blocked
+        optionEnabled -> SchedulingPickerOptionEmphasis.Enabled
+        else -> SchedulingPickerOptionEmphasis.Disabled
+    }
+
 internal enum class SchedulingProposalTimeAvailability {
     Future,
     Expired,

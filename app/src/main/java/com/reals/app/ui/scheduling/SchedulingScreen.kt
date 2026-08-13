@@ -850,6 +850,10 @@ internal fun <T> WheelPickerColumn(
                 itemsIndexed(options) { _, option ->
                     val optionEnabled = enabled && isOptionEnabled(option)
                     val optionBlocked = isOptionBlocked(option)
+                    val optionEmphasis = schedulingPickerOptionEmphasis(
+                        optionEnabled = optionEnabled,
+                        optionBlocked = optionBlocked,
+                    )
                     val isSelected = option == selected
                     if (isSelected) {
                         Button(
@@ -876,11 +880,7 @@ internal fun <T> WheelPickerColumn(
                         ) {
                             Text(
                                 text = optionLabel(option),
-                                color = if (optionBlocked) {
-                                    MaterialTheme.colorScheme.error
-                                } else {
-                                    MaterialTheme.colorScheme.onSurface
-                                },
+                                color = schedulingPickerOptionContentColor(optionEmphasis),
                                 textAlign = TextAlign.Center,
                             )
                         }
@@ -953,6 +953,10 @@ internal fun MinutePickerColumn(
             minutes.forEach { minute ->
                 val optionEnabled = enabled && minute in enabledMinutes
                 val conflicting = minute in conflictingMinutes
+                val optionEmphasis = schedulingPickerOptionEmphasis(
+                    optionEnabled = optionEnabled,
+                    optionBlocked = conflicting,
+                )
                 val label = minute.toString().padStart(2, '0')
                 if (minute == selected && optionEnabled) {
                     Button(
@@ -981,11 +985,7 @@ internal fun MinutePickerColumn(
                     ) {
                         Text(
                             text = label,
-                            color = if (conflicting) {
-                                MaterialTheme.colorScheme.error
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            },
+                            color = schedulingPickerOptionContentColor(optionEmphasis),
                             textAlign = TextAlign.Center,
                         )
                     }
@@ -1003,6 +1003,15 @@ internal fun MinutePickerColumn(
         }
         Spacer(modifier = Modifier.height(controlMinHeight))
     }
+}
+
+@Composable
+private fun schedulingPickerOptionContentColor(
+    emphasis: SchedulingPickerOptionEmphasis,
+) = when (emphasis) {
+    SchedulingPickerOptionEmphasis.Enabled -> MaterialTheme.colorScheme.onSurface
+    SchedulingPickerOptionEmphasis.Disabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+    SchedulingPickerOptionEmphasis.Blocked -> MaterialTheme.colorScheme.error
 }
 
 @Composable
