@@ -121,8 +121,8 @@ class HomePendingPresentationTest {
 
         assertEquals(
             listOf(
-                HomePendingSectionType.ActionRequired,
                 HomePendingSectionType.InProgress,
+                HomePendingSectionType.ActionRequired,
                 HomePendingSectionType.Upcoming,
                 HomePendingSectionType.Recent,
                 HomePendingSectionType.Other,

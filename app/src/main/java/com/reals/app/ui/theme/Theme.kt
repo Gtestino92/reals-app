@@ -8,25 +8,51 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 private val LightColors = lightColorScheme(
-    primary = Color(0xFF0F5B4C),
-    onPrimary = Color.White,
-    secondary = Color(0xFF7A4A18),
-    background = Color(0xFFFFFBF4),
-    surface = Color(0xFFFFFBF4),
-    surfaceContainerHigh = Color(0xFFF2E5D4),
-    secondaryContainer = Color(0xFFFFE1B8),
-    onSecondaryContainer = Color(0xFF33200A),
+    primary = RealsColors.Ink,
+    onPrimary = RealsColors.Ivory,
+    primaryContainer = RealsColors.Paper,
+    onPrimaryContainer = RealsColors.Ink,
+    secondary = RealsColors.AntiqueGold,
+    onSecondary = RealsColors.Ink,
+    secondaryContainer = RealsColors.Sand,
+    onSecondaryContainer = RealsColors.Ink,
+    tertiary = RealsColors.SoftGold,
+    background = RealsColors.Ivory,
+    onBackground = RealsColors.Ink,
+    surface = RealsColors.Paper,
+    onSurface = RealsColors.Ink,
+    surfaceVariant = RealsColors.Sand,
+    onSurfaceVariant = RealsColors.InkSoft,
+    surfaceContainerHigh = RealsColors.Sand,
+    outline = RealsColors.SoftGold,
+    outlineVariant = RealsColors.SoftGold.copy(alpha = 0.65f),
+    error = Color(0xFF9C2F28),
+    errorContainer = Color(0xFFFFE1D9),
+    onErrorContainer = Color(0xFF5C1611),
 )
 
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFF71D8C1),
-    onPrimary = Color(0xFF00382E),
-    secondary = Color(0xFFE8B06E),
-    background = Color(0xFF15120E),
-    surface = Color(0xFF15120E),
-    surfaceContainerHigh = Color(0xFF282119),
-    secondaryContainer = Color(0xFF583614),
-    onSecondaryContainer = Color(0xFFFFDDB4),
+    primary = RealsColors.DarkText,
+    onPrimary = RealsColors.DarkInk,
+    primaryContainer = RealsColors.DarkSurface,
+    onPrimaryContainer = RealsColors.DarkText,
+    secondary = Color(0xFFC6A15B),
+    onSecondary = RealsColors.DarkInk,
+    secondaryContainer = RealsColors.DarkSurfaceHigh,
+    onSecondaryContainer = RealsColors.DarkText,
+    tertiary = Color(0xFF9E824C),
+    background = RealsColors.DarkInk,
+    onBackground = RealsColors.DarkText,
+    surface = RealsColors.DarkSurface,
+    onSurface = RealsColors.DarkText,
+    surfaceVariant = RealsColors.DarkSurfaceHigh,
+    onSurfaceVariant = RealsColors.DarkTextMuted,
+    surfaceContainerHigh = RealsColors.DarkSurfaceHigh,
+    outline = Color(0xFF7E6C49),
+    outlineVariant = Color(0xFF493E2B),
+    error = Color(0xFFFFB4A9),
+    errorContainer = Color(0xFF6E211A),
+    onErrorContainer = Color(0xFFFFDAD4),
 )
 
 @Composable
@@ -36,6 +62,8 @@ fun RealsAppTheme(
 ) {
     MaterialTheme(
         colorScheme = if (darkTheme) DarkColors else LightColors,
+        typography = RealsTypography,
+        shapes = RealsShapes,
         content = content,
     )
 }

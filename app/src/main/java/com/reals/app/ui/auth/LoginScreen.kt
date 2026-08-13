@@ -13,11 +13,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -36,6 +35,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.reals.app.R
+import com.reals.app.ui.common.RealsBrandDivider
+import com.reals.app.ui.common.RealsBrandSeal
+import com.reals.app.ui.common.RealsPrimaryButton
+import com.reals.app.ui.common.RealsSecondaryButton
+import com.reals.app.ui.common.realsOutlinedTextFieldColors
+import com.reals.app.ui.theme.RealsRadii
+import com.reals.app.ui.theme.RealsType
 import kotlinx.coroutines.delay
 
 @Composable
@@ -76,112 +82,132 @@ fun LoginScreen(
             .verticalScroll(rememberScrollState())
             .padding(24.dp),
         verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.Start,
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        RealsBrandSeal(modifier = Modifier.size(54.dp))
+        Spacer(modifier = Modifier.height(14.dp))
         Text(
             text = "Reals",
-            style = MaterialTheme.typography.displayMedium,
+            style = RealsType.Identity,
             color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
+        RealsBrandDivider(
+            modifier = Modifier
+                .padding(top = 16.dp)
+                .fillMaxWidth(),
         )
         Text(
             text = "Ingresá o creá tu cuenta para empezar.",
+            modifier = Modifier
+                .padding(top = 22.dp)
+                .fillMaxWidth(),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
-        Spacer(modifier = Modifier.height(28.dp))
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        Spacer(modifier = Modifier.height(26.dp))
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                OutlinedTextField(
-                    value = email,
-                    onValueChange = { email = it },
-                    label = { Text("Email") },
-                    singleLine = true,
-                    enabled = !authBusy,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it },
-                    label = { Text("Password") },
-                    singleLine = true,
-                    enabled = !authBusy,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                if (error != null) {
-                    Text(
-                        text = error,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-                if (passwordResetMessage != null) {
-                    Text(
-                        text = passwordResetMessage,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-                Button(
-                    onClick = { onSignIn(email, password) },
-                    enabled = !authBusy,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(if (loading) "Ingresando..." else "Ingresar")
-                }
-                OutlinedButton(
-                    onClick = { onSignUp(email, password) },
-                    enabled = !authBusy,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Crear cuenta")
-                }
-                OutlinedButton(
-                    onClick = { onPasswordReset(email) },
-                    enabled = passwordResetButtonEnabled(
-                        loginLoading = loading,
-                        googleLoading = googleLoading,
-                        passwordResetLoading = passwordResetLoading,
-                        cooldownRemainingSeconds = cooldownRemainingSeconds,
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        passwordResetButtonText(
-                            loading = passwordResetLoading,
-                            cooldownRemainingSeconds = cooldownRemainingSeconds,
-                        )
-                    )
-                }
+            OutlinedTextField(
+                value = email,
+                onValueChange = { email = it },
+                label = { Text("Email") },
+                singleLine = true,
+                enabled = !authBusy,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                shape = RoundedCornerShape(RealsRadii.Button),
+                colors = realsOutlinedTextFieldColors(),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = { Text("Password") },
+                singleLine = true,
+                enabled = !authBusy,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                shape = RoundedCornerShape(RealsRadii.Button),
+                colors = realsOutlinedTextFieldColors(),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (error != null) {
                 Text(
-                    text = "o",
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                    text = error,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            if (passwordResetMessage != null) {
+                Text(
+                    text = passwordResetMessage,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                OutlinedButton(
-                    onClick = onGoogleSignIn,
-                    enabled = !authBusy,
-                    modifier = Modifier.fillMaxWidth(),
+            }
+            RealsPrimaryButton(
+                text = if (loading) "Ingresando..." else "Ingresar",
+                onClick = { onSignIn(email, password) },
+                enabled = !authBusy,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            RealsSecondaryButton(
+                text = "Crear cuenta",
+                onClick = { onSignUp(email, password) },
+                enabled = !authBusy,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedButton(
+                onClick = { onPasswordReset(email) },
+                enabled = passwordResetButtonEnabled(
+                    loginLoading = loading,
+                    googleLoading = googleLoading,
+                    passwordResetLoading = passwordResetLoading,
+                    cooldownRemainingSeconds = cooldownRemainingSeconds,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(RealsRadii.Button),
+            ) {
+                Text(
+                    passwordResetButtonText(
+                        loading = passwordResetLoading,
+                        cooldownRemainingSeconds = cooldownRemainingSeconds,
+                    )
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.outlineVariant)
+                Text(
+                    text = "o",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.outlineVariant)
+            }
+            OutlinedButton(
+                onClick = onGoogleSignIn,
+                enabled = !authBusy,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(RealsRadii.Button),
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Image(
-                            painter = painterResource(R.drawable.ic_google_g),
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Text(googleSignInButtonText(googleLoading))
-                    }
+                    Image(
+                        painter = painterResource(R.drawable.ic_google_g),
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(googleSignInButtonText(googleLoading))
                 }
             }
         }

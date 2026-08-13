@@ -6,8 +6,11 @@ import android.content.Context
 import android.content.ContextWrapper
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,9 +18,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -49,6 +55,12 @@ import com.reals.app.domain.model.SearchLocationInput
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
+import com.reals.app.ui.common.RealsArchitecturalLines
+import com.reals.app.ui.common.RealsBrandSeal
+import com.reals.app.ui.common.RealsScreenHeader
+import com.reals.app.ui.theme.RealsColors
+import com.reals.app.ui.theme.RealsRadii
+import com.reals.app.ui.theme.RealsType
 import com.reals.app.ui.root.AffinityHomeSummaryUiState
 import com.reals.app.ui.root.MatchmakingSearchUiPhase
 import kotlinx.coroutines.delay
@@ -479,21 +491,17 @@ private fun MatchmakingIdleScreen(
             .padding(24.dp),
         verticalArrangement = Arrangement.Top,
     ) {
-        Text(
-            text = "Inicio",
-            style = MaterialTheme.typography.headlineLarge,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        Text(
-            text = if (screenModel.draftProfileWarning == null) {
+        RealsScreenHeader(
+            title = "Inicio",
+            subtitle = if (screenModel.draftProfileWarning == null) {
                 "${profile.displayName}, tu perfil está activo."
             } else {
                 "${profile.displayName}, Inicio sigue disponible."
             },
-            modifier = Modifier.padding(top = 8.dp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            showSeal = true,
+            centered = true,
         )
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(24.dp))
         screenModel.draftProfileWarning?.let { warning ->
             FeedbackCard(
                 title = warning.title,
@@ -530,72 +538,96 @@ private fun MatchmakingIdleScreen(
         )
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+            shape = RoundedCornerShape(RealsRadii.Hero),
+            border = BorderStroke(1.dp, RealsColors.SoftGold.copy(alpha = 0.42f)),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {
-            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Buscar chat", style = MaterialTheme.typography.titleLarge)
-                if (screenModel.shouldShowMatchmakingLocationCopy()) {
-                    Text(
-                        text = "Vamos a usar tu ubicación actual para encontrar personas compatibles cerca.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                ActiveInteractionsSummary(
-                    summary = screenModel.activeInteractionsSummary,
-                    passiveNotices = screenModel.passiveNotices,
+            Box {
+                RealsArchitecturalLines(
+                    modifier = Modifier.matchParentSize(),
+                    lightOnInk = true,
                 )
-                localError?.let { ErrorFeedback("No pudimos usar tu ubicación", it) }
-                homeError?.let { ApiErrorFeedbackCard(it, ErrorContext.Home) }
-                homeMessage?.let { SuccessFeedback(it) }
-                if (!canSearch && blockedReason != null) {
-                    Text(
-                        text = blockedReason.matchmakingBlockedMessage()
-                            ?: "No pudimos iniciar la búsqueda. Revisá tu perfil e intentá nuevamente.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    ) {
+                        RealsBrandSeal(modifier = Modifier.size(38.dp))
+                        Text(
+                            "Buscar chat",
+                            style = RealsType.SectionTitle,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    }
+                    if (screenModel.shouldShowMatchmakingLocationCopy()) {
+                        Text(
+                            text = "Vamos a usar tu ubicación actual para encontrar personas compatibles cerca.",
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.82f),
+                        )
+                    }
+                    ActiveInteractionsSummary(
+                        summary = screenModel.activeInteractionsSummary,
+                        passiveNotices = screenModel.passiveNotices,
+                        textColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.82f),
                     )
-                }
-                Button(
-                    onClick = onSearchWithDeviceLocation,
-                    enabled = !busy && canSearch,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(if (homeLoading) "Preparando búsqueda..." else "Buscar chat")
-                }
-                if (showManualLocationFallback) {
-                    OutlinedButton(
-                        onClick = { onManualExpandedChange(!manualExpanded) },
+                    localError?.let { ErrorFeedback("No pudimos usar tu ubicación", it) }
+                    homeError?.let { ApiErrorFeedbackCard(it, ErrorContext.Home) }
+                    homeMessage?.let { SuccessFeedback(it) }
+                    if (!canSearch && blockedReason != null) {
+                        Text(
+                            text = blockedReason.matchmakingBlockedMessage()
+                                ?: "No pudimos iniciar la búsqueda. Revisá tu perfil e intentá nuevamente.",
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.82f),
+                        )
+                    }
+                    Button(
+                        onClick = onSearchWithDeviceLocation,
                         enabled = !busy && canSearch,
                         modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.onPrimary,
+                            contentColor = MaterialTheme.colorScheme.primary,
+                        ),
                     ) {
-                        Text(if (manualExpanded) "Ocultar fallback manual" else "Fallback manual dev")
+                        Text(if (homeLoading) "Preparando búsqueda..." else "Buscar chat")
                     }
-                }
-                if (showManualLocationFallback && manualExpanded) {
-                    ManualLocationFallback(
-                        latitude = latitude,
-                        longitude = longitude,
-                        accuracy = accuracy,
-                        enabled = !busy && canSearch,
-                        onLatitudeChange = { latitude = signedDecimalInput(it) },
-                        onLongitudeChange = { longitude = signedDecimalInput(it) },
-                        onAccuracyChange = { accuracy = it.filter { char -> char.isDigit() } },
-                        onSubmit = {
-                            val location = validateLocation(latitude, longitude, accuracy)
-                            if (location == null) {
-                                onLocalErrorChange(
-                                    "Ubicación inválida. Latitud -90..90, " +
-                                        "longitud -180..180, precision 0..100000."
-                                )
-                            } else {
-                                onLocalErrorChange(null)
-                                onEnqueue(location)
-                            }
-                        },
-                    )
-                }
-                if (homeError != null) {
-                    OutlinedButton(onClick = onRefreshHome, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (homeLoading) "Actualizando..." else "Reintentar estado")
+                    if (showManualLocationFallback) {
+                        OutlinedButton(
+                            onClick = { onManualExpandedChange(!manualExpanded) },
+                            enabled = !busy && canSearch,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(if (manualExpanded) "Ocultar fallback manual" else "Fallback manual dev")
+                        }
+                    }
+                    if (showManualLocationFallback && manualExpanded) {
+                        ManualLocationFallback(
+                            latitude = latitude,
+                            longitude = longitude,
+                            accuracy = accuracy,
+                            enabled = !busy && canSearch,
+                            onLatitudeChange = { latitude = signedDecimalInput(it) },
+                            onLongitudeChange = { longitude = signedDecimalInput(it) },
+                            onAccuracyChange = { accuracy = it.filter { char -> char.isDigit() } },
+                            onSubmit = {
+                                val location = validateLocation(latitude, longitude, accuracy)
+                                if (location == null) {
+                                    onLocalErrorChange(
+                                        "Ubicación inválida. Latitud -90..90, " +
+                                            "longitud -180..180, precision 0..100000."
+                                    )
+                                } else {
+                                    onLocalErrorChange(null)
+                                    onEnqueue(location)
+                                }
+                            },
+                        )
+                    }
+                    if (homeError != null) {
+                        OutlinedButton(onClick = onRefreshHome, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                            Text(if (homeLoading) "Actualizando..." else "Reintentar estado")
+                        }
                     }
                 }
             }
@@ -645,13 +677,14 @@ private fun MatchmakingIdleScreen(
 private fun ActiveInteractionsSummary(
     summary: HomeActiveInteractionsSummary?,
     passiveNotices: List<HomePassiveNoticeItem>,
+    textColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurfaceVariant,
 ) {
     if (summary == null) return
 
     activeExperiencesSummaryText(summary)?.let { text ->
         Text(
             text = text,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = textColor,
         )
     }
 
@@ -659,7 +692,7 @@ private fun ActiveInteractionsSummary(
         passiveNoticeText(notice)?.let { text ->
             Text(
                 text = text,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = textColor,
             )
         }
     }
