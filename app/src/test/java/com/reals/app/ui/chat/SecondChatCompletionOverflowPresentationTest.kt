@@ -160,6 +160,36 @@ class SecondChatCompletionOverflowPresentationTest {
     }
 
     @Test
+    fun `partner no show claim shows before partner entry cutoff when backend allows`() {
+        assertTrue(
+            shouldShowPartnerNoShowClaim(
+                backendCanClaim = true,
+                partnerEntryCutoffReached = false,
+            )
+        )
+    }
+
+    @Test
+    fun `partner no show claim hides at local partner entry cutoff`() {
+        assertFalse(
+            shouldShowPartnerNoShowClaim(
+                backendCanClaim = true,
+                partnerEntryCutoffReached = true,
+            )
+        )
+    }
+
+    @Test
+    fun `partner no show claim hides when backend disallows`() {
+        assertFalse(
+            shouldShowPartnerNoShowClaim(
+                backendCanClaim = false,
+                partnerEntryCutoffReached = false,
+            )
+        )
+    }
+
+    @Test
     fun `eligible second-chat completion creates overflow action`() {
         val action = secondChatCompletionOverflowPresentation(
             SecondChatResolutionPresentation(createCompletion = completionCreate(enabled = true))

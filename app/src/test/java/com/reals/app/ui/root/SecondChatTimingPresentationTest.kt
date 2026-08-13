@@ -1074,6 +1074,182 @@ class SecondChatTimingPresentationTest {
     }
 
     @Test
+    fun `joined active second chat before partner entry cutoff cannot return Home`() {
+        val state = secondChatState(
+            lifecycle = lifecycle(
+                serverTime = "2026-06-18T21:19:59Z",
+                absoluteExpiresAt = "2026-06-18T23:00:00Z",
+                entryClosesAt = "2026-06-18T21:20:00Z",
+                receivedAtMillis = 1_000L,
+                myAttendanceStatus = "ON_TIME",
+                partnerAttendanceStatus = "PENDING",
+            ),
+        )
+
+        assertTrue(state.isJoinedActiveSecondChat())
+        assertFalse(state.canReturnHomeNow(nowMillis = 1_000L))
+    }
+
+    @Test
+    fun `joined active second chat at partner entry cutoff can return Home`() = runTest(dispatcher) {
+        val api = FakeRealsApi()
+        val viewModel = viewModel(api)
+        val state = secondChatState(
+            lifecycle = lifecycle(
+                serverTime = "2026-06-18T21:20:00Z",
+                absoluteExpiresAt = "2026-06-18T23:00:00Z",
+                entryClosesAt = "2026-06-18T21:20:00Z",
+                receivedAtMillis = 1_000L,
+                myAttendanceStatus = "ON_TIME",
+                partnerAttendanceStatus = "PENDING",
+            ),
+        )
+        viewModel.setState(state)
+
+        assertTrue(state.isJoinedActiveSecondChat())
+        assertTrue(state.canReturnHomeNow(nowMillis = 1_000L))
+
+        viewModel.closeSecondChat()
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value is RealsRootUiState.Ready)
+        assertEquals(1, api.calls.count { it == "getHome" })
+    }
+
+    @Test
+    fun `late joined second chat after partner entry cutoff can return Home`() {
+        val state = secondChatState(
+            lifecycle = lifecycle(
+                serverTime = "2026-06-18T21:21:00Z",
+                absoluteExpiresAt = "2026-06-18T23:00:00Z",
+                receivedAtMillis = 1_000L,
+                myAttendanceStatus = "LATE",
+                partnerAttendanceStatus = "PENDING",
+            ),
+        )
+
+        assertTrue(state.canReturnHomeNow(nowMillis = 1_000L))
+    }
+
+    @Test
+    fun `joined second chat after partner no show cutoff can return Home`() {
+        listOf("ON_TIME", "LATE").forEach { myAttendance ->
+            val state = secondChatState(
+                lifecycle = lifecycle(
+                    serverTime = "2026-06-18T21:21:00Z",
+                    absoluteExpiresAt = "2026-06-18T23:00:00Z",
+                    receivedAtMillis = 1_000L,
+                    myAttendanceStatus = myAttendance,
+                    partnerAttendanceStatus = "NO_SHOW",
+                ),
+            )
+
+            assertTrue(state.canReturnHomeNow(nowMillis = 1_000L))
+        }
+    }
+
+    @Test
+    fun `both joined active second chat after entry cutoff cannot return Home`() {
+        listOf("ON_TIME", "LATE").forEach { partnerAttendance ->
+            val state = secondChatState(
+                lifecycle = lifecycle(
+                    serverTime = "2026-06-18T21:21:00Z",
+                    absoluteExpiresAt = "2026-06-18T23:00:00Z",
+                    receivedAtMillis = 1_000L,
+                    myAttendanceStatus = "ON_TIME",
+                    partnerAttendanceStatus = partnerAttendance,
+                ),
+            )
+
+            assertTrue(state.isJoinedActiveSecondChat())
+            assertFalse(state.canReturnHomeNow(nowMillis = 1_000L))
+        }
+    }
+
+    @Test
+    fun `terminal second chat can return Home through non-active policy`() {
+        val state = secondChatState(
+            lifecycle = lifecycle(
+                chatStatus = "FINISHED",
+                serverTime = "2026-06-18T21:21:00Z",
+                absoluteExpiresAt = "2026-06-18T23:00:00Z",
+                receivedAtMillis = 1_000L,
+                myAttendanceStatus = "ON_TIME",
+                partnerAttendanceStatus = "ON_TIME",
+            ),
+            chatStatus = ChatStatus.Finished,
+        )
+
+        assertFalse(state.isJoinedActiveSecondChat())
+        assertTrue(state.canReturnHomeNow(nowMillis = 1_000L))
+    }
+
+    @Test
+    fun `invalid partner entry cutoff while genuinely active cannot return Home`() {
+        val state = secondChatState(
+            lifecycle = lifecycle(
+                serverTime = "2026-06-18T21:21:00Z",
+                absoluteExpiresAt = "2026-06-18T23:00:00Z",
+                entryClosesAt = "not-a-date",
+                receivedAtMillis = 1_000L,
+                myAttendanceStatus = "ON_TIME",
+                partnerAttendanceStatus = "PENDING",
+            ),
+        )
+
+        assertTrue(state.isJoinedActiveSecondChat())
+        assertFalse(state.canReturnHomeNow(nowMillis = 1_000L))
+    }
+
+    @Test
+    fun `system back uses partner entry cutoff return policy and busy guards`() {
+        val receivedAtMillis = System.currentTimeMillis()
+        val serverTime = Instant.ofEpochMilli(receivedAtMillis).toString()
+        val entryClosesAt = Instant.ofEpochMilli(receivedAtMillis).toString()
+        val absoluteExpiresAt = Instant.ofEpochMilli(receivedAtMillis + 7_200_000L).toString()
+        val eligibleState = secondChatState(
+            lifecycle = lifecycle(
+                serverTime = serverTime,
+                absoluteExpiresAt = absoluteExpiresAt,
+                entryClosesAt = entryClosesAt,
+                receivedAtMillis = receivedAtMillis,
+                myAttendanceStatus = "ON_TIME",
+                partnerAttendanceStatus = "PENDING",
+            ),
+        )
+
+        assertTrue(eligibleState.canHandleSystemBack())
+        listOf(
+            eligibleState.copy(sending = true),
+            eligibleState.copy(actionLoading = true),
+            eligibleState.copy(audioUpload = ChatAudioUploadUiState(uploading = true)),
+            eligibleState.copy(manualBlock = ManualBlockUiState(loading = true)),
+        ).forEach { busyState ->
+            assertFalse(busyState.canHandleSystemBack())
+        }
+    }
+
+    @Test
+    fun `system back stays blocked before partner entry cutoff`() {
+        val receivedAtMillis = System.currentTimeMillis()
+        val serverTime = Instant.ofEpochMilli(receivedAtMillis).toString()
+        val entryClosesAt = Instant.ofEpochMilli(receivedAtMillis + 60_000L).toString()
+        val absoluteExpiresAt = Instant.ofEpochMilli(receivedAtMillis + 7_200_000L).toString()
+        val state = secondChatState(
+            lifecycle = lifecycle(
+                serverTime = serverTime,
+                absoluteExpiresAt = absoluteExpiresAt,
+                entryClosesAt = entryClosesAt,
+                receivedAtMillis = receivedAtMillis,
+                myAttendanceStatus = "ON_TIME",
+                partnerAttendanceStatus = "PENDING",
+            ),
+        )
+
+        assertFalse(state.canHandleSystemBack())
+    }
+
+    @Test
     fun `same active backend status after local deadline allows fallback navigation`() = runTest(dispatcher) {
         val api = FakeRealsApi()
         val viewModel = viewModel(api)
@@ -1440,14 +1616,20 @@ class SecondChatTimingPresentationTest {
         canRequestMutualCompletion: Boolean = false,
         mutualCompletionCooldownUntil: String? = null,
         canClaimPartnerInactivity: Boolean = false,
+        entryClosesAt: String = "2026-06-18T21:20:00Z",
+        myAttendanceStatus: String = "ON_TIME",
+        partnerAttendanceStatus: String = "ON_TIME",
     ): SecondChatLifecycleUiState = SecondChatLifecycleUiState(
         status = status(
             connectionId = connectionId,
             chatId = chatId,
             serverTime = serverTime,
             absoluteExpiresAt = absoluteExpiresAt,
+            entryClosesAt = entryClosesAt,
             chatStatus = chatStatus,
             readOnlyUntil = readOnlyUntil,
+            myAttendanceStatus = myAttendanceStatus,
+            partnerAttendanceStatus = partnerAttendanceStatus,
             canClaimPartnerNoShow = canClaimPartnerNoShow,
             activeResolutionRequest = activeResolutionRequest,
             canRequestMutualCompletion = canRequestMutualCompletion,

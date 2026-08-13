@@ -635,7 +635,7 @@ fun RealsRootUiState.canHandleSystemBack(): Boolean = when (this) {
                 session.profileSnapshot is ProfileSnapshot.Found &&
                 !photos.reorderingPhotos
 
-    is RealsRootUiState.SecondChat -> !isJoinedActiveSecondChat() &&
+    is RealsRootUiState.SecondChat -> canReturnHomeNow() &&
             !sending && !audioUpload.uploading && !actionLoading && !manualBlock.loading
 
     is RealsRootUiState.VisualApproval ->
@@ -669,3 +669,13 @@ fun RealsRootUiState.FirstChat.canRecoverFirstChatToHome(): Boolean =
 
 fun RealsRootUiState.SecondChat.isJoinedActiveSecondChat(): Boolean =
     lifecycle.timingPresentation().genuinelyActive
+
+fun RealsRootUiState.SecondChat.canReturnHomeNow(
+    nowMillis: Long = System.currentTimeMillis(),
+): Boolean {
+    if (!lifecycle.timingPresentation(nowMillis).genuinelyActive) return true
+    return lifecycle.status?.canReturnHomeAfterPartnerEntryCutoff(
+        statusReceivedAtMillis = lifecycle.statusReceivedAtMillis,
+        nowMillis = nowMillis,
+    ) == true
+}

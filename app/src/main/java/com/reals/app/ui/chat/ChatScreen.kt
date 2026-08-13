@@ -613,6 +613,7 @@ fun ChatScreen(
                 lifecycle = secondChatLifecycle,
                 partnerName = partnerDisplayName,
                 actionLoading = loadingChatAction || audioInteractionBusy,
+                partnerEntryCutoffReached = canReturnHomeAfterPartnerCutoff,
                 onClaimNoShow = onClaimSecondChatNoShow,
                 onRefresh = onRefresh,
             )
@@ -830,6 +831,7 @@ private fun SecondChatLifecyclePanel(
     lifecycle: SecondChatLifecycleUiState?,
     partnerName: String?,
     actionLoading: Boolean,
+    partnerEntryCutoffReached: Boolean,
     onClaimNoShow: () -> Unit,
     onRefresh: () -> Unit,
 ) {
@@ -927,7 +929,7 @@ private fun SecondChatLifecyclePanel(
                         "Podés mandar mensajes mientras esperás. Eso no significa que la otra persona haya llegado.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    if (status.canClaimPartnerNoShow) {
+                    if (shouldShowPartnerNoShowClaim(status.canClaimPartnerNoShow, partnerEntryCutoffReached)) {
                         Text(
                             "Si pasa el tiempo de espera, podés reclamar. " +
                                     "Si la otra persona no entra durante el plazo de confirmación, la cita termina sin penalizarte.",
@@ -1159,6 +1161,11 @@ internal fun shouldShowBackHomeAction(
                 !genuinelyActive ||
                 canReturnAfterPartnerCutoff
             )
+
+internal fun shouldShowPartnerNoShowClaim(
+    backendCanClaim: Boolean,
+    partnerEntryCutoffReached: Boolean,
+): Boolean = backendCanClaim && !partnerEntryCutoffReached
 
 internal fun secondChatCompletionOverflowMenuItemEnabled(
     action: SecondChatCompletionOverflowPresentation,
