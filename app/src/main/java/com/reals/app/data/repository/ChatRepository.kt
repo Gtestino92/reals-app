@@ -9,6 +9,7 @@ import com.reals.app.data.api.RealsApi
 import com.reals.app.data.dto.ChatExitRequestCreateRequestDto
 import com.reals.app.data.dto.ChatMessageResponseDto
 import com.reals.app.data.dto.ChatMessagesResponseDto
+import com.reals.app.data.dto.PutMessageReactionRequestDto
 import com.reals.app.data.dto.SecondChatCompletionDecisionRequestDto
 import com.reals.app.data.dto.SendMessageRequestDto
 import com.reals.app.data.mapper.toDomain
@@ -18,6 +19,7 @@ import com.reals.app.domain.model.ChatExitOutcome
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.ChatMessageReactionType
 import com.reals.app.domain.model.FirstChatGuidance
 import com.reals.app.domain.model.SecondChatStatus
 import java.io.File
@@ -124,6 +126,20 @@ class ChatRepository(
                     body = file.asRequestBody(CHAT_AUDIO_MEDIA_TYPE.toMediaType()),
                 ),
                 clientMessageId = clientMessageId.toRequestBody("text/plain".toMediaType()),
+            )
+        }.map { it.toDomain() }
+
+    suspend fun putMessageReaction(
+        chatId: String,
+        messageId: String,
+        reactionType: ChatMessageReactionType,
+    ): ApiResult<ChatMessage> =
+        authorizedCall { authorization ->
+            api.putChatMessageReaction(
+                authorization = authorization,
+                chatId = chatId,
+                messageId = messageId,
+                body = PutMessageReactionRequestDto(reactionType.rawValue),
             )
         }.map { it.toDomain() }
 

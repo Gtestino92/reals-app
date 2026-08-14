@@ -29,6 +29,7 @@ import com.reals.app.data.dto.PasswordResetRequestDto
 import com.reals.app.data.dto.PhotoResponseDto
 import com.reals.app.data.dto.PingResponseDto
 import com.reals.app.data.dto.PatchAffinityAnswersRequestDto
+import com.reals.app.data.dto.PutMessageReactionRequestDto
 import com.reals.app.data.dto.ProfileResponseDto
 import com.reals.app.data.dto.ProfileQuestionAnswersResponseDto
 import com.reals.app.data.dto.ProfileQuestionCatalogResponseDto
@@ -345,6 +346,14 @@ interface RealsApi {
         @Path("chatId") chatId: String,
         @Part file: MultipartBody.Part,
         @Part("clientMessageId") clientMessageId: RequestBody,
+    ): Response<ChatMessageResponseDto>
+
+    @PUT("api/chats/{chatId}/messages/{messageId}/reaction")
+    suspend fun putChatMessageReaction(
+        @Header("Authorization") authorization: String,
+        @Path("chatId") chatId: String,
+        @Path("messageId") messageId: String,
+        @Body body: PutMessageReactionRequestDto,
     ): Response<ChatMessageResponseDto>
 
     @GET("api/chats/{chatId}/messages")

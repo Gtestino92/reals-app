@@ -580,7 +580,11 @@ class RealsRootViewModel(
                     message = null,
                 )
             }
-            val result = secondChatCoordinator.refresh(current, silent)
+            val result = secondChatCoordinator.refresh(
+                current = current,
+                silent = silent,
+                useReactionReconciliationAlternation = silent,
+            )
             val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return@launch
             if (latest.audioUpload != current.audioUpload) return@launch
             if (latest.audioDraft != current.audioDraft) return@launch
@@ -1247,7 +1251,11 @@ class RealsRootViewModel(
                     message = null,
                 )
             }
-            val result = firstChatCoordinator.refresh(current, silent)
+            val result = firstChatCoordinator.refresh(
+                current = current,
+                silent = silent,
+                useReactionReconciliationAlternation = silent,
+            )
             val latest = _uiState.value as? RealsRootUiState.FirstChat ?: return@launch
             if (latest.audioUpload != current.audioUpload) return@launch
             if (latest.audioDraft != current.audioDraft) return@launch

@@ -22,6 +22,7 @@ import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatExitRequestType
 import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.ChatMessageReactionType
 import com.reals.app.domain.model.ChatMessageType
 import com.reals.app.domain.model.ChatPartner
 import com.reals.app.domain.model.ChatStatus
@@ -143,6 +144,7 @@ fun ChatMessageResponseDto.toDomain(): ChatMessage = ChatMessage(
     messageType = ChatMessageType.fromBackend(messageType),
     content = content,
     audio = audio?.toDomain(),
+    reactionType = ChatMessageReactionType.fromBackend(reactionType),
     sentAt = sentAt,
 )
 

@@ -88,6 +88,7 @@ data class ChatMessage(
     val messageType: ChatMessageType = ChatMessageType.Text,
     val content: String? = null,
     val audio: ChatAudio? = null,
+    val reactionType: ChatMessageReactionType? = null,
     val sentAt: String,
 ) {
     val presentation: ChatMessagePresentation
@@ -121,6 +122,21 @@ sealed interface ChatMessageType {
         fun fromBackend(value: String?): ChatMessageType = when (value?.uppercase()) {
             null, "", Text.rawValue -> Text
             Audio.rawValue -> Audio
+            else -> Unknown(value)
+        }
+    }
+}
+
+sealed interface ChatMessageReactionType {
+    val rawValue: String
+
+    data object Heart : ChatMessageReactionType { override val rawValue = "HEART" }
+    data class Unknown(override val rawValue: String) : ChatMessageReactionType
+
+    companion object {
+        fun fromBackend(value: String?): ChatMessageReactionType? = when (value?.uppercase()) {
+            null, "" -> null
+            Heart.rawValue -> Heart
             else -> Unknown(value)
         }
     }

@@ -471,6 +471,34 @@ class FirstChatCoordinatorTest {
     }
 
     @Test
+    fun `silent refresh alternates incremental and reaction reconciliation cursors`() = runBlocking {
+        val current = firstChatState(chatStatus = ChatStatus.Active).copy(messages = pollingMessages())
+        api.chatMessagesResponse = Response.success(TestDtos.chatMessagesPagedPayload(emptyList()))
+
+        coordinator.refresh(current, silent = true, useReactionReconciliationAlternation = true)
+        assertEquals("d", api.lastChatMessagesAfter)
+
+        coordinator.refresh(current, silent = true, useReactionReconciliationAlternation = true)
+        assertEquals("b", api.lastChatMessagesAfter)
+
+        coordinator.refresh(current, silent = true, useReactionReconciliationAlternation = true)
+        assertEquals("d", api.lastChatMessagesAfter)
+    }
+
+    @Test
+    fun `silent refresh alternation resets after first chat load reopens chat`() = runBlocking {
+        val current = firstChatState(chatStatus = ChatStatus.Active).copy(messages = pollingMessages())
+        api.chatMessagesResponse = Response.success(TestDtos.chatMessagesPagedPayload(emptyList()))
+
+        coordinator.refresh(current, silent = true, useReactionReconciliationAlternation = true)
+        coordinator.refresh(current, silent = true, useReactionReconciliationAlternation = true)
+        coordinator.load(TestDomain.session(), matchId = "match-1", chatId = "chat-1")
+        coordinator.refresh(current, silent = true, useReactionReconciliationAlternation = true)
+
+        assertEquals("d", api.lastChatMessagesAfter)
+    }
+
+    @Test
     fun `refresh with resolved exit request returns ExitResolved`() = runBlocking {
         api.exitRequestsResponse = Response.success(listOf(TestDtos.exitRequest(status = "TIMED_OUT")))
         val current = firstChatState(chatStatus = ChatStatus.Active)
@@ -1596,6 +1624,14 @@ class FirstChatCoordinatorTest {
                 myDecision = myDecision,
                 partnerDecision = partnerDecision,
             ).toDomain(),
+        )
+
+    private fun pollingMessages(): List<ChatMessage> =
+        listOf(
+            TestDtos.chatMessage("a").copy(senderId = "other", sentAt = "2026-06-18T21:00:00Z").toDomain(),
+            TestDtos.chatMessage("b").copy(senderId = "me", sentAt = "2026-06-18T21:01:00Z").toDomain(),
+            TestDtos.chatMessage("c").copy(senderId = "other", sentAt = "2026-06-18T21:02:00Z").toDomain(),
+            TestDtos.chatMessage("d").copy(senderId = "me", sentAt = "2026-06-18T21:03:00Z").toDomain(),
         )
 
     private fun audioDraft(file: File): ChatAudioDraftUiState =

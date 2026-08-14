@@ -383,7 +383,10 @@ object TestDtos {
         completed = completed,
     )
 
-    fun chatMessage(id: String = "message-1") = ChatMessageResponseDto(
+    fun chatMessage(
+        id: String = "message-1",
+        reactionType: String? = null,
+    ) = ChatMessageResponseDto(
         id = id,
         chatSessionId = "chat-1",
         senderId = "user-1",
@@ -391,6 +394,7 @@ object TestDtos {
         messageType = "TEXT",
         content = "hola",
         audio = null,
+        reactionType = reactionType,
         sentAt = now,
     )
 
@@ -398,6 +402,7 @@ object TestDtos {
         id: String = "audio-message-1",
         clientMessageId: String = "00000000-0000-0000-0000-000000000101",
         url: String = "https://example.test/audio",
+        reactionType: String? = null,
     ) = ChatMessageResponseDto(
         id = id,
         chatSessionId = "chat-1",
@@ -411,6 +416,7 @@ object TestDtos {
             contentType = "audio/mp4",
             sizeBytes = 77_832,
         ),
+        reactionType = reactionType,
         sentAt = now,
     )
 

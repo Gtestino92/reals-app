@@ -2,7 +2,9 @@ package com.reals.app.ui.root
 
 import com.reals.app.domain.model.ChatAudio
 import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.ChatMessageReactionType
 import com.reals.app.domain.model.ChatMessageType
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -114,6 +116,50 @@ class ChatMessageCollectionTest {
     }
 
     @Test
+    fun `appendUnique merges existing null and incoming HEART to HEART`() {
+        val current = listOf(message("1", "2026-06-18T21:00:00Z", reactionType = null))
+        val appended = current.appendUnique(
+            listOf(message("1", "2026-06-18T21:01:00Z", reactionType = ChatMessageReactionType.Heart))
+        )
+
+        assertEquals(ChatMessageReactionType.Heart, appended.single().reactionType)
+    }
+
+    @Test
+    fun `appendUnique preserves existing HEART when incoming duplicate has null reaction`() {
+        val current = listOf(message("1", "2026-06-18T21:00:00Z", reactionType = ChatMessageReactionType.Heart))
+        val appended = current.appendUnique(
+            listOf(message("1", "2026-06-18T21:01:00Z", reactionType = null))
+        )
+
+        assertEquals(ChatMessageReactionType.Heart, appended.single().reactionType)
+    }
+
+    @Test
+    fun `appendUnique keeps HEART when existing and incoming duplicate both have HEART`() {
+        val current = listOf(message("1", "2026-06-18T21:00:00Z", reactionType = ChatMessageReactionType.Heart))
+        val appended = current.appendUnique(
+            listOf(message("1", "2026-06-18T21:01:00Z", reactionType = ChatMessageReactionType.Heart))
+        )
+
+        assertEquals(ChatMessageReactionType.Heart, appended.single().reactionType)
+    }
+
+    @Test
+    fun `appendUnique still reconciles non reaction fields from incoming duplicate`() {
+        val current = listOf(
+            message("1", "2026-06-18T21:00:00Z", reactionType = ChatMessageReactionType.Heart).copy(content = "old")
+        )
+        val appended = current.appendUnique(
+            listOf(message("1", "2026-06-18T21:01:00Z", reactionType = null).copy(content = "new"))
+        )
+
+        assertEquals("new", appended.single().content)
+        assertEquals("2026-06-18T21:01:00Z", appended.single().sentAt)
+        assertEquals(ChatMessageReactionType.Heart, appended.single().reactionType)
+    }
+
+    @Test
     fun `lastMessageCursor includes audio messages`() {
         val messages = listOf(
             message("text", "2026-06-18T21:00:00Z"),
@@ -123,11 +169,94 @@ class ChatMessageCollectionTest {
         assertEquals("audio", messages.lastMessageCursor())
     }
 
-    private fun message(id: String, sentAt: String) = ChatMessage(
+    @Test
+    fun `reactionReconciliationCursor returns null for no messages`() {
+        assertNull(emptyList<ChatMessage>().reactionReconciliationCursor())
+    }
+
+    @Test
+    fun `reactionReconciliationCursor returns null for one sender run`() {
+        val messages = listOf(
+            message("a", "2026-06-18T21:00:00Z", senderId = "other"),
+            message("b", "2026-06-18T21:01:00Z", senderId = "other"),
+        )
+
+        assertNull(messages.reactionReconciliationCursor())
+    }
+
+    @Test
+    fun `reactionReconciliationCursor returns null for exactly two sender runs`() {
+        val messages = listOf(
+            message("a", "2026-06-18T21:00:00Z", senderId = "other"),
+            message("b", "2026-06-18T21:01:00Z", senderId = "me"),
+        )
+
+        assertNull(messages.reactionReconciliationCursor())
+    }
+
+    @Test
+    fun `reactionReconciliationCursor returns message before two latest runs for three runs`() {
+        val messages = listOf(
+            message("a", "2026-06-18T21:00:00Z", senderId = "other"),
+            message("b", "2026-06-18T21:01:00Z", senderId = "other"),
+            message("c", "2026-06-18T21:02:00Z", senderId = "me"),
+            message("d", "2026-06-18T21:03:00Z", senderId = "other"),
+            message("e", "2026-06-18T21:04:00Z", senderId = "me"),
+        )
+
+        assertEquals("c", messages.reactionReconciliationCursor())
+    }
+
+    @Test
+    fun `reactionReconciliationCursor handles latest run length greater than one`() {
+        val messages = listOf(
+            message("a", "2026-06-18T21:00:00Z", senderId = "other"),
+            message("b", "2026-06-18T21:01:00Z", senderId = "me"),
+            message("c", "2026-06-18T21:02:00Z", senderId = "other"),
+            message("d", "2026-06-18T21:03:00Z", senderId = "me"),
+            message("e", "2026-06-18T21:04:00Z", senderId = "me"),
+        )
+
+        assertEquals("c", messages.reactionReconciliationCursor())
+    }
+
+    @Test
+    fun `reactionReconciliationCursor handles penultimate run length greater than one`() {
+        val messages = listOf(
+            message("a", "2026-06-18T21:00:00Z", senderId = "other"),
+            message("b", "2026-06-18T21:01:00Z", senderId = "me"),
+            message("c", "2026-06-18T21:02:00Z", senderId = "other"),
+            message("d", "2026-06-18T21:03:00Z", senderId = "other"),
+            message("e", "2026-06-18T21:04:00Z", senderId = "me"),
+        )
+
+        assertEquals("b", messages.reactionReconciliationCursor())
+    }
+
+    @Test
+    fun `reactionReconciliationCursor orders equal sentAt values by id`() {
+        val timestamp = "2026-06-18T21:00:00Z"
+        val messages = listOf(
+            message("d", timestamp, senderId = "me"),
+            message("a", timestamp, senderId = "other"),
+            message("c", timestamp, senderId = "other"),
+            message("b", timestamp, senderId = "me"),
+        )
+
+        assertEquals("b", messages.reactionReconciliationCursor())
+    }
+
+    private fun message(
+        id: String,
+        sentAt: String,
+        senderId: String = "user-1",
+        reactionType: ChatMessageReactionType? = null,
+    ) = ChatMessage(
         id = id,
         chatSessionId = "chat-1",
-        senderId = "user-1",
+        senderId = senderId,
         content = "hola",
+        reactionType = reactionType,
         sentAt = sentAt,
     )
 

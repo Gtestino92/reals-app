@@ -7,6 +7,7 @@ import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatExitRequestType
 import com.reals.app.domain.model.ChatAudioUnavailableReason
 import com.reals.app.domain.model.ChatMessagePresentation
+import com.reals.app.domain.model.ChatMessageReactionType
 import com.reals.app.domain.model.ChatMessageType
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.testutil.TestDtos
@@ -159,6 +160,46 @@ class ChatMappersTest {
         assertEquals(ChatMessageType.Text, message.messageType)
         assertTrue(message.presentation is ChatMessagePresentation.Text)
         assertEquals(TestDtos.now, message.sentAt)
+    }
+
+    @Test
+    fun `ChatMessageResponseDto maps absent and null reaction to none`() {
+        val absentDto = testJson.decodeFromString<com.reals.app.data.dto.ChatMessageResponseDto>(
+            """
+            {
+              "id": "message-2",
+              "chatSessionId": "chat-1",
+              "senderId": "user-1",
+              "messageType": "TEXT",
+              "content": "hola",
+              "audio": null,
+              "sentAt": "2026-06-18T21:00:00Z"
+            }
+            """.trimIndent(),
+        )
+        val nullDto = TestDtos.chatMessage("message-3", reactionType = null)
+
+        assertNull(absentDto.toDomain().reactionType)
+        assertNull(nullDto.toDomain().reactionType)
+    }
+
+    @Test
+    fun `ChatMessageResponseDto maps HEART reaction for text and audio messages`() {
+        val text = TestDtos.chatMessage("message-2", reactionType = "HEART").toDomain()
+        val audio = TestDtos.audioChatMessage("audio-message-2", reactionType = "HEART").toDomain()
+
+        assertEquals(ChatMessageReactionType.Heart, text.reactionType)
+        assertEquals(ChatMessageReactionType.Heart, audio.reactionType)
+        assertEquals(ChatMessageType.Text, text.messageType)
+        assertEquals(ChatMessageType.Audio, audio.messageType)
+    }
+
+    @Test
+    fun `ChatMessageResponseDto maps unknown reaction without crashing`() {
+        val message = TestDtos.chatMessage("message-2", reactionType = "SMILE").toDomain()
+
+        assertTrue(message.reactionType is ChatMessageReactionType.Unknown)
+        assertEquals("SMILE", message.reactionType?.rawValue)
     }
 
     @Test
