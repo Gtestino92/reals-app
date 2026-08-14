@@ -1,21 +1,26 @@
 package com.reals.app.ui.chat
 
 import android.os.SystemClock
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -25,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.reals.app.R
@@ -35,6 +41,9 @@ import com.reals.app.domain.model.ChatAudioUnavailableReason
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.root.ChatAudioDraftUiState
 import com.reals.app.ui.root.ChatAudioUploadUiState
+import com.reals.app.ui.theme.LocalRealsDarkTheme
+import com.reals.app.ui.theme.RealsColors
+import com.reals.app.ui.theme.RealsRadii
 import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -70,6 +79,7 @@ internal fun MessageComposer(
     presentation: ChatAudioComposerPresentation,
     callbacks: ChatAudioComposerCallbacks,
 ) {
+    val trayAppearance = chatComposerTrayAppearance()
     var recordingNowMillis by remember(presentation.recordingStartedAtMillis) {
         mutableStateOf(SystemClock.elapsedRealtime())
     }
@@ -81,13 +91,17 @@ internal fun MessageComposer(
     }
     Card(
         modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(RealsRadii.Card),
+        border = trayAppearance.border,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            containerColor = trayAppearance.containerColor,
+            contentColor = trayAppearance.contentColor,
         ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
-            modifier = Modifier.padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             presentation.localAudioError?.let {
                 Text(it, color = MaterialTheme.colorScheme.error)
@@ -123,6 +137,7 @@ internal fun MessageComposer(
                     elapsedMillis = elapsedMillis,
                     maxDurationMillis = presentation.audioState.maxDurationMillis,
                     controlsEnabled = !presentation.recordingOperationInFlight,
+                    appearance = trayAppearance,
                     onStop = callbacks.onStopRecording,
                     onSend = callbacks.onSendRecording,
                     onCancel = callbacks.onCancelRecording,
@@ -132,6 +147,7 @@ internal fun MessageComposer(
                 if (audioDraft == null) {
                     TextComposerRow(
                         presentation = presentation,
+                        appearance = trayAppearance,
                         callbacks = callbacks,
                     )
                 } else {
@@ -140,6 +156,7 @@ internal fun MessageComposer(
                         canSendMessages = presentation.textState.canSendMessages,
                         uploadState = presentation.uploadState,
                         playbackState = presentation.playbackState,
+                        appearance = trayAppearance,
                         onPlay = { callbacks.onPlayDraft(audioDraft) },
                         onPause = callbacks.onPauseAudio,
                         onDelete = callbacks.onDeleteDraft,
@@ -151,9 +168,47 @@ internal fun MessageComposer(
     }
 }
 
+private data class ChatComposerTrayAppearance(
+    val containerColor: Color,
+    val border: BorderStroke,
+    val contentColor: Color,
+    val metadataColor: Color,
+    val placeholderColor: Color,
+    val primaryActionContainerColor: Color,
+    val primaryActionContentColor: Color,
+    val secondaryActionContentColor: Color,
+)
+
+@Composable
+private fun chatComposerTrayAppearance(): ChatComposerTrayAppearance {
+    val darkTheme = LocalRealsDarkTheme.current
+    return ChatComposerTrayAppearance(
+        containerColor = if (darkTheme) {
+            RealsColors.DarkSurface.copy(alpha = 0.96f)
+        } else {
+            RealsColors.Paper.copy(alpha = 0.96f)
+        },
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (darkTheme) {
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.66f)
+            } else {
+                RealsColors.SoftGold.copy(alpha = 0.52f)
+            },
+        ),
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        metadataColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        placeholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.70f),
+        primaryActionContainerColor = MaterialTheme.colorScheme.primary,
+        primaryActionContentColor = MaterialTheme.colorScheme.onPrimary,
+        secondaryActionContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
 @Composable
 private fun TextComposerRow(
     presentation: ChatAudioComposerPresentation,
+    appearance: ChatComposerTrayAppearance,
     callbacks: ChatAudioComposerCallbacks,
 ) {
     Row(
@@ -168,11 +223,31 @@ private fun TextComposerRow(
             enabled = presentation.textState.canEditDraft,
             minLines = 1,
             maxLines = 4,
+            shape = RoundedCornerShape(RealsRadii.Row),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = appearance.contentColor,
+                unfocusedTextColor = appearance.contentColor,
+                disabledTextColor = appearance.metadataColor,
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                disabledContainerColor = Color.Transparent,
+                focusedBorderColor = Color.Transparent,
+                unfocusedBorderColor = Color.Transparent,
+                disabledBorderColor = Color.Transparent,
+                focusedPlaceholderColor = appearance.placeholderColor,
+                unfocusedPlaceholderColor = appearance.placeholderColor,
+                disabledPlaceholderColor = appearance.placeholderColor.copy(alpha = 0.56f),
+                cursorColor = MaterialTheme.colorScheme.primary,
+            ),
             trailingIcon = if (presentation.audioState.visible) {
                 {
                     IconButton(
                         onClick = callbacks.onStartRecording,
                         enabled = presentation.audioState.startEnabled,
+                        colors = IconButtonDefaults.iconButtonColors(
+                            contentColor = appearance.secondaryActionContentColor,
+                            disabledContentColor = appearance.secondaryActionContentColor.copy(alpha = 0.42f),
+                        ),
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_mic),
@@ -189,6 +264,13 @@ private fun TextComposerRow(
         FilledIconButton(
             onClick = callbacks.onSendText,
             enabled = presentation.textState.sendButtonEnabled,
+            shape = RoundedCornerShape(RealsRadii.Row),
+            colors = IconButtonDefaults.filledIconButtonColors(
+                containerColor = appearance.primaryActionContainerColor,
+                contentColor = appearance.primaryActionContentColor,
+                disabledContainerColor = appearance.primaryActionContainerColor.copy(alpha = 0.18f),
+                disabledContentColor = appearance.metadataColor.copy(alpha = 0.48f),
+            ),
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_send),
@@ -204,7 +286,7 @@ private fun TextComposerRow(
     ) {
         Text(
             text = presentation.audioState.disabledCopy,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = appearance.metadataColor,
             style = MaterialTheme.typography.bodySmall,
         )
     }
@@ -215,26 +297,35 @@ private fun RecordingComposer(
     elapsedMillis: Long,
     maxDurationMillis: Long,
     controlsEnabled: Boolean,
+    appearance: ChatComposerTrayAppearance,
     onStop: () -> Unit,
     onSend: () -> Unit,
     onCancel: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            "Grabando ${formatRecordingElapsedDuration(elapsedMillis)} / ${formatAudioDuration(maxDurationMillis)}"
+            text = "Grabando ${formatRecordingElapsedDuration(elapsedMillis)} / ${formatAudioDuration(maxDurationMillis)}",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
         )
         LinearProgressIndicator(
             progress = { (elapsedMillis.toFloat() / maxDurationMillis.toFloat()).coerceIn(0f, 1f) },
             modifier = Modifier.fillMaxWidth(),
+            color = appearance.primaryActionContainerColor,
+            trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f),
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(
                 onClick = onCancel,
                 enabled = controlsEnabled,
+                colors = IconButtonDefaults.iconButtonColors(
+                    contentColor = appearance.secondaryActionContentColor,
+                    disabledContentColor = appearance.secondaryActionContentColor.copy(alpha = 0.42f),
+                ),
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_close),
@@ -244,6 +335,10 @@ private fun RecordingComposer(
             IconButton(
                 onClick = onStop,
                 enabled = controlsEnabled,
+                colors = IconButtonDefaults.iconButtonColors(
+                    contentColor = appearance.secondaryActionContentColor,
+                    disabledContentColor = appearance.secondaryActionContentColor.copy(alpha = 0.42f),
+                ),
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_stop),
@@ -253,6 +348,13 @@ private fun RecordingComposer(
             FilledIconButton(
                 onClick = onSend,
                 enabled = controlsEnabled,
+                shape = RoundedCornerShape(RealsRadii.Row),
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = appearance.primaryActionContainerColor,
+                    contentColor = appearance.primaryActionContentColor,
+                    disabledContainerColor = appearance.primaryActionContainerColor.copy(alpha = 0.18f),
+                    disabledContentColor = appearance.metadataColor.copy(alpha = 0.48f),
+                ),
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_send),
@@ -269,6 +371,7 @@ private fun AudioDraftComposer(
     canSendMessages: Boolean,
     uploadState: ChatAudioUploadUiState,
     playbackState: ChatAudioPlaybackUiState,
+    appearance: ChatComposerTrayAppearance,
     onPlay: () -> Unit,
     onPause: () -> Unit,
     onDelete: () -> Unit,
@@ -279,7 +382,11 @@ private fun AudioDraftComposer(
         uploadState = uploadState,
     )
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Audio listo para enviar")
+        Text(
+            text = "Audio listo para enviar",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
+        )
         AudioPlaybackRow(
             key = "draft-${draft.clientMessageId}",
             durationMillis = draft.durationMillis,
@@ -287,11 +394,20 @@ private fun AudioDraftComposer(
             onPlay = onPlay,
             onPause = onPause,
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             OutlinedButton(
                 onClick = onDelete,
                 enabled = actionState.deleteAvailable,
                 modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(RealsRadii.Row),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = appearance.secondaryActionContentColor,
+                    disabledContentColor = appearance.secondaryActionContentColor.copy(alpha = 0.42f),
+                ),
             ) {
                 Text(if (uploadState.nonRetryable) "Borrar" else "Cancelar")
             }
@@ -299,6 +415,13 @@ private fun AudioDraftComposer(
                 onClick = { onSend() },
                 enabled = actionState.sendAvailable,
                 modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(RealsRadii.Row),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = appearance.primaryActionContainerColor,
+                    contentColor = appearance.primaryActionContentColor,
+                    disabledContainerColor = appearance.primaryActionContainerColor.copy(alpha = 0.18f),
+                    disabledContentColor = appearance.metadataColor.copy(alpha = 0.48f),
+                ),
             ) {
                 Text(
                     if (uploadState.uploading) {

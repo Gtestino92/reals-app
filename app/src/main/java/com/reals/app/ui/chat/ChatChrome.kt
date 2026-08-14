@@ -141,56 +141,77 @@ internal fun ChatHeader(
     showDecisionSummary: Boolean,
     trailingContent: (@Composable () -> Unit)? = null,
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(RealsRadii.Card),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 4.dp, top = 2.dp, end = 4.dp, bottom = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top,
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top,
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
                 Text(
-                    text = chatHeaderTitle(titlePrefix, partnerName),
-                    modifier = Modifier.weight(1f),
+                    text = chatHeaderPhaseLabel(titlePrefix),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+                Text(
+                    text = chatHeaderPrimaryTitle(titlePrefix, partnerName),
                     style = RealsType.SectionTitle,
                     color = MaterialTheme.colorScheme.primary,
                 )
+            }
 
-                trailingContent?.invoke()
-            }
-            chatHeaderStatusText(
-                expiresAt = expiresAt,
-                firstChatLifecycle = firstChatLifecycle,
-                secondChatReadOnlyUntil = secondChatReadOnlyUntil,
-                secondChatUnavailable = secondChatUnavailable,
-            )?.let { statusText ->
-                Text(
-                    text = statusText,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (showDecisionSummary) chatDecisionSummary(
-                myDecision,
-                partnerDecision,
-                partnerName
-            )?.let {
-                Text(
-                    text = it,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
+            trailingContent?.invoke()
         }
+        chatHeaderStatusText(
+            expiresAt = expiresAt,
+            firstChatLifecycle = firstChatLifecycle,
+            secondChatReadOnlyUntil = secondChatReadOnlyUntil,
+            secondChatUnavailable = secondChatUnavailable,
+        )?.let { statusText ->
+            Text(
+                text = statusText,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        if (showDecisionSummary) chatDecisionSummary(
+            myDecision,
+            partnerDecision,
+            partnerName
+        )?.let {
+            Text(
+                text = it,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        RealsBrandDivider(
+            modifier = Modifier
+                .padding(top = 6.dp)
+                .fillMaxWidth(),
+        )
     }
+}
+
+private fun chatHeaderPhaseLabel(titlePrefix: String): String =
+    titlePrefix.trim().ifBlank { "Chat" }.uppercase()
+
+private fun chatHeaderPrimaryTitle(
+    titlePrefix: String,
+    partnerName: String?,
+): String {
+    val safeTitlePrefix = titlePrefix.trim().ifBlank { "Chat" }
+    return partnerName
+        ?.takeIf { it.isNotBlank() }
+        ?.let { TextSafety.safeDisplay(it) }
+        ?: safeTitlePrefix
 }
 
 internal fun chatOverflowCanOpen(
