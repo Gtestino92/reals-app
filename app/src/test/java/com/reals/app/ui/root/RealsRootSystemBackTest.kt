@@ -5,12 +5,14 @@ import com.reals.app.domain.model.ProfileActivationResult
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.testutil.TestDomain
 import com.reals.app.testutil.TestDtos
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -253,6 +255,140 @@ class RealsRootSystemBackTest {
         viewModel.onSystemBack()
 
         assertReadySurface(viewModel, HomeSurface.Overview)
+    }
+
+    @Test
+    fun `Ready Pending back is ignored when Home is not the rendered surface`() = runTest(dispatcher) {
+        val viewModel = viewModel()
+        viewModel.setState(
+            RealsRootUiState.Ready(
+                session = draftSession(),
+                home = HomeUiState(surface = HomeSurface.Pending),
+            )
+        )
+
+        assertFalse(viewModel.uiState.value.canHandleSystemBack())
+
+        viewModel.onSystemBack()
+
+        assertReadySurface(viewModel, HomeSurface.Pending)
+    }
+
+    @Test
+    fun `stale visual open result does not restore Visual Review after system Back`() = runTest(dispatcher) {
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val api = com.reals.app.testutil.FakeRealsApi().apply {
+            matchResponse = retrofit2.Response.success(TestDtos.match("VISUAL_PHASE"))
+            beforeGetMatchResponse = {
+                started.complete(Unit)
+                release.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(ready(surface = HomeSurface.Pending))
+
+        viewModel.openVisualApproval("match-1")
+        runCurrent()
+        started.await()
+
+        val loading = viewModel.uiState.value as RealsRootUiState.VisualApproval
+        assertEquals("match-1", loading.matchId)
+        assertEquals(HomeSurface.Pending, loading.returnHomeSurface)
+        assertTrue(loading.loading)
+
+        viewModel.onSystemBack()
+        advanceUntilIdle()
+
+        assertReadySurface(viewModel, HomeSurface.Pending)
+
+        release.complete(Unit)
+        advanceUntilIdle()
+
+        assertReadySurface(viewModel, HomeSurface.Pending)
+    }
+
+    @Test
+    fun `stale visual refresh result does not restore Visual Review after system Back`() = runTest(dispatcher) {
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val api = com.reals.app.testutil.FakeRealsApi().apply {
+            matchResponse = retrofit2.Response.success(TestDtos.match("VISUAL_PHASE"))
+            beforeGetMatchResponse = {
+                started.complete(Unit)
+                release.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(
+            RealsRootUiState.VisualApproval(
+                session = TestDomain.session(),
+                matchId = "match-1",
+                returnHomeSurface = HomeSurface.Pending,
+            )
+        )
+
+        viewModel.refreshVisualApproval()
+        runCurrent()
+        started.await()
+
+        val refreshing = viewModel.uiState.value as RealsRootUiState.VisualApproval
+        assertTrue(refreshing.refreshing)
+
+        viewModel.onSystemBack()
+        advanceUntilIdle()
+
+        assertReadySurface(viewModel, HomeSurface.Pending)
+
+        release.complete(Unit)
+        advanceUntilIdle()
+
+        assertReadySurface(viewModel, HomeSurface.Pending)
+    }
+
+    @Test
+    fun `stale Partner Profile open result does not overwrite Scheduling after system Back`() = runTest(dispatcher) {
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val api = com.reals.app.testutil.FakeRealsApi().apply {
+            beforeGetVisualProfileResponse = {
+                started.complete(Unit)
+                release.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(
+            scheduling(
+                connectionId = "connection-1",
+                matchId = "match-scheduling",
+                partnerName = "Alex",
+                returnHomeSurface = HomeSurface.Pending,
+            )
+        )
+
+        viewModel.openConnectionPartnerProfile("match-profile")
+        runCurrent()
+        started.await()
+
+        val loading = viewModel.uiState.value as RealsRootUiState.PartnerProfile
+        assertEquals("match-profile", loading.matchId)
+        assertTrue(loading.loading)
+
+        viewModel.onSystemBack()
+        advanceUntilIdle()
+
+        val scheduling = viewModel.uiState.value as RealsRootUiState.Scheduling
+        assertEquals("connection-1", scheduling.connectionId)
+        assertEquals("match-scheduling", scheduling.matchId)
+        assertEquals(HomeSurface.Pending, scheduling.returnHomeSurface)
+
+        release.complete(Unit)
+        advanceUntilIdle()
+
+        val final = viewModel.uiState.value as RealsRootUiState.Scheduling
+        assertEquals("connection-1", final.connectionId)
+        assertEquals("match-scheduling", final.matchId)
+        assertEquals(HomeSurface.Pending, final.returnHomeSurface)
     }
 
     @Test

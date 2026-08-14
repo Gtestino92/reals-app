@@ -653,7 +653,7 @@ fun RealsRootUiState.canHandleSystemBack(): Boolean = when (this) {
                         session.profileSnapshot is ProfileSnapshot.Found &&
                         !photos.reorderingPhotos
                     ) ||
-                (!editingActiveProfile && home.surface == HomeSurface.Pending)
+                isHomePendingSurfaceVisible()
 
     is RealsRootUiState.SecondChat -> canReturnHomeNow() &&
             !sending && !audioUpload.uploading && !actionLoading && !manualBlock.loading

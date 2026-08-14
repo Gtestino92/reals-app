@@ -565,6 +565,13 @@ internal fun RealsRootUiState.Ready.shouldRenderHomeSurface(): Boolean {
     }
 }
 
+internal fun RealsRootUiState.Ready.isHomePendingSurfaceVisible(): Boolean =
+    !affinityQuestionnaire.open &&
+        !profileQuestions.open &&
+        !editingActiveProfile &&
+        home.surface == HomeSurface.Pending &&
+        shouldRenderHomeSurface()
+
 private fun HomeUiState.hasRenderableDraftHomeSurface(): Boolean {
     if (homeLoading && allowDraftHomeWithoutInteractions) return true
     return homeState?.profileStatus == ProfileStatus.Draft &&
