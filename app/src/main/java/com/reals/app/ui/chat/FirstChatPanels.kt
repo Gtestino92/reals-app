@@ -15,6 +15,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -145,31 +146,37 @@ internal fun FirstChatGuidancePanel(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(
-                text = TextSafety.safeDisplay(state.questionText),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = TextSafety.safeDisplay(state.questionText),
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
 
-            if (state.showButton) {
-                OutlinedButton(
-                    onClick = { onRequestNext?.invoke() },
-                    enabled = state.buttonEnabled &&
-                        !actionLoading &&
-                        onRequestNext != null,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Otra pregunta")
+                if (state.showButton) {
+                    TextButton(
+                        onClick = { onRequestNext?.invoke() },
+                        enabled = state.buttonEnabled &&
+                            !actionLoading &&
+                            onRequestNext != null,
+                    ) {
+                        Text("Otra pregunta")
+                    }
                 }
             }
 
             if (state.showWaitingCopy) {
                 Text(
                     text = "Cambiaremos la pregunta cuando ambos quieran seguir.",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -196,8 +203,8 @@ internal fun FirstChatDecisionOnlyPanel(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             state.approvalCopy?.let { copy ->
                 Text(

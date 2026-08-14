@@ -89,81 +89,123 @@ internal fun MessageComposer(
             recordingNowMillis = SystemClock.elapsedRealtime()
         }
     }
-    Card(
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(RealsRadii.Card),
-        border = trayAppearance.border,
-        colors = CardDefaults.cardColors(
-            containerColor = trayAppearance.containerColor,
-            contentColor = trayAppearance.contentColor,
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(RealsRadii.Card),
+            border = trayAppearance.border,
+            colors = CardDefaults.cardColors(
+                containerColor = trayAppearance.containerColor,
+                contentColor = trayAppearance.contentColor,
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {
-            presentation.localAudioError?.let {
-                Text(it, color = MaterialTheme.colorScheme.error)
-            }
-            presentation.localAudioInfo?.let {
-                Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            presentation.uploadState.error?.let {
-                ApiErrorFeedbackCard(it, ErrorContext.Chat)
-            }
-            presentation.textState.explanatoryCopy?.let { copy ->
-                Text(
-                    text = copy,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            if (presentation.recordingStartedAtMillis != null) {
-                val elapsedMillis = (recordingNowMillis - presentation.recordingStartedAtMillis).coerceAtLeast(0L)
-                LaunchedEffect(
-                    elapsedMillis,
-                    presentation.audioState.maxDurationMillis,
-                    presentation.recordingOperationInFlight,
-                ) {
-                    if (
-                        !presentation.recordingOperationInFlight &&
-                        elapsedMillis >= presentation.audioState.maxDurationMillis
+            Column(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (presentation.recordingStartedAtMillis != null) {
+                    val elapsedMillis = (recordingNowMillis - presentation.recordingStartedAtMillis).coerceAtLeast(0L)
+                    LaunchedEffect(
+                        elapsedMillis,
+                        presentation.audioState.maxDurationMillis,
+                        presentation.recordingOperationInFlight,
                     ) {
-                        callbacks.onMaxDurationReached()
+                        if (
+                            !presentation.recordingOperationInFlight &&
+                            elapsedMillis >= presentation.audioState.maxDurationMillis
+                        ) {
+                            callbacks.onMaxDurationReached()
+                        }
                     }
-                }
-                RecordingComposer(
-                    elapsedMillis = elapsedMillis,
-                    maxDurationMillis = presentation.audioState.maxDurationMillis,
-                    controlsEnabled = !presentation.recordingOperationInFlight,
-                    appearance = trayAppearance,
-                    onStop = callbacks.onStopRecording,
-                    onSend = callbacks.onSendRecording,
-                    onCancel = callbacks.onCancelRecording,
-                )
-            } else {
-                val audioDraft = presentation.audioDraft.takeUnless { presentation.uploadState.uploading }
-                if (audioDraft == null) {
-                    TextComposerRow(
-                        presentation = presentation,
+                    RecordingComposer(
+                        elapsedMillis = elapsedMillis,
+                        maxDurationMillis = presentation.audioState.maxDurationMillis,
+                        controlsEnabled = !presentation.recordingOperationInFlight,
                         appearance = trayAppearance,
-                        callbacks = callbacks,
+                        onStop = callbacks.onStopRecording,
+                        onSend = callbacks.onSendRecording,
+                        onCancel = callbacks.onCancelRecording,
                     )
                 } else {
-                    AudioDraftComposer(
-                        draft = audioDraft,
-                        canSendMessages = presentation.textState.canSendMessages,
-                        uploadState = presentation.uploadState,
-                        playbackState = presentation.playbackState,
-                        appearance = trayAppearance,
-                        onPlay = { callbacks.onPlayDraft(audioDraft) },
-                        onPause = callbacks.onPauseAudio,
-                        onDelete = callbacks.onDeleteDraft,
-                        onSend = { callbacks.onSendAudio(audioDraft) },
-                    )
+                    val audioDraft = presentation.audioDraft.takeUnless { presentation.uploadState.uploading }
+                    if (audioDraft == null) {
+                        TextComposerRow(
+                            presentation = presentation,
+                            appearance = trayAppearance,
+                            callbacks = callbacks,
+                        )
+                    } else {
+                        AudioDraftComposer(
+                            draft = audioDraft,
+                            canSendMessages = presentation.textState.canSendMessages,
+                            uploadState = presentation.uploadState,
+                            playbackState = presentation.playbackState,
+                            appearance = trayAppearance,
+                            onPlay = { callbacks.onPlayDraft(audioDraft) },
+                            onPause = callbacks.onPauseAudio,
+                            onDelete = callbacks.onDeleteDraft,
+                            onSend = { callbacks.onSendAudio(audioDraft) },
+                        )
+                    }
                 }
             }
+        }
+        ComposerSupportingCopy(
+            presentation = presentation,
+            appearance = trayAppearance,
+        )
+    }
+}
+
+@Composable
+private fun ComposerSupportingCopy(
+    presentation: ChatAudioComposerPresentation,
+    appearance: ChatComposerTrayAppearance,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        presentation.localAudioError?.let {
+            Text(
+                text = it,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        presentation.localAudioInfo?.let {
+            Text(
+                text = it,
+                color = appearance.metadataColor,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        presentation.textState.explanatoryCopy?.let { copy ->
+            Text(
+                text = copy,
+                color = appearance.metadataColor,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        if (
+            presentation.audioState.visible &&
+            !presentation.audioState.startEnabled &&
+            presentation.audioState.disabledCopy != null
+        ) {
+            Text(
+                text = presentation.audioState.disabledCopy,
+                color = appearance.metadataColor,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        presentation.uploadState.error?.let {
+            ApiErrorFeedbackCard(it, ErrorContext.Chat)
         }
     }
 }
@@ -279,17 +321,6 @@ private fun TextComposerRow(
         }
     }
 
-    if (
-        presentation.audioState.visible &&
-        !presentation.audioState.startEnabled &&
-        presentation.audioState.disabledCopy != null
-    ) {
-        Text(
-            text = presentation.audioState.disabledCopy,
-            color = appearance.metadataColor,
-            style = MaterialTheme.typography.bodySmall,
-        )
-    }
 }
 
 @Composable

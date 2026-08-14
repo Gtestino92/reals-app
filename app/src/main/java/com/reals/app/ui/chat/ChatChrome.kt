@@ -96,6 +96,7 @@ internal const val MUTUAL_EXIT_CONVERSATION_PAUSED_COPY =
 
 private const val MUTUAL_EXIT_TIMEOUT_SECONDS = 20L
 private const val MUTUAL_EXIT_TIMEOUT_RETRY_MILLIS = 2_000L
+private val ChatBubbleOppositeGutter = 40.dp
 
 @Composable
 internal fun LoadingChatScreen(
@@ -144,8 +145,8 @@ internal fun ChatHeader(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 4.dp, top = 2.dp, end = 4.dp, bottom = 2.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+            .padding(start = 2.dp, end = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -153,7 +154,7 @@ internal fun ChatHeader(
         ) {
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(3.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
                     text = chatHeaderPhaseLabel(titlePrefix),
@@ -194,7 +195,7 @@ internal fun ChatHeader(
         }
         RealsBrandDivider(
             modifier = Modifier
-                .padding(top = 6.dp)
+                .padding(top = 3.dp)
                 .fillMaxWidth(),
         )
     }
@@ -383,8 +384,8 @@ internal fun ChatActionsPanel(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             activeExitRequest?.let { request ->
                 TimedExitRequestCard(
@@ -579,12 +580,12 @@ internal fun MessageList(
                     )
                 },
             contentPadding = PaddingValues(
-                start = 18.dp,
-                top = 18.dp,
-                end = 18.dp,
+                start = 12.dp,
+                top = 12.dp,
+                end = 12.dp,
                 bottom = bottomContentPadding,
             ),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (messageItems.isEmpty()) {
                 item {
@@ -725,16 +726,21 @@ private fun MessageBubble(
 ) {
     val appearance = chatBubbleAppearance(mine = mine)
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                start = if (mine) ChatBubbleOppositeGutter else 0.dp,
+                end = if (mine) 0.dp else ChatBubbleOppositeGutter,
+            ),
         horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
     ) {
         Card(
-            modifier = Modifier.widthIn(max = 300.dp),
+            modifier = Modifier.widthIn(max = 292.dp),
             shape = RoundedCornerShape(
-                topStart = RealsRadii.Row,
-                topEnd = RealsRadii.Row,
-                bottomStart = if (mine) RealsRadii.Row else 4.dp,
-                bottomEnd = if (mine) 4.dp else RealsRadii.Row,
+                topStart = if (mine) RealsRadii.Row else 8.dp,
+                topEnd = if (mine) 8.dp else RealsRadii.Row,
+                bottomStart = if (mine) RealsRadii.Row else 2.dp,
+                bottomEnd = if (mine) 2.dp else RealsRadii.Row,
             ),
             border = appearance.border,
             colors = CardDefaults.cardColors(
@@ -765,7 +771,7 @@ private fun MessageBubble(
                 Text(
                     text = formatBackendTime(message.sentAt),
                     modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.End,
+                    textAlign = appearance.metadataTextAlign,
                     style = MaterialTheme.typography.bodySmall,
                     color = appearance.metadataColor,
                 )
@@ -779,6 +785,7 @@ private data class ChatBubbleAppearance(
     val border: BorderStroke?,
     val contentColor: Color,
     val metadataColor: Color,
+    val metadataTextAlign: TextAlign,
 )
 
 @Composable
@@ -787,13 +794,21 @@ private fun chatBubbleAppearance(mine: Boolean): ChatBubbleAppearance {
     return if (mine) {
         ChatBubbleAppearance(
             containerColor = if (darkTheme) {
-                RealsColors.DarkSurfaceHigh.copy(alpha = 0.88f)
+                RealsColors.DarkSurfaceHigh.copy(alpha = 0.98f)
             } else {
-                RealsColors.Ink.copy(alpha = 0.08f)
+                RealsColors.Ink.copy(alpha = 0.14f)
             },
-            border = null,
+            border = BorderStroke(
+                width = 1.dp,
+                color = if (darkTheme) {
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.46f)
+                } else {
+                    RealsColors.Ink.copy(alpha = 0.12f)
+                },
+            ),
             contentColor = MaterialTheme.colorScheme.onSurface,
-            metadataColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.86f),
+            metadataColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.90f),
+            metadataTextAlign = TextAlign.End,
         )
     } else {
         ChatBubbleAppearance(
@@ -812,6 +827,7 @@ private fun chatBubbleAppearance(mine: Boolean): ChatBubbleAppearance {
             ),
             contentColor = MaterialTheme.colorScheme.onSurface,
             metadataColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            metadataTextAlign = TextAlign.Start,
         )
     }
 }
@@ -895,16 +911,18 @@ private fun OptimisticMessageBubble(
 ) {
     val appearance = chatBubbleAppearance(mine = true)
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = ChatBubbleOppositeGutter),
         horizontalArrangement = Arrangement.End,
     ) {
         Card(
-            modifier = Modifier.widthIn(max = 300.dp),
+            modifier = Modifier.widthIn(max = 292.dp),
             shape = RoundedCornerShape(
                 topStart = RealsRadii.Row,
-                topEnd = RealsRadii.Row,
+                topEnd = 8.dp,
                 bottomStart = RealsRadii.Row,
-                bottomEnd = 4.dp,
+                bottomEnd = 2.dp,
             ),
             border = appearance.border,
             colors = CardDefaults.cardColors(
