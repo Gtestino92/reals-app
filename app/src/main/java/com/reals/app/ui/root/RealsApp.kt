@@ -538,15 +538,16 @@ fun RealsApp(
 
 @Composable
 private fun Modifier.realsEditorialBackground(): Modifier {
-    val canvasModifier = background(MaterialTheme.colorScheme.background)
-    return if (LocalRealsDarkTheme.current) {
-        canvasModifier
+    val drawable = if (LocalRealsDarkTheme.current) {
+        R.drawable.reals_background_editorial_dark
     } else {
-        canvasModifier.paint(
-            painter = painterResource(R.drawable.reals_background_editorial_light),
-            contentScale = ContentScale.Crop,
-        )
+        R.drawable.reals_background_editorial_light
     }
+
+    return background(MaterialTheme.colorScheme.background).paint(
+        painter = painterResource(drawable),
+        contentScale = ContentScale.Crop,
+    )
 }
 
 @Composable
