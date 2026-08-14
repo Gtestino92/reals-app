@@ -349,7 +349,7 @@ fun ChatScreen(
     )
     val showMessageComposer = composerPresentationPolicy.visible
     val bottomContentPadding = if (showMessageComposer) {
-        bottomBarHeight.takeIf { it > 0.dp } ?: 180.dp
+        bottomBarHeight.takeIf { it > 0.dp } ?: 132.dp
     } else {
         0.dp
     }
@@ -438,11 +438,11 @@ fun ChatScreen(
         modifier = Modifier
             .fillMaxSize()
             .safeDrawingPadding()
-            .padding(24.dp),
+            .padding(start = 16.dp, top = 14.dp, end = 16.dp, bottom = 10.dp),
     ) {
         Column(
             modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             ChatHeader(
                 titlePrefix = chatTitlePrefix,
@@ -563,15 +563,18 @@ fun ChatScreen(
             )
             FirstChatGuidancePanel(
                 state = guidancePanelState,
+                dismissalScope = chat?.id,
                 actionLoading = guidanceActionLoading || audioInteractionBusy,
                 onRequestNext = onRequestNextGuidanceQuestion,
             )
             MessageList(
+                chatId = chat?.id,
+                initialHistoryLoading = loading,
                 currentUserId = currentUserId,
                 chatType = chat?.chatType ?: ChatType.Unknown(""),
                 messages = messages,
                 optimisticMessages = optimisticMessages,
-                bottomContentPadding = bottomContentPadding + 12.dp,
+                bottomContentPadding = bottomContentPadding + 8.dp,
                 modifier = Modifier.weight(1f),
                 onRetryOptimisticMessage = onRetryOptimisticMessage,
                 canRetryFailedTextMessages = firstChatPolicy.canRetryFailedTextMessages,

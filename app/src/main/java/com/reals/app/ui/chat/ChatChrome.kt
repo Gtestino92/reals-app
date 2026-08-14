@@ -4,6 +4,9 @@ import android.util.Patterns
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,6 +15,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -49,6 +54,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
@@ -56,6 +62,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
@@ -64,6 +72,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.semantics.Role
 import com.reals.app.R
 import com.reals.app.core.security.TextSafety
 import com.reals.app.core.time.remainingExitSeconds
@@ -81,6 +91,8 @@ import com.reals.app.ui.common.formatBackendTime
 import com.reals.app.ui.root.OptimisticOutgoingMessage
 import com.reals.app.ui.root.OptimisticOutgoingMessageType
 import com.reals.app.ui.root.OutgoingMessageDeliveryState
+import com.reals.app.ui.theme.LocalRealsDarkTheme
+import com.reals.app.ui.theme.RealsColors
 import com.reals.app.ui.theme.RealsRadii
 import com.reals.app.ui.theme.RealsType
 import kotlinx.coroutines.coroutineScope
@@ -93,6 +105,7 @@ internal const val MUTUAL_EXIT_CONVERSATION_PAUSED_COPY =
 
 private const val MUTUAL_EXIT_TIMEOUT_SECONDS = 20L
 private const val MUTUAL_EXIT_TIMEOUT_RETRY_MILLIS = 2_000L
+private val ChatBubbleOppositeGutter = 28.dp
 
 @Composable
 internal fun LoadingChatScreen(
@@ -138,56 +151,77 @@ internal fun ChatHeader(
     showDecisionSummary: Boolean,
     trailingContent: (@Composable () -> Unit)? = null,
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(RealsRadii.Card),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 2.dp, end = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top,
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top,
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
-                    text = chatHeaderTitle(titlePrefix, partnerName),
-                    modifier = Modifier.weight(1f),
+                    text = chatHeaderPhaseLabel(titlePrefix),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+                Text(
+                    text = chatHeaderPrimaryTitle(titlePrefix, partnerName),
                     style = RealsType.SectionTitle,
                     color = MaterialTheme.colorScheme.primary,
                 )
+            }
 
-                trailingContent?.invoke()
-            }
-            chatHeaderStatusText(
-                expiresAt = expiresAt,
-                firstChatLifecycle = firstChatLifecycle,
-                secondChatReadOnlyUntil = secondChatReadOnlyUntil,
-                secondChatUnavailable = secondChatUnavailable,
-            )?.let { statusText ->
-                Text(
-                    text = statusText,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (showDecisionSummary) chatDecisionSummary(
-                myDecision,
-                partnerDecision,
-                partnerName
-            )?.let {
-                Text(
-                    text = it,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
+            trailingContent?.invoke()
         }
+        chatHeaderStatusText(
+            expiresAt = expiresAt,
+            firstChatLifecycle = firstChatLifecycle,
+            secondChatReadOnlyUntil = secondChatReadOnlyUntil,
+            secondChatUnavailable = secondChatUnavailable,
+        )?.let { statusText ->
+            Text(
+                text = statusText,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        if (showDecisionSummary) chatDecisionSummary(
+            myDecision,
+            partnerDecision,
+            partnerName
+        )?.let {
+            Text(
+                text = it,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        RealsBrandDivider(
+            modifier = Modifier
+                .padding(top = 3.dp)
+                .fillMaxWidth(),
+        )
     }
+}
+
+private fun chatHeaderPhaseLabel(titlePrefix: String): String =
+    titlePrefix.trim().ifBlank { "Chat" }.uppercase()
+
+private fun chatHeaderPrimaryTitle(
+    titlePrefix: String,
+    partnerName: String?,
+): String {
+    val safeTitlePrefix = titlePrefix.trim().ifBlank { "Chat" }
+    return partnerName
+        ?.takeIf { it.isNotBlank() }
+        ?.let { TextSafety.safeDisplay(it) }
+        ?: safeTitlePrefix
 }
 
 internal fun chatOverflowCanOpen(
@@ -351,6 +385,17 @@ internal fun ChatActionsPanel(
         return
     }
 
+    val approvalLabel = if (loadingChatAction) actionLoadingLabel ?: "Procesando..." else "Aprobar chat"
+    val approvalEnabled = !loadingChatAction && canDecide
+    if (activeExitRequest == null && onBackHome == null && showDecisionActions) {
+        FirstChatApprovalAction(
+            label = approvalLabel,
+            enabled = approvalEnabled,
+            onClick = onApprove,
+        )
+        return
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(RealsRadii.Card),
@@ -359,8 +404,8 @@ internal fun ChatActionsPanel(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             activeExitRequest?.let { request ->
                 TimedExitRequestCard(
@@ -383,18 +428,87 @@ internal fun ChatActionsPanel(
                 }
             }
             if (showDecisionActions) {
-                Button(
+                FirstChatApprovalAction(
+                    label = approvalLabel,
+                    enabled = approvalEnabled,
                     onClick = onApprove,
-                    enabled = !loadingChatAction && canDecide,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        if (loadingChatAction) actionLoadingLabel
-                            ?: "Procesando..." else "Aprobar chat"
-                    )
-                }
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun FirstChatApprovalAction(
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val darkTheme = LocalRealsDarkTheme.current
+    val containerColor = if (darkTheme) {
+        RealsColors.DarkSurfaceHigh.copy(alpha = if (enabled) 0.98f else 0.54f)
+    } else {
+        RealsColors.Ink.copy(alpha = if (enabled) 0.94f else 0.22f)
+    }
+    val contentColor = if (darkTheme) {
+        MaterialTheme.colorScheme.onSurface
+    } else {
+        RealsColors.Ivory
+    }
+    val borderColor = if (darkTheme) {
+        MaterialTheme.colorScheme.secondary.copy(alpha = if (enabled) 0.60f else 0.30f)
+    } else {
+        RealsColors.SoftGold.copy(alpha = if (enabled) 0.74f else 0.38f)
+    }
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(
+                enabled = enabled,
+                role = Role.Button,
+                onClick = onClick,
+            ),
+        shape = RoundedCornerShape(RealsRadii.Row),
+        border = BorderStroke(1.dp, borderColor),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .padding(horizontal = 14.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            RealsApprovalDiamond(
+                color = MaterialTheme.colorScheme.secondary.copy(alpha = if (enabled) 0.90f else 0.42f),
+            )
+            Text(
+                text = label,
+                modifier = Modifier.padding(start = 10.dp),
+                style = MaterialTheme.typography.labelLarge,
+                color = contentColor.copy(alpha = if (enabled) 1f else 0.54f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun RealsApprovalDiamond(
+    color: Color,
+) {
+    Canvas(modifier = Modifier.size(8.dp)) {
+        val path = Path().apply {
+            moveTo(size.width / 2f, 0f)
+            lineTo(size.width, size.height / 2f)
+            lineTo(size.width / 2f, size.height)
+            lineTo(0f, size.height / 2f)
+            close()
+        }
+        drawPath(path, color)
     }
 }
 
@@ -506,6 +620,8 @@ internal fun timedExitRequestBodyText(
 
 @Composable
 internal fun MessageList(
+    chatId: String?,
+    initialHistoryLoading: Boolean,
     currentUserId: String,
     chatType: ChatType,
     messages: List<ChatMessage>,
@@ -522,26 +638,47 @@ internal fun MessageList(
     val messageItems = sortedMessages.map { ChatMessageListItem.Backend(it) } +
         optimisticMessages.sortedBy { it.createdAtMillis }
             .map { ChatMessageListItem.Optimistic(it) }
+    val canvasAppearance = chatCanvasAppearance(chatType)
     val listState = rememberLazyListState()
     val latestMessage = messageItems.lastOrNull()
     val latestMessageId = latestMessage?.stableId
     val latestMessageIsMine = latestMessage?.isMine(currentUserId) == true
     var selectionResetGeneration by remember { mutableStateOf(0) }
+    var knownMessageIds by remember(chatId) { mutableStateOf<Set<String>?>(null) }
+    var messageBaselineEstablished by remember(chatId) { mutableStateOf(false) }
+    val currentMessageIds = messageItems.map { it.stableId }.toSet()
+    val entranceBaselineIds = knownMessageIds.takeIf { messageBaselineEstablished }
 
     LaunchedEffect(latestMessageId) {
         if (latestMessageId == null) return@LaunchedEffect
+        if (!messageBaselineEstablished) return@LaunchedEffect
 
         val shouldScrollToBottom = latestMessageIsMine || listState.isNearBottom()
         if (shouldScrollToBottom) {
-            listState.animateScrollToItem(messageItems.lastIndex)
+            listState.animateLatestItemIntoView(messageItems.lastIndex)
+        }
+    }
+
+    LaunchedEffect(currentMessageIds, initialHistoryLoading) {
+        if (!messageBaselineEstablished) {
+            if (initialHistoryLoading) return@LaunchedEffect
+            knownMessageIds = currentMessageIds
+            messageBaselineEstablished = true
+            if (messageItems.isNotEmpty()) {
+                listState.scrollToItem(messageItems.lastIndex)
+            }
+        } else {
+            knownMessageIds = knownMessageIds
+                ?.plus(currentMessageIds)
+                ?: currentMessageIds
         }
     }
 
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(RealsRadii.Card),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.52f)),
+        border = canvasAppearance.border,
+        colors = CardDefaults.cardColors(containerColor = canvasAppearance.containerColor),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         LazyColumn(
@@ -554,22 +691,40 @@ internal fun MessageList(
                     )
                 },
             contentPadding = PaddingValues(
-                start = 18.dp,
-                top = 18.dp,
-                end = 18.dp,
+                start = 8.dp,
+                top = 10.dp,
+                end = 8.dp,
                 bottom = bottomContentPadding,
             ),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             if (messageItems.isEmpty()) {
                 item {
-                    Text(
-                        "Todavía no hay mensajes.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    EmptyMessageState(
+                        appearance = canvasAppearance,
                     )
                 }
             } else {
                 items(messageItems, key = { it.stableId }) { item ->
+                    val shouldSlideIn = entranceBaselineIds?.let { knownIds ->
+                        item.stableId !in knownIds && when (item) {
+                            is ChatMessageListItem.Backend -> !item.isMine(currentUserId)
+                            is ChatMessageListItem.Optimistic -> item.isMine(currentUserId)
+                        }
+                    } == true
+                    val itemModifier = (entranceBaselineIds?.let {
+                        Modifier.animateItem(
+                            fadeInSpec = null,
+                            placementSpec = tween(durationMillis = 180),
+                            fadeOutSpec = null,
+                        )
+                    } ?: Modifier)
+                        .then(
+                            rememberMessageArrivalModifier(
+                                stableId = item.stableId,
+                                slideIn = shouldSlideIn,
+                            )
+                        )
                     when (item) {
                         is ChatMessageListItem.Backend -> MessageBubble(
                             message = item.message,
@@ -577,6 +732,7 @@ internal fun MessageList(
                             chatType = chatType,
                             selectionResetGeneration = selectionResetGeneration,
                             playbackState = playbackState,
+                            modifier = itemModifier,
                             onPlayAudio = onPlayAudio,
                             onPauseAudio = onPauseAudio,
                         )
@@ -585,6 +741,7 @@ internal fun MessageList(
                             message = item.message,
                             chatType = chatType,
                             selectionResetGeneration = selectionResetGeneration,
+                            modifier = itemModifier,
                             onRetry = onRetryOptimisticMessage,
                             canRetryFailedTextMessages = canRetryFailedTextMessages,
                         )
@@ -593,6 +750,110 @@ internal fun MessageList(
             }
         }
     }
+}
+
+private suspend fun LazyListState.animateLatestItemIntoView(lastIndex: Int) {
+    withFrameNanos { }
+    val latestItemInfo = layoutInfo.visibleItemsInfo.firstOrNull { it.index == lastIndex }
+    val overflow = latestItemInfo
+        ?.let { it.offset + it.size - layoutInfo.viewportEndOffset }
+        ?.coerceAtLeast(0)
+
+    when {
+        latestItemInfo == null -> animateScrollToItem(lastIndex)
+        overflow != null && overflow > 0 -> animateScrollBy(overflow.toFloat())
+    }
+}
+
+@Composable
+private fun rememberMessageArrivalModifier(
+    stableId: String,
+    slideIn: Boolean,
+): Modifier {
+    val initialSlideIn = remember(stableId) { slideIn }
+    val offsetY = remember(stableId) { Animatable(if (initialSlideIn) 10f else 0f) }
+
+    LaunchedEffect(stableId) {
+        if (initialSlideIn) {
+            offsetY.snapTo(10f)
+            offsetY.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(durationMillis = 170),
+            )
+        } else {
+            offsetY.snapTo(0f)
+        }
+    }
+
+    return Modifier.offset(y = offsetY.value.dp)
+}
+
+private data class ChatCanvasAppearance(
+    val containerColor: Color,
+    val border: BorderStroke?,
+    val emptyStateColor: Color,
+    val emptyStateVerticalPadding: Dp,
+)
+
+@Composable
+private fun chatCanvasAppearance(chatType: ChatType): ChatCanvasAppearance {
+    val darkTheme = LocalRealsDarkTheme.current
+    return when (chatType) {
+        ChatType.FirstChat -> ChatCanvasAppearance(
+            containerColor = if (darkTheme) {
+                RealsColors.DarkSurface.copy(alpha = 0.50f)
+            } else {
+                RealsColors.Paper.copy(alpha = 0.38f)
+            },
+            border = BorderStroke(
+                width = 1.dp,
+                color = if (darkTheme) {
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.68f)
+                } else {
+                    RealsColors.SoftGold.copy(alpha = 0.48f)
+                },
+            ),
+            emptyStateColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            emptyStateVerticalPadding = 28.dp,
+        )
+
+        ChatType.SecondChat -> ChatCanvasAppearance(
+            containerColor = if (darkTheme) {
+                RealsColors.DarkSurface.copy(alpha = 0.26f)
+            } else {
+                RealsColors.Paper.copy(alpha = 0.16f)
+            },
+            border = if (darkTheme) {
+                BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.30f))
+            } else {
+                null
+            },
+            emptyStateColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.86f),
+            emptyStateVerticalPadding = 20.dp,
+        )
+
+        is ChatType.Unknown -> ChatCanvasAppearance(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.30f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f)),
+            emptyStateColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            emptyStateVerticalPadding = 24.dp,
+        )
+    }
+}
+
+@Composable
+private fun EmptyMessageState(
+    appearance: ChatCanvasAppearance,
+) {
+    Text(
+        text = "Todavía no hay mensajes.",
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = appearance.emptyStateVerticalPadding),
+        style = MaterialTheme.typography.bodyMedium,
+        color = appearance.emptyStateColor,
+        textAlign = TextAlign.Center,
+    )
 }
 
 private fun LazyListState.isNearBottom(bufferItems: Int = 2): Boolean {
@@ -628,38 +889,47 @@ private fun MessageBubble(
     chatType: ChatType,
     selectionResetGeneration: Int,
     playbackState: ChatAudioPlaybackUiState,
+    modifier: Modifier = Modifier,
     onPlayAudio: (ChatMessage) -> Unit,
     onPauseAudio: () -> Unit,
 ) {
+    val appearance = chatBubbleAppearance(mine = mine)
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(
+                start = if (mine) ChatBubbleOppositeGutter else 0.dp,
+                end = if (mine) 0.dp else ChatBubbleOppositeGutter,
+            ),
         horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
     ) {
         Card(
-            modifier = Modifier.widthIn(max = 300.dp),
+            modifier = Modifier.widthIn(max = 340.dp),
             shape = RoundedCornerShape(
-                topStart = RealsRadii.Row,
-                topEnd = RealsRadii.Row,
-                bottomStart = if (mine) RealsRadii.Row else 4.dp,
-                bottomEnd = if (mine) 4.dp else RealsRadii.Row,
+                topStart = if (mine) RealsRadii.Row else 8.dp,
+                topEnd = if (mine) 8.dp else RealsRadii.Row,
+                bottomStart = if (mine) RealsRadii.Row else 2.dp,
+                bottomEnd = if (mine) 2.dp else RealsRadii.Row,
             ),
-            border = if (mine) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            border = appearance.border,
             colors = CardDefaults.cardColors(
-                containerColor = if (mine) {
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
-                } else {
-                    MaterialTheme.colorScheme.surface
-                },
+                containerColor = appearance.containerColor,
+                contentColor = appearance.contentColor,
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {
-            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Column(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(1.dp),
+            ) {
                 when (val presentation = message.presentation) {
-                    is ChatMessagePresentation.Text -> SelectableMessageText(
+                    is ChatMessagePresentation.Text -> MessageTextWithTimestamp(
                         presentation = chatMessageTextPresentation(
                             content = presentation.content,
                             chatType = chatType,
                         ),
+                        timestamp = formatBackendTime(message.sentAt),
+                        appearance = appearance,
                         selectionResetGeneration = selectionResetGeneration,
                     )
                     is ChatMessagePresentation.Audio -> AudioPlaybackRow(
@@ -672,15 +942,64 @@ private fun MessageBubble(
 
                     ChatMessagePresentation.Unsupported -> Text("Mensaje no compatible")
                 }
-                Text(
-                    text = formatBackendTime(message.sentAt),
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.End,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                if (message.presentation !is ChatMessagePresentation.Text) {
+                    MessageTimestamp(
+                        text = formatBackendTime(message.sentAt),
+                        color = appearance.metadataColor,
+                        modifier = Modifier.align(Alignment.End),
+                    )
+                }
             }
         }
+    }
+}
+
+private data class ChatBubbleAppearance(
+    val containerColor: Color,
+    val border: BorderStroke?,
+    val contentColor: Color,
+    val metadataColor: Color,
+)
+
+@Composable
+private fun chatBubbleAppearance(mine: Boolean): ChatBubbleAppearance {
+    val darkTheme = LocalRealsDarkTheme.current
+    return if (mine) {
+        ChatBubbleAppearance(
+            containerColor = if (darkTheme) {
+                RealsColors.DarkSurfaceHigh.copy(alpha = 0.98f)
+            } else {
+                RealsColors.Ink.copy(alpha = 0.14f)
+            },
+            border = BorderStroke(
+                width = 1.dp,
+                color = if (darkTheme) {
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.46f)
+                } else {
+                    RealsColors.Ink.copy(alpha = 0.12f)
+                },
+            ),
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            metadataColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.90f),
+        )
+    } else {
+        ChatBubbleAppearance(
+            containerColor = if (darkTheme) {
+                RealsColors.DarkSurface.copy(alpha = 0.92f)
+            } else {
+                RealsColors.Paper.copy(alpha = 0.94f)
+            },
+            border = BorderStroke(
+                width = 1.dp,
+                color = if (darkTheme) {
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)
+                } else {
+                    RealsColors.SoftGold.copy(alpha = 0.42f)
+                },
+            ),
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            metadataColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -758,27 +1077,36 @@ private fun OptimisticMessageBubble(
     message: OptimisticOutgoingMessage,
     chatType: ChatType,
     selectionResetGeneration: Int,
+    modifier: Modifier = Modifier,
     onRetry: (localId: String, content: String) -> Unit,
     canRetryFailedTextMessages: Boolean,
 ) {
+    val appearance = chatBubbleAppearance(mine = true)
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(start = ChatBubbleOppositeGutter),
         horizontalArrangement = Arrangement.End,
     ) {
         Card(
-            modifier = Modifier.widthIn(max = 300.dp),
+            modifier = Modifier.widthIn(max = 340.dp),
             shape = RoundedCornerShape(
                 topStart = RealsRadii.Row,
-                topEnd = RealsRadii.Row,
+                topEnd = 8.dp,
                 bottomStart = RealsRadii.Row,
-                bottomEnd = 4.dp,
+                bottomEnd = 2.dp,
             ),
+            border = appearance.border,
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                containerColor = appearance.containerColor,
+                contentColor = appearance.contentColor,
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {
-            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Column(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(1.dp),
+            ) {
                 when (message.messageType) {
                     OptimisticOutgoingMessageType.Text -> SelectableMessageText(
                         presentation = chatMessageTextPresentation(
@@ -798,8 +1126,8 @@ private fun OptimisticMessageBubble(
                     },
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.End,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = appearance.metadataColor,
                 )
                 if (
                     optimisticTextRetryAvailable(message, canRetryFailedTextMessages)
@@ -820,6 +1148,7 @@ private fun OptimisticMessageBubble(
 private fun SelectableMessageText(
     presentation: ChatMessageTextPresentation,
     selectionResetGeneration: Int,
+    modifier: Modifier = Modifier,
 ) {
     key(selectionResetGeneration) {
         SelectionContainer {
@@ -830,9 +1159,51 @@ private fun SelectableMessageText(
                         textDecoration = TextDecoration.Underline,
                     ),
                 ),
+                modifier = modifier,
             )
         }
     }
+}
+
+@Composable
+private fun MessageTextWithTimestamp(
+    presentation: ChatMessageTextPresentation,
+    timestamp: String,
+    appearance: ChatBubbleAppearance,
+    selectionResetGeneration: Int,
+) {
+    Box(modifier = Modifier.fillMaxWidth()) {
+        SelectableMessageText(
+            presentation = presentation,
+            selectionResetGeneration = selectionResetGeneration,
+            modifier = Modifier.padding(end = 42.dp),
+        )
+        MessageTimestamp(
+            text = timestamp,
+            color = appearance.metadataColor,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(start = 4.dp),
+        )
+    }
+}
+
+@Composable
+private fun MessageTimestamp(
+    text: String,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        text = text,
+        modifier = modifier,
+        textAlign = TextAlign.End,
+        style = MaterialTheme.typography.labelSmall.copy(
+            fontSize = 9.sp,
+            lineHeight = 9.sp,
+        ),
+        color = color.copy(alpha = 0.78f),
+    )
 }
 
 internal data class ChatMessageTextPresentation(
