@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -74,6 +75,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
 import com.reals.app.R
 import com.reals.app.core.security.TextSafety
 import com.reals.app.core.time.remainingExitSeconds
@@ -81,6 +83,7 @@ import com.reals.app.domain.model.ChatDecisionState
 import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.ChatMessagePresentation
+import com.reals.app.domain.model.ChatMessageReactionType
 import com.reals.app.domain.model.ChatType
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
@@ -91,6 +94,7 @@ import com.reals.app.ui.common.formatBackendTime
 import com.reals.app.ui.root.OptimisticOutgoingMessage
 import com.reals.app.ui.root.OptimisticOutgoingMessageType
 import com.reals.app.ui.root.OutgoingMessageDeliveryState
+import com.reals.app.ui.root.reactableIncomingMessageIds
 import com.reals.app.ui.theme.LocalRealsDarkTheme
 import com.reals.app.ui.theme.RealsColors
 import com.reals.app.ui.theme.RealsRadii
@@ -626,15 +630,23 @@ internal fun MessageList(
     chatType: ChatType,
     messages: List<ChatMessage>,
     optimisticMessages: List<OptimisticOutgoingMessage>,
+    pendingReactionMessageIds: Set<String> = emptySet(),
+    reactionAddingEnabled: Boolean = false,
     bottomContentPadding: Dp,
     modifier: Modifier,
     onRetryOptimisticMessage: (localId: String, content: String) -> Unit,
+    onReactToMessage: (messageId: String) -> Unit = {},
     canRetryFailedTextMessages: Boolean,
     playbackState: ChatAudioPlaybackUiState,
     onPlayAudio: (ChatMessage) -> Unit,
     onPauseAudio: () -> Unit,
 ) {
     val sortedMessages = messages.sortedWith(compareBy<ChatMessage> { it.sentAt }.thenBy { it.id })
+    val reactableMessageIds = if (reactionAddingEnabled) {
+        reactableIncomingMessageIds(sortedMessages, currentUserId)
+    } else {
+        emptySet()
+    }
     val messageItems = sortedMessages.map { ChatMessageListItem.Backend(it) } +
         optimisticMessages.sortedBy { it.createdAtMillis }
             .map { ChatMessageListItem.Optimistic(it) }
@@ -732,7 +744,14 @@ internal fun MessageList(
                             chatType = chatType,
                             selectionResetGeneration = selectionResetGeneration,
                             playbackState = playbackState,
+                            reactionPresentation = chatMessageReactionPresentation(
+                                message = item.message,
+                                mine = item.message.senderId == currentUserId,
+                                pendingReactionMessageIds = pendingReactionMessageIds,
+                                reactableMessageIds = reactableMessageIds,
+                            ),
                             modifier = itemModifier,
+                            onReactToMessage = onReactToMessage,
                             onPlayAudio = onPlayAudio,
                             onPauseAudio = onPauseAudio,
                         )
@@ -882,6 +901,29 @@ private sealed interface ChatMessageListItem {
     }
 }
 
+internal enum class ChatMessageReactionPresentation {
+    None,
+    AddHeart,
+    GivenHeart,
+    ReceivedHeart,
+}
+
+internal fun chatMessageReactionPresentation(
+    message: ChatMessage,
+    mine: Boolean,
+    pendingReactionMessageIds: Set<String>,
+    reactableMessageIds: Set<String>,
+): ChatMessageReactionPresentation {
+    val confirmedHeart = message.reactionType == ChatMessageReactionType.Heart
+    return when {
+        mine && confirmedHeart -> ChatMessageReactionPresentation.ReceivedHeart
+        mine -> ChatMessageReactionPresentation.None
+        confirmedHeart || message.id in pendingReactionMessageIds -> ChatMessageReactionPresentation.GivenHeart
+        message.reactionType == null && message.id in reactableMessageIds -> ChatMessageReactionPresentation.AddHeart
+        else -> ChatMessageReactionPresentation.None
+    }
+}
+
 @Composable
 private fun MessageBubble(
     message: ChatMessage,
@@ -889,7 +931,9 @@ private fun MessageBubble(
     chatType: ChatType,
     selectionResetGeneration: Int,
     playbackState: ChatAudioPlaybackUiState,
+    reactionPresentation: ChatMessageReactionPresentation,
     modifier: Modifier = Modifier,
+    onReactToMessage: (messageId: String) -> Unit,
     onPlayAudio: (ChatMessage) -> Unit,
     onPauseAudio: () -> Unit,
 ) {
@@ -900,57 +944,179 @@ private fun MessageBubble(
             .padding(
                 start = if (mine) ChatBubbleOppositeGutter else 0.dp,
                 end = if (mine) 0.dp else ChatBubbleOppositeGutter,
-            ),
+        ),
         horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
     ) {
-        Card(
-            modifier = Modifier.widthIn(max = 340.dp),
-            shape = RoundedCornerShape(
-                topStart = if (mine) RealsRadii.Row else 8.dp,
-                topEnd = if (mine) 8.dp else RealsRadii.Row,
-                bottomStart = if (mine) RealsRadii.Row else 2.dp,
-                bottomEnd = if (mine) 2.dp else RealsRadii.Row,
-            ),
-            border = appearance.border,
-            colors = CardDefaults.cardColors(
-                containerColor = appearance.containerColor,
-                contentColor = appearance.contentColor,
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(1.dp),
-            ) {
-                when (val presentation = message.presentation) {
-                    is ChatMessagePresentation.Text -> MessageTextWithTimestamp(
-                        presentation = chatMessageTextPresentation(
-                            content = presentation.content,
-                            chatType = chatType,
-                        ),
-                        timestamp = formatBackendTime(message.sentAt),
-                        appearance = appearance,
-                        selectionResetGeneration = selectionResetGeneration,
-                    )
-                    is ChatMessagePresentation.Audio -> AudioPlaybackRow(
-                        key = message.id,
-                        durationMillis = presentation.audio.durationMillis ?: 0L,
-                        playbackState = playbackState,
-                        onPlay = { onPlayAudio(message) },
-                        onPause = onPauseAudio,
-                    )
-
-                    ChatMessagePresentation.Unsupported -> Text("Mensaje no compatible")
-                }
-                if (message.presentation !is ChatMessagePresentation.Text) {
-                    MessageTimestamp(
-                        text = formatBackendTime(message.sentAt),
-                        color = appearance.metadataColor,
-                        modifier = Modifier.align(Alignment.End),
+        if (mine) {
+            Column(horizontalAlignment = Alignment.End) {
+                MessageBubbleCard(
+                    message = message,
+                    mine = true,
+                    chatType = chatType,
+                    appearance = appearance,
+                    selectionResetGeneration = selectionResetGeneration,
+                    playbackState = playbackState,
+                    onPlayAudio = onPlayAudio,
+                    onPauseAudio = onPauseAudio,
+                )
+                if (reactionPresentation == ChatMessageReactionPresentation.ReceivedHeart) {
+                    HeartReactionChip(
+                        filled = true,
+                        contentDescription = "La otra persona reaccionó con corazón",
+                        clickable = false,
+                        modifier = Modifier
+                            .padding(end = 14.dp)
+                            .offset(y = (-3).dp),
                     )
                 }
             }
+        } else {
+            Row(verticalAlignment = Alignment.Bottom) {
+                MessageBubbleCard(
+                    message = message,
+                    mine = false,
+                    chatType = chatType,
+                    appearance = appearance,
+                    selectionResetGeneration = selectionResetGeneration,
+                    playbackState = playbackState,
+                    onPlayAudio = onPlayAudio,
+                    onPauseAudio = onPauseAudio,
+                )
+                IncomingReactionSlot(
+                    presentation = reactionPresentation,
+                    onReact = { onReactToMessage(message.id) },
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun MessageBubbleCard(
+    message: ChatMessage,
+    mine: Boolean,
+    chatType: ChatType,
+    appearance: ChatBubbleAppearance,
+    selectionResetGeneration: Int,
+    playbackState: ChatAudioPlaybackUiState,
+    onPlayAudio: (ChatMessage) -> Unit,
+    onPauseAudio: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.widthIn(max = 340.dp),
+        shape = RoundedCornerShape(
+            topStart = if (mine) RealsRadii.Row else 8.dp,
+            topEnd = if (mine) 8.dp else RealsRadii.Row,
+            bottomStart = if (mine) RealsRadii.Row else 2.dp,
+            bottomEnd = if (mine) 2.dp else RealsRadii.Row,
+        ),
+        border = appearance.border,
+        colors = CardDefaults.cardColors(
+            containerColor = appearance.containerColor,
+            contentColor = appearance.contentColor,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(1.dp),
+        ) {
+            when (val presentation = message.presentation) {
+                is ChatMessagePresentation.Text -> MessageTextWithTimestamp(
+                    presentation = chatMessageTextPresentation(
+                        content = presentation.content,
+                        chatType = chatType,
+                    ),
+                    timestamp = formatBackendTime(message.sentAt),
+                    appearance = appearance,
+                    selectionResetGeneration = selectionResetGeneration,
+                )
+                is ChatMessagePresentation.Audio -> AudioPlaybackRow(
+                    key = message.id,
+                    durationMillis = presentation.audio.durationMillis ?: 0L,
+                    playbackState = playbackState,
+                    onPlay = { onPlayAudio(message) },
+                    onPause = onPauseAudio,
+                )
+
+                ChatMessagePresentation.Unsupported -> Text("Mensaje no compatible")
+            }
+            if (message.presentation !is ChatMessagePresentation.Text) {
+                MessageTimestamp(
+                    text = formatBackendTime(message.sentAt),
+                    color = appearance.metadataColor,
+                    modifier = Modifier.align(Alignment.End),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun IncomingReactionSlot(
+    presentation: ChatMessageReactionPresentation,
+    onReact: () -> Unit,
+) {
+    when (presentation) {
+        ChatMessageReactionPresentation.AddHeart -> HeartReactionChip(
+            filled = false,
+            contentDescription = "Reaccionar con corazón",
+            clickable = true,
+            onClick = onReact,
+            modifier = Modifier.offset(x = (-2).dp),
+        )
+        ChatMessageReactionPresentation.GivenHeart -> HeartReactionChip(
+            filled = true,
+            contentDescription = "Reaccionaste con corazón",
+            clickable = false,
+            modifier = Modifier.offset(x = (-2).dp),
+        )
+        ChatMessageReactionPresentation.ReceivedHeart,
+        ChatMessageReactionPresentation.None -> Unit
+    }
+}
+
+@Composable
+private fun HeartReactionChip(
+    filled: Boolean,
+    contentDescription: String,
+    clickable: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit = {},
+) {
+    val scale = remember(filled) { Animatable(if (filled) 0.86f else 1f) }
+    LaunchedEffect(filled) {
+        if (filled) {
+            scale.snapTo(0.86f)
+            scale.animateTo(1f, animationSpec = tween(durationMillis = 150))
+        }
+    }
+    val semanticModifier = if (clickable) {
+        Modifier
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics {
+                this.contentDescription = contentDescription
+                role = Role.Button
+            }
+    } else {
+        Modifier.semantics {
+            this.contentDescription = contentDescription
+        }
+    }
+    Box(
+        modifier = modifier
+            .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+            .then(semanticModifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painter = painterResource(if (filled) R.drawable.ic_heart_filled else R.drawable.ic_heart_outline),
+            contentDescription = null,
+            tint = if (filled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .size(20.dp)
+                .scale(scale.value),
+        )
     }
 }
 

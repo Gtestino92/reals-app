@@ -8,6 +8,7 @@ import com.reals.app.di.SecondChatFeatureDependencies
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.ChatMessageReactionType
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.SecondChatAttendanceStatus
@@ -108,6 +109,20 @@ internal class SecondChatCoordinator(
     ): ApiResult<List<ChatMessage>> {
         val chat = current.chat ?: return ApiResult.Success(current.messages)
         return dependencies.getChatMessages(chat.id, afterMessageId = null)
+    }
+
+    suspend fun putMessageReaction(
+        chatId: String,
+        messageId: String,
+        reactionType: ChatMessageReactionType,
+    ): ApiResult<ChatMessage> =
+        dependencies.putMessageReaction(chatId, messageId, reactionType)
+
+    suspend fun reconcileMessagesForReactions(
+        current: RealsRootUiState.SecondChat,
+    ): ApiResult<List<ChatMessage>> {
+        val chat = current.chat ?: return ApiResult.Success(emptyList())
+        return dependencies.getChatMessages(chat.id, current.messages.reactionReconciliationCursor())
     }
 
     suspend fun createNoShowClaim(

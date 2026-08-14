@@ -158,6 +158,7 @@ class FakeRealsApi : RealsApi {
     var beforeGetChatMessagesResponse: suspend () -> Unit = {}
     var beforeSendChatMessageResponse: suspend () -> Unit = {}
     var beforeSendChatAudioMessageResponse: suspend () -> Unit = {}
+    var beforePutChatMessageReactionResponse: suspend () -> Unit = {}
     var beforeGetChatExitRequestsResponse: suspend () -> Unit = {}
     var beforeGetSecondChatStatusResponse: suspend () -> Unit = {}
     var beforeGetConnectionNegotiationResponse: suspend () -> Unit = {}
@@ -615,7 +616,7 @@ class FakeRealsApi : RealsApi {
         messageId: String,
         body: PutMessageReactionRequestDto,
     ): Response<ChatMessageResponseDto> =
-        record("putChatMessageReaction", authorization, "$chatId/$messageId", beforeResponse = {}) {
+        record("putChatMessageReaction", authorization, "$chatId/$messageId", beforeResponse = beforePutChatMessageReactionResponse) {
             chatMessageReactionBody = body
             chatMessageReactionResponse
         }

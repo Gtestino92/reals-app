@@ -1,6 +1,7 @@
 package com.reals.app.ui.root
 
 import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.ChatMessagePresentation
 
 private val chatMessageOrder = compareBy<ChatMessage> { it.sentAt }
     .thenBy { it.id }
@@ -27,6 +28,27 @@ internal fun List<ChatMessage>.reactionReconciliationCursor(): String? {
         oldestIncludedIndex = index
     }
     return ordered.getOrNull(oldestIncludedIndex - 1)?.id
+}
+
+internal fun reactableIncomingMessageIds(
+    messages: List<ChatMessage>,
+    currentUserId: String,
+): Set<String> {
+    val ordered = messages.sortedWith(chatMessageOrder)
+    val latestIncomingIndex = ordered.indexOfLast { it.senderId != currentUserId }
+    if (latestIncomingIndex < 0) return emptySet()
+
+    val boundaryIndex = ordered
+        .subList(0, latestIncomingIndex)
+        .indexOfLast { it.senderId == currentUserId }
+
+    return ordered
+        .subList(boundaryIndex + 1, latestIncomingIndex + 1)
+        .asSequence()
+        .filter { it.senderId != currentUserId }
+        .filter { it.reactionType == null }
+        .filter { it.presentation is ChatMessagePresentation.Text || it.presentation is ChatMessagePresentation.Audio }
+        .mapTo(LinkedHashSet()) { it.id }
 }
 
 internal fun List<ChatMessage>.appendUnique(newMessages: List<ChatMessage>): List<ChatMessage> {

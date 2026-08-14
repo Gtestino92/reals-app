@@ -95,6 +95,7 @@ enum class BackendErrorCode(val raw: String) {
     ChatDecisionAlreadySubmitted("CHAT_DECISION_ALREADY_SUBMITTED"),
     ChatMinMessagesRequired("CHAT_MIN_MESSAGES_REQUIRED"),
     ChatMutualCancellationPending("CHAT_MUTUAL_CANCELLATION_PENDING"),
+    ChatMessageReactionNotAvailable("CHAT_MESSAGE_REACTION_NOT_AVAILABLE"),
     FirstChatDecisionOnly("FIRST_CHAT_DECISION_ONLY"),
     ChatAudioFeatureDisabled("CHAT_AUDIO_FEATURE_DISABLED"),
     ChatAudioInvalidFormat("CHAT_AUDIO_INVALID_FORMAT"),
@@ -321,6 +322,8 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.ChatMinMessagesRequired -> "Antes de decidir, enviá al menos un poco más de conversación."
     BackendErrorCode.ChatMutualCancellationPending ->
         "La conversaci\u00f3n est\u00e1 pausada mientras se resuelve la solicitud."
+    BackendErrorCode.ChatMessageReactionNotAvailable ->
+        "Esta reacción ya no está disponible."
     BackendErrorCode.FirstChatDecisionOnly ->
         "Ya no se pueden enviar mensajes. Elegí cómo querés continuar."
     BackendErrorCode.ChatAudioFeatureDisabled -> "Los audios no están disponibles en este entorno."

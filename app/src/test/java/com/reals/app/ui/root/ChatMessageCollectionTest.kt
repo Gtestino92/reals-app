@@ -6,6 +6,8 @@ import com.reals.app.domain.model.ChatMessageReactionType
 import com.reals.app.domain.model.ChatMessageType
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ChatMessageCollectionTest {
@@ -244,6 +246,92 @@ class ChatMessageCollectionTest {
         )
 
         assertEquals("b", messages.reactionReconciliationCursor())
+    }
+
+    @Test
+    fun `reactableIncomingMessageIds includes initial partner-only block`() {
+        val messages = listOf(
+            message("a", "2026-06-18T21:00:00Z", senderId = "other"),
+            message("b", "2026-06-18T21:01:00Z", senderId = "other"),
+        )
+
+        assertEquals(setOf("a", "b"), reactableIncomingMessageIds(messages, "me"))
+    }
+
+    @Test
+    fun `reactableIncomingMessageIds keeps incoming block open after own replies`() {
+        val messages = listOf(
+            message("a", "2026-06-18T21:00:00Z", senderId = "other"),
+            message("b", "2026-06-18T21:01:00Z", senderId = "other"),
+            message("c", "2026-06-18T21:02:00Z", senderId = "me"),
+            message("d", "2026-06-18T21:03:00Z", senderId = "me"),
+            message("e", "2026-06-18T21:04:00Z", senderId = "me"),
+        )
+
+        assertEquals(setOf("a", "b"), reactableIncomingMessageIds(messages, "me"))
+    }
+
+    @Test
+    fun `reactableIncomingMessageIds supersedes older incoming block when partner sends again`() {
+        val messages = listOf(
+            message("a", "2026-06-18T21:00:00Z", senderId = "other"),
+            message("b", "2026-06-18T21:01:00Z", senderId = "other"),
+            message("c", "2026-06-18T21:02:00Z", senderId = "me"),
+            message("d", "2026-06-18T21:03:00Z", senderId = "me"),
+            message("e", "2026-06-18T21:04:00Z", senderId = "other"),
+            message("f", "2026-06-18T21:05:00Z", senderId = "other"),
+        )
+
+        assertEquals(setOf("e", "f"), reactableIncomingMessageIds(messages, "me"))
+    }
+
+    @Test
+    fun `reactableIncomingMessageIds handles own initial messages before partner block`() {
+        val messages = listOf(
+            message("a", "2026-06-18T21:00:00Z", senderId = "me"),
+            message("b", "2026-06-18T21:01:00Z", senderId = "me"),
+            message("c", "2026-06-18T21:02:00Z", senderId = "other"),
+        )
+
+        assertEquals(setOf("c"), reactableIncomingMessageIds(messages, "me"))
+    }
+
+    @Test
+    fun `reactableIncomingMessageIds handles one incoming message`() {
+        val messages = listOf(message("a", "2026-06-18T21:00:00Z", senderId = "other"))
+
+        assertEquals(setOf("a"), reactableIncomingMessageIds(messages, "me"))
+    }
+
+    @Test
+    fun `reactableIncomingMessageIds orders equal sentAt values by id`() {
+        val timestamp = "2026-06-18T21:00:00Z"
+        val messages = listOf(
+            message("d", timestamp, senderId = "other"),
+            message("a", timestamp, senderId = "other"),
+            message("c", timestamp, senderId = "me"),
+            message("b", timestamp, senderId = "me"),
+        )
+
+        assertEquals(setOf("d"), reactableIncomingMessageIds(messages, "me"))
+    }
+
+    @Test
+    fun `reactableIncomingMessageIds excludes reacted own and unsupported messages`() {
+        val messages = listOf(
+            message("a", "2026-06-18T21:00:00Z", senderId = "other", reactionType = ChatMessageReactionType.Heart),
+            message("b", "2026-06-18T21:01:00Z", senderId = "me"),
+            message("c", "2026-06-18T21:02:00Z", senderId = "other"),
+            message("d", "2026-06-18T21:03:00Z", senderId = "other")
+                .copy(messageType = ChatMessageType.Unknown("STICKER")),
+        )
+
+        val reactable = reactableIncomingMessageIds(messages, "me")
+
+        assertTrue("c" in reactable)
+        assertFalse("a" in reactable)
+        assertFalse("b" in reactable)
+        assertFalse("d" in reactable)
     }
 
     private fun message(

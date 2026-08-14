@@ -143,6 +143,7 @@ sealed interface RealsRootUiState {
         val sending: Boolean = false,
         val audioUpload: ChatAudioUploadUiState = ChatAudioUploadUiState(),
         val audioDraft: ChatAudioDraftUiState? = null,
+        val reaction: ChatReactionUiState = ChatReactionUiState(),
         val actionLoading: Boolean = false,
         val actionLoadingLabel: String? = null,
         val guidanceActionLoading: Boolean = false,
@@ -167,6 +168,7 @@ sealed interface RealsRootUiState {
         val sending: Boolean = false,
         val audioUpload: ChatAudioUploadUiState = ChatAudioUploadUiState(),
         val audioDraft: ChatAudioDraftUiState? = null,
+        val reaction: ChatReactionUiState = ChatReactionUiState(),
         val actionLoading: Boolean = false,
         val actionLoadingLabel: String? = null,
         val manualBlock: ManualBlockUiState = ManualBlockUiState(),
@@ -268,6 +270,10 @@ data class ChatAudioDraftUiState(
     val clientMessageId: String,
     val durationMillis: Long,
     val sizeBytes: Long,
+)
+
+data class ChatReactionUiState(
+    val pendingMessageIds: Set<String> = emptySet(),
 )
 
 data class ProfileManagementState(
