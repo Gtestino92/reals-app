@@ -20,6 +20,34 @@ internal data class ProfilePhotoCropRequest(
     val target: ProfilePhotoSelectionTarget,
 )
 
+private const val ProfilePhotoAddTargetKind = "add"
+private const val ProfilePhotoReplaceTargetKind = "replace"
+
+internal fun profilePhotoSelectionTarget(
+    kind: String?,
+    position: Int?,
+    photoId: String?,
+): ProfilePhotoSelectionTarget? =
+    when (kind) {
+        ProfilePhotoAddTargetKind ->
+            position?.let(ProfilePhotoSelectionTarget::Add)
+
+        ProfilePhotoReplaceTargetKind ->
+            if (position != null && !photoId.isNullOrBlank()) {
+                ProfilePhotoSelectionTarget.Replace(photoId = photoId, position = position)
+            } else {
+                null
+            }
+
+        else -> null
+    }
+
+internal fun ProfilePhotoSelectionTarget.savedKind(): String =
+    when (this) {
+        is ProfilePhotoSelectionTarget.Add -> ProfilePhotoAddTargetKind
+        is ProfilePhotoSelectionTarget.Replace -> ProfilePhotoReplaceTargetKind
+    }
+
 internal fun dispatchCroppedProfilePhoto(
     target: ProfilePhotoSelectionTarget,
     croppedUri: Uri,
