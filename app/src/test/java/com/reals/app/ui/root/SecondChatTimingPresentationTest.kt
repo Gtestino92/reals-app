@@ -1086,7 +1086,7 @@ class SecondChatTimingPresentationTest {
             ),
         )
 
-        assertTrue(state.isJoinedActiveSecondChat())
+        assertTrue(state.lifecycle.timingPresentation(nowMillis = 1_000L).genuinelyActive)
         assertFalse(state.canReturnHomeNow(nowMillis = 1_000L))
     }
 
@@ -1106,7 +1106,7 @@ class SecondChatTimingPresentationTest {
         )
         viewModel.setState(state)
 
-        assertTrue(state.isJoinedActiveSecondChat())
+        assertTrue(state.lifecycle.timingPresentation(nowMillis = 1_000L).genuinelyActive)
         assertTrue(state.canReturnHomeNow(nowMillis = 1_000L))
 
         viewModel.closeSecondChat()
@@ -1161,7 +1161,7 @@ class SecondChatTimingPresentationTest {
                 ),
             )
 
-            assertTrue(state.isJoinedActiveSecondChat())
+            assertTrue(state.lifecycle.timingPresentation(nowMillis = 1_000L).genuinelyActive)
             assertFalse(state.canReturnHomeNow(nowMillis = 1_000L))
         }
     }
@@ -1197,7 +1197,7 @@ class SecondChatTimingPresentationTest {
             ),
         )
 
-        assertTrue(state.isJoinedActiveSecondChat())
+        assertTrue(state.lifecycle.timingPresentation(nowMillis = 1_000L).genuinelyActive)
         assertFalse(state.canReturnHomeNow(nowMillis = 1_000L))
     }
 
