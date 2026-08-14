@@ -3,11 +3,13 @@ package com.reals.app.ui.chat
 import android.os.SystemClock
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -19,8 +21,6 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.reals.app.R
@@ -331,50 +332,59 @@ private fun TextComposerRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        OutlinedTextField(
+        BasicTextField(
             value = presentation.draft,
             onValueChange = callbacks.onDraftChange,
-            placeholder = { Text("Mensaje") },
             enabled = presentation.textState.canEditDraft,
             minLines = 1,
             maxLines = 4,
-            shape = RoundedCornerShape(RealsRadii.Row),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = appearance.contentColor,
-                unfocusedTextColor = appearance.contentColor,
-                disabledTextColor = appearance.metadataColor,
-                focusedContainerColor = Color.Transparent,
-                unfocusedContainerColor = Color.Transparent,
-                disabledContainerColor = Color.Transparent,
-                focusedBorderColor = Color.Transparent,
-                unfocusedBorderColor = Color.Transparent,
-                disabledBorderColor = Color.Transparent,
-                focusedPlaceholderColor = appearance.placeholderColor,
-                unfocusedPlaceholderColor = appearance.placeholderColor,
-                disabledPlaceholderColor = appearance.placeholderColor.copy(alpha = 0.56f),
-                cursorColor = MaterialTheme.colorScheme.primary,
+            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                color = if (presentation.textState.canEditDraft) {
+                    appearance.contentColor
+                } else {
+                    appearance.metadataColor
+                },
             ),
-            trailingIcon = if (presentation.audioState.visible) {
-                {
-                    IconButton(
-                        onClick = callbacks.onStartRecording,
-                        enabled = presentation.audioState.startEnabled,
-                        colors = IconButtonDefaults.iconButtonColors(
-                            contentColor = appearance.secondaryActionContentColor,
-                            disabledContentColor = appearance.secondaryActionContentColor.copy(alpha = 0.42f),
-                        ),
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_mic),
-                            contentDescription = "Grabar audio",
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 6.dp, end = 2.dp),
+            decorationBox = { innerTextField ->
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    if (presentation.draft.isEmpty()) {
+                        Text(
+                            text = "Mensaje",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (presentation.textState.canEditDraft) {
+                                appearance.placeholderColor
+                            } else {
+                                appearance.placeholderColor.copy(alpha = 0.56f)
+                            },
                         )
                     }
+                    innerTextField()
                 }
-            } else {
-                null
             },
-            modifier = Modifier.weight(1f),
         )
+
+        if (presentation.audioState.visible) {
+            IconButton(
+                onClick = callbacks.onStartRecording,
+                enabled = presentation.audioState.startEnabled,
+                colors = IconButtonDefaults.iconButtonColors(
+                    contentColor = appearance.secondaryActionContentColor,
+                    disabledContentColor = appearance.secondaryActionContentColor.copy(alpha = 0.42f),
+                ),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_mic),
+                    contentDescription = "Grabar audio",
+                )
+            }
+        }
 
         FilledIconButton(
             onClick = callbacks.onSendText,

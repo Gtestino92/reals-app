@@ -4,6 +4,8 @@ import android.util.Patterns
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -57,6 +60,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
@@ -65,6 +69,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.Role
 import com.reals.app.R
 import com.reals.app.core.security.TextSafety
 import com.reals.app.core.time.remainingExitSeconds
@@ -376,6 +381,17 @@ internal fun ChatActionsPanel(
         return
     }
 
+    val approvalLabel = if (loadingChatAction) actionLoadingLabel ?: "Procesando..." else "Aprobar chat"
+    val approvalEnabled = !loadingChatAction && canDecide
+    if (activeExitRequest == null && onBackHome == null && showDecisionActions) {
+        FirstChatApprovalAction(
+            label = approvalLabel,
+            enabled = approvalEnabled,
+            onClick = onApprove,
+        )
+        return
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(RealsRadii.Card),
@@ -408,18 +424,87 @@ internal fun ChatActionsPanel(
                 }
             }
             if (showDecisionActions) {
-                Button(
+                FirstChatApprovalAction(
+                    label = approvalLabel,
+                    enabled = approvalEnabled,
                     onClick = onApprove,
-                    enabled = !loadingChatAction && canDecide,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        if (loadingChatAction) actionLoadingLabel
-                            ?: "Procesando..." else "Aprobar chat"
-                    )
-                }
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun FirstChatApprovalAction(
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val darkTheme = LocalRealsDarkTheme.current
+    val containerColor = if (darkTheme) {
+        RealsColors.DarkSurfaceHigh.copy(alpha = if (enabled) 0.98f else 0.54f)
+    } else {
+        RealsColors.Ink.copy(alpha = if (enabled) 0.94f else 0.22f)
+    }
+    val contentColor = if (darkTheme) {
+        MaterialTheme.colorScheme.onSurface
+    } else {
+        RealsColors.Ivory
+    }
+    val borderColor = if (darkTheme) {
+        MaterialTheme.colorScheme.secondary.copy(alpha = if (enabled) 0.60f else 0.30f)
+    } else {
+        RealsColors.SoftGold.copy(alpha = if (enabled) 0.74f else 0.38f)
+    }
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 44.dp)
+            .clickable(
+                enabled = enabled,
+                role = Role.Button,
+                onClick = onClick,
+            ),
+        shape = RoundedCornerShape(RealsRadii.Row),
+        border = BorderStroke(1.dp, borderColor),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            RealsApprovalDiamond(
+                color = MaterialTheme.colorScheme.secondary.copy(alpha = if (enabled) 0.90f else 0.42f),
+            )
+            Text(
+                text = label,
+                modifier = Modifier.padding(start = 10.dp),
+                style = MaterialTheme.typography.labelLarge,
+                color = contentColor.copy(alpha = if (enabled) 1f else 0.54f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun RealsApprovalDiamond(
+    color: Color,
+) {
+    Canvas(modifier = Modifier.size(8.dp)) {
+        val path = Path().apply {
+            moveTo(size.width / 2f, 0f)
+            lineTo(size.width, size.height / 2f)
+            lineTo(size.width / 2f, size.height)
+            lineTo(0f, size.height / 2f)
+            close()
+        }
+        drawPath(path, color)
     }
 }
 
@@ -553,6 +638,8 @@ internal fun MessageList(
     val latestMessageId = latestMessage?.stableId
     val latestMessageIsMine = latestMessage?.isMine(currentUserId) == true
     var selectionResetGeneration by remember { mutableStateOf(0) }
+    var knownMessageIds by remember { mutableStateOf<Set<String>?>(null) }
+    val currentMessageIds = messageItems.map { it.stableId }.toSet()
 
     LaunchedEffect(latestMessageId) {
         if (latestMessageId == null) return@LaunchedEffect
@@ -561,6 +648,12 @@ internal fun MessageList(
         if (shouldScrollToBottom) {
             listState.animateScrollToItem(messageItems.lastIndex)
         }
+    }
+
+    LaunchedEffect(currentMessageIds) {
+        knownMessageIds = knownMessageIds
+            ?.plus(currentMessageIds)
+            ?: currentMessageIds
     }
 
     Card(
@@ -595,6 +688,13 @@ internal fun MessageList(
                 }
             } else {
                 items(messageItems, key = { it.stableId }) { item ->
+                    val itemModifier = knownMessageIds?.let { knownIds ->
+                        Modifier.animateItem(
+                            fadeInSpec = if (item.stableId in knownIds) null else tween(durationMillis = 140),
+                            placementSpec = tween(durationMillis = 180),
+                            fadeOutSpec = null,
+                        )
+                    } ?: Modifier
                     when (item) {
                         is ChatMessageListItem.Backend -> MessageBubble(
                             message = item.message,
@@ -602,6 +702,7 @@ internal fun MessageList(
                             chatType = chatType,
                             selectionResetGeneration = selectionResetGeneration,
                             playbackState = playbackState,
+                            modifier = itemModifier,
                             onPlayAudio = onPlayAudio,
                             onPauseAudio = onPauseAudio,
                         )
@@ -610,6 +711,7 @@ internal fun MessageList(
                             message = item.message,
                             chatType = chatType,
                             selectionResetGeneration = selectionResetGeneration,
+                            modifier = itemModifier,
                             onRetry = onRetryOptimisticMessage,
                             canRetryFailedTextMessages = canRetryFailedTextMessages,
                         )
@@ -721,12 +823,13 @@ private fun MessageBubble(
     chatType: ChatType,
     selectionResetGeneration: Int,
     playbackState: ChatAudioPlaybackUiState,
+    modifier: Modifier = Modifier,
     onPlayAudio: (ChatMessage) -> Unit,
     onPauseAudio: () -> Unit,
 ) {
     val appearance = chatBubbleAppearance(mine = mine)
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(
                 start = if (mine) ChatBubbleOppositeGutter else 0.dp,
@@ -909,12 +1012,13 @@ private fun OptimisticMessageBubble(
     message: OptimisticOutgoingMessage,
     chatType: ChatType,
     selectionResetGeneration: Int,
+    modifier: Modifier = Modifier,
     onRetry: (localId: String, content: String) -> Unit,
     canRetryFailedTextMessages: Boolean,
 ) {
     val appearance = chatBubbleAppearance(mine = true)
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(start = ChatBubbleOppositeGutter),
         horizontalArrangement = Arrangement.End,

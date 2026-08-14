@@ -2,10 +2,13 @@ package com.reals.app.ui.chat
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -16,6 +19,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -104,10 +111,12 @@ internal fun FirstChatUnansweredSuggestionCard(
 }
 
 internal data class FirstChatGuidancePanelState(
+    val dismissalKey: String,
     val questionText: String,
     val showButton: Boolean,
     val buttonEnabled: Boolean,
     val showWaitingCopy: Boolean,
+    val closeAvailable: Boolean,
 )
 
 internal fun firstChatGuidancePanelState(
@@ -117,6 +126,7 @@ internal fun firstChatGuidancePanelState(
     if (guidance == null) return null
     val finalQuestion = guidance.questionOrdinal >= guidance.maxQuestions
     return FirstChatGuidancePanelState(
+        dismissalKey = "${guidance.questionOrdinal}:${guidance.maxQuestions}:${guidance.question.text}",
         questionText = guidance.question.text,
         showButton = !guidance.completed && !finalQuestion && !guidance.myNextRequested,
         buttonEnabled = !guidance.completed &&
@@ -125,6 +135,7 @@ internal fun firstChatGuidancePanelState(
             guidance.canRequestNext &&
             canRequestNextWhileChatOpen,
         showWaitingCopy = !guidance.completed && guidance.myNextRequested,
+        closeAvailable = guidance.completed || finalQuestion || guidance.myNextRequested,
     )
 }
 
@@ -135,6 +146,8 @@ internal fun FirstChatGuidancePanel(
     onRequestNext: (() -> Unit)?,
 ) {
     if (state == null) return
+    var dismissedKeys by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    if (state.dismissalKey in dismissedKeys) return
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -155,6 +168,9 @@ internal fun FirstChatGuidancePanel(
                 state.buttonEnabled &&
                 !actionLoading &&
                 onRequestNext != null
+            val closeVisible = !nextQuestionAvailable &&
+                !actionLoading &&
+                state.closeAvailable
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -168,17 +184,40 @@ internal fun FirstChatGuidancePanel(
                     color = MaterialTheme.colorScheme.primary,
                 )
 
-                if (nextQuestionAvailable) {
-                    IconButton(
-                        onClick = { onRequestNext?.invoke() },
-                        modifier = Modifier.semantics { contentDescription = "Otra pregunta" },
-                    ) {
-                        Text(
-                            text = "›",
-                            modifier = Modifier.clearAndSetSemantics {},
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
+                Box(
+                    modifier = Modifier.size(48.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    when {
+                        nextQuestionAvailable -> IconButton(
+                            onClick = { onRequestNext?.invoke() },
+                            modifier = Modifier.semantics { contentDescription = "Otra pregunta" },
+                        ) {
+                            Text(
+                                text = "›",
+                                modifier = Modifier.clearAndSetSemantics {},
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+
+                        closeVisible -> IconButton(
+                            onClick = {
+                                dismissedKeys = if (state.dismissalKey in dismissedKeys) {
+                                    dismissedKeys
+                                } else {
+                                    dismissedKeys + state.dismissalKey
+                                }
+                            },
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_close),
+                                contentDescription = "Ocultar pregunta",
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+
+                        else -> Spacer(modifier = Modifier.size(48.dp))
                     }
                 }
             }
