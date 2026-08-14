@@ -74,44 +74,46 @@ internal fun FirstChatUnansweredSuggestionCard(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 12.dp, top = 8.dp, end = 8.dp, bottom = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text(
                     text = "Todavía no recibiste respuesta",
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.padding(end = 44.dp),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
-                IconButton(
-                    onClick = { state.periodReference?.let(onDismiss) },
-                    enabled = state.periodReference != null,
+                Text(
+                    text = "Podés solicitar el cierre de la conversación. Si la otra persona no responde a la solicitud, el chat se cerrará sin penalizarte.",
+                    modifier = Modifier.padding(end = 44.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Button(
+                    onClick = onRequestMutualExit,
+                    enabled = state.actionEnabled,
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_close),
-                        contentDescription = "Ocultar sugerencia",
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
+                    Text("Solicitar cierre")
                 }
             }
-            Text(
-                text = "Podés solicitar el cierre de la conversación. Si la otra persona no responde a la solicitud, el chat se cerrará sin penalizarte.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Button(
-                onClick = onRequestMutualExit,
-                enabled = state.actionEnabled,
-                modifier = Modifier.fillMaxWidth(),
+            IconButton(
+                onClick = { state.periodReference?.let(onDismiss) },
+                enabled = state.periodReference != null,
+                modifier = Modifier.align(Alignment.TopEnd),
             ) {
-                Text("Solicitar cierre")
+                Icon(
+                    painter = painterResource(R.drawable.ic_close),
+                    contentDescription = "Ocultar sugerencia",
+                    tint = MaterialTheme.colorScheme.primary,
+                )
             }
         }
     }
@@ -182,7 +184,7 @@ internal fun FirstChatGuidancePanel(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 48.dp)
-                    .padding(start = 10.dp, top = 5.dp, end = 2.dp, bottom = 5.dp),
+                    .padding(start = 10.dp, top = 5.dp, end = 0.dp, bottom = 5.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 val nextQuestionAvailable = state.showButton &&
@@ -224,7 +226,7 @@ internal fun FirstChatGuidancePanel(
                     }
 
                     Box(
-                        modifier = Modifier.size(width = 44.dp, height = 44.dp),
+                        modifier = Modifier.size(48.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         when {
@@ -256,7 +258,7 @@ internal fun FirstChatGuidancePanel(
                                 )
                             }
 
-                            else -> Spacer(modifier = Modifier.size(44.dp))
+                            else -> Spacer(modifier = Modifier.size(48.dp))
                         }
                     }
                 }

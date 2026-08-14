@@ -620,6 +620,7 @@ internal fun timedExitRequestBodyText(
 @Composable
 internal fun MessageList(
     chatId: String?,
+    initialHistoryLoading: Boolean,
     currentUserId: String,
     chatType: ChatType,
     messages: List<ChatMessage>,
@@ -656,8 +657,9 @@ internal fun MessageList(
         }
     }
 
-    LaunchedEffect(currentMessageIds) {
+    LaunchedEffect(currentMessageIds, initialHistoryLoading) {
         if (!messageBaselineEstablished) {
+            if (initialHistoryLoading) return@LaunchedEffect
             knownMessageIds = currentMessageIds
             messageBaselineEstablished = true
         } else {

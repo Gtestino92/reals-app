@@ -569,6 +569,7 @@ fun ChatScreen(
             )
             MessageList(
                 chatId = chat?.id,
+                initialHistoryLoading = loading,
                 currentUserId = currentUserId,
                 chatType = chat?.chatType ?: ChatType.Unknown(""),
                 messages = messages,
