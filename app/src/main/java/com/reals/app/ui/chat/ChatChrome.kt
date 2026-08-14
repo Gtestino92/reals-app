@@ -72,6 +72,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.semantics.Role
 import com.reals.app.R
 import com.reals.app.core.security.TextSafety
@@ -650,6 +651,7 @@ internal fun MessageList(
 
     LaunchedEffect(latestMessageId) {
         if (latestMessageId == null) return@LaunchedEffect
+        if (!messageBaselineEstablished) return@LaunchedEffect
 
         val shouldScrollToBottom = latestMessageIsMine || listState.isNearBottom()
         if (shouldScrollToBottom) {
@@ -662,6 +664,9 @@ internal fun MessageList(
             if (initialHistoryLoading) return@LaunchedEffect
             knownMessageIds = currentMessageIds
             messageBaselineEstablished = true
+            if (messageItems.isNotEmpty()) {
+                listState.scrollToItem(messageItems.lastIndex)
+            }
         } else {
             knownMessageIds = knownMessageIds
                 ?.plus(currentMessageIds)
@@ -918,11 +923,13 @@ private fun MessageBubble(
                 verticalArrangement = Arrangement.spacedBy(1.dp),
             ) {
                 when (val presentation = message.presentation) {
-                    is ChatMessagePresentation.Text -> SelectableMessageText(
+                    is ChatMessagePresentation.Text -> MessageTextWithTimestamp(
                         presentation = chatMessageTextPresentation(
                             content = presentation.content,
                             chatType = chatType,
                         ),
+                        timestamp = formatBackendTime(message.sentAt),
+                        appearance = appearance,
                         selectionResetGeneration = selectionResetGeneration,
                     )
                     is ChatMessagePresentation.Audio -> AudioPlaybackRow(
@@ -935,13 +942,13 @@ private fun MessageBubble(
 
                     ChatMessagePresentation.Unsupported -> Text("Mensaje no compatible")
                 }
-                Text(
-                    text = formatBackendTime(message.sentAt),
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = appearance.metadataTextAlign,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = appearance.metadataColor,
-                )
+                if (message.presentation !is ChatMessagePresentation.Text) {
+                    MessageTimestamp(
+                        text = formatBackendTime(message.sentAt),
+                        color = appearance.metadataColor,
+                        modifier = Modifier.align(Alignment.End),
+                    )
+                }
             }
         }
     }
@@ -952,7 +959,6 @@ private data class ChatBubbleAppearance(
     val border: BorderStroke?,
     val contentColor: Color,
     val metadataColor: Color,
-    val metadataTextAlign: TextAlign,
 )
 
 @Composable
@@ -975,7 +981,6 @@ private fun chatBubbleAppearance(mine: Boolean): ChatBubbleAppearance {
             ),
             contentColor = MaterialTheme.colorScheme.onSurface,
             metadataColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.90f),
-            metadataTextAlign = TextAlign.End,
         )
     } else {
         ChatBubbleAppearance(
@@ -994,7 +999,6 @@ private fun chatBubbleAppearance(mine: Boolean): ChatBubbleAppearance {
             ),
             contentColor = MaterialTheme.colorScheme.onSurface,
             metadataColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            metadataTextAlign = TextAlign.Start,
         )
     }
 }
@@ -1144,6 +1148,7 @@ private fun OptimisticMessageBubble(
 private fun SelectableMessageText(
     presentation: ChatMessageTextPresentation,
     selectionResetGeneration: Int,
+    modifier: Modifier = Modifier,
 ) {
     key(selectionResetGeneration) {
         SelectionContainer {
@@ -1154,9 +1159,51 @@ private fun SelectableMessageText(
                         textDecoration = TextDecoration.Underline,
                     ),
                 ),
+                modifier = modifier,
             )
         }
     }
+}
+
+@Composable
+private fun MessageTextWithTimestamp(
+    presentation: ChatMessageTextPresentation,
+    timestamp: String,
+    appearance: ChatBubbleAppearance,
+    selectionResetGeneration: Int,
+) {
+    Box(modifier = Modifier.fillMaxWidth()) {
+        SelectableMessageText(
+            presentation = presentation,
+            selectionResetGeneration = selectionResetGeneration,
+            modifier = Modifier.padding(end = 42.dp),
+        )
+        MessageTimestamp(
+            text = timestamp,
+            color = appearance.metadataColor,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(start = 4.dp),
+        )
+    }
+}
+
+@Composable
+private fun MessageTimestamp(
+    text: String,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        text = text,
+        modifier = modifier,
+        textAlign = TextAlign.End,
+        style = MaterialTheme.typography.labelSmall.copy(
+            fontSize = 9.sp,
+            lineHeight = 9.sp,
+        ),
+        color = color.copy(alpha = 0.78f),
+    )
 }
 
 internal data class ChatMessageTextPresentation(
