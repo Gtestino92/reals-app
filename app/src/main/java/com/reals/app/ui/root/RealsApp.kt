@@ -358,6 +358,7 @@ fun RealsApp(
                 manualBlockError = current.manualBlock.error,
                 error = current.error,
                 message = current.message,
+                chatTitlePrefix = "Primer chat",
                 onRefresh = { viewModel.refreshFirstChat(silent = true) },
                 onFirstChatLocalExpiry = viewModel::handleFirstChatLocalExpiry,
                 onRequestNextGuidanceQuestion = viewModel::requestNextFirstChatGuidanceQuestion,
