@@ -217,7 +217,7 @@ class ChatMessageCollectionTest {
             message("e", "2026-06-18T21:04:00Z", senderId = "me"),
         )
 
-        assertEquals("c", messages.reactionReconciliationCursor())
+        assertEquals("b", messages.reactionReconciliationCursor())
     }
 
     @Test

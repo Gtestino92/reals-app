@@ -23,6 +23,7 @@ import com.reals.app.domain.usecase.GetChatExitRequestsUseCase
 import com.reals.app.domain.usecase.GetChatMessagesUseCase
 import com.reals.app.domain.usecase.GetFirstChatForMatchUseCase
 import com.reals.app.domain.usecase.GetMatchUseCase
+import com.reals.app.domain.usecase.PutChatMessageReactionUseCase
 import com.reals.app.domain.usecase.RejectChatExitRequestUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
 import com.reals.app.domain.usecase.RequestNextFirstChatGuidanceQuestionUseCase
@@ -1662,6 +1663,7 @@ class FirstChatCoordinatorTest {
             getChatMessages = GetChatMessagesUseCase(chatRepository),
             sendChatMessage = SendChatMessageUseCase(chatRepository),
             sendChatAudioMessage = com.reals.app.domain.usecase.SendChatAudioMessageUseCase(chatRepository),
+            putMessageReaction = PutChatMessageReactionUseCase(chatRepository),
             requestNextFirstChatGuidanceQuestion = RequestNextFirstChatGuidanceQuestionUseCase(chatRepository),
             getChatExitRequests = GetChatExitRequestsUseCase(chatRepository),
             requestMutualChatExit = RequestMutualChatExitUseCase(chatRepository),

@@ -17,6 +17,7 @@ import com.reals.app.domain.usecase.GetChatUseCase
 import com.reals.app.domain.usecase.GetSecondChatForConnectionUseCase
 import com.reals.app.domain.usecase.GetSecondChatStatusUseCase
 import com.reals.app.domain.usecase.JoinSecondChatUseCase
+import com.reals.app.domain.usecase.PutChatMessageReactionUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
 import com.reals.app.domain.usecase.SafetyCancelChatUseCase
 import com.reals.app.domain.usecase.SendChatMessageUseCase
@@ -288,6 +289,7 @@ class SecondChatCoordinatorTest {
             getChatMessages = GetChatMessagesUseCase(chatRepository),
             sendChatMessage = SendChatMessageUseCase(chatRepository),
             sendChatAudioMessage = com.reals.app.domain.usecase.SendChatAudioMessageUseCase(chatRepository),
+            putMessageReaction = PutChatMessageReactionUseCase(chatRepository),
             safetyCancelChat = SafetyCancelChatUseCase(chatRepository),
             createCompletionRequest = CreateSecondChatCompletionRequestUseCase(chatRepository),
             decideCompletionRequest = DecideSecondChatCompletionRequestUseCase(chatRepository),
