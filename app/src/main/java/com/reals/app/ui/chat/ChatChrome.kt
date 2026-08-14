@@ -461,7 +461,7 @@ private fun FirstChatApprovalAction(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 44.dp)
+            .heightIn(min = 48.dp)
             .clickable(
                 enabled = enabled,
                 role = Role.Button,
