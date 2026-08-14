@@ -9,7 +9,9 @@ import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -21,13 +23,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.paint
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.reals.app.R
 import com.reals.app.core.network.ErrorContext
 import com.reals.app.di.AppContainer
 import com.reals.app.domain.model.ChatContinueDecision
@@ -53,6 +60,7 @@ import com.reals.app.ui.profile.ProfileQuestionScreen
 import com.reals.app.ui.profile.ProfileManagementSurface
 import com.reals.app.ui.profile.ProfileStatusScreen
 import com.reals.app.ui.scheduling.SchedulingScreen
+import com.reals.app.ui.theme.LocalRealsDarkTheme
 import kotlinx.coroutines.launch
 
 @Composable
@@ -91,7 +99,12 @@ fun RealsApp(
         viewModel.onSystemBack()
     }
 
-    Surface(modifier = Modifier.fillMaxSize()) {
+    Surface(
+        modifier = Modifier
+            .fillMaxSize()
+            .realsEditorialBackground(),
+        color = Color.Transparent,
+    ) {
         when (val current = state) {
             RealsRootUiState.Checking -> FullScreenMessage(
                 title = "Inicializando Reals",
@@ -519,6 +532,19 @@ fun RealsApp(
                 onDismiss = viewModel::signOut,
             )
         }
+    }
+}
+
+@Composable
+private fun Modifier.realsEditorialBackground(): Modifier {
+    val canvasModifier = background(MaterialTheme.colorScheme.background)
+    return if (LocalRealsDarkTheme.current) {
+        canvasModifier
+    } else {
+        canvasModifier.paint(
+            painter = painterResource(R.drawable.reals_background_editorial_light),
+            contentScale = ContentScale.Crop,
+        )
     }
 }
 
