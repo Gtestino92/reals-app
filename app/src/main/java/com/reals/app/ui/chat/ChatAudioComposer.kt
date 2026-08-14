@@ -1,6 +1,11 @@
 package com.reals.app.ui.chat
 
 import android.os.SystemClock
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -171,35 +176,54 @@ private fun ComposerSupportingCopy(
 ) {
     var dismissedKeys by rememberSaveable { mutableStateOf(emptyList<String>()) }
     val rows = composerSupportingMessages(presentation)
-        .filterNot { it.key in dismissedKeys }
-    if (rows.isEmpty()) return
+    val hasVisibleRows = rows.any { it.key !in dismissedKeys }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(RealsRadii.Row),
-        border = appearance.border,
-        colors = CardDefaults.cardColors(
-            containerColor = appearance.containerColor,
-            contentColor = appearance.contentColor,
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    AnimatedVisibility(
+        visible = hasVisibleRows,
+        enter = EnterTransition.None,
+        exit = fadeOut(tween(durationMillis = 180)) +
+            shrinkVertically(
+                animationSpec = tween(durationMillis = 180),
+                shrinkTowards = Alignment.Top,
+            ),
     ) {
-        Column(
-            modifier = Modifier.padding(start = 8.dp, top = 4.dp, end = 4.dp, bottom = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(RealsRadii.Row),
+            border = appearance.border,
+            colors = CardDefaults.cardColors(
+                containerColor = appearance.containerColor,
+                contentColor = appearance.contentColor,
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {
-            rows.forEach { row ->
-                ComposerSupportingRow(
-                    row = row,
-                    appearance = appearance,
-                    onDismiss = {
-                        dismissedKeys = if (row.key in dismissedKeys) {
-                            dismissedKeys
-                        } else {
-                            dismissedKeys + row.key
-                        }
-                    },
-                )
+            Column(
+                modifier = Modifier.padding(start = 8.dp, top = 4.dp, end = 4.dp, bottom = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                rows.forEach { row ->
+                    AnimatedVisibility(
+                        visible = row.key !in dismissedKeys,
+                        enter = EnterTransition.None,
+                        exit = fadeOut(tween(durationMillis = 170)) +
+                            shrinkVertically(
+                                animationSpec = tween(durationMillis = 170),
+                                shrinkTowards = Alignment.Top,
+                            ),
+                    ) {
+                        ComposerSupportingRow(
+                            row = row,
+                            appearance = appearance,
+                            onDismiss = {
+                                dismissedKeys = if (row.key in dismissedKeys) {
+                                    dismissedKeys
+                                } else {
+                                    dismissedKeys + row.key
+                                }
+                            },
+                        )
+                    }
+                }
             }
         }
     }

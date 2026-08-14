@@ -563,10 +563,12 @@ fun ChatScreen(
             )
             FirstChatGuidancePanel(
                 state = guidancePanelState,
+                dismissalScope = chat?.id,
                 actionLoading = guidanceActionLoading || audioInteractionBusy,
                 onRequestNext = onRequestNextGuidanceQuestion,
             )
             MessageList(
+                chatId = chat?.id,
                 currentUserId = currentUserId,
                 chatType = chat?.chatType ?: ChatType.Unknown(""),
                 messages = messages,

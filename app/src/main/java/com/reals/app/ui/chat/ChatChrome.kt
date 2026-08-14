@@ -6,6 +6,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -52,6 +54,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
@@ -461,7 +464,6 @@ private fun FirstChatApprovalAction(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 48.dp)
             .clickable(
                 enabled = enabled,
                 role = Role.Button,
@@ -475,7 +477,8 @@ private fun FirstChatApprovalAction(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .heightIn(min = 48.dp)
+                .padding(horizontal = 14.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -616,6 +619,7 @@ internal fun timedExitRequestBodyText(
 
 @Composable
 internal fun MessageList(
+    chatId: String?,
     currentUserId: String,
     chatType: ChatType,
     messages: List<ChatMessage>,
@@ -638,22 +642,29 @@ internal fun MessageList(
     val latestMessageId = latestMessage?.stableId
     val latestMessageIsMine = latestMessage?.isMine(currentUserId) == true
     var selectionResetGeneration by remember { mutableStateOf(0) }
-    var knownMessageIds by remember { mutableStateOf<Set<String>?>(null) }
+    var knownMessageIds by remember(chatId) { mutableStateOf<Set<String>?>(null) }
+    var messageBaselineEstablished by remember(chatId) { mutableStateOf(false) }
     val currentMessageIds = messageItems.map { it.stableId }.toSet()
+    val entranceBaselineIds = knownMessageIds.takeIf { messageBaselineEstablished }
 
     LaunchedEffect(latestMessageId) {
         if (latestMessageId == null) return@LaunchedEffect
 
         val shouldScrollToBottom = latestMessageIsMine || listState.isNearBottom()
         if (shouldScrollToBottom) {
-            listState.animateScrollToItem(messageItems.lastIndex)
+            listState.animateLatestItemIntoView(messageItems.lastIndex)
         }
     }
 
     LaunchedEffect(currentMessageIds) {
-        knownMessageIds = knownMessageIds
-            ?.plus(currentMessageIds)
-            ?: currentMessageIds
+        if (!messageBaselineEstablished) {
+            knownMessageIds = currentMessageIds
+            messageBaselineEstablished = true
+        } else {
+            knownMessageIds = knownMessageIds
+                ?.plus(currentMessageIds)
+                ?: currentMessageIds
+        }
     }
 
     Card(
@@ -688,13 +699,25 @@ internal fun MessageList(
                 }
             } else {
                 items(messageItems, key = { it.stableId }) { item ->
-                    val itemModifier = knownMessageIds?.let { knownIds ->
+                    val shouldSlideIn = entranceBaselineIds?.let { knownIds ->
+                        item.stableId !in knownIds && when (item) {
+                            is ChatMessageListItem.Backend -> !item.isMine(currentUserId)
+                            is ChatMessageListItem.Optimistic -> item.isMine(currentUserId)
+                        }
+                    } == true
+                    val itemModifier = (entranceBaselineIds?.let {
                         Modifier.animateItem(
-                            fadeInSpec = if (item.stableId in knownIds) null else tween(durationMillis = 140),
+                            fadeInSpec = null,
                             placementSpec = tween(durationMillis = 180),
                             fadeOutSpec = null,
                         )
-                    } ?: Modifier
+                    } ?: Modifier)
+                        .then(
+                            rememberMessageArrivalModifier(
+                                stableId = item.stableId,
+                                slideIn = shouldSlideIn,
+                            )
+                        )
                     when (item) {
                         is ChatMessageListItem.Backend -> MessageBubble(
                             message = item.message,
@@ -720,6 +743,42 @@ internal fun MessageList(
             }
         }
     }
+}
+
+private suspend fun LazyListState.animateLatestItemIntoView(lastIndex: Int) {
+    withFrameNanos { }
+    val latestItemInfo = layoutInfo.visibleItemsInfo.firstOrNull { it.index == lastIndex }
+    val overflow = latestItemInfo
+        ?.let { it.offset + it.size - layoutInfo.viewportEndOffset }
+        ?.coerceAtLeast(0)
+
+    when {
+        latestItemInfo == null -> animateScrollToItem(lastIndex)
+        overflow != null && overflow > 0 -> animateScrollBy(overflow.toFloat())
+    }
+}
+
+@Composable
+private fun rememberMessageArrivalModifier(
+    stableId: String,
+    slideIn: Boolean,
+): Modifier {
+    val initialSlideIn = remember(stableId) { slideIn }
+    val offsetY = remember(stableId) { Animatable(if (initialSlideIn) 10f else 0f) }
+
+    LaunchedEffect(stableId) {
+        if (initialSlideIn) {
+            offsetY.snapTo(10f)
+            offsetY.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(durationMillis = 170),
+            )
+        } else {
+            offsetY.snapTo(0f)
+        }
+    }
+
+    return Modifier.offset(y = offsetY.value.dp)
 }
 
 private data class ChatCanvasAppearance(

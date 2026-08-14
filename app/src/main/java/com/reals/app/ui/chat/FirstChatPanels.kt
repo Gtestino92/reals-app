@@ -1,5 +1,10 @@
 package com.reals.app.ui.chat
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -7,8 +12,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -112,6 +119,7 @@ internal fun FirstChatUnansweredSuggestionCard(
 
 internal data class FirstChatGuidancePanelState(
     val dismissalKey: String,
+    val questionOrdinal: Int,
     val questionText: String,
     val showButton: Boolean,
     val buttonEnabled: Boolean,
@@ -127,6 +135,7 @@ internal fun firstChatGuidancePanelState(
     val finalQuestion = guidance.questionOrdinal >= guidance.maxQuestions
     return FirstChatGuidancePanelState(
         dismissalKey = "${guidance.questionOrdinal}:${guidance.maxQuestions}:${guidance.question.text}",
+        questionOrdinal = guidance.questionOrdinal,
         questionText = guidance.question.text,
         showButton = !guidance.completed && !finalQuestion && !guidance.myNextRequested,
         buttonEnabled = !guidance.completed &&
@@ -142,92 +151,115 @@ internal fun firstChatGuidancePanelState(
 @Composable
 internal fun FirstChatGuidancePanel(
     state: FirstChatGuidancePanelState?,
+    dismissalScope: String?,
     actionLoading: Boolean,
     onRequestNext: (() -> Unit)?,
 ) {
     if (state == null) return
-    var dismissedKeys by rememberSaveable { mutableStateOf(emptyList<String>()) }
-    if (state.dismissalKey in dismissedKeys) return
+    var dismissedKeys by rememberSaveable(dismissalScope) { mutableStateOf(emptyList<String>()) }
+    val scopedDismissalKey = "${dismissalScope.orEmpty()}:${state.dismissalKey}"
+    val dismissed = scopedDismissalKey in dismissedKeys
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        shape = RoundedCornerShape(RealsRadii.Card),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.55f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    AnimatedVisibility(
+        visible = !dismissed,
+        enter = EnterTransition.None,
+        exit = fadeOut(tween(durationMillis = 180)) +
+            shrinkVertically(
+                animationSpec = tween(durationMillis = 180),
+                shrinkTowards = Alignment.Top,
+            ),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(3.dp),
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
+            ),
+            shape = RoundedCornerShape(RealsRadii.Row),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.48f)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {
-            val nextQuestionAvailable = state.showButton &&
-                state.buttonEnabled &&
-                !actionLoading &&
-                onRequestNext != null
-            val closeVisible = !nextQuestionAvailable &&
-                !actionLoading &&
-                state.closeAvailable
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .padding(start = 10.dp, top = 5.dp, end = 2.dp, bottom = 5.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                Text(
-                    text = TextSafety.safeDisplay(state.questionText),
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+                val nextQuestionAvailable = state.showButton &&
+                    state.buttonEnabled &&
+                    !actionLoading &&
+                    onRequestNext != null
+                val closeVisible = !nextQuestionAvailable &&
+                    !actionLoading &&
+                    state.closeAvailable
 
-                Box(
-                    modifier = Modifier.size(48.dp),
-                    contentAlignment = Alignment.Center,
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    when {
-                        nextQuestionAvailable -> IconButton(
-                            onClick = { onRequestNext?.invoke() },
-                            modifier = Modifier.semantics { contentDescription = "Otra pregunta" },
-                        ) {
+                    Text(
+                        text = "${state.questionOrdinal}.",
+                        modifier = Modifier.width(24.dp),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(1.dp),
+                    ) {
+                        Text(
+                            text = TextSafety.safeDisplay(state.questionText),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+
+                        if (state.showWaitingCopy) {
                             Text(
-                                text = "›",
-                                modifier = Modifier.clearAndSetSemantics {},
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.primary,
+                                text = "Cambiaremos la pregunta cuando ambos quieran seguir.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                    }
 
-                        closeVisible -> IconButton(
-                            onClick = {
-                                dismissedKeys = if (state.dismissalKey in dismissedKeys) {
-                                    dismissedKeys
-                                } else {
-                                    dismissedKeys + state.dismissalKey
-                                }
-                            },
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_close),
-                                contentDescription = "Ocultar pregunta",
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
+                    Box(
+                        modifier = Modifier.size(width = 44.dp, height = 44.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        when {
+                            nextQuestionAvailable -> IconButton(
+                                onClick = { onRequestNext?.invoke() },
+                                modifier = Modifier.semantics { contentDescription = "Otra pregunta" },
+                            ) {
+                                Text(
+                                    text = "›",
+                                    modifier = Modifier.clearAndSetSemantics {},
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+
+                            closeVisible -> IconButton(
+                                onClick = {
+                                    dismissedKeys = if (scopedDismissalKey in dismissedKeys) {
+                                        dismissedKeys
+                                    } else {
+                                        dismissedKeys + scopedDismissalKey
+                                    }
+                                },
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_close),
+                                    contentDescription = "Ocultar pregunta",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+
+                            else -> Spacer(modifier = Modifier.size(44.dp))
                         }
-
-                        else -> Spacer(modifier = Modifier.size(48.dp))
                     }
                 }
-            }
-
-            if (state.showWaitingCopy) {
-                Text(
-                    text = "Cambiaremos la pregunta cuando ambos quieran seguir.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
         }
     }
