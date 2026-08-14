@@ -56,6 +56,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
@@ -81,6 +82,8 @@ import com.reals.app.ui.common.formatBackendTime
 import com.reals.app.ui.root.OptimisticOutgoingMessage
 import com.reals.app.ui.root.OptimisticOutgoingMessageType
 import com.reals.app.ui.root.OutgoingMessageDeliveryState
+import com.reals.app.ui.theme.LocalRealsDarkTheme
+import com.reals.app.ui.theme.RealsColors
 import com.reals.app.ui.theme.RealsRadii
 import com.reals.app.ui.theme.RealsType
 import kotlinx.coroutines.coroutineScope
@@ -522,6 +525,7 @@ internal fun MessageList(
     val messageItems = sortedMessages.map { ChatMessageListItem.Backend(it) } +
         optimisticMessages.sortedBy { it.createdAtMillis }
             .map { ChatMessageListItem.Optimistic(it) }
+    val canvasAppearance = chatCanvasAppearance(chatType)
     val listState = rememberLazyListState()
     val latestMessage = messageItems.lastOrNull()
     val latestMessageId = latestMessage?.stableId
@@ -540,8 +544,8 @@ internal fun MessageList(
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(RealsRadii.Card),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.52f)),
+        border = canvasAppearance.border,
+        colors = CardDefaults.cardColors(containerColor = canvasAppearance.containerColor),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         LazyColumn(
@@ -563,9 +567,8 @@ internal fun MessageList(
         ) {
             if (messageItems.isEmpty()) {
                 item {
-                    Text(
-                        "Todavía no hay mensajes.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    EmptyMessageState(
+                        appearance = canvasAppearance,
                     )
                 }
             } else {
@@ -593,6 +596,74 @@ internal fun MessageList(
             }
         }
     }
+}
+
+private data class ChatCanvasAppearance(
+    val containerColor: Color,
+    val border: BorderStroke?,
+    val emptyStateColor: Color,
+    val emptyStateVerticalPadding: Dp,
+)
+
+@Composable
+private fun chatCanvasAppearance(chatType: ChatType): ChatCanvasAppearance {
+    val darkTheme = LocalRealsDarkTheme.current
+    return when (chatType) {
+        ChatType.FirstChat -> ChatCanvasAppearance(
+            containerColor = if (darkTheme) {
+                RealsColors.DarkSurface.copy(alpha = 0.50f)
+            } else {
+                RealsColors.Paper.copy(alpha = 0.38f)
+            },
+            border = BorderStroke(
+                width = 1.dp,
+                color = if (darkTheme) {
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.68f)
+                } else {
+                    RealsColors.SoftGold.copy(alpha = 0.48f)
+                },
+            ),
+            emptyStateColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            emptyStateVerticalPadding = 28.dp,
+        )
+
+        ChatType.SecondChat -> ChatCanvasAppearance(
+            containerColor = if (darkTheme) {
+                RealsColors.DarkSurface.copy(alpha = 0.26f)
+            } else {
+                RealsColors.Paper.copy(alpha = 0.16f)
+            },
+            border = if (darkTheme) {
+                BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.30f))
+            } else {
+                null
+            },
+            emptyStateColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.86f),
+            emptyStateVerticalPadding = 20.dp,
+        )
+
+        is ChatType.Unknown -> ChatCanvasAppearance(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.30f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f)),
+            emptyStateColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            emptyStateVerticalPadding = 24.dp,
+        )
+    }
+}
+
+@Composable
+private fun EmptyMessageState(
+    appearance: ChatCanvasAppearance,
+) {
+    Text(
+        text = "Todavía no hay mensajes.",
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = appearance.emptyStateVerticalPadding),
+        style = MaterialTheme.typography.bodyMedium,
+        color = appearance.emptyStateColor,
+        textAlign = TextAlign.Center,
+    )
 }
 
 private fun LazyListState.isNearBottom(bufferItems: Int = 2): Boolean {
@@ -631,6 +702,7 @@ private fun MessageBubble(
     onPlayAudio: (ChatMessage) -> Unit,
     onPauseAudio: () -> Unit,
 ) {
+    val appearance = chatBubbleAppearance(mine = mine)
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
@@ -643,13 +715,10 @@ private fun MessageBubble(
                 bottomStart = if (mine) RealsRadii.Row else 4.dp,
                 bottomEnd = if (mine) 4.dp else RealsRadii.Row,
             ),
-            border = if (mine) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            border = appearance.border,
             colors = CardDefaults.cardColors(
-                containerColor = if (mine) {
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
-                } else {
-                    MaterialTheme.colorScheme.surface
-                },
+                containerColor = appearance.containerColor,
+                contentColor = appearance.contentColor,
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {
@@ -677,10 +746,52 @@ private fun MessageBubble(
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.End,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = appearance.metadataColor,
                 )
             }
         }
+    }
+}
+
+private data class ChatBubbleAppearance(
+    val containerColor: Color,
+    val border: BorderStroke?,
+    val contentColor: Color,
+    val metadataColor: Color,
+)
+
+@Composable
+private fun chatBubbleAppearance(mine: Boolean): ChatBubbleAppearance {
+    val darkTheme = LocalRealsDarkTheme.current
+    return if (mine) {
+        ChatBubbleAppearance(
+            containerColor = if (darkTheme) {
+                RealsColors.DarkSurfaceHigh.copy(alpha = 0.88f)
+            } else {
+                RealsColors.Ink.copy(alpha = 0.08f)
+            },
+            border = null,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            metadataColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.86f),
+        )
+    } else {
+        ChatBubbleAppearance(
+            containerColor = if (darkTheme) {
+                RealsColors.DarkSurface.copy(alpha = 0.92f)
+            } else {
+                RealsColors.Paper.copy(alpha = 0.94f)
+            },
+            border = BorderStroke(
+                width = 1.dp,
+                color = if (darkTheme) {
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)
+                } else {
+                    RealsColors.SoftGold.copy(alpha = 0.42f)
+                },
+            ),
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            metadataColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -761,6 +872,7 @@ private fun OptimisticMessageBubble(
     onRetry: (localId: String, content: String) -> Unit,
     canRetryFailedTextMessages: Boolean,
 ) {
+    val appearance = chatBubbleAppearance(mine = true)
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.End,
@@ -773,8 +885,10 @@ private fun OptimisticMessageBubble(
                 bottomStart = RealsRadii.Row,
                 bottomEnd = 4.dp,
             ),
+            border = appearance.border,
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                containerColor = appearance.containerColor,
+                contentColor = appearance.contentColor,
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {
@@ -799,7 +913,7 @@ private fun OptimisticMessageBubble(
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.End,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = appearance.metadataColor,
                 )
                 if (
                     optimisticTextRetryAvailable(message, canRetryFailedTextMessages)
