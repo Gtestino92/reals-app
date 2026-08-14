@@ -96,7 +96,7 @@ internal const val MUTUAL_EXIT_CONVERSATION_PAUSED_COPY =
 
 private const val MUTUAL_EXIT_TIMEOUT_SECONDS = 20L
 private const val MUTUAL_EXIT_TIMEOUT_RETRY_MILLIS = 2_000L
-private val ChatBubbleOppositeGutter = 40.dp
+private val ChatBubbleOppositeGutter = 28.dp
 
 @Composable
 internal fun LoadingChatScreen(
@@ -580,12 +580,12 @@ internal fun MessageList(
                     )
                 },
             contentPadding = PaddingValues(
-                start = 12.dp,
-                top = 12.dp,
-                end = 12.dp,
+                start = 8.dp,
+                top = 10.dp,
+                end = 8.dp,
                 bottom = bottomContentPadding,
             ),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             if (messageItems.isEmpty()) {
                 item {
@@ -735,7 +735,7 @@ private fun MessageBubble(
         horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
     ) {
         Card(
-            modifier = Modifier.widthIn(max = 292.dp),
+            modifier = Modifier.widthIn(max = 340.dp),
             shape = RoundedCornerShape(
                 topStart = if (mine) RealsRadii.Row else 8.dp,
                 topEnd = if (mine) 8.dp else RealsRadii.Row,
@@ -749,7 +749,10 @@ private fun MessageBubble(
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {
-            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Column(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(1.dp),
+            ) {
                 when (val presentation = message.presentation) {
                     is ChatMessagePresentation.Text -> SelectableMessageText(
                         presentation = chatMessageTextPresentation(
@@ -772,7 +775,7 @@ private fun MessageBubble(
                     text = formatBackendTime(message.sentAt),
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = appearance.metadataTextAlign,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelSmall,
                     color = appearance.metadataColor,
                 )
             }
@@ -917,7 +920,7 @@ private fun OptimisticMessageBubble(
         horizontalArrangement = Arrangement.End,
     ) {
         Card(
-            modifier = Modifier.widthIn(max = 292.dp),
+            modifier = Modifier.widthIn(max = 340.dp),
             shape = RoundedCornerShape(
                 topStart = RealsRadii.Row,
                 topEnd = 8.dp,
@@ -931,7 +934,10 @@ private fun OptimisticMessageBubble(
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {
-            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Column(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(1.dp),
+            ) {
                 when (message.messageType) {
                     OptimisticOutgoingMessageType.Text -> SelectableMessageText(
                         presentation = chatMessageTextPresentation(
@@ -951,7 +957,7 @@ private fun OptimisticMessageBubble(
                     },
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.End,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelSmall,
                     color = appearance.metadataColor,
                 )
                 if (

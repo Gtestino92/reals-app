@@ -27,6 +27,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,10 +36,11 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.reals.app.R
 import com.reals.app.core.network.ErrorContext
+import com.reals.app.core.network.toUserMessage
+import com.reals.app.core.network.toUserTitle
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatAudioPolicy
 import com.reals.app.domain.model.ChatAudioUnavailableReason
-import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.root.ChatAudioDraftUiState
 import com.reals.app.ui.root.ChatAudioUploadUiState
 import com.reals.app.ui.theme.LocalRealsDarkTheme
@@ -91,7 +93,7 @@ internal fun MessageComposer(
     }
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(5.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -104,8 +106,8 @@ internal fun MessageComposer(
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 if (presentation.recordingStartedAtMillis != null) {
                     val elapsedMillis = (recordingNowMillis - presentation.recordingStartedAtMillis).coerceAtLeast(0L)
@@ -166,46 +168,117 @@ private fun ComposerSupportingCopy(
     presentation: ChatAudioComposerPresentation,
     appearance: ChatComposerTrayAppearance,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(3.dp),
+    var dismissedKeys by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    val rows = composerSupportingMessages(presentation)
+        .filterNot { it.key in dismissedKeys }
+    if (rows.isEmpty()) return
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(RealsRadii.Row),
+        border = appearance.border,
+        colors = CardDefaults.cardColors(
+            containerColor = appearance.containerColor,
+            contentColor = appearance.contentColor,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
-        presentation.localAudioError?.let {
-            Text(
-                text = it,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-        presentation.localAudioInfo?.let {
-            Text(
-                text = it,
-                color = appearance.metadataColor,
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-        presentation.textState.explanatoryCopy?.let { copy ->
-            Text(
-                text = copy,
-                color = appearance.metadataColor,
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-        if (
-            presentation.audioState.visible &&
-            !presentation.audioState.startEnabled &&
-            presentation.audioState.disabledCopy != null
+        Column(
+            modifier = Modifier.padding(start = 8.dp, top = 4.dp, end = 4.dp, bottom = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
+            rows.forEach { row ->
+                ComposerSupportingRow(
+                    row = row,
+                    appearance = appearance,
+                    onDismiss = {
+                        dismissedKeys = if (row.key in dismissedKeys) {
+                            dismissedKeys
+                        } else {
+                            dismissedKeys + row.key
+                        }
+                    },
+                )
+            }
+        }
+    }
+}
+
+private data class ComposerSupportingMessage(
+    val key: String,
+    val title: String? = null,
+    val message: String,
+    val error: Boolean = false,
+)
+
+private fun composerSupportingMessages(
+    presentation: ChatAudioComposerPresentation,
+): List<ComposerSupportingMessage> = buildList {
+    presentation.localAudioError?.let {
+        add(ComposerSupportingMessage(key = "local-error:$it", message = it, error = true))
+    }
+    presentation.localAudioInfo?.let {
+        add(ComposerSupportingMessage(key = "local-info:$it", message = it))
+    }
+    presentation.textState.explanatoryCopy?.let { copy ->
+        add(ComposerSupportingMessage(key = "explanatory:$copy", message = copy))
+    }
+    if (
+        presentation.audioState.visible &&
+        !presentation.audioState.startEnabled &&
+        presentation.audioState.disabledCopy != null
+    ) {
+        val copy = presentation.audioState.disabledCopy
+        add(ComposerSupportingMessage(key = "audio-disabled:$copy", message = copy))
+    }
+    presentation.uploadState.error?.let { error ->
+        val title = error.toUserTitle(ErrorContext.Chat)
+        val message = error.toUserMessage(ErrorContext.Chat)
+        add(
+            ComposerSupportingMessage(
+                key = "upload-error:$title:$message",
+                title = title,
+                message = message,
+                error = true,
+            )
+        )
+    }
+}
+
+@Composable
+private fun ComposerSupportingRow(
+    row: ComposerSupportingMessage,
+    appearance: ChatComposerTrayAppearance,
+    onDismiss: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(1.dp),
+        ) {
+            row.title?.let {
+                Text(
+                    text = it,
+                    color = if (row.error) MaterialTheme.colorScheme.error else appearance.contentColor,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
             Text(
-                text = presentation.audioState.disabledCopy,
-                color = appearance.metadataColor,
+                text = row.message,
+                color = if (row.error) MaterialTheme.colorScheme.error else appearance.metadataColor,
                 style = MaterialTheme.typography.bodySmall,
             )
         }
-        presentation.uploadState.error?.let {
-            ApiErrorFeedbackCard(it, ErrorContext.Chat)
+        IconButton(onClick = onDismiss) {
+            Icon(
+                painter = painterResource(R.drawable.ic_close),
+                contentDescription = "Ocultar mensaje",
+                tint = appearance.secondaryActionContentColor,
+            )
         }
     }
 }
@@ -256,7 +329,7 @@ private fun TextComposerRow(
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         OutlinedTextField(
             value = presentation.draft,
@@ -333,7 +406,7 @@ private fun RecordingComposer(
     onSend: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
             text = "Grabando ${formatRecordingElapsedDuration(elapsedMillis)} / ${formatAudioDuration(maxDurationMillis)}",
             style = MaterialTheme.typography.titleSmall,
@@ -347,7 +420,7 @@ private fun RecordingComposer(
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(
@@ -412,7 +485,7 @@ private fun AudioDraftComposer(
         canSendMessages = canSendMessages,
         uploadState = uploadState,
     )
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
             text = "Audio listo para enviar",
             style = MaterialTheme.typography.titleSmall,
@@ -427,7 +500,7 @@ private fun AudioDraftComposer(
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             OutlinedButton(
                 onClick = onDelete,

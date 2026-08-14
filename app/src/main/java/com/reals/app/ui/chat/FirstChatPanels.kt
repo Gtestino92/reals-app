@@ -15,11 +15,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.reals.app.R
 import com.reals.app.core.security.TextSafety
@@ -146,13 +148,18 @@ internal fun FirstChatGuidancePanel(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
+            val nextQuestionAvailable = state.showButton &&
+                state.buttonEnabled &&
+                !actionLoading &&
+                onRequestNext != null
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
                     text = TextSafety.safeDisplay(state.questionText),
@@ -161,14 +168,17 @@ internal fun FirstChatGuidancePanel(
                     color = MaterialTheme.colorScheme.primary,
                 )
 
-                if (state.showButton) {
-                    TextButton(
+                if (nextQuestionAvailable) {
+                    IconButton(
                         onClick = { onRequestNext?.invoke() },
-                        enabled = state.buttonEnabled &&
-                            !actionLoading &&
-                            onRequestNext != null,
+                        modifier = Modifier.semantics { contentDescription = "Otra pregunta" },
                     ) {
-                        Text("Otra pregunta")
+                        Text(
+                            text = "›",
+                            modifier = Modifier.clearAndSetSemantics {},
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                     }
                 }
             }

@@ -438,7 +438,7 @@ fun ChatScreen(
         modifier = Modifier
             .fillMaxSize()
             .safeDrawingPadding()
-            .padding(start = 20.dp, top = 16.dp, end = 20.dp, bottom = 12.dp),
+            .padding(start = 16.dp, top = 14.dp, end = 16.dp, bottom = 10.dp),
     ) {
         Column(
             modifier = Modifier.fillMaxSize(),
