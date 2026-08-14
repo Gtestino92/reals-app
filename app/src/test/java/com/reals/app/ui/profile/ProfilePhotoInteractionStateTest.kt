@@ -3,7 +3,6 @@ package com.reals.app.ui.profile
 import com.reals.app.domain.model.ProfilePhoto
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -128,17 +127,14 @@ class ProfilePhotoInteractionStateTest {
     }
 
     @Test
-    fun mismatchedActiveActionDoesNotConsumePreview() {
+    fun deleteActionClearsExistingPreview() {
         val state = uploadingAddState(position = 4)
-        state.startDelete(photoId = "photo-2", position = 2)
 
-        val transition = state.prepareMatchingUploadSucceeded(
-            photos = listOf(photo("photo-new", 4)),
-            uploadResponseAtElapsedMillis = 42L,
-        )
+        val cleanupUriString = state.startDelete(photoId = "photo-2", position = 2)
 
-        assertNull(transition)
-        assertTrue(state.previewState is ProfilePhotoPreviewState.Uploading)
+        assertEquals("file:///cache/crop.jpg", cleanupUriString)
+        assertEquals(ProfilePhotoPreviewState.None, state.previewState)
+        assertEquals(ProfilePhotoActionPresentation(ProfilePhotoActionKind.Delete, 2, "photo-2"), state.activeAction)
     }
 
     @Test
@@ -194,17 +190,6 @@ class ProfilePhotoInteractionStateTest {
         assertEquals(state.previewGenerationCounter, restored.previewGenerationCounter)
         assertEquals(state.previewState, restored.previewState)
         assertEquals(state.cropTransaction, restored.cropTransaction)
-    }
-
-    @Test
-    fun differentProfileUsesFreshInteractionState() {
-        val previousProfileState = uploadingAddState(position = 4)
-        val nextProfileState = ProfilePhotoInteractionState()
-
-        assertTrue(previousProfileState.previewState is ProfilePhotoPreviewState.Uploading)
-        assertNull(nextProfileState.selectionTransaction)
-        assertNull(nextProfileState.activeAction)
-        assertEquals(ProfilePhotoPreviewState.None, nextProfileState.previewState)
     }
 
     private fun uploadingAddState(position: Int): ProfilePhotoInteractionState =

@@ -3,31 +3,18 @@
 package com.reals.app.ui.profile
 
 import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
@@ -36,20 +23,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -57,49 +37,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import coil3.SingletonImageLoader
-import coil3.compose.AsyncImage
-import coil3.memory.MemoryCache
-import coil3.request.CachePolicy
-import coil3.request.ImageRequest
-import com.reals.app.core.media.ProfilePhotoPipelineTiming
-import com.reals.app.core.media.ProfilePhotoTimingFields
-import com.reals.app.core.media.deleteOwnedProfilePhotoCropFile
-import com.reals.app.core.media.deleteStaleProfilePhotoCropFiles
-import com.reals.app.core.media.profilePhotoCropCacheDirectory
 import com.reals.app.core.network.ApiError
-import com.reals.app.core.network.BackendErrorCode
 import com.reals.app.core.network.ErrorContext
-import com.reals.app.core.network.backendErrorCode
-import com.reals.app.core.security.TextSafety
-import com.reals.app.ui.common.ApiErrorFeedbackCard
-import com.reals.app.ui.common.FeedbackCard
-import com.reals.app.ui.common.FeedbackTone
-import com.reals.app.ui.common.RealsBrandDivider
-import com.reals.app.ui.common.realsOutlinedTextFieldColors
-import com.reals.app.ui.common.userDescription
-import com.reals.app.ui.theme.RealsRadii
-import com.reals.app.ui.theme.RealsType
 import com.reals.app.domain.model.CountryReference
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfilePhoto
@@ -108,12 +48,12 @@ import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.UpdateProfileInput
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
-import kotlin.math.roundToInt
-import kotlin.time.Duration.Companion.hours
-import kotlin.time.Duration.Companion.milliseconds
+import com.reals.app.ui.common.ApiErrorFeedbackCard
+import com.reals.app.ui.common.FeedbackCard
+import com.reals.app.ui.common.FeedbackTone
+import com.reals.app.ui.common.RealsBrandDivider
+import com.reals.app.ui.theme.RealsRadii
+import com.reals.app.ui.theme.RealsType
 
 @Composable
 fun ProfileStatusScreen(
@@ -677,32 +617,4 @@ internal fun ErrorFeedback(title: String, message: String) {
 @Composable
 internal fun SuccessFeedback(message: String) {
     FeedbackCard(title = "Listo", message = message, tone = FeedbackTone.Success)
-}
-
-@Composable
-private fun EnumDropdown(
-    label: String,
-    value: String,
-    options: List<String>,
-    enabled: Boolean,
-    optionLabel: (String) -> String = { it },
-    onValueChange: (String) -> Unit,
-) {
-    var expanded by rememberSaveable(label, value) { mutableStateOf(false) }
-    Column {
-        OutlinedButton(onClick = { expanded = true }, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
-            Text("$label: ${optionLabel(value)}")
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(optionLabel(option)) },
-                    onClick = {
-                        onValueChange(option)
-                        expanded = false
-                    },
-                )
-            }
-        }
-    }
 }
