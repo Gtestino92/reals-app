@@ -124,6 +124,35 @@ class VisualApprovalCoordinatorTest {
     }
 
     @Test
+    fun `return Home surface survives initial visual load and refresh`() = runBlocking {
+        api.matchResponse = Response.success(TestDtos.match("VISUAL_PHASE"))
+        api.visualProfileResponse = Response.success(TestDtos.visualProfile())
+
+        val initial = coordinator.load(
+            session = TestDomain.session(),
+            matchId = "match-1",
+            returnHomeSurface = HomeSurface.Pending,
+            initialMatch = null,
+            previous = null,
+            locallyHidden = false,
+        )
+
+        val loaded = (initial as VisualApprovalLoadResult.Show).state
+        assertEquals(HomeSurface.Pending, loaded.returnHomeSurface)
+
+        val refreshed = coordinator.refresh(
+            current = loaded,
+            locallyHidden = false,
+            onPending = { pending ->
+                assertEquals(HomeSurface.Pending, pending.returnHomeSurface)
+            },
+        )
+
+        assertTrue(refreshed is VisualApprovalFlowResult.Show)
+        assertEquals(HomeSurface.Pending, (refreshed as VisualApprovalFlowResult.Show).state.returnHomeSurface)
+    }
+
+    @Test
     fun `load does not fetch unread partner message automatically`() = runBlocking {
         api.matchResponse = Response.success(TestDtos.match("VISUAL_PHASE"))
         api.visualProfileResponse = Response.success(

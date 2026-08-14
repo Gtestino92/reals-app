@@ -221,14 +221,16 @@ class RealsRootViewModel(
                     navigateBackProfileQuestions()
                 } else if (current.editingActiveProfile) {
                     closeProfileManagement()
+                } else if (current.home.surface == HomeSurface.Pending) {
+                    showHomeSurface(HomeSurface.Overview)
                 }
             }
 
             is RealsRootUiState.SecondChat -> closeSecondChat()
             is RealsRootUiState.FirstChat -> closeFirstChat()
-            is RealsRootUiState.VisualApproval -> closeVisualApproval()
-            is RealsRootUiState.Scheduling -> closeScheduling()
-            is RealsRootUiState.PartnerProfile -> closePartnerProfile()
+            is RealsRootUiState.VisualApproval -> closeVisualApprovalFromSystemBack(current)
+            is RealsRootUiState.Scheduling -> closeSchedulingFromSystemBack(current)
+            is RealsRootUiState.PartnerProfile -> closePartnerProfileFromSystemBack(current)
             is RealsRootUiState.PendingEngagement -> returnToHomeFromPendingEngagement()
             is RealsRootUiState.ActivationComplete -> refreshSession()
 
@@ -249,6 +251,10 @@ class RealsRootViewModel(
 
     fun pollHomeStateSilently() {
         homeCoordinator.pollHomeStateSilently()
+    }
+
+    fun showHomeSurface(surface: HomeSurface) {
+        homeCoordinator.showHomeSurface(surface)
     }
 
     fun handleExternalNotificationOpened(type: String?) {
@@ -841,11 +847,17 @@ class RealsRootViewModel(
     }
 
     fun openVisualApproval(matchId: String) {
-        val session = when (val current = _uiState.value) {
+        val current = _uiState.value
+        val session = when (current) {
             is RealsRootUiState.Ready -> current.session
             is RealsRootUiState.FirstChat -> current.session
             is RealsRootUiState.VisualApproval -> current.session
             else -> return
+        }
+        val returnHomeSurface = when (current) {
+            is RealsRootUiState.Ready -> current.home.surface
+            is RealsRootUiState.VisualApproval -> current.returnHomeSurface
+            else -> HomeSurface.Overview
         }
 
         viewModelScope.launch {
@@ -853,6 +865,7 @@ class RealsRootViewModel(
                 visualApprovalCoordinator.open(
                     session = session,
                     matchId = matchId,
+                    returnHomeSurface = returnHomeSurface,
                     locallyHidden = matchId.trim() in homeCoordinator.localHiddenSnapshot().hiddenVisualMatchIds,
                     onPending = { _uiState.value = it },
                 )
@@ -864,6 +877,15 @@ class RealsRootViewModel(
         val current = _uiState.value as? RealsRootUiState.VisualApproval ?: return
         viewModelScope.launch {
             homeCoordinator.returnHome(current.session)
+        }
+    }
+
+    private fun closeVisualApprovalFromSystemBack(current: RealsRootUiState.VisualApproval) {
+        viewModelScope.launch {
+            homeCoordinator.returnHome(
+                session = current.session,
+                surface = current.returnHomeSurface,
+            )
         }
     }
 
@@ -886,14 +908,37 @@ class RealsRootViewModel(
         matchId: String,
         partnerName: String? = null,
     ) {
-        val session = when (val current = _uiState.value) {
+        val current = _uiState.value
+        val session = when (current) {
             is RealsRootUiState.Ready -> current.session
             is RealsRootUiState.Scheduling -> current.session
             else -> return
         }
+        val returnHomeSurface = when (current) {
+            is RealsRootUiState.Ready -> current.home.surface
+            is RealsRootUiState.Scheduling -> current.returnHomeSurface
+            else -> HomeSurface.Overview
+        }
         val cleanConnectionId = connectionId.trim()
         val cleanMatchId = matchId.trim()
         if (cleanConnectionId.isBlank() || cleanMatchId.isBlank()) return
+
+        openScheduling(
+            session = session,
+            cleanConnectionId = cleanConnectionId,
+            cleanMatchId = cleanMatchId,
+            partnerName = partnerName,
+            returnHomeSurface = returnHomeSurface,
+        )
+    }
+
+    private fun openScheduling(
+        session: ProvisionedSession,
+        cleanConnectionId: String,
+        cleanMatchId: String,
+        partnerName: String?,
+        returnHomeSurface: HomeSurface,
+    ) {
         if (schedulingOpenJob?.isActive == true) return
 
         val pending = RealsRootUiState.Scheduling(
@@ -901,6 +946,7 @@ class RealsRootViewModel(
             connectionId = cleanConnectionId,
             matchId = cleanMatchId,
             partnerName = partnerName,
+            returnHomeSurface = returnHomeSurface,
             loading = true,
         )
         _uiState.value = pending
@@ -1036,11 +1082,39 @@ class RealsRootViewModel(
         }
     }
 
+    private fun closeSchedulingFromSystemBack(current: RealsRootUiState.Scheduling) {
+        schedulingOpenJob?.cancel()
+        schedulingOpenJob = null
+        schedulingRefreshJob?.cancel()
+        schedulingRefreshJob = null
+        silentSchedulingRefreshJob = null
+        viewModelScope.launch {
+            homeCoordinator.returnHome(
+                session = current.session,
+                surface = current.returnHomeSurface,
+            )
+        }
+    }
+
     fun openConnectionPartnerProfile(matchId: String) {
-        val session = when (val current = _uiState.value) {
+        val current = _uiState.value
+        val session = when (current) {
             is RealsRootUiState.Ready -> current.session
             is RealsRootUiState.Scheduling -> current.session
             else -> return
+        }
+        val fallbackHomeSurface = when (current) {
+            is RealsRootUiState.Ready -> current.home.surface
+            is RealsRootUiState.Scheduling -> current.returnHomeSurface
+            else -> HomeSurface.Overview
+        }
+        val schedulingReturnContext = (current as? RealsRootUiState.Scheduling)?.let { scheduling ->
+            SchedulingReturnContext(
+                connectionId = scheduling.connectionId,
+                matchId = scheduling.matchId,
+                partnerName = scheduling.partnerName,
+                homeSurface = scheduling.returnHomeSurface,
+            )
         }
         val cleanMatchId = matchId.trim()
         if (cleanMatchId.isBlank()) return
@@ -1049,6 +1123,8 @@ class RealsRootViewModel(
             _uiState.value = partnerProfileCoordinator.load(
                 session = session,
                 matchId = cleanMatchId,
+                fallbackHomeSurface = fallbackHomeSurface,
+                schedulingReturnContext = schedulingReturnContext,
                 onPending = { _uiState.value = it },
             )
         }
@@ -1080,6 +1156,27 @@ class RealsRootViewModel(
         val current = _uiState.value as? RealsRootUiState.PartnerProfile ?: return
         viewModelScope.launch {
             homeCoordinator.returnHome(current.session)
+        }
+    }
+
+    private fun closePartnerProfileFromSystemBack(current: RealsRootUiState.PartnerProfile) {
+        val schedulingContext = current.schedulingReturnContext
+        if (schedulingContext != null) {
+            openScheduling(
+                session = current.session,
+                cleanConnectionId = schedulingContext.connectionId,
+                cleanMatchId = schedulingContext.matchId,
+                partnerName = schedulingContext.partnerName,
+                returnHomeSurface = schedulingContext.homeSurface,
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            homeCoordinator.returnHome(
+                session = current.session,
+                surface = current.fallbackHomeSurface,
+            )
         }
     }
 

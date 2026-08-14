@@ -97,6 +97,14 @@ internal class HomeCoordinator(
         }
     }
 
+    fun showHomeSurface(surface: HomeSurface) {
+        val current = uiState.value as? RealsRootUiState.Ready ?: return
+        if (current.home.surface == surface) return
+        uiState.value = current.copy(
+            home = current.home.copy(surface = surface),
+        )
+    }
+
     fun pollHomeStateSilently() {
         if (uiState.value !is RealsRootUiState.Ready) return
         if (silentHomePollJob?.isActive == true) return
@@ -472,11 +480,16 @@ internal class HomeCoordinator(
      * Convenience for non-home features (chat, scheduling, visual review...) to
      * come back to home after they finish. Loads the home with a status message.
      */
-    suspend fun returnHome(session: ProvisionedSession, message: String? = null) {
+    suspend fun returnHome(
+        session: ProvisionedSession,
+        message: String? = null,
+        surface: HomeSurface = HomeSurface.Overview,
+    ) {
         loadHomeForReady(
             ready = RealsRootUiState.Ready(
                 session = session,
                 home = HomeUiState(
+                    surface = surface,
                     homeLoading = true,
                     homeMessage = message,
                 ),

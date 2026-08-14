@@ -13,11 +13,15 @@ internal class PartnerProfileCoordinator(
     suspend fun load(
         session: ProvisionedSession,
         matchId: String,
+        fallbackHomeSurface: HomeSurface = HomeSurface.Overview,
+        schedulingReturnContext: SchedulingReturnContext? = null,
         onPending: (RealsRootUiState.PartnerProfile) -> Unit,
     ): RealsRootUiState.PartnerProfile {
         val loadingState = RealsRootUiState.PartnerProfile(
             session = session,
             matchId = matchId,
+            fallbackHomeSurface = fallbackHomeSurface,
+            schedulingReturnContext = schedulingReturnContext,
             loading = true,
         )
         onPending(loadingState)

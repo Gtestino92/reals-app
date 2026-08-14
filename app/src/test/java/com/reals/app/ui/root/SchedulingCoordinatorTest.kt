@@ -41,6 +41,7 @@ class SchedulingCoordinatorTest {
     fun `initial scheduling refresh success updates state`() = runBlocking {
         val state = coordinator.refresh(
             current = baseState().copy(
+                returnHomeSurface = HomeSurface.Pending,
                 loading = true,
                 negotiation = null,
             ),
@@ -48,6 +49,7 @@ class SchedulingCoordinatorTest {
         )
 
         assertEquals(false, state.loading)
+        assertEquals(HomeSurface.Pending, state.returnHomeSurface)
         assertEquals(NegotiationStatus.Pending, state.negotiation?.status)
         assertEquals(1, state.proposals.size)
         assertEquals(60L, state.availability?.conflictWindowMinutes)
@@ -243,6 +245,7 @@ class SchedulingCoordinatorTest {
         }
         val previousError = ApiError.Unexpected("old")
         val current = baseState().copy(
+            returnHomeSurface = HomeSurface.Pending,
             submittingLabel = "Enviando horarios...",
             error = previousError,
             message = "mensaje anterior",
@@ -261,12 +264,15 @@ class SchedulingCoordinatorTest {
         runCurrent()
 
         assertEquals(true, pending?.submitting)
+        assertEquals(HomeSurface.Pending, pending?.returnHomeSurface)
         assertEquals("Enviando horarios...", pending?.submittingLabel)
         assertNull(pending?.error)
         assertNull(pending?.message)
 
         releaseSubmit.complete(Unit)
-        assertEquals(false, result.await().submitting)
+        val final = result.await()
+        assertEquals(false, final.submitting)
+        assertEquals(HomeSurface.Pending, final.returnHomeSurface)
     }
 
     @Test

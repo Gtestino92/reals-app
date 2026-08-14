@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -243,6 +244,218 @@ class RealsRootSystemBackTest {
     }
 
     @Test
+    fun `system back on Home Pending returns to Overview`() = runTest(dispatcher) {
+        val viewModel = viewModel()
+        viewModel.setState(ready(surface = HomeSurface.Pending))
+
+        assertTrue(viewModel.uiState.value.canHandleSystemBack())
+
+        viewModel.onSystemBack()
+
+        assertReadySurface(viewModel, HomeSurface.Overview)
+    }
+
+    @Test
+    fun `visual review system back returns to originating Home surface`() = runTest(dispatcher) {
+        assertSystemBackReturnsHome(
+            state = RealsRootUiState.VisualApproval(
+                session = TestDomain.session(),
+                matchId = "match-1",
+                returnHomeSurface = HomeSurface.Overview,
+            ),
+            expectedSurface = HomeSurface.Overview,
+        )
+        assertSystemBackReturnsHome(
+            state = RealsRootUiState.VisualApproval(
+                session = TestDomain.session(),
+                matchId = "match-1",
+                returnHomeSurface = HomeSurface.Pending,
+            ),
+            expectedSurface = HomeSurface.Pending,
+        )
+    }
+
+    @Test
+    fun `visual review opened from First Chat installs Overview fallback`() = runTest(dispatcher) {
+        val api = com.reals.app.testutil.FakeRealsApi().apply {
+            matchResponse = retrofit2.Response.success(TestDtos.match("VISUAL_PHASE"))
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(firstChat())
+
+        viewModel.openVisualApproval("match-1")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.VisualApproval
+        assertEquals(HomeSurface.Overview, state.returnHomeSurface)
+    }
+
+    @Test
+    fun `visual review opened from Home installs current Home surface`() = runTest(dispatcher) {
+        val api = com.reals.app.testutil.FakeRealsApi().apply {
+            matchResponse = retrofit2.Response.success(TestDtos.match("VISUAL_PHASE"))
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(ready(surface = HomeSurface.Pending))
+
+        viewModel.openVisualApproval("match-1")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.VisualApproval
+        assertEquals(HomeSurface.Pending, state.returnHomeSurface)
+    }
+
+    @Test
+    fun `scheduling system back returns to originating Home surface`() = runTest(dispatcher) {
+        assertSystemBackReturnsHome(
+            state = scheduling(returnHomeSurface = HomeSurface.Overview),
+            expectedSurface = HomeSurface.Overview,
+        )
+        assertSystemBackReturnsHome(
+            state = scheduling(returnHomeSurface = HomeSurface.Pending),
+            expectedSurface = HomeSurface.Pending,
+        )
+    }
+
+    @Test
+    fun `scheduling opened from Home installs current Home surface`() = runTest(dispatcher) {
+        val viewModel = viewModel()
+        viewModel.setState(ready(surface = HomeSurface.Pending))
+
+        viewModel.openScheduling("connection-1", "match-1", "Alex")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Scheduling
+        assertEquals(HomeSurface.Pending, state.returnHomeSurface)
+    }
+
+    @Test
+    fun `partner profile direct system back returns to originating Home surface`() = runTest(dispatcher) {
+        assertSystemBackReturnsHome(
+            state = RealsRootUiState.PartnerProfile(
+                session = TestDomain.session(),
+                matchId = "match-1",
+                fallbackHomeSurface = HomeSurface.Overview,
+            ),
+            expectedSurface = HomeSurface.Overview,
+        )
+        assertSystemBackReturnsHome(
+            state = RealsRootUiState.PartnerProfile(
+                session = TestDomain.session(),
+                matchId = "match-1",
+                fallbackHomeSurface = HomeSurface.Pending,
+            ),
+            expectedSurface = HomeSurface.Pending,
+        )
+    }
+
+    @Test
+    fun `partner profile opened from Home installs fallback without scheduling context`() = runTest(dispatcher) {
+        val viewModel = viewModel()
+        viewModel.setState(ready(surface = HomeSurface.Pending))
+
+        viewModel.openConnectionPartnerProfile("match-1")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.PartnerProfile
+        assertEquals(HomeSurface.Pending, state.fallbackHomeSurface)
+        assertEquals(null, state.schedulingReturnContext)
+    }
+
+    @Test
+    fun `partner profile from Scheduling returns to Scheduling then Home Pending`() = runTest(dispatcher) {
+        val viewModel = viewModel()
+        viewModel.setState(
+            scheduling(
+                connectionId = "connection-1",
+                matchId = "match-scheduling",
+                partnerName = "Alex",
+                returnHomeSurface = HomeSurface.Pending,
+            )
+        )
+
+        viewModel.openConnectionPartnerProfile("match-profile")
+        advanceUntilIdle()
+
+        val partnerProfile = viewModel.uiState.value as RealsRootUiState.PartnerProfile
+        assertEquals(HomeSurface.Pending, partnerProfile.fallbackHomeSurface)
+        assertEquals(
+            SchedulingReturnContext(
+                connectionId = "connection-1",
+                matchId = "match-scheduling",
+                partnerName = "Alex",
+                homeSurface = HomeSurface.Pending,
+            ),
+            partnerProfile.schedulingReturnContext,
+        )
+
+        viewModel.onSystemBack()
+        advanceUntilIdle()
+
+        val scheduling = viewModel.uiState.value as RealsRootUiState.Scheduling
+        assertEquals("connection-1", scheduling.connectionId)
+        assertEquals("match-scheduling", scheduling.matchId)
+        assertEquals("Alex", scheduling.partnerName)
+        assertEquals(HomeSurface.Pending, scheduling.returnHomeSurface)
+
+        viewModel.onSystemBack()
+        advanceUntilIdle()
+
+        assertReadySurface(viewModel, HomeSurface.Pending)
+    }
+
+    @Test
+    fun `partner profile from Scheduling returns ultimately to Home Overview`() = runTest(dispatcher) {
+        val viewModel = viewModel()
+        viewModel.setState(scheduling(returnHomeSurface = HomeSurface.Overview))
+
+        viewModel.openConnectionPartnerProfile("match-profile")
+        advanceUntilIdle()
+        viewModel.onSystemBack()
+        advanceUntilIdle()
+        viewModel.onSystemBack()
+        advanceUntilIdle()
+
+        assertReadySurface(viewModel, HomeSurface.Overview)
+    }
+
+    @Test
+    fun `explicit Home actions still force Overview`() = runTest(dispatcher) {
+        assertExplicitCloseReturnsOverview(
+            state = RealsRootUiState.VisualApproval(
+                session = TestDomain.session(),
+                matchId = "match-1",
+                returnHomeSurface = HomeSurface.Pending,
+            ),
+            close = RealsRootViewModel::closeVisualApproval,
+        )
+        assertExplicitCloseReturnsOverview(
+            state = scheduling(returnHomeSurface = HomeSurface.Pending),
+            close = RealsRootViewModel::closeScheduling,
+        )
+        assertExplicitCloseReturnsOverview(
+            state = RealsRootUiState.PartnerProfile(
+                session = TestDomain.session(),
+                matchId = "match-1",
+                fallbackHomeSurface = HomeSurface.Pending,
+            ),
+            close = RealsRootViewModel::closePartnerProfile,
+        )
+    }
+
+    @Test
+    fun `permitted second chat system back still returns to Overview`() = runTest(dispatcher) {
+        assertSystemBackReturnsHome(
+            state = RealsRootUiState.SecondChat(
+                session = TestDomain.session(),
+                connectionId = "connection-1",
+                matchId = "match-1",
+            ),
+            expectedSurface = HomeSurface.Overview,
+        )
+    }
+
+    @Test
     fun `system back is not handled while guarded operations are active`() {
         val session = TestDomain.session()
 
@@ -295,6 +508,68 @@ class RealsRootSystemBackTest {
         guidanceActionLoading = guidanceActionLoading,
         manualBlock = manualBlock,
     )
+
+    private fun ready(surface: HomeSurface): RealsRootUiState.Ready =
+        RealsRootUiState.Ready(
+            session = TestDomain.session(),
+            home = HomeUiState(surface = surface),
+        )
+
+    private fun scheduling(
+        connectionId: String = "connection-1",
+        matchId: String = "match-1",
+        partnerName: String? = "Alex",
+        returnHomeSurface: HomeSurface,
+    ): RealsRootUiState.Scheduling =
+        RealsRootUiState.Scheduling(
+            session = TestDomain.session(),
+            connectionId = connectionId,
+            matchId = matchId,
+            partnerName = partnerName,
+            returnHomeSurface = returnHomeSurface,
+        )
+
+    private fun viewModel(
+        api: com.reals.app.testutil.FakeRealsApi = com.reals.app.testutil.FakeRealsApi(),
+    ): RealsRootViewModel =
+        RealsRootViewModel(
+            dependencies = rootViewModelTestDependencies(api),
+            autoRefreshSession = false,
+        )
+
+    private fun assertSystemBackReturnsHome(
+        state: RealsRootUiState,
+        expectedSurface: HomeSurface,
+    ) {
+        val viewModel = viewModel()
+        viewModel.setState(state)
+
+        viewModel.onSystemBack()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertReadySurface(viewModel, expectedSurface)
+    }
+
+    private fun assertExplicitCloseReturnsOverview(
+        state: RealsRootUiState,
+        close: RealsRootViewModel.() -> Unit,
+    ) {
+        val viewModel = viewModel()
+        viewModel.setState(state)
+
+        viewModel.close()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertReadySurface(viewModel, HomeSurface.Overview)
+    }
+
+    private fun assertReadySurface(
+        viewModel: RealsRootViewModel,
+        expectedSurface: HomeSurface,
+    ) {
+        val ready = viewModel.uiState.value as RealsRootUiState.Ready
+        assertEquals(expectedSurface, ready.home.surface)
+    }
 
     private fun RealsRootViewModel.setState(state: RealsRootUiState) {
         val field = RealsRootViewModel::class.java.getDeclaredField("_uiState")

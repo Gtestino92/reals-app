@@ -293,6 +293,8 @@ fun RealsApp(
                             changePasswordError = current.changePasswordError,
                             changePasswordMessage = current.changePasswordMessage,
                             canChangePassword = current.session.user.passwordManagementAllowed,
+                            homeSurface = current.home.surface,
+                            onHomeSurfaceChange = viewModel::showHomeSurface,
                             onEnqueue = viewModel::enqueueMatchmaking,
                             onDeviceLocationResolved = viewModel::enqueueMatchmakingFromResolvedDeviceLocation,
                             onCancelSearch = viewModel::cancelMatchmakingSearch,

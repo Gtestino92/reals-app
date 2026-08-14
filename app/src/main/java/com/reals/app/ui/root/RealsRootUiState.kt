@@ -177,6 +177,7 @@ sealed interface RealsRootUiState {
     data class VisualApproval(
         val session: ProvisionedSession,
         val matchId: String,
+        val returnHomeSurface: HomeSurface = HomeSurface.Overview,
         val match: Match? = null,
         val profile: VisualProfile? = null,
         val partnerMessage: String? = null,
@@ -199,6 +200,7 @@ sealed interface RealsRootUiState {
         val connectionId: String,
         val matchId: String,
         val partnerName: String? = null,
+        val returnHomeSurface: HomeSurface = HomeSurface.Overview,
         val loading: Boolean = false,
         val refreshing: Boolean = false,
         val submitting: Boolean = false,
@@ -214,6 +216,8 @@ sealed interface RealsRootUiState {
     data class PartnerProfile(
         val session: ProvisionedSession,
         val matchId: String,
+        val fallbackHomeSurface: HomeSurface = HomeSurface.Overview,
+        val schedulingReturnContext: SchedulingReturnContext? = null,
         val profile: VisualProfile? = null,
         val partnerMessage: String? = null,
         val partnerMessageLoaded: Boolean = false,
@@ -307,12 +311,25 @@ data class HomeUiState(
     val homeState: HomeState? = null,
     val homeStatusVersion: Long? = null,
     val screenModel: HomeScreenModel? = null,
+    val surface: HomeSurface = HomeSurface.Overview,
     val allowDraftHomeWithoutInteractions: Boolean = false,
     val homeLoading: Boolean = false,
     val homeError: ApiError? = null,
     val homeMessage: String? = null,
     val matchmakingBlockedReason: ApiError? = null,
     val matchmakingSearchPhase: MatchmakingSearchUiPhase = MatchmakingSearchUiPhase.Idle,
+)
+
+enum class HomeSurface {
+    Overview,
+    Pending,
+}
+
+data class SchedulingReturnContext(
+    val connectionId: String,
+    val matchId: String,
+    val partnerName: String?,
+    val homeSurface: HomeSurface,
 )
 
 enum class MatchmakingSearchUiPhase {
@@ -631,9 +648,12 @@ fun RealsRootUiState.canHandleSystemBack(): Boolean = when (this) {
     is RealsRootUiState.Ready ->
         affinityQuestionnaire.open ||
                 profileQuestions.open ||
-                editingActiveProfile &&
-                session.profileSnapshot is ProfileSnapshot.Found &&
-                !photos.reorderingPhotos
+                (
+                    editingActiveProfile &&
+                        session.profileSnapshot is ProfileSnapshot.Found &&
+                        !photos.reorderingPhotos
+                    ) ||
+                (!editingActiveProfile && home.surface == HomeSurface.Pending)
 
     is RealsRootUiState.SecondChat -> canReturnHomeNow() &&
             !sending && !audioUpload.uploading && !actionLoading && !manualBlock.loading
