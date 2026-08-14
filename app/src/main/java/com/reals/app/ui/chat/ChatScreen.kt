@@ -51,7 +51,7 @@ import java.time.Instant
 import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.milliseconds
 
-private const val FIRST_CHAT_DECISION_ONLY_COMPOSER_PAUSED_COPY =
+internal const val FIRST_CHAT_DECISION_ONLY_COMPOSER_PAUSED_COPY =
     "El chat está pausado mientras decidís."
 
 internal data class ChatLoadingPresentation(
