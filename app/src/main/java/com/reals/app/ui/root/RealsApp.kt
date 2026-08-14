@@ -293,6 +293,8 @@ fun RealsApp(
                             changePasswordError = current.changePasswordError,
                             changePasswordMessage = current.changePasswordMessage,
                             canChangePassword = current.session.user.passwordManagementAllowed,
+                            homeSurface = current.home.surface,
+                            onHomeSurfaceChange = viewModel::showHomeSurface,
                             onEnqueue = viewModel::enqueueMatchmaking,
                             onDeviceLocationResolved = viewModel::enqueueMatchmakingFromResolvedDeviceLocation,
                             onCancelSearch = viewModel::cancelMatchmakingSearch,
@@ -562,6 +564,13 @@ internal fun RealsRootUiState.Ready.shouldRenderHomeSurface(): Boolean {
         else -> false
     }
 }
+
+internal fun RealsRootUiState.Ready.isHomePendingSurfaceVisible(): Boolean =
+    !affinityQuestionnaire.open &&
+        !profileQuestions.open &&
+        !editingActiveProfile &&
+        home.surface == HomeSurface.Pending &&
+        shouldRenderHomeSurface()
 
 private fun HomeUiState.hasRenderableDraftHomeSurface(): Boolean {
     if (homeLoading && allowDraftHomeWithoutInteractions) return true

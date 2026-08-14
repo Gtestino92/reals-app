@@ -62,6 +62,7 @@ import com.reals.app.ui.theme.RealsColors
 import com.reals.app.ui.theme.RealsRadii
 import com.reals.app.ui.theme.RealsType
 import com.reals.app.ui.root.AffinityHomeSummaryUiState
+import com.reals.app.ui.root.HomeSurface
 import com.reals.app.ui.root.MatchmakingSearchUiPhase
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -74,11 +75,6 @@ private enum class LocationPermissionRequestMode {
     None,
     AutoPrewarm,
     Search,
-}
-
-private enum class HomeSurface {
-    Overview,
-    Pending,
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -96,6 +92,8 @@ fun MatchmakingHomeScreen(
     changePasswordError: String?,
     changePasswordMessage: String?,
     canChangePassword: Boolean,
+    homeSurface: HomeSurface,
+    onHomeSurfaceChange: (HomeSurface) -> Unit,
     onEnqueue: (SearchLocationInput) -> Unit,
     onDeviceLocationResolved: (SearchLocationInput) -> Unit,
     onCancelSearch: () -> Unit,
@@ -136,7 +134,6 @@ fun MatchmakingHomeScreen(
         mutableStateOf(LocationPermissionRequestMode.None)
     }
     var autoLocationPermissionRequested by rememberSaveable(profile.id) { mutableStateOf(false) }
-    var homeSurface by rememberSaveable(profile.id) { mutableStateOf(HomeSurface.Overview) }
     var prewarmedProfileId by rememberSaveable { mutableStateOf<String?>(null) }
 
     fun prewarmLocationSilently() {
@@ -379,8 +376,8 @@ fun MatchmakingHomeScreen(
             onDeleteAccount = onDeleteAccount,
             onSupportReals = onSupportReals,
             homeSurface = homeSurface,
-            onOpenPendingSurface = { homeSurface = HomeSurface.Pending },
-            onBackHome = { homeSurface = HomeSurface.Overview },
+            onOpenPendingSurface = { onHomeSurfaceChange(HomeSurface.Pending) },
+            onBackHome = { onHomeSurfaceChange(HomeSurface.Overview) },
         )
     }
 }

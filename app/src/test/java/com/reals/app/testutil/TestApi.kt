@@ -145,6 +145,7 @@ class FakeRealsApi : RealsApi {
     var beforeGetHomeResponse: suspend () -> Unit = {}
     var beforeGetHomeStatusResponse: suspend () -> Unit = {}
     var beforeGetMatchResponse: suspend () -> Unit = {}
+    var beforeGetVisualProfileResponse: suspend () -> Unit = {}
     var beforeGetFirstChatForMatchResponse: suspend () -> Unit = {}
     var beforeGetChatResponse: suspend () -> Unit = {}
     var beforeGetChatMessagesResponse: suspend () -> Unit = {}
@@ -535,7 +536,9 @@ class FakeRealsApi : RealsApi {
         authorization: String,
         matchId: String,
     ): Response<VisualProfileResponseDto> =
-        record("getVisualProfile", authorization, matchId) { visualProfileResponse }
+        record("getVisualProfile", authorization, matchId, beforeResponse = beforeGetVisualProfileResponse) {
+            visualProfileResponse
+        }
 
     override suspend fun submitVisualDecision(
         authorization: String,

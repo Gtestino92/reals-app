@@ -18,6 +18,7 @@ internal class VisualApprovalCoordinator(
     suspend fun open(
         session: ProvisionedSession,
         matchId: String,
+        returnHomeSurface: HomeSurface = HomeSurface.Overview,
         locallyHidden: Boolean,
         onPending: (RealsRootUiState.VisualApproval) -> Unit,
     ): VisualApprovalFlowResult {
@@ -30,6 +31,7 @@ internal class VisualApprovalCoordinator(
         return loadFlow(
             session = session,
             matchId = cleanMatchId,
+            returnHomeSurface = returnHomeSurface,
             initialMatch = null,
             previous = null,
             locallyHidden = false,
@@ -40,6 +42,7 @@ internal class VisualApprovalCoordinator(
     suspend fun load(
         session: ProvisionedSession,
         matchId: String,
+        returnHomeSurface: HomeSurface = HomeSurface.Overview,
         initialMatch: Match?,
         previous: RealsRootUiState.VisualApproval?,
         locallyHidden: Boolean,
@@ -47,6 +50,7 @@ internal class VisualApprovalCoordinator(
         val loadingState = previous ?: RealsRootUiState.VisualApproval(
             session = session,
             matchId = matchId,
+            returnHomeSurface = returnHomeSurface,
             match = initialMatch,
             loading = true,
         )
@@ -124,6 +128,7 @@ internal class VisualApprovalCoordinator(
         return loadFlow(
             session = current.session,
             matchId = current.matchId,
+            returnHomeSurface = current.returnHomeSurface,
             initialMatch = current.match,
             previous = current.copy(refreshing = true, error = null, message = null),
             locallyHidden = locallyHidden,
@@ -349,6 +354,7 @@ internal class VisualApprovalCoordinator(
     private suspend fun loadFlow(
         session: ProvisionedSession,
         matchId: String,
+        returnHomeSurface: HomeSurface,
         initialMatch: Match?,
         previous: RealsRootUiState.VisualApproval?,
         locallyHidden: Boolean,
@@ -357,6 +363,7 @@ internal class VisualApprovalCoordinator(
         val loadingState = previous ?: RealsRootUiState.VisualApproval(
             session = session,
             matchId = matchId,
+            returnHomeSurface = returnHomeSurface,
             match = initialMatch,
             loading = true,
         )
@@ -366,6 +373,7 @@ internal class VisualApprovalCoordinator(
             val result = load(
                 session = session,
                 matchId = matchId,
+                returnHomeSurface = returnHomeSurface,
                 initialMatch = initialMatch,
                 previous = previous,
                 locallyHidden = locallyHidden,

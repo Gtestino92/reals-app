@@ -66,7 +66,11 @@ class PartnerProfileCoordinatorTest {
 
     @Test
     fun `refresh preserves session and match id and clears refreshing on success`() = runBlocking {
-        val current = partnerProfileState()
+        val context = schedulingReturnContext(HomeSurface.Pending)
+        val current = partnerProfileState().copy(
+            fallbackHomeSurface = HomeSurface.Pending,
+            schedulingReturnContext = context,
+        )
         val pendingStates = mutableListOf<RealsRootUiState.PartnerProfile>()
 
         val state = coordinator.refresh(
@@ -76,6 +80,10 @@ class PartnerProfileCoordinatorTest {
 
         assertEquals(current.session, state.session)
         assertEquals(current.matchId, state.matchId)
+        assertEquals(HomeSurface.Pending, pendingStates.first().fallbackHomeSurface)
+        assertEquals(context, pendingStates.first().schedulingReturnContext)
+        assertEquals(HomeSurface.Pending, state.fallbackHomeSurface)
+        assertEquals(context, state.schedulingReturnContext)
         assertEquals(true, pendingStates.first().refreshing)
         assertEquals(null, pendingStates.first().error)
         assertEquals("visual-profile-1", pendingStates.last().profile?.profileId)
@@ -193,7 +201,10 @@ class PartnerProfileCoordinatorTest {
     @Test
     fun `retry partner message success keeps profile and skips visual profile request`() = runBlocking {
         val existingProfile = TestDtos.visualProfile(partnerPersonalMessageSubmitted = true).toDomain()
+        val context = schedulingReturnContext(HomeSurface.Pending)
         val current = partnerProfileState(profile = existingProfile).copy(
+            fallbackHomeSurface = HomeSurface.Pending,
+            schedulingReturnContext = context,
             partnerMessageError = ApiError.Unexpected("previous message failure"),
         )
         val pendingStates = mutableListOf<RealsRootUiState.PartnerProfile>()
@@ -204,9 +215,13 @@ class PartnerProfileCoordinatorTest {
         )
 
         assertEquals(existingProfile, pendingStates.single().profile)
+        assertEquals(HomeSurface.Pending, pendingStates.single().fallbackHomeSurface)
+        assertEquals(context, pendingStates.single().schedulingReturnContext)
         assertTrue(pendingStates.single().loadingPartnerMessage)
         assertEquals(null, pendingStates.single().partnerMessageError)
         assertEquals(existingProfile, state.profile)
+        assertEquals(HomeSurface.Pending, state.fallbackHomeSurface)
+        assertEquals(context, state.schedulingReturnContext)
         assertEquals("hola", state.partnerMessage)
         assertTrue(state.partnerMessageLoaded)
         assertFalse(state.loadingPartnerMessage)
@@ -319,6 +334,15 @@ class PartnerProfileCoordinatorTest {
         matchId = "match-1",
         profile = profile,
         error = ApiError.Unexpected("previous"),
+    )
+
+    private fun schedulingReturnContext(
+        homeSurface: HomeSurface,
+    ): SchedulingReturnContext = SchedulingReturnContext(
+        connectionId = "connection-1",
+        matchId = "match-scheduling",
+        partnerName = "Alex",
+        homeSurface = homeSurface,
     )
 
     private fun getVisualProfile(api: FakeRealsApi): GetVisualProfileUseCase {
