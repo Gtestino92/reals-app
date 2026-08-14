@@ -104,6 +104,7 @@ fun RealsApp(
             .fillMaxSize()
             .realsEditorialBackground(),
         color = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onBackground,
     ) {
         when (val current = state) {
             RealsRootUiState.Checking -> FullScreenMessage(

@@ -9,7 +9,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
-val LocalRealsDarkTheme = staticCompositionLocalOf { false }
+internal val LocalRealsDarkTheme = staticCompositionLocalOf { false }
 
 private val LightColors = lightColorScheme(
     primary = RealsColors.Ink,
