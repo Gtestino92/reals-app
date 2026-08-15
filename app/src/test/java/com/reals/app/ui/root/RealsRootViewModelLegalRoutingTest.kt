@@ -57,6 +57,7 @@ import com.reals.app.domain.usecase.GetSecondChatForConnectionUseCase
 import com.reals.app.domain.usecase.GetVisualProfileUseCase
 import com.reals.app.domain.usecase.LeaveQueueUseCase
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
+import com.reals.app.domain.usecase.PutChatMessageReactionUseCase
 import com.reals.app.domain.usecase.PutMyPersonalMessageUseCase
 import com.reals.app.domain.usecase.ReactivateAccountUseCase
 import com.reals.app.domain.usecase.RejectChatExitRequestUseCase
@@ -433,6 +434,7 @@ class RealsRootViewModelLegalRoutingTest {
                 getChatMessages = GetChatMessagesUseCase(chatRepository),
                 sendChatMessage = SendChatMessageUseCase(chatRepository),
                 sendChatAudioMessage = com.reals.app.domain.usecase.SendChatAudioMessageUseCase(chatRepository),
+                putMessageReaction = PutChatMessageReactionUseCase(chatRepository),
                 requestNextFirstChatGuidanceQuestion = RequestNextFirstChatGuidanceQuestionUseCase(chatRepository),
                 getChatExitRequests = GetChatExitRequestsUseCase(chatRepository),
                 requestMutualChatExit = RequestMutualChatExitUseCase(chatRepository),
@@ -453,6 +455,7 @@ class RealsRootViewModelLegalRoutingTest {
                 getChatMessages = GetChatMessagesUseCase(chatRepository),
                 sendChatMessage = SendChatMessageUseCase(chatRepository),
                 sendChatAudioMessage = com.reals.app.domain.usecase.SendChatAudioMessageUseCase(chatRepository),
+                putMessageReaction = PutChatMessageReactionUseCase(chatRepository),
                 safetyCancelChat = SafetyCancelChatUseCase(chatRepository),
                 createCompletionRequest =
                     com.reals.app.domain.usecase.CreateSecondChatCompletionRequestUseCase(chatRepository),

@@ -5,6 +5,7 @@ import com.reals.app.data.mapper.toDomain
 import com.reals.app.data.repository.ChatRepository
 import com.reals.app.di.SecondChatFeatureDependencies
 import com.reals.app.domain.model.ChatExitReason
+import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.usecase.CancelChatUseCase
 import com.reals.app.domain.usecase.CreateSecondChatCompletionRequestUseCase
 import com.reals.app.domain.usecase.CreateSecondChatInactivityClaimUseCase
@@ -16,6 +17,7 @@ import com.reals.app.domain.usecase.GetChatUseCase
 import com.reals.app.domain.usecase.GetSecondChatForConnectionUseCase
 import com.reals.app.domain.usecase.GetSecondChatStatusUseCase
 import com.reals.app.domain.usecase.JoinSecondChatUseCase
+import com.reals.app.domain.usecase.PutChatMessageReactionUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
 import com.reals.app.domain.usecase.SafetyCancelChatUseCase
 import com.reals.app.domain.usecase.SendChatMessageUseCase
@@ -217,6 +219,34 @@ class SecondChatCoordinatorTest {
         assertEquals("client-1", result.audioUpload.completedClientMessageId)
     }
 
+    @Test
+    fun `silent refresh alternates incremental and reaction reconciliation cursors`() = runBlocking {
+        val secondCoordinator = SecondChatCoordinator(secondChatDependencies(api))
+        val current = secondChatState().copy(messages = pollingMessages())
+        api.chatMessagesResponse = Response.success(TestDtos.chatMessagesPagedPayload(emptyList()))
+
+        secondCoordinator.refresh(current, silent = true, useReactionReconciliationAlternation = true)
+        assertEquals("d", api.lastChatMessagesAfter)
+
+        secondCoordinator.refresh(current, silent = true, useReactionReconciliationAlternation = true)
+        assertEquals("b", api.lastChatMessagesAfter)
+
+        secondCoordinator.refresh(current, silent = true, useReactionReconciliationAlternation = true)
+        assertEquals("d", api.lastChatMessagesAfter)
+    }
+
+    @Test
+    fun `silent refresh alternation resets when second chat id changes`() = runBlocking {
+        val secondCoordinator = SecondChatCoordinator(secondChatDependencies(api))
+        val oldChat = secondChatState().chat?.copy(id = "chat-old")
+        val current = secondChatState().copy(chatId = "chat-old", chat = oldChat, messages = pollingMessages())
+        api.chatMessagesResponse = Response.success(TestDtos.chatMessagesPagedPayload(emptyList()))
+
+        secondCoordinator.refresh(current, silent = true, useReactionReconciliationAlternation = true)
+
+        assertEquals(null, api.lastChatMessagesAfter)
+    }
+
     private fun secondChatState(): RealsRootUiState.SecondChat =
         RealsRootUiState.SecondChat(
             session = TestDomain.session(),
@@ -224,6 +254,14 @@ class SecondChatCoordinatorTest {
             matchId = "match-1",
             chatId = "chat-1",
             chat = TestDtos.chat(status = "ACTIVE").copy(chatType = "SECOND_CHAT").toDomain(),
+        )
+
+    private fun pollingMessages(): List<ChatMessage> =
+        listOf(
+            TestDtos.chatMessage("a").copy(senderId = "other", sentAt = "2026-06-18T21:00:00Z").toDomain(),
+            TestDtos.chatMessage("b").copy(senderId = "me", sentAt = "2026-06-18T21:01:00Z").toDomain(),
+            TestDtos.chatMessage("c").copy(senderId = "other", sentAt = "2026-06-18T21:02:00Z").toDomain(),
+            TestDtos.chatMessage("d").copy(senderId = "me", sentAt = "2026-06-18T21:03:00Z").toDomain(),
         )
 
     private fun audioDraft(file: File): ChatAudioDraftUiState =
@@ -251,6 +289,7 @@ class SecondChatCoordinatorTest {
             getChatMessages = GetChatMessagesUseCase(chatRepository),
             sendChatMessage = SendChatMessageUseCase(chatRepository),
             sendChatAudioMessage = com.reals.app.domain.usecase.SendChatAudioMessageUseCase(chatRepository),
+            putMessageReaction = PutChatMessageReactionUseCase(chatRepository),
             safetyCancelChat = SafetyCancelChatUseCase(chatRepository),
             createCompletionRequest = CreateSecondChatCompletionRequestUseCase(chatRepository),
             decideCompletionRequest = DecideSecondChatCompletionRequestUseCase(chatRepository),

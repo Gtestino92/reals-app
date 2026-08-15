@@ -95,6 +95,7 @@ fun ChatScreen(
     chat: Chat?,
     messages: List<ChatMessage>,
     optimisticMessages: List<OptimisticOutgoingMessage>,
+    pendingReactionMessageIds: Set<String> = emptySet(),
     exitRequests: List<ChatExitRequest>,
     serverClockSnapshot: ServerClockSnapshot? = null,
     dismissedUnansweredPeriodReference: String? = null,
@@ -137,6 +138,7 @@ fun ChatScreen(
     onDeleteAudioDraft: () -> Unit = {},
     onRefreshAudioUrl: suspend (messageId: String) -> String? = { null },
     onRetryOptimisticMessage: (localId: String, content: String) -> Unit,
+    onReactToMessage: (messageId: String) -> Unit = {},
     onApprove: () -> Unit,
     onReject: () -> Unit,
     onRequestMutualExit: () -> Unit,
@@ -285,6 +287,14 @@ fun ChatScreen(
         canUseChatActions &&
             (secondChatLifecycle == null || secondChatTiming?.genuinelyActive == true) &&
             (!showMutualExitActions || !exitFlowLocked)
+    val canAddMessageReactions =
+        !loadingChatAction &&
+            when (chat?.chatType) {
+                ChatType.FirstChat -> firstChatPolicy.canSendMessages
+                ChatType.SecondChat -> canChat && secondChatTiming?.genuinelyActive == true
+                is ChatType.Unknown,
+                null -> false
+            }
     val firstChatUnansweredSuggestion = firstChatUnansweredSuggestionState(
         chat = chat,
         currentUserId = currentUserId,
@@ -574,9 +584,12 @@ fun ChatScreen(
                 chatType = chat?.chatType ?: ChatType.Unknown(""),
                 messages = messages,
                 optimisticMessages = optimisticMessages,
+                pendingReactionMessageIds = pendingReactionMessageIds,
+                reactionAddingEnabled = canAddMessageReactions,
                 bottomContentPadding = bottomContentPadding + 8.dp,
                 modifier = Modifier.weight(1f),
                 onRetryOptimisticMessage = onRetryOptimisticMessage,
+                onReactToMessage = onReactToMessage,
                 canRetryFailedTextMessages = firstChatPolicy.canRetryFailedTextMessages,
                 playbackState = audioSession.playbackState,
                 onPlayAudio = audioSession::playRemoteMessage,

@@ -67,6 +67,11 @@ data class SendMessageRequestDto(
 )
 
 @Serializable
+data class PutMessageReactionRequestDto(
+    val type: String,
+)
+
+@Serializable
 data class ChatMessageResponseDto(
     val id: String,
     val chatSessionId: String,
@@ -75,6 +80,7 @@ data class ChatMessageResponseDto(
     val messageType: String = "TEXT",
     val content: String? = null,
     val audio: ChatAudioResponseDto? = null,
+    val reactionType: String? = null,
     val sentAt: String,
 )
 

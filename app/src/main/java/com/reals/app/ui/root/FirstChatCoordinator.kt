@@ -12,6 +12,7 @@ import com.reals.app.domain.model.ChatExitOutcome
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.ChatMessageReactionType
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.FirstChatSnapshot
 import com.reals.app.domain.model.MatchState
@@ -24,6 +25,8 @@ import kotlinx.coroutines.coroutineScope
 internal class FirstChatCoordinator(
     private val dependencies: FirstChatFeatureDependencies,
 ) {
+    private val silentMessagePollingCursor = SilentChatMessagePollingCursor()
+
     suspend fun load(
         session: ProvisionedSession,
         matchId: String,
@@ -72,6 +75,7 @@ internal class FirstChatCoordinator(
 
         val firstChatSnapshot = (chatResult as ApiResult.Success).value
         val chat = firstChatSnapshot.chat
+        silentMessagePollingCursor.reset(chat.id)
 
         if (!chat.status.isOpenFirstChatStatus()) {
             return FirstChatLoadResult.RouteHome(
@@ -113,6 +117,7 @@ internal class FirstChatCoordinator(
     suspend fun refresh(
         current: RealsRootUiState.FirstChat,
         silent: Boolean,
+        useReactionReconciliationAlternation: Boolean = false,
     ): FirstChatRefreshResult {
         val chat = current.chat ?: return FirstChatRefreshResult.Reopen(current.matchId, current.chatId)
         val pending = current.copy(
@@ -131,7 +136,12 @@ internal class FirstChatCoordinator(
             }
         }
         val matchResult = dependencies.getMatch(current.matchId)
-        val messagesResult = dependencies.getChatMessages(chat.id, pending.messages.lastMessageCursor())
+        val messageCursor = if (silent && useReactionReconciliationAlternation) {
+            silentMessagePollingCursor.nextCursor(chat.id, pending.messages)
+        } else {
+            pending.messages.lastMessageCursor()
+        }
+        val messagesResult = dependencies.getChatMessages(chat.id, messageCursor)
         val exitsResult = dependencies.getChatExitRequests(chat.id)
         val updatedMatch = (matchResult as? ApiResult.Success)?.value ?: pending.match
         val updatedState = (chatResult as? ApiResult.Success)
@@ -205,6 +215,20 @@ internal class FirstChatCoordinator(
                 ?: (chatResult as? ApiResult.Failure)?.error
                 ?: current.error,
         )
+    }
+
+    suspend fun putMessageReaction(
+        chatId: String,
+        messageId: String,
+        reactionType: ChatMessageReactionType,
+    ): ApiResult<ChatMessage> =
+        dependencies.putMessageReaction(chatId, messageId, reactionType)
+
+    suspend fun reconcileMessagesForReactions(
+        current: RealsRootUiState.FirstChat,
+    ): ApiResult<List<ChatMessage>> {
+        val chat = current.chat ?: return ApiResult.Success(emptyList())
+        return dependencies.getChatMessages(chat.id, current.messages.reactionReconciliationCursor())
     }
 
     suspend fun sendMessage(

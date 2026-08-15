@@ -11,6 +11,7 @@ import com.reals.app.core.network.isAccountDeleted
 import com.reals.app.core.network.toUserMessage
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequestStatus
+import com.reals.app.domain.model.ChatMessageReactionType
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.testutil.FakeAuthTokenProvider
 import com.reals.app.testutil.FakeRealsApi
@@ -25,6 +26,9 @@ import okio.Buffer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import retrofit2.http.Body
+import retrofit2.http.PUT
+import retrofit2.http.Path
 import retrofit2.Response
 import java.io.File
 
@@ -146,6 +150,31 @@ class ChatRepositoryTest {
         } finally {
             file.delete()
         }
+    }
+
+    @Test
+    fun `putMessageReaction sends PUT path body and maps canonical response`() = runBlocking {
+        api.chatMessageReactionResponse = Response.success(TestDtos.chatMessage("message-2", reactionType = "HEART"))
+
+        val message = repository.putMessageReaction(
+            chatId = "chat-1",
+            messageId = "message-2",
+            reactionType = ChatMessageReactionType.Heart,
+        ).successValue()
+        val apiMethod = com.reals.app.data.api.RealsApi::class.java.methods
+            .single { it.name == "putChatMessageReaction" }
+
+        assertEquals("putChatMessageReaction", api.calls.single())
+        assertEquals("chat-1/message-2", api.lastPathId)
+        assertEquals("HEART", api.chatMessageReactionBody?.type)
+        assertEquals(ChatMessageReactionType.Heart, message.reactionType)
+        assertEquals("api/chats/{chatId}/messages/{messageId}/reaction", apiMethod.getAnnotation(PUT::class.java)?.value)
+        assertEquals(
+            listOf("chatId", "messageId"),
+            apiMethod.parameterAnnotations
+                .flatMap { annotations -> annotations.filterIsInstance<Path>().map { it.value } },
+        )
+        assertTrue(apiMethod.parameterAnnotations.any { annotations -> annotations.any { it is Body } })
     }
 
     @Test

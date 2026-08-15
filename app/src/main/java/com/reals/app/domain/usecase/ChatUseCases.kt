@@ -7,6 +7,7 @@ import com.reals.app.domain.model.ChatExitOutcome
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.ChatMessageReactionType
 import com.reals.app.domain.model.FirstChatGuidance
 import com.reals.app.domain.model.SecondChatCompletionDecision
 import com.reals.app.domain.model.SecondChatStatus
@@ -98,6 +99,17 @@ class SendChatAudioMessageUseCase(
 ) {
     suspend operator fun invoke(chatId: String, file: File, clientMessageId: String): ApiResult<ChatMessage> =
         chatRepository.sendAudioMessage(chatId, file, clientMessageId)
+}
+
+class PutChatMessageReactionUseCase(
+    private val chatRepository: ChatRepository,
+) {
+    suspend operator fun invoke(
+        chatId: String,
+        messageId: String,
+        reactionType: ChatMessageReactionType,
+    ): ApiResult<ChatMessage> =
+        chatRepository.putMessageReaction(chatId, messageId, reactionType)
 }
 
 class RequestNextFirstChatGuidanceQuestionUseCase(

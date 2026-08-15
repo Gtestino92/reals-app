@@ -23,6 +23,7 @@ import com.reals.app.domain.usecase.GetChatExitRequestsUseCase
 import com.reals.app.domain.usecase.GetChatMessagesUseCase
 import com.reals.app.domain.usecase.GetFirstChatForMatchUseCase
 import com.reals.app.domain.usecase.GetMatchUseCase
+import com.reals.app.domain.usecase.PutChatMessageReactionUseCase
 import com.reals.app.domain.usecase.RejectChatExitRequestUseCase
 import com.reals.app.domain.usecase.RequestMutualChatExitUseCase
 import com.reals.app.domain.usecase.RequestNextFirstChatGuidanceQuestionUseCase
@@ -468,6 +469,34 @@ class FirstChatCoordinatorTest {
         assertEquals(current.chat, state.chat)
         assertEquals(false, state.refreshing)
         assertTrue(state.error is ApiError.Backend)
+    }
+
+    @Test
+    fun `silent refresh alternates incremental and reaction reconciliation cursors`() = runBlocking {
+        val current = firstChatState(chatStatus = ChatStatus.Active).copy(messages = pollingMessages())
+        api.chatMessagesResponse = Response.success(TestDtos.chatMessagesPagedPayload(emptyList()))
+
+        coordinator.refresh(current, silent = true, useReactionReconciliationAlternation = true)
+        assertEquals("d", api.lastChatMessagesAfter)
+
+        coordinator.refresh(current, silent = true, useReactionReconciliationAlternation = true)
+        assertEquals("b", api.lastChatMessagesAfter)
+
+        coordinator.refresh(current, silent = true, useReactionReconciliationAlternation = true)
+        assertEquals("d", api.lastChatMessagesAfter)
+    }
+
+    @Test
+    fun `silent refresh alternation resets after first chat load reopens chat`() = runBlocking {
+        val current = firstChatState(chatStatus = ChatStatus.Active).copy(messages = pollingMessages())
+        api.chatMessagesResponse = Response.success(TestDtos.chatMessagesPagedPayload(emptyList()))
+
+        coordinator.refresh(current, silent = true, useReactionReconciliationAlternation = true)
+        coordinator.refresh(current, silent = true, useReactionReconciliationAlternation = true)
+        coordinator.load(TestDomain.session(), matchId = "match-1", chatId = "chat-1")
+        coordinator.refresh(current, silent = true, useReactionReconciliationAlternation = true)
+
+        assertEquals("d", api.lastChatMessagesAfter)
     }
 
     @Test
@@ -1598,6 +1627,14 @@ class FirstChatCoordinatorTest {
             ).toDomain(),
         )
 
+    private fun pollingMessages(): List<ChatMessage> =
+        listOf(
+            TestDtos.chatMessage("a").copy(senderId = "other", sentAt = "2026-06-18T21:00:00Z").toDomain(),
+            TestDtos.chatMessage("b").copy(senderId = "me", sentAt = "2026-06-18T21:01:00Z").toDomain(),
+            TestDtos.chatMessage("c").copy(senderId = "other", sentAt = "2026-06-18T21:02:00Z").toDomain(),
+            TestDtos.chatMessage("d").copy(senderId = "me", sentAt = "2026-06-18T21:03:00Z").toDomain(),
+        )
+
     private fun audioDraft(file: File): ChatAudioDraftUiState =
         ChatAudioDraftUiState(
             filePath = file.absolutePath,
@@ -1626,6 +1663,7 @@ class FirstChatCoordinatorTest {
             getChatMessages = GetChatMessagesUseCase(chatRepository),
             sendChatMessage = SendChatMessageUseCase(chatRepository),
             sendChatAudioMessage = com.reals.app.domain.usecase.SendChatAudioMessageUseCase(chatRepository),
+            putMessageReaction = PutChatMessageReactionUseCase(chatRepository),
             requestNextFirstChatGuidanceQuestion = RequestNextFirstChatGuidanceQuestionUseCase(chatRepository),
             getChatExitRequests = GetChatExitRequestsUseCase(chatRepository),
             requestMutualChatExit = RequestMutualChatExitUseCase(chatRepository),

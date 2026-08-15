@@ -3,6 +3,9 @@ package com.reals.app.ui.root
 import com.reals.app.core.network.ApiError
 import com.reals.app.data.mapper.toDomain
 import com.reals.app.domain.model.ChatExitRequest
+import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.ChatMessageReactionType
+import com.reals.app.domain.model.ChatMessageType
 import com.reals.app.testutil.TestDomain
 import com.reals.app.testutil.TestDtos
 import java.io.File
@@ -218,10 +221,153 @@ class ChatMessageActionHandlerTest {
     }
 
     @Test
+    fun `first chat reaction accepted adds pending id without sending or action loading`() {
+        val result = ChatMessageActionHandler.prepareFirstChatReaction(
+            current = firstChatState(
+                messages = listOf(chatMessage("incoming", senderId = "other")),
+                error = ApiError.Unexpected("previous error"),
+                message = "previous message",
+            ),
+            messageId = "incoming",
+        )
+
+        assertTrue(result is ChatReactionPreparation.Accepted<*>)
+        result as ChatReactionPreparation.Accepted<RealsRootUiState.FirstChat>
+        assertEquals(setOf("incoming"), result.pendingState.reaction.pendingMessageIds)
+        assertEquals(false, result.pendingState.sending)
+        assertEquals(false, result.pendingState.actionLoading)
+        assertEquals("previous error", (result.pendingState.error as ApiError.Unexpected).message)
+        assertEquals("previous message", result.pendingState.message)
+        assertEquals("chat-1", result.chatId)
+    }
+
+    @Test
+    fun `first chat reaction accepts while guidance action is loading`() {
+        val result = ChatMessageActionHandler.prepareFirstChatReaction(
+            current = firstChatState(
+                messages = listOf(chatMessage("incoming", senderId = "other")),
+                guidanceActionLoading = true,
+            ),
+            messageId = "incoming",
+        )
+
+        assertTrue(result is ChatReactionPreparation.Accepted<*>)
+    }
+
+    @Test
+    fun `first chat reaction ignores non active first chat`() {
+        val current = firstChatState(
+            messages = listOf(chatMessage("incoming", senderId = "other")),
+        ).copy(chat = activeFirstChatDto(status = "EXPIRED").toDomain())
+
+        assertEquals(ChatReactionPreparation.Ignored, ChatMessageActionHandler.prepareFirstChatReaction(current, "incoming"))
+    }
+
+    @Test
+    fun `first chat reaction ignores non first chat`() {
+        val current = firstChatState(
+            messages = listOf(chatMessage("incoming", senderId = "other")),
+        ).copy(chat = activeFirstChatDto(status = "ACTIVE").copy(chatType = "SECOND_CHAT").toDomain())
+
+        assertEquals(ChatReactionPreparation.Ignored, ChatMessageActionHandler.prepareFirstChatReaction(current, "incoming"))
+    }
+
+    @Test
+    fun `second chat reaction accepted adds pending id without sending or action loading`() {
+        val result = ChatMessageActionHandler.prepareSecondChatReaction(
+            current = secondChatState(messages = listOf(chatMessage("incoming", senderId = "other"))),
+            messageId = "incoming",
+        )
+
+        assertTrue(result is ChatReactionPreparation.Accepted<*>)
+        result as ChatReactionPreparation.Accepted<RealsRootUiState.SecondChat>
+        assertEquals(setOf("incoming"), result.pendingState.reaction.pendingMessageIds)
+        assertEquals(false, result.pendingState.sending)
+        assertEquals(false, result.pendingState.actionLoading)
+    }
+
+    @Test
+    fun `reaction ignores duplicate pending id but allows different ids`() {
+        val current = firstChatState(
+            messages = listOf(
+                chatMessage("a", senderId = "other"),
+                chatMessage("b", "2026-06-18T21:01:00Z", senderId = "other"),
+            ),
+        ).copy(reaction = ChatReactionUiState(pendingMessageIds = setOf("a")))
+
+        assertEquals(ChatReactionPreparation.Ignored, ChatMessageActionHandler.prepareFirstChatReaction(current, "a"))
+        val second = ChatMessageActionHandler.prepareFirstChatReaction(current, "b")
+
+        assertTrue(second is ChatReactionPreparation.Accepted<*>)
+        second as ChatReactionPreparation.Accepted<RealsRootUiState.FirstChat>
+        assertEquals(setOf("a", "b"), second.pendingState.reaction.pendingMessageIds)
+    }
+
+    @Test
+    fun `reaction ignores own old reacted unknown and unsupported messages`() {
+        val current = firstChatState(
+            messages = listOf(
+                chatMessage("old", senderId = "other"),
+                chatMessage("own", "2026-06-18T21:01:00Z", senderId = "user-1"),
+                chatMessage("reacted", "2026-06-18T21:02:00Z", senderId = "other")
+                    .copy(reactionType = ChatMessageReactionType.Heart),
+                chatMessage("unknown", "2026-06-18T21:03:00Z", senderId = "other")
+                    .copy(reactionType = ChatMessageReactionType.Unknown("FIRE")),
+                chatMessage("unsupported", "2026-06-18T21:04:00Z", senderId = "other")
+                    .copy(messageType = ChatMessageType.Unknown("STICKER")),
+            ),
+        )
+
+        assertEquals(ChatReactionPreparation.Ignored, ChatMessageActionHandler.prepareFirstChatReaction(current, "old"))
+        assertEquals(ChatReactionPreparation.Ignored, ChatMessageActionHandler.prepareFirstChatReaction(current, "own"))
+        assertEquals(ChatReactionPreparation.Ignored, ChatMessageActionHandler.prepareFirstChatReaction(current, "reacted"))
+        assertEquals(ChatReactionPreparation.Ignored, ChatMessageActionHandler.prepareFirstChatReaction(current, "unknown"))
+        assertEquals(ChatReactionPreparation.Ignored, ChatMessageActionHandler.prepareFirstChatReaction(current, "unsupported"))
+    }
+
+    @Test
+    fun `first chat reaction ignores decision only and pending mutual exit`() {
+        val current = firstChatState(messages = listOf(chatMessage("incoming", senderId = "other")))
+        val decisionOnly = current.copy(
+            chat = TestDtos.chat(myDecision = "PENDING", partnerDecision = "APPROVED").toDomain(),
+        )
+        val exitPending = current.copy(exitRequests = listOf(TestDtos.exitRequest(status = "PENDING").toDomain()))
+
+        assertEquals(ChatReactionPreparation.Ignored, ChatMessageActionHandler.prepareFirstChatReaction(decisionOnly, "incoming"))
+        assertEquals(ChatReactionPreparation.Ignored, ChatMessageActionHandler.prepareFirstChatReaction(exitPending, "incoming"))
+    }
+
+    @Test
+    fun `first chat reaction ignores local expiry`() {
+        val current = firstChatState(
+            messages = listOf(chatMessage("incoming", senderId = "other")),
+        ).copy(
+            chat = TestDtos.chat()
+                .copy(expiresAt = "2020-06-18T21:00:00Z", inactivityExpiresAt = null)
+                .toDomain(),
+        )
+
+        assertEquals(ChatReactionPreparation.Ignored, ChatMessageActionHandler.prepareFirstChatReaction(current, "incoming"))
+    }
+
+    @Test
+    fun `second chat reaction ignores inactive lifecycle`() {
+        val current = secondChatState(
+            messages = listOf(chatMessage("incoming", senderId = "other")),
+            lifecycle = SecondChatLifecycleUiState(
+                status = TestDtos.secondChatStatus(chatStatus = "FINISHED").toDomain(),
+                statusReceivedAtMillis = System.currentTimeMillis(),
+            ),
+        )
+
+        assertEquals(ChatReactionPreparation.Ignored, ChatMessageActionHandler.prepareSecondChatReaction(current, "incoming"))
+    }
+
+    @Test
     fun `audio send rejects subsecond draft before upload`() {
         val file = createTempFile()
         val state = firstChatState().copy(
-            chat = TestDtos.chat(audioPolicy = TestDtos.audioPolicy(enabled = true)).toDomain(),
+            chat = activeFirstChatDto(audioPolicy = TestDtos.audioPolicy(enabled = true)).toDomain(),
             audioDraft = ChatAudioDraftUiState(
                 filePath = file.absolutePath,
                 clientMessageId = "client-1",
@@ -246,7 +392,7 @@ class ChatMessageActionHandlerTest {
     fun `audio send keeps same file and UUID when accepted`() {
         val file = createTempFile()
         val state = firstChatState().copy(
-            chat = TestDtos.chat(audioPolicy = TestDtos.audioPolicy(enabled = true)).toDomain(),
+            chat = activeFirstChatDto(audioPolicy = TestDtos.audioPolicy(enabled = true)).toDomain(),
             audioDraft = ChatAudioDraftUiState(
                 filePath = file.absolutePath,
                 clientMessageId = "client-1",
@@ -332,23 +478,39 @@ class ChatMessageActionHandlerTest {
     private fun firstChatState(
         optimisticMessages: List<OptimisticOutgoingMessage> = emptyList(),
         exitRequests: List<ChatExitRequest> = emptyList(),
+        messages: List<ChatMessage> = emptyList(),
         sending: Boolean = false,
+        guidanceActionLoading: Boolean = false,
         error: ApiError? = null,
         message: String? = null,
     ): RealsRootUiState.FirstChat = RealsRootUiState.FirstChat(
         session = TestDomain.session(),
         matchId = "match-1",
         chatId = "chat-1",
-        chat = TestDtos.chat().toDomain(),
+        chat = activeFirstChatDto().toDomain(),
+        messages = messages,
         optimisticMessages = optimisticMessages,
         exitRequests = exitRequests,
         sending = sending,
+        guidanceActionLoading = guidanceActionLoading,
         error = error,
         message = message,
     )
 
+    private fun activeFirstChatDto(
+        status: String = "ACTIVE",
+        audioPolicy: com.reals.app.data.dto.ChatAudioPolicyResponseDto? = null,
+    ): com.reals.app.data.dto.ChatResponseDto = TestDtos.chat(
+        status = status,
+        audioPolicy = audioPolicy,
+    ).copy(
+        expiresAt = "2099-06-20T21:00:00Z",
+        inactivityExpiresAt = "2099-06-18T21:05:00Z",
+    )
+
     private fun secondChatState(
         optimisticMessages: List<OptimisticOutgoingMessage> = emptyList(),
+        messages: List<ChatMessage> = emptyList(),
         lifecycle: SecondChatLifecycleUiState = SecondChatLifecycleUiState(),
         error: ApiError? = null,
         message: String? = null,
@@ -358,10 +520,37 @@ class ChatMessageActionHandlerTest {
         matchId = "match-1",
         chatId = "chat-1",
         chat = TestDtos.chat().copy(chatType = "SECOND_CHAT").toDomain(),
+        messages = messages,
         optimisticMessages = optimisticMessages,
-        lifecycle = lifecycle,
+        lifecycle = lifecycle.takeUnless { it.status == null } ?: SecondChatLifecycleUiState(
+            status = activeSecondChatStatus().toDomain(),
+            statusReceivedAtMillis = System.currentTimeMillis(),
+        ),
         error = error,
         message = message,
+    )
+
+    private fun activeSecondChatStatus(): com.reals.app.data.dto.SecondChatAttendanceResponseDto =
+        TestDtos.secondChatStatus(
+            scheduledAt = "2099-06-18T21:00:00Z",
+            entryClosesAt = "2099-06-18T21:20:00Z",
+            absoluteExpiresAt = "2099-06-18T23:00:00Z",
+            serverTime = "2099-06-18T21:00:00Z",
+            mutualCompletionEligibleAt = "2099-06-18T21:10:00Z",
+            inactivityClaimableAt = "2099-06-18T21:05:00Z",
+            inactivityClosesAt = "2099-06-18T21:10:00Z",
+        )
+
+    private fun chatMessage(
+        id: String,
+        sentAt: String = "2026-06-18T21:00:00Z",
+        senderId: String,
+    ): ChatMessage = ChatMessage(
+        id = id,
+        chatSessionId = "chat-1",
+        senderId = senderId,
+        content = "hola",
+        sentAt = sentAt,
     )
 
     private fun failedOptimisticMessage(localId: String): OptimisticOutgoingMessage =

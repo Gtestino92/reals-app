@@ -33,6 +33,7 @@ import com.reals.app.data.dto.PatchAffinityAnswersRequestDto
 import com.reals.app.data.dto.ProfileQuestionAnswersResponseDto
 import com.reals.app.data.dto.ProfileQuestionCatalogResponseDto
 import com.reals.app.data.dto.ProfileResponseDto
+import com.reals.app.data.dto.PutMessageReactionRequestDto
 import com.reals.app.data.dto.QueueStatusResponseDto
 import com.reals.app.data.dto.RegisterPushTokenRequestDto
 import com.reals.app.data.dto.RegisterPushTokenResponseDto
@@ -105,7 +106,13 @@ class FakeRealsApi : RealsApi {
         private set
     var chatAudioClientMessageIdPart: RequestBody? = null
         private set
+    var chatMessageReactionBody: PutMessageReactionRequestDto? = null
+        private set
     var lastChatMessagesLimit: Int? = null
+        private set
+    var lastChatMessagesAfter: String? = null
+        private set
+    var lastChatMessagesAfterAlias: String? = null
         private set
     var exitBody: ChatExitRequestCreateRequestDto? = null
         private set
@@ -151,6 +158,7 @@ class FakeRealsApi : RealsApi {
     var beforeGetChatMessagesResponse: suspend () -> Unit = {}
     var beforeSendChatMessageResponse: suspend () -> Unit = {}
     var beforeSendChatAudioMessageResponse: suspend () -> Unit = {}
+    var beforePutChatMessageReactionResponse: suspend () -> Unit = {}
     var beforeGetChatExitRequestsResponse: suspend () -> Unit = {}
     var beforeGetSecondChatStatusResponse: suspend () -> Unit = {}
     var beforeGetConnectionNegotiationResponse: suspend () -> Unit = {}
@@ -210,6 +218,9 @@ class FakeRealsApi : RealsApi {
     var partnerMessageResponse: Response<PartnerPersonalMessageResponseDto> =
         Response.success(PartnerPersonalMessageResponseDto("hola"))
     var chatMessageResponse: Response<ChatMessageResponseDto> = Response.success(TestDtos.chatMessage())
+    var chatMessageReactionResponse: Response<ChatMessageResponseDto> = Response.success(
+        TestDtos.chatMessage().copy(reactionType = "HEART")
+    )
     var chatAudioMessageResponse: Response<ChatMessageResponseDto> =
         Response.success(TestDtos.audioChatMessage())
     var chatMessagesResponse: Response<JsonElement> = Response.success(TestDtos.chatMessagesArrayPayload())
@@ -599,6 +610,17 @@ class FakeRealsApi : RealsApi {
             chatAudioMessageResponse
         }
 
+    override suspend fun putChatMessageReaction(
+        authorization: String,
+        chatId: String,
+        messageId: String,
+        body: PutMessageReactionRequestDto,
+    ): Response<ChatMessageResponseDto> =
+        record("putChatMessageReaction", authorization, "$chatId/$messageId", beforeResponse = beforePutChatMessageReactionResponse) {
+            chatMessageReactionBody = body
+            chatMessageReactionResponse
+        }
+
     override suspend fun getChatMessages(
         authorization: String,
         chatId: String,
@@ -608,6 +630,8 @@ class FakeRealsApi : RealsApi {
     ): Response<JsonElement> =
         record("getChatMessages", authorization, chatId, beforeResponse = beforeGetChatMessagesResponse) {
             lastChatMessagesLimit = limit
+            lastChatMessagesAfter = afterMessageId
+            lastChatMessagesAfterAlias = afterMessageIdAlias
             chatMessagesResponse
         }
 

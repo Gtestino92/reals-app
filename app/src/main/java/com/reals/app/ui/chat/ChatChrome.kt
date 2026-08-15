@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -52,13 +53,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -73,7 +78,9 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
 import com.reals.app.R
 import com.reals.app.core.security.TextSafety
 import com.reals.app.core.time.remainingExitSeconds
@@ -81,6 +88,7 @@ import com.reals.app.domain.model.ChatDecisionState
 import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.ChatMessagePresentation
+import com.reals.app.domain.model.ChatMessageReactionType
 import com.reals.app.domain.model.ChatType
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
@@ -91,6 +99,7 @@ import com.reals.app.ui.common.formatBackendTime
 import com.reals.app.ui.root.OptimisticOutgoingMessage
 import com.reals.app.ui.root.OptimisticOutgoingMessageType
 import com.reals.app.ui.root.OutgoingMessageDeliveryState
+import com.reals.app.ui.root.reactableIncomingMessageIds
 import com.reals.app.ui.theme.LocalRealsDarkTheme
 import com.reals.app.ui.theme.RealsColors
 import com.reals.app.ui.theme.RealsRadii
@@ -106,6 +115,10 @@ internal const val MUTUAL_EXIT_CONVERSATION_PAUSED_COPY =
 private const val MUTUAL_EXIT_TIMEOUT_SECONDS = 20L
 private const val MUTUAL_EXIT_TIMEOUT_RETRY_MILLIS = 2_000L
 private val ChatBubbleOppositeGutter = 28.dp
+private val ChatBubbleMaxWidth = 340.dp
+private val ChatReactionLaneWidth = 48.dp
+private val ChatReactionBadgeBottomExtent = 12.dp
+private val ChatReactionSideOffsetY = 4.dp
 
 @Composable
 internal fun LoadingChatScreen(
@@ -626,51 +639,144 @@ internal fun MessageList(
     chatType: ChatType,
     messages: List<ChatMessage>,
     optimisticMessages: List<OptimisticOutgoingMessage>,
+    pendingReactionMessageIds: Set<String> = emptySet(),
+    reactionAddingEnabled: Boolean = false,
     bottomContentPadding: Dp,
     modifier: Modifier,
     onRetryOptimisticMessage: (localId: String, content: String) -> Unit,
+    onReactToMessage: (messageId: String) -> Unit = {},
     canRetryFailedTextMessages: Boolean,
     playbackState: ChatAudioPlaybackUiState,
     onPlayAudio: (ChatMessage) -> Unit,
     onPauseAudio: () -> Unit,
 ) {
     val sortedMessages = messages.sortedWith(compareBy<ChatMessage> { it.sentAt }.thenBy { it.id })
+    val reactableMessageIds = if (reactionAddingEnabled) {
+        reactableIncomingMessageIds(sortedMessages, currentUserId)
+    } else {
+        emptySet()
+    }
     val messageItems = sortedMessages.map { ChatMessageListItem.Backend(it) } +
         optimisticMessages.sortedBy { it.createdAtMillis }
             .map { ChatMessageListItem.Optimistic(it) }
     val canvasAppearance = chatCanvasAppearance(chatType)
     val listState = rememberLazyListState()
+    val scrollScope = rememberCoroutineScope()
     val latestMessage = messageItems.lastOrNull()
     val latestMessageId = latestMessage?.stableId
     val latestMessageIsMine = latestMessage?.isMine(currentUserId) == true
     var selectionResetGeneration by remember { mutableStateOf(0) }
     var knownMessageIds by remember(chatId) { mutableStateOf<Set<String>?>(null) }
+    var knownBackendMessageIds by remember(chatId) { mutableStateOf<Set<String>?>(null) }
+    var knownReactionLayoutIdentities by remember(chatId) {
+        mutableStateOf<List<MessageReactionLayoutIdentity>?>(null)
+    }
     var messageBaselineEstablished by remember(chatId) { mutableStateOf(false) }
+    var hasUnseenIncomingMessages by remember(chatId) { mutableStateOf(false) }
+    var listNearBottom by remember(chatId) { mutableStateOf(true) }
     val currentMessageIds = messageItems.map { it.stableId }.toSet()
+    val backendMessageIdentities = sortedMessages.map {
+        BackendMessageIdentity(id = it.id, senderId = it.senderId)
+    }
+    val reactionLayoutIdentities = sortedMessages.map { message ->
+        MessageReactionLayoutIdentity(
+            id = message.id,
+            hasReactionExtent = chatMessageReactionPresentation(
+                message = message,
+                mine = message.senderId == currentUserId,
+                pendingReactionMessageIds = pendingReactionMessageIds,
+                reactableMessageIds = reactableMessageIds,
+            ).hasReactionBadgeExtent(),
+        )
+    }
+    val currentBackendMessageIds = backendMessageIdentities.mapTo(LinkedHashSet()) { it.id }
     val entranceBaselineIds = knownMessageIds.takeIf { messageBaselineEstablished }
+    val currentMessageIdsForScroll by rememberUpdatedState(currentMessageIds)
+    val knownMessageIdsForScroll by rememberUpdatedState(knownMessageIds)
+
+    LaunchedEffect(chatId) {
+        snapshotFlow { listState.isNearBottom() }
+            .collect { nearBottom ->
+                if (currentMessageIdsForScroll.allKnownBy(knownMessageIdsForScroll)) {
+                    listNearBottom = nearBottom
+                    if (nearBottom) {
+                        hasUnseenIncomingMessages = false
+                    }
+                }
+            }
+    }
+
+    LaunchedEffect(knownMessageIds) {
+        if (currentMessageIds.allKnownBy(knownMessageIds)) {
+            val nearBottom = listState.isNearBottom()
+            listNearBottom = nearBottom
+            if (nearBottom) {
+                hasUnseenIncomingMessages = false
+            }
+        }
+    }
 
     LaunchedEffect(latestMessageId) {
         if (latestMessageId == null) return@LaunchedEffect
         if (!messageBaselineEstablished) return@LaunchedEffect
 
-        val shouldScrollToBottom = latestMessageIsMine || listState.isNearBottom()
+        val shouldScrollToBottom = shouldAutoScrollForLatestMessage(
+            latestMessageIsMine = latestMessageIsMine,
+            wasNearBottomBeforeLatestChange = listNearBottom,
+        )
         if (shouldScrollToBottom) {
             listState.animateLatestItemIntoView(messageItems.lastIndex)
+            hasUnseenIncomingMessages = false
         }
     }
 
-    LaunchedEffect(currentMessageIds, initialHistoryLoading) {
+    LaunchedEffect(reactionLayoutIdentities) {
+        val previous = knownReactionLayoutIdentities
+        if (previous == null || !messageBaselineEstablished) {
+            knownReactionLayoutIdentities = reactionLayoutIdentities
+            return@LaunchedEffect
+        }
+
+        if (
+            shouldPreserveBottomForReactionLayoutChange(
+                previous = previous,
+                current = reactionLayoutIdentities,
+                wasNearBottomBeforeReactionChange = listNearBottom,
+            ) && messageItems.isNotEmpty()
+        ) {
+            listState.animateLatestItemIntoView(messageItems.lastIndex)
+        }
+        knownReactionLayoutIdentities = reactionLayoutIdentities
+    }
+
+    LaunchedEffect(currentMessageIds, currentBackendMessageIds, initialHistoryLoading) {
         if (!messageBaselineEstablished) {
             if (initialHistoryLoading) return@LaunchedEffect
             knownMessageIds = currentMessageIds
+            knownBackendMessageIds = currentBackendMessageIds
+            knownReactionLayoutIdentities = reactionLayoutIdentities
             messageBaselineEstablished = true
             if (messageItems.isNotEmpty()) {
                 listState.scrollToItem(messageItems.lastIndex)
             }
         } else {
+            if (
+                shouldMarkIncomingMessagesUnseen(
+                    baselineEstablished = true,
+                    previousBackendMessageIds = knownBackendMessageIds,
+                    currentBackendMessages = backendMessageIdentities,
+                    currentUserId = currentUserId,
+                    wasNearBottomBeforeMessageChange = listNearBottom,
+                )
+            ) {
+                hasUnseenIncomingMessages = true
+            }
             knownMessageIds = knownMessageIds
                 ?.plus(currentMessageIds)
                 ?: currentMessageIds
+            knownBackendMessageIds = knownBackendMessageIds
+                ?.plus(currentBackendMessageIds)
+                ?: currentBackendMessageIds
         }
     }
 
@@ -681,72 +787,96 @@ internal fun MessageList(
         colors = CardDefaults.cardColors(containerColor = canvasAppearance.containerColor),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .fillMaxSize()
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onTap = { selectionResetGeneration++ },
-                    )
-                },
-            contentPadding = PaddingValues(
-                start = 8.dp,
-                top = 10.dp,
-                end = 8.dp,
-                bottom = bottomContentPadding,
-            ),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            if (messageItems.isEmpty()) {
-                item {
-                    EmptyMessageState(
-                        appearance = canvasAppearance,
-                    )
-                }
-            } else {
-                items(messageItems, key = { it.stableId }) { item ->
-                    val shouldSlideIn = entranceBaselineIds?.let { knownIds ->
-                        item.stableId !in knownIds && when (item) {
-                            is ChatMessageListItem.Backend -> !item.isMine(currentUserId)
-                            is ChatMessageListItem.Optimistic -> item.isMine(currentUserId)
-                        }
-                    } == true
-                    val itemModifier = (entranceBaselineIds?.let {
-                        Modifier.animateItem(
-                            fadeInSpec = null,
-                            placementSpec = tween(durationMillis = 180),
-                            fadeOutSpec = null,
+        Box(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onTap = { selectionResetGeneration++ },
                         )
-                    } ?: Modifier)
-                        .then(
-                            rememberMessageArrivalModifier(
-                                stableId = item.stableId,
-                                slideIn = shouldSlideIn,
-                            )
-                        )
-                    when (item) {
-                        is ChatMessageListItem.Backend -> MessageBubble(
-                            message = item.message,
-                            mine = item.message.senderId == currentUserId,
-                            chatType = chatType,
-                            selectionResetGeneration = selectionResetGeneration,
-                            playbackState = playbackState,
-                            modifier = itemModifier,
-                            onPlayAudio = onPlayAudio,
-                            onPauseAudio = onPauseAudio,
-                        )
-
-                        is ChatMessageListItem.Optimistic -> OptimisticMessageBubble(
-                            message = item.message,
-                            chatType = chatType,
-                            selectionResetGeneration = selectionResetGeneration,
-                            modifier = itemModifier,
-                            onRetry = onRetryOptimisticMessage,
-                            canRetryFailedTextMessages = canRetryFailedTextMessages,
+                    },
+                contentPadding = PaddingValues(
+                    start = 8.dp,
+                    top = 10.dp,
+                    end = 8.dp,
+                    bottom = bottomContentPadding,
+                ),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (messageItems.isEmpty()) {
+                    item {
+                        EmptyMessageState(
+                            appearance = canvasAppearance,
                         )
                     }
+                } else {
+                    items(messageItems, key = { it.stableId }) { item ->
+                        val shouldSlideIn = entranceBaselineIds?.let { knownIds ->
+                            item.stableId !in knownIds && when (item) {
+                                is ChatMessageListItem.Backend -> !item.isMine(currentUserId)
+                                is ChatMessageListItem.Optimistic -> item.isMine(currentUserId)
+                            }
+                        } == true
+                        val itemModifier = (entranceBaselineIds?.let {
+                            Modifier.animateItem(
+                                fadeInSpec = null,
+                                placementSpec = tween(durationMillis = 180),
+                                fadeOutSpec = null,
+                            )
+                        } ?: Modifier)
+                            .then(
+                                rememberMessageArrivalModifier(
+                                    stableId = item.stableId,
+                                    slideIn = shouldSlideIn,
+                                )
+                            )
+                        when (item) {
+                            is ChatMessageListItem.Backend -> MessageBubble(
+                                message = item.message,
+                                mine = item.message.senderId == currentUserId,
+                                chatType = chatType,
+                                selectionResetGeneration = selectionResetGeneration,
+                                playbackState = playbackState,
+                                reactionPresentation = chatMessageReactionPresentation(
+                                    message = item.message,
+                                    mine = item.message.senderId == currentUserId,
+                                    pendingReactionMessageIds = pendingReactionMessageIds,
+                                    reactableMessageIds = reactableMessageIds,
+                                ),
+                                modifier = itemModifier,
+                                onReactToMessage = onReactToMessage,
+                                onPlayAudio = onPlayAudio,
+                                onPauseAudio = onPauseAudio,
+                            )
+
+                            is ChatMessageListItem.Optimistic -> OptimisticMessageBubble(
+                                message = item.message,
+                                chatType = chatType,
+                                selectionResetGeneration = selectionResetGeneration,
+                                modifier = itemModifier,
+                                onRetry = onRetryOptimisticMessage,
+                                canRetryFailedTextMessages = canRetryFailedTextMessages,
+                            )
+                        }
+                    }
                 }
+            }
+            if (hasUnseenIncomingMessages) {
+                NewMessagesIndicator(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = bottomContentPadding + 12.dp),
+                    onClick = {
+                        scrollScope.launch {
+                            if (messageItems.isNotEmpty()) {
+                                listState.animateLatestItemIntoView(messageItems.lastIndex)
+                            }
+                            hasUnseenIncomingMessages = false
+                        }
+                    },
+                )
             }
         }
     }
@@ -755,13 +885,91 @@ internal fun MessageList(
 private suspend fun LazyListState.animateLatestItemIntoView(lastIndex: Int) {
     withFrameNanos { }
     val latestItemInfo = layoutInfo.visibleItemsInfo.firstOrNull { it.index == lastIndex }
+    val usableViewportEnd = usableLazyListViewportEnd(
+        viewportEndOffset = layoutInfo.viewportEndOffset,
+        afterContentPadding = layoutInfo.afterContentPadding,
+    )
     val overflow = latestItemInfo
-        ?.let { it.offset + it.size - layoutInfo.viewportEndOffset }
-        ?.coerceAtLeast(0)
+        ?.let { latestItemOverflow(itemEndOffset = it.offset + it.size, usableViewportEnd = usableViewportEnd) }
 
     when {
         latestItemInfo == null -> animateScrollToItem(lastIndex)
         overflow != null && overflow > 0 -> animateScrollBy(overflow.toFloat())
+    }
+}
+
+internal fun usableLazyListViewportEnd(
+    viewportEndOffset: Int,
+    afterContentPadding: Int,
+): Int = viewportEndOffset - afterContentPadding
+
+internal fun latestItemOverflow(
+    itemEndOffset: Int,
+    usableViewportEnd: Int,
+): Int = (itemEndOffset - usableViewportEnd).coerceAtLeast(0)
+
+internal fun shouldAutoScrollForLatestMessage(
+    latestMessageIsMine: Boolean,
+    wasNearBottomBeforeLatestChange: Boolean,
+): Boolean = latestMessageIsMine || wasNearBottomBeforeLatestChange
+
+internal data class BackendMessageIdentity(
+    val id: String,
+    val senderId: String,
+)
+
+internal data class MessageReactionLayoutIdentity(
+    val id: String,
+    val hasReactionExtent: Boolean,
+)
+
+internal fun shouldMarkIncomingMessagesUnseen(
+    baselineEstablished: Boolean,
+    previousBackendMessageIds: Set<String>?,
+    currentBackendMessages: List<BackendMessageIdentity>,
+    currentUserId: String,
+    wasNearBottomBeforeMessageChange: Boolean,
+): Boolean {
+    if (!baselineEstablished || previousBackendMessageIds == null) return false
+    if (wasNearBottomBeforeMessageChange) return false
+
+    return currentBackendMessages.any { message ->
+        message.id !in previousBackendMessageIds && message.senderId != currentUserId
+    }
+}
+
+internal fun shouldPreserveBottomForReactionLayoutChange(
+    previous: List<MessageReactionLayoutIdentity>,
+    current: List<MessageReactionLayoutIdentity>,
+    wasNearBottomBeforeReactionChange: Boolean,
+): Boolean {
+    if (!wasNearBottomBeforeReactionChange) return false
+    if (previous.map { it.id } != current.map { it.id }) return false
+    return previous.zip(current).any { (old, new) ->
+        !old.hasReactionExtent && new.hasReactionExtent
+    }
+}
+
+private fun Set<String>.allKnownBy(knownIds: Set<String>?): Boolean =
+    knownIds?.containsAll(this) == true
+
+@Composable
+private fun NewMessagesIndicator(
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier.semantics {
+            contentDescription = "Ir a mensajes nuevos"
+        },
+        shape = RoundedCornerShape(RealsRadii.Row),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+    ) {
+        Text(
+            text = "\u2193 Mensajes nuevos",
+            style = MaterialTheme.typography.labelMedium,
+        )
     }
 }
 
@@ -861,7 +1069,17 @@ private fun LazyListState.isNearBottom(bufferItems: Int = 2): Boolean {
     if (totalItems == 0) return true
 
     val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: return true
-    return lastVisibleIndex >= totalItems - 1 - bufferItems
+    if (lastVisibleIndex < totalItems - 1 - bufferItems) return false
+
+    val latestItemInfo = layoutInfo.visibleItemsInfo.firstOrNull { it.index == totalItems - 1 } ?: return true
+    val usableViewportEnd = usableLazyListViewportEnd(
+        viewportEndOffset = layoutInfo.viewportEndOffset,
+        afterContentPadding = layoutInfo.afterContentPadding,
+    )
+    return latestItemOverflow(
+        itemEndOffset = latestItemInfo.offset + latestItemInfo.size,
+        usableViewportEnd = usableViewportEnd,
+    ) == 0
 }
 
 private sealed interface ChatMessageListItem {
@@ -882,6 +1100,32 @@ private sealed interface ChatMessageListItem {
     }
 }
 
+internal enum class ChatMessageReactionPresentation {
+    None,
+    AddHeart,
+    GivenHeart,
+    ReceivedHeart,
+}
+
+private fun ChatMessageReactionPresentation.hasReactionBadgeExtent(): Boolean =
+    this == ChatMessageReactionPresentation.ReceivedHeart
+
+internal fun chatMessageReactionPresentation(
+    message: ChatMessage,
+    mine: Boolean,
+    pendingReactionMessageIds: Set<String>,
+    reactableMessageIds: Set<String>,
+): ChatMessageReactionPresentation {
+    val confirmedHeart = message.reactionType == ChatMessageReactionType.Heart
+    return when {
+        mine && confirmedHeart -> ChatMessageReactionPresentation.ReceivedHeart
+        mine -> ChatMessageReactionPresentation.None
+        confirmedHeart || message.id in pendingReactionMessageIds -> ChatMessageReactionPresentation.GivenHeart
+        message.reactionType == null && message.id in reactableMessageIds -> ChatMessageReactionPresentation.AddHeart
+        else -> ChatMessageReactionPresentation.None
+    }
+}
+
 @Composable
 private fun MessageBubble(
     message: ChatMessage,
@@ -889,7 +1133,9 @@ private fun MessageBubble(
     chatType: ChatType,
     selectionResetGeneration: Int,
     playbackState: ChatAudioPlaybackUiState,
+    reactionPresentation: ChatMessageReactionPresentation,
     modifier: Modifier = Modifier,
+    onReactToMessage: (messageId: String) -> Unit,
     onPlayAudio: (ChatMessage) -> Unit,
     onPauseAudio: () -> Unit,
 ) {
@@ -899,58 +1145,279 @@ private fun MessageBubble(
             .fillMaxWidth()
             .padding(
                 start = if (mine) ChatBubbleOppositeGutter else 0.dp,
-                end = if (mine) 0.dp else ChatBubbleOppositeGutter,
-            ),
+                end = 0.dp,
+        ),
         horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
     ) {
-        Card(
-            modifier = Modifier.widthIn(max = 340.dp),
-            shape = RoundedCornerShape(
-                topStart = if (mine) RealsRadii.Row else 8.dp,
-                topEnd = if (mine) 8.dp else RealsRadii.Row,
-                bottomStart = if (mine) RealsRadii.Row else 2.dp,
-                bottomEnd = if (mine) 2.dp else RealsRadii.Row,
-            ),
-            border = appearance.border,
-            colors = CardDefaults.cardColors(
-                containerColor = appearance.containerColor,
-                contentColor = appearance.contentColor,
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(1.dp),
+        if (mine) {
+            Box(
+                modifier = Modifier.padding(bottom = if (reactionPresentation == ChatMessageReactionPresentation.ReceivedHeart) 12.dp else 0.dp),
             ) {
-                when (val presentation = message.presentation) {
-                    is ChatMessagePresentation.Text -> MessageTextWithTimestamp(
-                        presentation = chatMessageTextPresentation(
-                            content = presentation.content,
-                            chatType = chatType,
-                        ),
-                        timestamp = formatBackendTime(message.sentAt),
-                        appearance = appearance,
-                        selectionResetGeneration = selectionResetGeneration,
-                    )
-                    is ChatMessagePresentation.Audio -> AudioPlaybackRow(
-                        key = message.id,
-                        durationMillis = presentation.audio.durationMillis ?: 0L,
-                        playbackState = playbackState,
-                        onPlay = { onPlayAudio(message) },
-                        onPause = onPauseAudio,
-                    )
-
-                    ChatMessagePresentation.Unsupported -> Text("Mensaje no compatible")
-                }
-                if (message.presentation !is ChatMessagePresentation.Text) {
-                    MessageTimestamp(
-                        text = formatBackendTime(message.sentAt),
-                        color = appearance.metadataColor,
-                        modifier = Modifier.align(Alignment.End),
+                MessageBubbleCard(
+                    message = message,
+                    mine = true,
+                    chatType = chatType,
+                    appearance = appearance,
+                    selectionResetGeneration = selectionResetGeneration,
+                    playbackState = playbackState,
+                    onPlayAudio = onPlayAudio,
+                    onPauseAudio = onPauseAudio,
+                )
+                if (reactionPresentation == ChatMessageReactionPresentation.ReceivedHeart) {
+                    PassiveReceivedHeartBadge(
+                        contentDescription = "La otra persona reaccionó con corazón",
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .offset(x = (-16).dp, y = 14.dp),
                     )
                 }
             }
+        } else {
+            IncomingMessageBubbleLayout(
+                message = message,
+                chatType = chatType,
+                appearance = appearance,
+                selectionResetGeneration = selectionResetGeneration,
+                playbackState = playbackState,
+                reactionPresentation = reactionPresentation,
+                onReact = { onReactToMessage(message.id) },
+                onPlayAudio = onPlayAudio,
+                onPauseAudio = onPauseAudio,
+            )
         }
+    }
+}
+
+@Composable
+private fun IncomingMessageBubbleLayout(
+    message: ChatMessage,
+    chatType: ChatType,
+    appearance: ChatBubbleAppearance,
+    selectionResetGeneration: Int,
+    playbackState: ChatAudioPlaybackUiState,
+    reactionPresentation: ChatMessageReactionPresentation,
+    onReact: () -> Unit,
+    onPlayAudio: (ChatMessage) -> Unit,
+    onPauseAudio: () -> Unit,
+) {
+    Layout(
+        content = {
+            MessageBubbleCard(
+                message = message,
+                mine = false,
+                chatType = chatType,
+                appearance = appearance,
+                selectionResetGeneration = selectionResetGeneration,
+                playbackState = playbackState,
+                onPlayAudio = onPlayAudio,
+                onPauseAudio = onPauseAudio,
+            )
+            IncomingReactionSideSlot(
+                presentation = reactionPresentation,
+                onReact = onReact,
+            )
+        },
+        modifier = Modifier.fillMaxWidth(),
+    ) { measurables, constraints ->
+        val laneWidth = ChatReactionLaneWidth.roundToPx()
+        val bottomExtent = if (reactionPresentation.hasReactionBadgeExtent()) {
+            ChatReactionBadgeBottomExtent.roundToPx()
+        } else {
+            0
+        }
+        val maxBubbleWidth = (constraints.maxWidth - laneWidth)
+            .coerceAtLeast(0)
+            .coerceAtMost(ChatBubbleMaxWidth.roundToPx())
+        val bubble = measurables[0].measure(
+            constraints.copy(
+                minWidth = 0,
+                maxWidth = maxBubbleWidth,
+            ),
+        )
+        val lane = measurables[1].measure(
+            Constraints.fixedWidth(laneWidth),
+        )
+        val layoutWidth = constraints.maxWidth
+        val layoutHeight = (bubble.height + bottomExtent)
+            .coerceAtLeast(constraints.minHeight)
+            .coerceAtMost(constraints.maxHeight)
+        val laneY = (bubble.height - lane.height + ChatReactionSideOffsetY.roundToPx())
+            .coerceAtLeast(0)
+        layout(layoutWidth, layoutHeight) {
+            bubble.placeRelative(0, 0)
+            lane.placeRelative(bubble.width, laneY)
+        }
+    }
+}
+
+@Composable
+private fun MessageBubbleCard(
+    message: ChatMessage,
+    mine: Boolean,
+    chatType: ChatType,
+    appearance: ChatBubbleAppearance,
+    selectionResetGeneration: Int,
+    playbackState: ChatAudioPlaybackUiState,
+    onPlayAudio: (ChatMessage) -> Unit,
+    onPauseAudio: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier.widthIn(max = ChatBubbleMaxWidth),
+        shape = RoundedCornerShape(
+            topStart = if (mine) RealsRadii.Row else 8.dp,
+            topEnd = if (mine) 8.dp else RealsRadii.Row,
+            bottomStart = if (mine) RealsRadii.Row else 2.dp,
+            bottomEnd = if (mine) 2.dp else RealsRadii.Row,
+        ),
+        border = appearance.border,
+        colors = CardDefaults.cardColors(
+            containerColor = appearance.containerColor,
+            contentColor = appearance.contentColor,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(1.dp),
+        ) {
+            when (val presentation = message.presentation) {
+                is ChatMessagePresentation.Text -> MessageTextWithTimestamp(
+                    presentation = chatMessageTextPresentation(
+                        content = presentation.content,
+                        chatType = chatType,
+                    ),
+                    timestamp = formatBackendTime(message.sentAt),
+                    appearance = appearance,
+                    selectionResetGeneration = selectionResetGeneration,
+                )
+                is ChatMessagePresentation.Audio -> AudioPlaybackRow(
+                    key = message.id,
+                    durationMillis = presentation.audio.durationMillis ?: 0L,
+                    playbackState = playbackState,
+                    onPlay = { onPlayAudio(message) },
+                    onPause = onPauseAudio,
+                )
+
+                ChatMessagePresentation.Unsupported -> Text("Mensaje no compatible")
+            }
+            if (message.presentation !is ChatMessagePresentation.Text) {
+                MessageTimestamp(
+                    text = formatBackendTime(message.sentAt),
+                    color = appearance.metadataColor,
+                    modifier = Modifier.align(Alignment.End),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun IncomingReactionSideSlot(
+    presentation: ChatMessageReactionPresentation,
+    onReact: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.BottomEnd,
+    ) {
+        IncomingReactionSlot(
+            presentation = presentation,
+            onReact = onReact,
+            modifier = Modifier.align(Alignment.BottomEnd),
+        )
+    }
+}
+
+@Composable
+private fun IncomingReactionSlot(
+    presentation: ChatMessageReactionPresentation,
+    onReact: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    when (presentation) {
+        ChatMessageReactionPresentation.AddHeart -> HeartReactionChip(
+            filled = false,
+            contentDescription = "Reaccionar con corazón",
+            clickable = true,
+            onClick = onReact,
+            modifier = modifier,
+        )
+        ChatMessageReactionPresentation.GivenHeart -> HeartReactionChip(
+            filled = true,
+            contentDescription = "Reaccionaste con corazón",
+            clickable = false,
+            modifier = modifier,
+        )
+        ChatMessageReactionPresentation.ReceivedHeart,
+        ChatMessageReactionPresentation.None -> Unit
+    }
+}
+
+@Composable
+private fun PassiveReceivedHeartBadge(
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .size(24.dp)
+            .semantics {
+                this.contentDescription = contentDescription
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_heart_filled),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp),
+        )
+    }
+}
+
+@Composable
+private fun HeartReactionChip(
+    filled: Boolean,
+    contentDescription: String,
+    clickable: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit = {},
+) {
+    val scale = remember(filled) { Animatable(if (filled) 0.86f else 1f) }
+    LaunchedEffect(filled) {
+        if (filled) {
+            scale.snapTo(0.86f)
+            scale.animateTo(1f, animationSpec = tween(durationMillis = 150))
+        }
+    }
+    val semanticModifier = if (clickable) {
+        Modifier
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics {
+                this.contentDescription = contentDescription
+                role = Role.Button
+            }
+    } else {
+        Modifier.semantics {
+            this.contentDescription = contentDescription
+        }
+    }
+    Box(
+        modifier = modifier
+            .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+            .then(semanticModifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painter = painterResource(if (filled) R.drawable.ic_heart_filled else R.drawable.ic_heart_outline),
+            contentDescription = null,
+            tint = if (filled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .size(20.dp)
+                .scale(scale.value),
+        )
     }
 }
 

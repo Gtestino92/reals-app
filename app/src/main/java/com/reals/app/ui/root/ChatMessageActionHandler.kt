@@ -4,7 +4,11 @@ import com.reals.app.core.network.ApiError
 import com.reals.app.core.security.TextSafety
 import com.reals.app.domain.model.ChatAudioUnavailableReason
 import com.reals.app.domain.model.ChatExitRequestStatus
+import com.reals.app.domain.model.ChatMessageReactionType
+import com.reals.app.domain.model.ChatStatus
+import com.reals.app.domain.model.ChatType
 import com.reals.app.domain.model.isFirstChatDecisionOnly
+import com.reals.app.ui.chat.firstChatLifecycleUiState
 import java.io.File
 
 internal object ChatMessageActionHandler {
@@ -197,6 +201,63 @@ internal object ChatMessageActionHandler {
         optimisticMessages = current.optimisticMessages.withoutOptimisticMessage(localId),
     )
 
+    fun prepareFirstChatReaction(
+        current: RealsRootUiState.FirstChat,
+        messageId: String,
+    ): ChatReactionPreparation<RealsRootUiState.FirstChat> {
+        val cleanMessageId = messageId.trim()
+        if (cleanMessageId.isBlank()) return ChatReactionPreparation.Ignored
+        if (
+            current.loading ||
+            current.actionLoading ||
+            current.manualBlock.loading ||
+            current.hasPendingExitRequest()
+        ) {
+            return ChatReactionPreparation.Ignored
+        }
+        val chat = current.chat ?: return ChatReactionPreparation.Ignored
+        if (chat.chatType != ChatType.FirstChat || chat.status != ChatStatus.Active) {
+            return ChatReactionPreparation.Ignored
+        }
+        if (chat.isFirstChatDecisionOnly()) return ChatReactionPreparation.Ignored
+        if (firstChatLifecycleUiState(chat)?.expired == true) return ChatReactionPreparation.Ignored
+        if (!current.messageCanReceiveReaction(cleanMessageId)) return ChatReactionPreparation.Ignored
+
+        return ChatReactionPreparation.Accepted(
+            pendingState = current.copy(
+                reaction = current.reaction.withPendingReaction(cleanMessageId),
+            ),
+            chatId = chat.id,
+            messageId = cleanMessageId,
+        )
+    }
+
+    fun prepareSecondChatReaction(
+        current: RealsRootUiState.SecondChat,
+        messageId: String,
+    ): ChatReactionPreparation<RealsRootUiState.SecondChat> {
+        val cleanMessageId = messageId.trim()
+        if (cleanMessageId.isBlank()) return ChatReactionPreparation.Ignored
+        if (
+            current.loading ||
+            current.actionLoading ||
+            current.manualBlock.loading ||
+            !current.lifecycle.timingPresentation().genuinelyActive
+        ) {
+            return ChatReactionPreparation.Ignored
+        }
+        val chat = current.chat ?: return ChatReactionPreparation.Ignored
+        if (!current.messageCanReceiveReaction(cleanMessageId)) return ChatReactionPreparation.Ignored
+
+        return ChatReactionPreparation.Accepted(
+            pendingState = current.copy(
+                reaction = current.reaction.withPendingReaction(cleanMessageId),
+            ),
+            chatId = chat.id,
+            messageId = cleanMessageId,
+        )
+    }
+
     private fun <T> prepareSend(
         content: String,
         chatId: String,
@@ -301,6 +362,36 @@ internal object ChatMessageActionHandler {
 
     private fun RealsRootUiState.FirstChat.hasPendingExitRequest(): Boolean =
         exitRequests.any { it.status == ChatExitRequestStatus.Pending }
+
+    private fun RealsRootUiState.FirstChat.messageCanReceiveReaction(messageId: String): Boolean =
+        messageCanReceiveReaction(
+            messageId = messageId,
+            currentUserId = session.user.id,
+            messages = messages,
+            pendingMessageIds = reaction.pendingMessageIds,
+        )
+
+    private fun RealsRootUiState.SecondChat.messageCanReceiveReaction(messageId: String): Boolean =
+        messageCanReceiveReaction(
+            messageId = messageId,
+            currentUserId = session.user.id,
+            messages = messages,
+            pendingMessageIds = reaction.pendingMessageIds,
+        )
+
+    private fun messageCanReceiveReaction(
+        messageId: String,
+        currentUserId: String,
+        messages: List<com.reals.app.domain.model.ChatMessage>,
+        pendingMessageIds: Set<String>,
+    ): Boolean {
+        if (messageId in pendingMessageIds) return false
+        val message = messages.firstOrNull { it.id == messageId } ?: return false
+        if (message.senderId == currentUserId) return false
+        if (message.reactionType != null) return false
+        if (message.presentation is com.reals.app.domain.model.ChatMessagePresentation.Unsupported) return false
+        return messageId in reactableIncomingMessageIds(messages, currentUserId)
+    }
 }
 
 internal sealed interface ChatMessageSendPreparation<out T> {
@@ -331,3 +422,20 @@ internal sealed interface ChatAudioSendPreparation<out T> {
 
     data object Ignored : ChatAudioSendPreparation<Nothing>
 }
+
+internal sealed interface ChatReactionPreparation<out T> {
+    data class Accepted<T>(
+        val pendingState: T,
+        val chatId: String,
+        val messageId: String,
+        val reactionType: ChatMessageReactionType = ChatMessageReactionType.Heart,
+    ) : ChatReactionPreparation<T>
+
+    data object Ignored : ChatReactionPreparation<Nothing>
+}
+
+internal fun ChatReactionUiState.withPendingReaction(messageId: String): ChatReactionUiState =
+    copy(pendingMessageIds = pendingMessageIds + messageId)
+
+internal fun ChatReactionUiState.withoutPendingReaction(messageId: String): ChatReactionUiState =
+    copy(pendingMessageIds = pendingMessageIds - messageId)

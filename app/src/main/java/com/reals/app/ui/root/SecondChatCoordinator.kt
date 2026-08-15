@@ -8,6 +8,7 @@ import com.reals.app.di.SecondChatFeatureDependencies
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.ChatMessageReactionType
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.SecondChatAttendanceStatus
@@ -22,6 +23,8 @@ internal class SecondChatCoordinator(
     private val dependencies: SecondChatFeatureDependencies,
     private val nowMillis: () -> Long = { System.currentTimeMillis() },
 ) {
+    private val silentMessagePollingCursor = SilentChatMessagePollingCursor()
+
     suspend fun load(
         session: ProvisionedSession,
         connectionId: String,
@@ -55,6 +58,7 @@ internal class SecondChatCoordinator(
     suspend fun refresh(
         current: RealsRootUiState.SecondChat,
         silent: Boolean,
+        useReactionReconciliationAlternation: Boolean = false,
     ): SecondChatLoadResult {
         val pending = current.copy(
             refreshing = true,
@@ -73,6 +77,7 @@ internal class SecondChatCoordinator(
                 statusSnapshot = statusResult.value.receivedNow(),
                 joinIfAllowed = false,
                 loading = false,
+                useReactionReconciliationAlternation = silent && useReactionReconciliationAlternation,
             )
         }
     }
@@ -104,6 +109,20 @@ internal class SecondChatCoordinator(
     ): ApiResult<List<ChatMessage>> {
         val chat = current.chat ?: return ApiResult.Success(current.messages)
         return dependencies.getChatMessages(chat.id, afterMessageId = null)
+    }
+
+    suspend fun putMessageReaction(
+        chatId: String,
+        messageId: String,
+        reactionType: ChatMessageReactionType,
+    ): ApiResult<ChatMessage> =
+        dependencies.putMessageReaction(chatId, messageId, reactionType)
+
+    suspend fun reconcileMessagesForReactions(
+        current: RealsRootUiState.SecondChat,
+    ): ApiResult<List<ChatMessage>> {
+        val chat = current.chat ?: return ApiResult.Success(emptyList())
+        return dependencies.getChatMessages(chat.id, current.messages.reactionReconciliationCursor())
     }
 
     suspend fun createNoShowClaim(
@@ -393,6 +412,7 @@ internal class SecondChatCoordinator(
         statusSnapshot: ReceivedSecondChatStatus,
         joinIfAllowed: Boolean,
         loading: Boolean,
+        useReactionReconciliationAlternation: Boolean = false,
     ): SecondChatLoadResult {
         val status = statusSnapshot.status
         val authoritativeSnapshot = if (joinIfAllowed && status.canJoin) {
@@ -440,7 +460,11 @@ internal class SecondChatCoordinator(
         val chatId = authoritativeStatus.chatId ?: return SecondChatLoadResult.Show(
             withLifecycle.copy(loading = false)
         )
-        return loadChatAndMessages(withLifecycle, chatId)
+        return loadChatAndMessages(
+            current = withLifecycle,
+            chatId = chatId,
+            useReactionReconciliationAlternation = useReactionReconciliationAlternation,
+        )
     }
 
     private fun SecondChatStatus.receivedNow(): ReceivedSecondChatStatus =
@@ -469,9 +493,17 @@ internal class SecondChatCoordinator(
     private suspend fun loadChatAndMessages(
         current: RealsRootUiState.SecondChat,
         chatId: String,
+        useReactionReconciliationAlternation: Boolean = false,
     ): SecondChatLoadResult {
         val chatResult = dependencies.getChat(chatId)
-        val cursor = if (current.chat?.id == chatId) current.messages.lastMessageCursor() else null
+        val cursor = when {
+            current.chat?.id != chatId -> {
+                silentMessagePollingCursor.reset(chatId)
+                null
+            }
+            useReactionReconciliationAlternation -> silentMessagePollingCursor.nextCursor(chatId, current.messages)
+            else -> current.messages.lastMessageCursor()
+        }
         val messagesResult = dependencies.getChatMessages(chatId, cursor)
         return SecondChatLoadResult.Show(
             current.copy(

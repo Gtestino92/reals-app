@@ -50,6 +50,7 @@ import com.reals.app.domain.usecase.LeaveQueueUseCase
 import com.reals.app.domain.usecase.MarkLocalFirebaseEmailVerified
 import com.reals.app.domain.usecase.PatchMyAffinityAnswerUseCase
 import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
+import com.reals.app.domain.usecase.PutChatMessageReactionUseCase
 import com.reals.app.domain.usecase.PutMyPersonalMessageUseCase
 import com.reals.app.domain.usecase.ReactivateAccountUseCase
 import com.reals.app.domain.usecase.RejectChatExitRequestUseCase
@@ -152,6 +153,7 @@ data class FirstChatFeatureDependencies(
     val getChatMessages: GetChatMessagesUseCase,
     val sendChatMessage: SendChatMessageUseCase,
     val sendChatAudioMessage: SendChatAudioMessageUseCase,
+    val putMessageReaction: PutChatMessageReactionUseCase,
     val requestNextFirstChatGuidanceQuestion: RequestNextFirstChatGuidanceQuestionUseCase,
     val getChatExitRequests: GetChatExitRequestsUseCase,
     val requestMutualChatExit: RequestMutualChatExitUseCase,
@@ -172,6 +174,7 @@ data class SecondChatFeatureDependencies(
     val getChatMessages: GetChatMessagesUseCase,
     val sendChatMessage: SendChatMessageUseCase,
     val sendChatAudioMessage: SendChatAudioMessageUseCase,
+    val putMessageReaction: PutChatMessageReactionUseCase,
     val safetyCancelChat: SafetyCancelChatUseCase,
     val createCompletionRequest: CreateSecondChatCompletionRequestUseCase,
     val decideCompletionRequest: DecideSecondChatCompletionRequestUseCase,
