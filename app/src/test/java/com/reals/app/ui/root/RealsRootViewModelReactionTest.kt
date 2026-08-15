@@ -13,6 +13,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -155,6 +156,46 @@ class RealsRootViewModelReactionTest {
         val state = viewModel.uiState.value as RealsRootUiState.FirstChat
         assertEquals(setOf("b"), state.reaction.pendingMessageIds)
         assertEquals(ChatMessageReactionType.Heart, state.messages.single { it.id == "a" }.reactionType)
+    }
+
+    @Test
+    fun `one of two parallel first chat reactions can fail without clearing the successful one`() = runTest(dispatcher) {
+        val firstStarted = CompletableDeferred<Unit>()
+        val releaseFirst = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforePutChatMessageReactionResponse = {
+                if (lastPathId == "chat-1/a") {
+                    firstStarted.complete(Unit)
+                    releaseFirst.await()
+                }
+            }
+            chatMessageReactionResponse = backendErrorResponse(500, "SERVER_ERROR")
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(firstChatState(messages = listOf(
+            message("a", senderId = "other"),
+            message("b", "2026-06-18T21:01:00Z", senderId = "other"),
+        )))
+
+        assertTrue(viewModel.reactToFirstChatMessage("a"))
+        firstStarted.await()
+        assertTrue(viewModel.reactToFirstChatMessage("b"))
+        advanceUntilIdle()
+
+        val afterFailure = viewModel.uiState.value as RealsRootUiState.FirstChat
+        assertEquals(setOf("a"), afterFailure.reaction.pendingMessageIds)
+        assertEquals(null, afterFailure.messages.single { it.id == "b" }.reactionType)
+
+        api.chatMessageReactionResponse = Response.success(TestDtos.chatMessage("a", reactionType = "HEART"))
+        releaseFirst.complete(Unit)
+        advanceUntilIdle()
+
+        val final = viewModel.uiState.value as RealsRootUiState.FirstChat
+        assertTrue(final.reaction.pendingMessageIds.isEmpty())
+        assertEquals(ChatMessageReactionType.Heart, final.messages.single { it.id == "a" }.reactionType)
+        assertEquals(null, final.messages.single { it.id == "b" }.reactionType)
+        assertEquals(null, final.error)
+        assertEquals(null, final.message)
     }
 
     @Test
@@ -328,6 +369,36 @@ class RealsRootViewModelReactionTest {
     }
 
     @Test
+    fun `old first chat poll completing after put success cannot erase heart`() = runTest(dispatcher) {
+        val pollStarted = CompletableDeferred<Unit>()
+        val releasePoll = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeGetChatMessagesResponse = {
+                pollStarted.complete(Unit)
+                releasePoll.await()
+            }
+            chatMessagesResponse = chatMessagesPayload(listOf(TestDtos.chatMessage("incoming")))
+            chatMessageReactionResponse = Response.success(TestDtos.chatMessage("incoming", reactionType = "HEART"))
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(firstChatState(messages = listOf(message("incoming", senderId = "other"))))
+
+        viewModel.refreshFirstChat(silent = true)
+        pollStarted.await()
+        assertTrue(viewModel.reactToFirstChatMessage("incoming"))
+        runCurrent()
+
+        var state = viewModel.uiState.value as RealsRootUiState.FirstChat
+        assertEquals(ChatMessageReactionType.Heart, state.messages.single { it.id == "incoming" }.reactionType)
+
+        releasePoll.complete(Unit)
+        advanceUntilIdle()
+
+        state = viewModel.uiState.value as RealsRootUiState.FirstChat
+        assertEquals(ChatMessageReactionType.Heart, state.messages.single { it.id == "incoming" }.reactionType)
+    }
+
+    @Test
     fun `poll heart before put failure leaves canonical heart visible`() = runTest(dispatcher) {
         val release = CompletableDeferred<Unit>()
         val api = FakeRealsApi().apply {
@@ -367,6 +438,137 @@ class RealsRootViewModelReactionTest {
         advanceUntilIdle()
 
         assertTrue(viewModel.uiState.value is RealsRootUiState.Ready)
+    }
+
+    @Test
+    fun `late first chat reaction result is ignored after another first chat opens`() = runTest(dispatcher) {
+        val release = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforePutChatMessageReactionResponse = { release.await() }
+            chatMessageReactionResponse = Response.success(TestDtos.chatMessage("incoming", reactionType = "HEART"))
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(firstChatState(messages = listOf(message("incoming", senderId = "other"))))
+
+        assertTrue(viewModel.reactToFirstChatMessage("incoming"))
+        runCurrent()
+        viewModel.setState(firstChatState(
+            matchId = "match-2",
+            chatId = "chat-2",
+            messages = listOf(message("incoming", senderId = "other")),
+        ))
+        release.complete(Unit)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.FirstChat
+        assertEquals("chat-2", state.chatId)
+        assertEquals(null, state.messages.single { it.id == "incoming" }.reactionType)
+    }
+
+    @Test
+    fun `first chat audio full refresh completing after put success cannot erase heart`() = runTest(dispatcher) {
+        val refreshStarted = CompletableDeferred<Unit>()
+        val releaseRefresh = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeGetChatMessagesResponse = {
+                refreshStarted.complete(Unit)
+                releaseRefresh.await()
+            }
+            chatMessagesResponse = chatMessagesPayload(listOf(TestDtos.chatMessage("incoming")))
+            chatMessageReactionResponse = Response.success(TestDtos.chatMessage("incoming", reactionType = "HEART"))
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(firstChatState(messages = listOf(message("incoming", senderId = "other"))))
+
+        val audioRefresh = launch { viewModel.refreshFirstChatAudioUrl("incoming") }
+        refreshStarted.await()
+        assertTrue(viewModel.reactToFirstChatMessage("incoming"))
+        runCurrent()
+        releaseRefresh.complete(Unit)
+        audioRefresh.join()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.FirstChat
+        assertEquals(ChatMessageReactionType.Heart, state.messages.single { it.id == "incoming" }.reactionType)
+    }
+
+    @Test
+    fun `second chat active but not joined ignores reaction`() = runTest(dispatcher) {
+        val viewModel = viewModel(FakeRealsApi())
+        viewModel.setState(secondChatState(
+            messages = listOf(message("incoming", senderId = "other")),
+            lifecycle = SecondChatLifecycleUiState(
+                status = activeSecondChatStatus(myAttendanceStatus = "PENDING").toDomain(),
+                statusReceivedAtMillis = System.currentTimeMillis(),
+            ),
+        ))
+
+        assertFalse(viewModel.reactToSecondChatMessage("incoming"))
+    }
+
+    @Test
+    fun `pending second chat heart survives stale silent poll`() = runTest(dispatcher) {
+        val release = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforePutChatMessageReactionResponse = { release.await() }
+            chatMessagesResponse = chatMessagesPayload(listOf(TestDtos.chatMessage("incoming")))
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(secondChatState(messages = listOf(message("incoming", senderId = "other"))))
+
+        assertTrue(viewModel.reactToSecondChatMessage("incoming"))
+        runCurrent()
+        viewModel.refreshSecondChat(silent = true)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.SecondChat
+        assertEquals(setOf("incoming"), state.reaction.pendingMessageIds)
+        assertEquals(null, state.messages.single { it.id == "incoming" }.reactionType)
+
+        release.complete(Unit)
+        advanceUntilIdle()
+    }
+
+    @Test
+    fun `second chat reaction failure clears pending silently`() = runTest(dispatcher) {
+        val api = FakeRealsApi().apply {
+            chatMessageReactionResponse = backendErrorResponse(500, "SERVER_ERROR")
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(secondChatState(messages = listOf(message("incoming", senderId = "other"))))
+
+        assertTrue(viewModel.reactToSecondChatMessage("incoming"))
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.SecondChat
+        assertTrue(state.reaction.pendingMessageIds.isEmpty())
+        assertEquals(null, state.error)
+        assertEquals(null, state.message)
+    }
+
+    @Test
+    fun `late second chat reaction result is ignored after another second chat opens`() = runTest(dispatcher) {
+        val release = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforePutChatMessageReactionResponse = { release.await() }
+            chatMessageReactionResponse = Response.success(TestDtos.chatMessage("incoming", reactionType = "HEART"))
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(secondChatState(messages = listOf(message("incoming", senderId = "other"))))
+
+        assertTrue(viewModel.reactToSecondChatMessage("incoming"))
+        runCurrent()
+        viewModel.setState(secondChatState(
+            connectionId = "connection-2",
+            chatId = "chat-2",
+            messages = listOf(message("incoming", senderId = "other")),
+        ))
+        release.complete(Unit)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.SecondChat
+        assertEquals("chat-2", state.chatId)
+        assertEquals(null, state.messages.single { it.id == "incoming" }.reactionType)
     }
 
     @Test
@@ -426,16 +628,19 @@ class RealsRootViewModelReactionTest {
 
     private fun firstChatState(
         messages: List<ChatMessage>,
+        matchId: String = "match-1",
+        chatId: String = "chat-1",
         error: ApiError? = null,
         message: String? = null,
     ): RealsRootUiState.FirstChat =
         RealsRootUiState.FirstChat(
             session = TestDomain.session(),
-            matchId = "match-1",
-            chatId = "chat-1",
+            matchId = matchId,
+            chatId = chatId,
             match = TestDtos.match("CHAT_ACTIVE").toDomain(),
             chat = TestDtos.chat(status = "ACTIVE").copy(
-                id = "chat-1",
+                id = chatId,
+                matchId = matchId,
                 expiresAt = "2099-06-20T21:00:00Z",
                 inactivityExpiresAt = "2099-06-18T21:05:00Z",
             ).toDomain(),
@@ -444,23 +649,35 @@ class RealsRootViewModelReactionTest {
             message = message,
         )
 
-    private fun secondChatState(messages: List<ChatMessage>): RealsRootUiState.SecondChat =
+    private fun secondChatState(
+        messages: List<ChatMessage>,
+        connectionId: String = "connection-1",
+        chatId: String = "chat-1",
+        lifecycle: SecondChatLifecycleUiState = SecondChatLifecycleUiState(
+            status = activeSecondChatStatus().toDomain(),
+            statusReceivedAtMillis = System.currentTimeMillis(),
+        ),
+    ): RealsRootUiState.SecondChat =
         RealsRootUiState.SecondChat(
             session = TestDomain.session(),
-            connectionId = "connection-1",
+            connectionId = connectionId,
             matchId = "match-1",
             partnerName = "Alex",
-            chatId = "chat-1",
-            chat = TestDtos.chat(status = "ACTIVE").copy(id = "chat-1", chatType = "SECOND_CHAT").toDomain(),
+            chatId = chatId,
+            chat = TestDtos.chat(status = "ACTIVE").copy(
+                id = chatId,
+                connectionId = connectionId,
+                chatType = "SECOND_CHAT",
+            ).toDomain(),
             messages = messages,
-            lifecycle = SecondChatLifecycleUiState(
-                status = activeSecondChatStatus().toDomain(),
-                statusReceivedAtMillis = System.currentTimeMillis(),
-            ),
+            lifecycle = lifecycle,
         )
 
-    private fun activeSecondChatStatus(): com.reals.app.data.dto.SecondChatAttendanceResponseDto =
+    private fun activeSecondChatStatus(
+        myAttendanceStatus: String = "ON_TIME",
+    ): com.reals.app.data.dto.SecondChatAttendanceResponseDto =
         TestDtos.secondChatStatus(
+            myAttendanceStatus = myAttendanceStatus,
             scheduledAt = "2099-06-18T21:00:00Z",
             entryClosesAt = "2099-06-18T21:20:00Z",
             absoluteExpiresAt = "2099-06-18T23:00:00Z",

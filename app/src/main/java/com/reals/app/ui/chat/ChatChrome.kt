@@ -982,12 +982,10 @@ private fun MessageBubble(
                     onPlayAudio = onPlayAudio,
                     onPauseAudio = onPauseAudio,
                 )
-                IncomingReactionSlot(
+                IncomingReactionOverlay(
                     presentation = reactionPresentation,
                     onReact = { onReactToMessage(message.id) },
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .offset(x = 30.dp, y = 6.dp),
+                    modifier = Modifier.matchParentSize(),
                 )
             }
         }
@@ -1056,10 +1054,30 @@ private fun MessageBubbleCard(
 }
 
 @Composable
+private fun IncomingReactionOverlay(
+    presentation: ChatMessageReactionPresentation,
+    onReact: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.BottomEnd,
+    ) {
+        IncomingReactionSlot(
+            presentation = presentation,
+            onReact = onReact,
+            modifier = Modifier.align(Alignment.BottomEnd),
+            iconModifier = Modifier.offset(x = 18.dp, y = 6.dp),
+        )
+    }
+}
+
+@Composable
 private fun IncomingReactionSlot(
     presentation: ChatMessageReactionPresentation,
     onReact: () -> Unit,
     modifier: Modifier = Modifier,
+    iconModifier: Modifier = Modifier,
 ) {
     when (presentation) {
         ChatMessageReactionPresentation.AddHeart -> HeartReactionChip(
@@ -1068,12 +1086,14 @@ private fun IncomingReactionSlot(
             clickable = true,
             onClick = onReact,
             modifier = modifier,
+            iconModifier = iconModifier,
         )
         ChatMessageReactionPresentation.GivenHeart -> HeartReactionChip(
             filled = true,
             contentDescription = "Reaccionaste con corazón",
             clickable = false,
             modifier = modifier,
+            iconModifier = iconModifier,
         )
         ChatMessageReactionPresentation.ReceivedHeart,
         ChatMessageReactionPresentation.None -> Unit
@@ -1108,6 +1128,7 @@ private fun HeartReactionChip(
     contentDescription: String,
     clickable: Boolean,
     modifier: Modifier = Modifier,
+    iconModifier: Modifier = Modifier,
     onClick: () -> Unit = {},
 ) {
     val scale = remember(filled) { Animatable(if (filled) 0.86f else 1f) }
@@ -1139,7 +1160,7 @@ private fun HeartReactionChip(
             painter = painterResource(if (filled) R.drawable.ic_heart_filled else R.drawable.ic_heart_outline),
             contentDescription = null,
             tint = if (filled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier
+            modifier = iconModifier
                 .size(20.dp)
                 .scale(scale.value),
         )
