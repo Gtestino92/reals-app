@@ -86,7 +86,24 @@ class ChatMessageScrollBehaviorTest {
     }
 
     @Test
-    fun `pending reaction appearance can preserve bottom for an existing message`() {
+    fun `given heart keeps the same side lane geometry`() {
+        assertFalse(
+            shouldPreserveBottomForReactionLayoutChange(
+                previous = listOf(
+                    MessageReactionLayoutIdentity(id = "a", hasReactionExtent = false),
+                    MessageReactionLayoutIdentity(id = "b", hasReactionExtent = false),
+                ),
+                current = listOf(
+                    MessageReactionLayoutIdentity(id = "a", hasReactionExtent = false),
+                    MessageReactionLayoutIdentity(id = "b", hasReactionExtent = false),
+                ),
+                wasNearBottomBeforeReactionChange = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `received reaction appearance can preserve bottom for an existing message`() {
         assertTrue(
             shouldPreserveBottomForReactionLayoutChange(
                 previous = listOf(

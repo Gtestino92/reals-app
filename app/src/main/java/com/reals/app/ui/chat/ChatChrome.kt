@@ -1108,7 +1108,7 @@ internal enum class ChatMessageReactionPresentation {
 }
 
 private fun ChatMessageReactionPresentation.hasReactionBadgeExtent(): Boolean =
-    this == ChatMessageReactionPresentation.GivenHeart || this == ChatMessageReactionPresentation.ReceivedHeart
+    this == ChatMessageReactionPresentation.ReceivedHeart
 
 internal fun chatMessageReactionPresentation(
     message: ChatMessage,
