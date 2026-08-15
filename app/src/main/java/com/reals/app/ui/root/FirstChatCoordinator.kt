@@ -13,6 +13,7 @@ import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.ChatMessageReactionType
+import com.reals.app.domain.model.ChatReplyTarget
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.FirstChatSnapshot
 import com.reals.app.domain.model.MatchState
@@ -235,12 +236,13 @@ internal class FirstChatCoordinator(
         current: RealsRootUiState.FirstChat,
         cleanContent: String,
         localId: String,
+        replyTo: ChatReplyTarget? = null,
         onPostAcknowledged: (ChatMessage) -> Unit = {},
     ): FirstChatSendResult {
         val chat = current.chat ?: return FirstChatSendResult.Show(current)
         val cursorBeforeSend = current.messages.lastMessageCursor()
         val sendStarted = FirstChatSendTiming.markNow()
-        return when (val result = dependencies.sendChatMessage(chat.id, cleanContent)) {
+        return when (val result = dependencies.sendChatMessage(chat.id, cleanContent, localId, replyTo)) {
             is ApiResult.Success -> {
                 val postCompleted = FirstChatSendTiming.markNow()
                 FirstChatSendTiming.logStage(

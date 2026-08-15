@@ -3,6 +3,7 @@ package com.reals.app.data.mapper
 import com.reals.app.data.dto.ChatExitOutcomeResponseDto
 import com.reals.app.data.dto.ChatExitRequestResponseDto
 import com.reals.app.data.dto.ChatMessageResponseDto
+import com.reals.app.data.dto.ChatMessageReplyToResponseDto
 import com.reals.app.data.dto.ChatPartnerResponseDto
 import com.reals.app.data.dto.ChatResponseDto
 import com.reals.app.data.dto.ChatAudioPolicyResponseDto
@@ -22,12 +23,15 @@ import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatExitRequestType
 import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.ChatMessageReply
+import com.reals.app.domain.model.ChatMessageReplyTargetType
 import com.reals.app.domain.model.ChatMessageReactionType
 import com.reals.app.domain.model.ChatMessageType
 import com.reals.app.domain.model.ChatPartner
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.ChatType
 import com.reals.app.domain.model.FirstChatGuidance
+import com.reals.app.domain.model.FirstChatGuidanceProgressionAction
 import com.reals.app.domain.model.FirstChatGuidanceQuestion
 import com.reals.app.domain.model.SecondChatAttendanceStatus
 import com.reals.app.domain.model.SecondChatEndedReason
@@ -123,6 +127,7 @@ fun FirstChatGuidanceQuestionResponseDto.toDomain(): FirstChatGuidanceQuestion =
     FirstChatGuidanceQuestion(
         id = id,
         text = text,
+        instanceId = instanceId,
     )
 
 fun FirstChatGuidanceResponseDto.toDomain(): FirstChatGuidance =
@@ -131,6 +136,9 @@ fun FirstChatGuidanceResponseDto.toDomain(): FirstChatGuidance =
         questionOrdinal = questionOrdinal,
         maxQuestions = maxQuestions,
         requiredCharacters = requiredCharacters,
+        requiredParticipationScore = requiredParticipationScore,
+        directQuestionReplyMultiplier = directQuestionReplyMultiplier,
+        progressionAction = FirstChatGuidanceProgressionAction.fromBackend(progressionAction),
         canRequestNext = canRequestNext,
         myNextRequested = myNextRequested,
         completed = completed,
@@ -144,9 +152,22 @@ fun ChatMessageResponseDto.toDomain(): ChatMessage = ChatMessage(
     messageType = ChatMessageType.fromBackend(messageType),
     content = content,
     audio = audio?.toDomain(),
+    replyTo = replyTo?.toDomain(),
     reactionType = ChatMessageReactionType.fromBackend(reactionType),
     sentAt = sentAt,
 )
+
+fun ChatMessageReplyToResponseDto.toDomain(): ChatMessageReply? {
+    val cleanTargetId = targetId?.takeIf { it.isNotBlank() } ?: return null
+    val replyType = ChatMessageReplyTargetType.fromBackend(type) ?: return null
+    return ChatMessageReply(
+        type = replyType,
+        targetId = cleanTargetId,
+        senderId = senderId,
+        messageType = messageType?.let { ChatMessageType.fromBackend(it) },
+        previewText = previewText,
+    )
+}
 
 fun ChatAudioResponseDto.toDomain(): ChatAudio = ChatAudio(
     url = url,

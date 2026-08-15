@@ -12,8 +12,10 @@ import com.reals.app.data.dto.ChatMessagesResponseDto
 import com.reals.app.data.dto.PutMessageReactionRequestDto
 import com.reals.app.data.dto.SecondChatCompletionDecisionRequestDto
 import com.reals.app.data.dto.SendMessageRequestDto
+import com.reals.app.data.dto.SendMessageReplyToRequestDto
 import com.reals.app.data.mapper.toDomain
 import com.reals.app.domain.model.Chat
+import com.reals.app.domain.model.ChatReplyTarget
 import com.reals.app.domain.model.SecondChatCompletionDecision
 import com.reals.app.domain.model.ChatExitOutcome
 import com.reals.app.domain.model.ChatExitReason
@@ -102,12 +104,21 @@ class ChatRepository(
         }
             .mapChatMessages { payload -> payload.toMessageDtos().map { it.toDomain() } }
 
-    suspend fun sendMessage(chatId: String, content: String): ApiResult<ChatMessage> =
+    suspend fun sendMessage(
+        chatId: String,
+        content: String,
+        clientMessageId: String,
+        replyTo: ChatReplyTarget? = null,
+    ): ApiResult<ChatMessage> =
         authorizedCall { authorization ->
             api.sendChatMessage(
                 authorization = authorization,
                 chatId = chatId,
-                body = SendMessageRequestDto(content),
+                body = SendMessageRequestDto(
+                    clientMessageId = clientMessageId,
+                    content = content,
+                    replyTo = replyTo?.toRequestDto(),
+                ),
             )
         }.map { it.toDomain() }
 
@@ -221,6 +232,12 @@ class ChatRepository(
 }
 
 private const val CHAT_AUDIO_MEDIA_TYPE = "audio/mp4"
+
+private fun ChatReplyTarget.toRequestDto(): SendMessageReplyToRequestDto =
+    SendMessageReplyToRequestDto(
+        type = type.rawValue,
+        targetId = targetId,
+    )
 
 private fun String.ensureM4aExtension(): String =
     if (endsWith(".m4a", ignoreCase = true)) this else "$this.m4a"

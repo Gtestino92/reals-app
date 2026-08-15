@@ -19,6 +19,7 @@ import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatDecisionState
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.ChatReplyDraft
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.CreateProfileInput
 import com.reals.app.domain.model.FirstChatGuidance
@@ -30,6 +31,7 @@ import com.reals.app.domain.model.SecondChatCompletionDecision
 import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.UpdateProfileInput
 import com.reals.app.domain.model.VisualDecision
+import com.reals.app.domain.model.toReplyTargetOrNull
 import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_STARTED
 import com.reals.app.notifications.PushNotificationOpenContract
 import com.reals.app.ui.auth.GoogleCredentialResult
@@ -605,9 +607,9 @@ class RealsRootViewModel(
         }
     }
 
-    fun sendSecondChatMessage(content: String): Boolean {
+    fun sendSecondChatMessage(content: String, replyDraft: ChatReplyDraft? = null): Boolean {
         val current = _uiState.value as? RealsRootUiState.SecondChat ?: return false
-        return when (val preparation = ChatMessageActionHandler.prepareSecondChatSend(current, content)) {
+        return when (val preparation = ChatMessageActionHandler.prepareSecondChatSend(current, content, replyDraft)) {
             is ChatMessageSendPreparation.Accepted -> {
                 val instanceKey = preparation.pendingState.expiryKey()
                 _uiState.value = preparation.pendingState
@@ -616,6 +618,7 @@ class RealsRootViewModel(
                         preparation.pendingState,
                         preparation.cleanContent,
                         preparation.localId,
+                        preparation.replyTo,
                     )
                     val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return@launch
                     if (latest.matches(instanceKey)) {
@@ -731,10 +734,30 @@ class RealsRootViewModel(
         return merged.firstOrNull { it.id == messageId }?.audio?.url
     }
 
-    fun retrySecondChatMessage(localId: String, content: String) {
+    fun retrySecondChatMessage(localId: String) {
         val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
-        _uiState.value = ChatMessageActionHandler.retrySecondChat(current, localId)
-        sendSecondChatMessage(content)
+        val failedMessage = current.optimisticMessages.firstOrNull { it.localId == localId } ?: return
+        if (failedMessage.messageType != OptimisticOutgoingMessageType.Text) return
+        val retrying = current.copy(
+            optimisticMessages = current.optimisticMessages.markOptimisticMessageSending(localId),
+            sending = true,
+            error = null,
+            message = null,
+        )
+        val instanceKey = retrying.expiryKey()
+        _uiState.value = retrying
+        viewModelScope.launch {
+            val result = secondChatCoordinator.sendMessage(
+                retrying,
+                failedMessage.content,
+                failedMessage.localId,
+                failedMessage.replyTo?.toReplyTargetOrNull(),
+            )
+            val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return@launch
+            if (latest.matches(instanceKey)) {
+                _uiState.value = result.reconcileAsyncSecondChatResult(latest) ?: return@launch
+            }
+        }
     }
 
     fun reactToSecondChatMessage(messageId: String): Boolean {
@@ -1351,9 +1374,9 @@ class RealsRootViewModel(
         }
     }
 
-    fun sendFirstChatMessage(content: String): Boolean {
+    fun sendFirstChatMessage(content: String, replyDraft: ChatReplyDraft? = null): Boolean {
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return false
-        return when (val preparation = ChatMessageActionHandler.prepareFirstChatSend(current, content)) {
+        return when (val preparation = ChatMessageActionHandler.prepareFirstChatSend(current, content, replyDraft)) {
             is ChatMessageSendPreparation.Accepted -> {
                 _uiState.value = preparation.pendingState
                 val expectedSessionUserId = preparation.pendingState.session.user.id
@@ -1366,6 +1389,7 @@ class RealsRootViewModel(
                             preparation.pendingState,
                             preparation.cleanContent,
                             preparation.localId,
+                            preparation.replyTo,
                             onPostAcknowledged = { sentMessage ->
                                 applyFirstChatPostAcknowledgement(
                                     sentMessage = sentMessage,
@@ -1495,10 +1519,41 @@ class RealsRootViewModel(
         return merged.firstOrNull { it.id == messageId }?.audio?.url
     }
 
-    fun retryFirstChatMessage(localId: String, content: String) {
+    fun retryFirstChatMessage(localId: String) {
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
-        _uiState.value = ChatMessageActionHandler.retryFirstChat(current, localId)
-        sendFirstChatMessage(content)
+        val failedMessage = current.optimisticMessages.firstOrNull { it.localId == localId } ?: return
+        if (failedMessage.messageType != OptimisticOutgoingMessageType.Text) return
+        val retrying = current.copy(
+            optimisticMessages = current.optimisticMessages.markOptimisticMessageSending(localId),
+            sending = true,
+            error = null,
+            message = null,
+        )
+        _uiState.value = retrying
+        val expectedSessionUserId = retrying.session.user.id
+        val expectedMatchId = retrying.matchId
+        val expectedChatId = retrying.chatId ?: retrying.chat?.id
+        val preSendMessageIds = retrying.messages.mapTo(HashSet()) { it.id }
+        viewModelScope.launch {
+            applyFirstChatSendResult(
+                result = firstChatCoordinator.sendMessage(
+                    retrying,
+                    failedMessage.content,
+                    failedMessage.localId,
+                    failedMessage.replyTo?.toReplyTargetOrNull(),
+                    onPostAcknowledged = { sentMessage ->
+                        applyFirstChatPostAcknowledgement(
+                            sentMessage = sentMessage,
+                            localId = failedMessage.localId,
+                            expectedSessionUserId = expectedSessionUserId,
+                            expectedMatchId = expectedMatchId,
+                            expectedChatId = expectedChatId,
+                        )
+                    },
+                ),
+                preSendMessageIds = preSendMessageIds,
+            )
+        }
     }
 
     fun reactToFirstChatMessage(messageId: String): Boolean {

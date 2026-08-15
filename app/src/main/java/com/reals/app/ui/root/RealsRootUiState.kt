@@ -9,6 +9,7 @@ import com.reals.app.domain.model.BackendUser
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.ChatMessageReply
 import com.reals.app.domain.model.CountryReference
 import com.reals.app.domain.model.HomeState
 import com.reals.app.domain.model.LegalDocumentAction
@@ -26,6 +27,7 @@ import com.reals.app.domain.model.SchedulingProposal
 import com.reals.app.domain.model.SecondChatStatus
 import com.reals.app.domain.model.VisualProfile
 import com.reals.app.ui.matchmaking.HomeScreenModel
+import java.util.UUID
 
 sealed interface RealsRootUiState {
     data object Checking : RealsRootUiState
@@ -500,12 +502,14 @@ data class OptimisticOutgoingMessage(
     val deliveryState: OutgoingMessageDeliveryState,
     val messageType: OptimisticOutgoingMessageType = OptimisticOutgoingMessageType.Text,
     val audioDurationMillis: Long? = null,
+    val replyTo: ChatMessageReply? = null,
 )
 
 internal fun newOptimisticOutgoingMessage(
     chatId: String,
     senderId: String,
     content: String,
+    replyTo: ChatMessageReply? = null,
     localId: String = optimisticMessageLocalId(),
     createdAtMillis: Long = System.currentTimeMillis(),
 ): OptimisticOutgoingMessage = OptimisticOutgoingMessage(
@@ -515,6 +519,7 @@ internal fun newOptimisticOutgoingMessage(
     content = content,
     createdAtMillis = createdAtMillis,
     deliveryState = OutgoingMessageDeliveryState.Sending,
+    replyTo = replyTo,
 )
 
 internal fun newOptimisticOutgoingAudioMessage(
@@ -534,7 +539,7 @@ internal fun newOptimisticOutgoingAudioMessage(
     audioDurationMillis = durationMillis,
 )
 
-private fun optimisticMessageLocalId(): String = "local-${System.currentTimeMillis()}"
+private fun optimisticMessageLocalId(): String = UUID.randomUUID().toString()
 
 internal fun List<OptimisticOutgoingMessage>.withoutOptimisticMessage(
     localId: String,
@@ -545,6 +550,16 @@ internal fun List<OptimisticOutgoingMessage>.markOptimisticMessageFailed(
 ): List<OptimisticOutgoingMessage> = map { message ->
     if (message.localId == localId) {
         message.copy(deliveryState = OutgoingMessageDeliveryState.Failed)
+    } else {
+        message
+    }
+}
+
+internal fun List<OptimisticOutgoingMessage>.markOptimisticMessageSending(
+    localId: String,
+): List<OptimisticOutgoingMessage> = map { message ->
+    if (message.localId == localId) {
+        message.copy(deliveryState = OutgoingMessageDeliveryState.Sending)
     } else {
         message
     }

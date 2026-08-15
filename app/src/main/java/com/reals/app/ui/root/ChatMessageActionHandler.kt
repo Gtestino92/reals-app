@@ -5,6 +5,9 @@ import com.reals.app.core.security.TextSafety
 import com.reals.app.domain.model.ChatAudioUnavailableReason
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatMessageReactionType
+import com.reals.app.domain.model.ChatReplyDraft
+import com.reals.app.domain.model.toOptimisticReply
+import com.reals.app.domain.model.toReplyTarget
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.ChatType
 import com.reals.app.domain.model.isFirstChatDecisionOnly
@@ -15,6 +18,7 @@ internal object ChatMessageActionHandler {
     fun prepareFirstChatSend(
         current: RealsRootUiState.FirstChat,
         content: String,
+        replyDraft: ChatReplyDraft? = null,
     ): ChatMessageSendPreparation<RealsRootUiState.FirstChat> {
         if (current.loading || current.refreshing || current.sending || current.audioUpload.uploading || current.actionLoading) {
             return ChatMessageSendPreparation.Ignored
@@ -28,6 +32,7 @@ internal object ChatMessageActionHandler {
         }
         return prepareSend(
             content = content,
+            replyDraft = replyDraft,
             chatId = chat.id,
             senderId = current.session.user.id,
             invalidState = {
@@ -102,6 +107,7 @@ internal object ChatMessageActionHandler {
     fun prepareSecondChatSend(
         current: RealsRootUiState.SecondChat,
         content: String,
+        replyDraft: ChatReplyDraft? = null,
     ): ChatMessageSendPreparation<RealsRootUiState.SecondChat> {
         if (current.loading || current.refreshing || current.sending || current.audioUpload.uploading || current.actionLoading) {
             return ChatMessageSendPreparation.Ignored
@@ -112,6 +118,7 @@ internal object ChatMessageActionHandler {
         val chat = current.chat ?: return ChatMessageSendPreparation.Ignored
         return prepareSend(
             content = content,
+            replyDraft = replyDraft,
             chatId = chat.id,
             senderId = current.session.user.id,
             invalidState = {
@@ -260,6 +267,7 @@ internal object ChatMessageActionHandler {
 
     private fun <T> prepareSend(
         content: String,
+        replyDraft: ChatReplyDraft?,
         chatId: String,
         senderId: String,
         invalidState: () -> T,
@@ -274,11 +282,13 @@ internal object ChatMessageActionHandler {
             chatId = chatId,
             senderId = senderId,
             content = cleanContent,
+            replyTo = replyDraft?.toOptimisticReply(),
         )
         return ChatMessageSendPreparation.Accepted(
             pendingState = pendingState(optimisticMessage),
             cleanContent = cleanContent,
             localId = optimisticMessage.localId,
+            replyTo = replyDraft?.toReplyTarget(),
         )
     }
 
@@ -399,6 +409,7 @@ internal sealed interface ChatMessageSendPreparation<out T> {
         val pendingState: T,
         val cleanContent: String,
         val localId: String,
+        val replyTo: com.reals.app.domain.model.ChatReplyTarget?,
     ) : ChatMessageSendPreparation<T>
 
     data class Rejected<T>(

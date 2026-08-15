@@ -4,11 +4,15 @@ import com.reals.app.core.network.ApiError
 import com.reals.app.data.mapper.toDomain
 import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.ChatMessageReplyTargetType
 import com.reals.app.domain.model.ChatMessageReactionType
 import com.reals.app.domain.model.ChatMessageType
+import com.reals.app.domain.model.ChatReplyDraft
+import com.reals.app.domain.model.ChatReplyTarget
 import com.reals.app.testutil.TestDomain
 import com.reals.app.testutil.TestDtos
 import java.io.File
+import java.util.UUID
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -55,7 +59,8 @@ class ChatMessageActionHandlerTest {
         assertTrue(result is ChatMessageSendPreparation.Accepted<*>)
         result as ChatMessageSendPreparation.Accepted<RealsRootUiState.FirstChat>
         assertEquals("hola mundo", result.cleanContent)
-        assertTrue(result.localId.startsWith("local-"))
+        UUID.fromString(result.localId)
+        assertEquals(result.localId, result.pendingState.optimisticMessages.single().localId)
         assertTrue(result.pendingState.sending)
         assertEquals(null, result.pendingState.error)
         assertEquals(null, result.pendingState.message)
@@ -65,6 +70,33 @@ class ChatMessageActionHandlerTest {
         assertEquals("user-1", optimistic.senderId)
         assertEquals("hola mundo", optimistic.content)
         assertEquals(OutgoingMessageDeliveryState.Sending, optimistic.deliveryState)
+        assertEquals(null, optimistic.replyTo)
+        assertEquals(null, result.replyTo)
+    }
+
+    @Test
+    fun `first chat quoted text send carries client id and optimistic quote`() {
+        val replyDraft = ChatReplyDraft.Message(
+            targetId = "message-target",
+            senderId = "user-2",
+            messageType = ChatMessageType.Text,
+            previewText = "mensaje citado",
+        )
+
+        val result = ChatMessageActionHandler.prepareFirstChatSend(
+            current = firstChatState(),
+            content = "respuesta",
+            replyDraft = replyDraft,
+        )
+
+        assertTrue(result is ChatMessageSendPreparation.Accepted<*>)
+        result as ChatMessageSendPreparation.Accepted<RealsRootUiState.FirstChat>
+        assertEquals(ChatReplyTarget.Message("message-target"), result.replyTo)
+        val optimistic = result.pendingState.optimisticMessages.single()
+        assertEquals(result.localId, optimistic.localId)
+        assertEquals(ChatMessageReplyTargetType.Message, optimistic.replyTo?.type)
+        assertEquals("message-target", optimistic.replyTo?.targetId)
+        assertEquals("mensaje citado", optimistic.replyTo?.previewText)
     }
 
     @Test
@@ -178,7 +210,7 @@ class ChatMessageActionHandlerTest {
         assertTrue(result is ChatMessageSendPreparation.Accepted<*>)
         result as ChatMessageSendPreparation.Accepted<RealsRootUiState.SecondChat>
         assertEquals("segundo chat", result.cleanContent)
-        assertTrue(result.localId.startsWith("local-"))
+        UUID.fromString(result.localId)
         assertTrue(result.pendingState.sending)
         assertEquals(null, result.pendingState.error)
         assertEquals(null, result.pendingState.message)

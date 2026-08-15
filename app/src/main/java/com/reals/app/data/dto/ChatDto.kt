@@ -48,6 +48,7 @@ data class ChatPartnerResponseDto(
 data class FirstChatGuidanceQuestionResponseDto(
     val id: String,
     val text: String,
+    val instanceId: String? = null,
 )
 
 @Serializable
@@ -56,6 +57,9 @@ data class FirstChatGuidanceResponseDto(
     val questionOrdinal: Int,
     val maxQuestions: Int,
     val requiredCharacters: Int,
+    val requiredParticipationScore: Int? = null,
+    val directQuestionReplyMultiplier: Int? = null,
+    val progressionAction: String? = null,
     val canRequestNext: Boolean,
     val myNextRequested: Boolean,
     val completed: Boolean,
@@ -63,7 +67,15 @@ data class FirstChatGuidanceResponseDto(
 
 @Serializable
 data class SendMessageRequestDto(
+    val clientMessageId: String,
     val content: String,
+    val replyTo: SendMessageReplyToRequestDto? = null,
+)
+
+@Serializable
+data class SendMessageReplyToRequestDto(
+    val type: String,
+    val targetId: String,
 )
 
 @Serializable
@@ -80,8 +92,18 @@ data class ChatMessageResponseDto(
     val messageType: String = "TEXT",
     val content: String? = null,
     val audio: ChatAudioResponseDto? = null,
+    val replyTo: ChatMessageReplyToResponseDto? = null,
     val reactionType: String? = null,
     val sentAt: String,
+)
+
+@Serializable
+data class ChatMessageReplyToResponseDto(
+    val type: String? = null,
+    val targetId: String? = null,
+    val senderId: String? = null,
+    val messageType: String? = null,
+    val previewText: String? = null,
 )
 
 @Serializable

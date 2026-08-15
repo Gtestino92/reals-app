@@ -88,6 +88,7 @@ data class ChatMessage(
     val messageType: ChatMessageType = ChatMessageType.Text,
     val content: String? = null,
     val audio: ChatAudio? = null,
+    val replyTo: ChatMessageReply? = null,
     val reactionType: ChatMessageReactionType? = null,
     val sentAt: String,
 ) {
@@ -125,6 +126,92 @@ sealed interface ChatMessageType {
             else -> Unknown(value)
         }
     }
+}
+
+sealed interface ChatMessageReplyTargetType {
+    val rawValue: String
+
+    data object Message : ChatMessageReplyTargetType { override val rawValue = "MESSAGE" }
+    data object GuidanceQuestion : ChatMessageReplyTargetType { override val rawValue = "GUIDANCE_QUESTION" }
+    data class Unknown(override val rawValue: String) : ChatMessageReplyTargetType
+
+    companion object {
+        fun fromBackend(value: String?): ChatMessageReplyTargetType? = when (value?.uppercase()) {
+            null, "" -> null
+            Message.rawValue -> Message
+            GuidanceQuestion.rawValue -> GuidanceQuestion
+            else -> Unknown(value)
+        }
+    }
+}
+
+data class ChatMessageReply(
+    val type: ChatMessageReplyTargetType,
+    val targetId: String,
+    val senderId: String?,
+    val messageType: ChatMessageType?,
+    val previewText: String?,
+)
+
+sealed interface ChatReplyTarget {
+    val targetId: String
+    val type: ChatMessageReplyTargetType
+
+    data class Message(
+        override val targetId: String,
+    ) : ChatReplyTarget {
+        override val type: ChatMessageReplyTargetType = ChatMessageReplyTargetType.Message
+    }
+
+    data class GuidanceQuestion(
+        override val targetId: String,
+    ) : ChatReplyTarget {
+        override val type: ChatMessageReplyTargetType = ChatMessageReplyTargetType.GuidanceQuestion
+    }
+}
+
+sealed interface ChatReplyDraft {
+    val targetId: String
+
+    data class Message(
+        override val targetId: String,
+        val senderId: String,
+        val messageType: ChatMessageType,
+        val previewText: String?,
+    ) : ChatReplyDraft
+
+    data class GuidanceQuestion(
+        override val targetId: String,
+        val previewText: String,
+    ) : ChatReplyDraft
+}
+
+fun ChatReplyDraft.toReplyTarget(): ChatReplyTarget = when (this) {
+    is ChatReplyDraft.Message -> ChatReplyTarget.Message(targetId)
+    is ChatReplyDraft.GuidanceQuestion -> ChatReplyTarget.GuidanceQuestion(targetId)
+}
+
+fun ChatReplyDraft.toOptimisticReply(): ChatMessageReply = when (this) {
+    is ChatReplyDraft.Message -> ChatMessageReply(
+        type = ChatMessageReplyTargetType.Message,
+        targetId = targetId,
+        senderId = senderId,
+        messageType = messageType,
+        previewText = previewText,
+    )
+    is ChatReplyDraft.GuidanceQuestion -> ChatMessageReply(
+        type = ChatMessageReplyTargetType.GuidanceQuestion,
+        targetId = targetId,
+        senderId = null,
+        messageType = null,
+        previewText = previewText,
+    )
+}
+
+fun ChatMessageReply.toReplyTargetOrNull(): ChatReplyTarget? = when (type) {
+    ChatMessageReplyTargetType.Message -> ChatReplyTarget.Message(targetId)
+    ChatMessageReplyTargetType.GuidanceQuestion -> ChatReplyTarget.GuidanceQuestion(targetId)
+    is ChatMessageReplyTargetType.Unknown -> null
 }
 
 sealed interface ChatMessageReactionType {
@@ -230,6 +317,7 @@ data class SecondChatResolutionRequest(
 data class FirstChatGuidanceQuestion(
     val id: String,
     val text: String,
+    val instanceId: String? = null,
 )
 
 data class FirstChatGuidance(
@@ -237,10 +325,30 @@ data class FirstChatGuidance(
     val questionOrdinal: Int,
     val maxQuestions: Int,
     val requiredCharacters: Int,
+    val requiredParticipationScore: Int? = null,
+    val directQuestionReplyMultiplier: Int? = null,
+    val progressionAction: FirstChatGuidanceProgressionAction? = null,
     val canRequestNext: Boolean,
     val myNextRequested: Boolean,
     val completed: Boolean,
 )
+
+sealed interface FirstChatGuidanceProgressionAction {
+    val rawValue: String
+
+    data object NextQuestion : FirstChatGuidanceProgressionAction { override val rawValue = "NEXT_QUESTION" }
+    data object Complete : FirstChatGuidanceProgressionAction { override val rawValue = "COMPLETE" }
+    data class Unknown(override val rawValue: String) : FirstChatGuidanceProgressionAction
+
+    companion object {
+        fun fromBackend(value: String?): FirstChatGuidanceProgressionAction? = when (value?.uppercase()) {
+            null, "" -> null
+            NextQuestion.rawValue -> NextQuestion
+            Complete.rawValue -> Complete
+            else -> Unknown(value)
+        }
+    }
+}
 
 sealed interface ChatType {
     val rawValue: String
