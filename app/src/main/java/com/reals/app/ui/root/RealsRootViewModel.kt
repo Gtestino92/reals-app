@@ -1976,7 +1976,7 @@ class RealsRootViewModel(
     ) {
         val rolledBack = latest.copy(
             reaction = latest.reaction.withoutPendingReaction(messageId),
-            error = error.takeIf { it.isStructuralInteractionError() },
+            error = if (error.isStructuralInteractionError()) error else latest.error,
         )
         _uiState.value = rolledBack
         if ((error as? ApiError.Backend)?.backendErrorCode != BackendErrorCode.ChatMessageReactionNotAvailable) return
@@ -2011,7 +2011,7 @@ class RealsRootViewModel(
     ) {
         val rolledBack = latest.copy(
             reaction = latest.reaction.withoutPendingReaction(messageId),
-            error = error.takeIf { it.isStructuralInteractionError() },
+            error = if (error.isStructuralInteractionError()) error else latest.error,
         )
         _uiState.value = rolledBack
         if ((error as? ApiError.Backend)?.backendErrorCode != BackendErrorCode.ChatMessageReactionNotAvailable) return

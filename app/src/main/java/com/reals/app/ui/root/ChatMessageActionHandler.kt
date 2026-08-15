@@ -5,6 +5,8 @@ import com.reals.app.core.security.TextSafety
 import com.reals.app.domain.model.ChatAudioUnavailableReason
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatMessageReactionType
+import com.reals.app.domain.model.ChatStatus
+import com.reals.app.domain.model.ChatType
 import com.reals.app.domain.model.isFirstChatDecisionOnly
 import com.reals.app.ui.chat.firstChatLifecycleUiState
 import java.io.File
@@ -208,13 +210,15 @@ internal object ChatMessageActionHandler {
         if (
             current.loading ||
             current.actionLoading ||
-            current.guidanceActionLoading ||
             current.manualBlock.loading ||
             current.hasPendingExitRequest()
         ) {
             return ChatReactionPreparation.Ignored
         }
         val chat = current.chat ?: return ChatReactionPreparation.Ignored
+        if (chat.chatType != ChatType.FirstChat || chat.status != ChatStatus.Active) {
+            return ChatReactionPreparation.Ignored
+        }
         if (chat.isFirstChatDecisionOnly()) return ChatReactionPreparation.Ignored
         if (firstChatLifecycleUiState(chat)?.expired == true) return ChatReactionPreparation.Ignored
         if (!current.messageCanReceiveReaction(cleanMessageId)) return ChatReactionPreparation.Ignored
@@ -222,8 +226,6 @@ internal object ChatMessageActionHandler {
         return ChatReactionPreparation.Accepted(
             pendingState = current.copy(
                 reaction = current.reaction.withPendingReaction(cleanMessageId),
-                error = null,
-                message = null,
             ),
             chatId = chat.id,
             messageId = cleanMessageId,
@@ -250,8 +252,6 @@ internal object ChatMessageActionHandler {
         return ChatReactionPreparation.Accepted(
             pendingState = current.copy(
                 reaction = current.reaction.withPendingReaction(cleanMessageId),
-                error = null,
-                message = null,
             ),
             chatId = chat.id,
             messageId = cleanMessageId,

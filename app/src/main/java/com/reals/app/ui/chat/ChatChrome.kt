@@ -948,7 +948,9 @@ private fun MessageBubble(
         horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
     ) {
         if (mine) {
-            Column(horizontalAlignment = Alignment.End) {
+            Box(
+                modifier = Modifier.padding(bottom = if (reactionPresentation == ChatMessageReactionPresentation.ReceivedHeart) 4.dp else 0.dp),
+            ) {
                 MessageBubbleCard(
                     message = message,
                     mine = true,
@@ -960,18 +962,16 @@ private fun MessageBubble(
                     onPauseAudio = onPauseAudio,
                 )
                 if (reactionPresentation == ChatMessageReactionPresentation.ReceivedHeart) {
-                    HeartReactionChip(
-                        filled = true,
+                    PassiveReceivedHeartBadge(
                         contentDescription = "La otra persona reaccionó con corazón",
-                        clickable = false,
                         modifier = Modifier
-                            .padding(end = 14.dp)
-                            .offset(y = (-3).dp),
+                            .align(Alignment.BottomEnd)
+                            .offset(x = (-14).dp, y = 8.dp),
                     )
                 }
             }
         } else {
-            Row(verticalAlignment = Alignment.Bottom) {
+            Box {
                 MessageBubbleCard(
                     message = message,
                     mine = false,
@@ -985,6 +985,9 @@ private fun MessageBubble(
                 IncomingReactionSlot(
                     presentation = reactionPresentation,
                     onReact = { onReactToMessage(message.id) },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .offset(x = 30.dp, y = 6.dp),
                 )
             }
         }
@@ -1056,6 +1059,7 @@ private fun MessageBubbleCard(
 private fun IncomingReactionSlot(
     presentation: ChatMessageReactionPresentation,
     onReact: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     when (presentation) {
         ChatMessageReactionPresentation.AddHeart -> HeartReactionChip(
@@ -1063,16 +1067,38 @@ private fun IncomingReactionSlot(
             contentDescription = "Reaccionar con corazón",
             clickable = true,
             onClick = onReact,
-            modifier = Modifier.offset(x = (-2).dp),
+            modifier = modifier,
         )
         ChatMessageReactionPresentation.GivenHeart -> HeartReactionChip(
             filled = true,
             contentDescription = "Reaccionaste con corazón",
             clickable = false,
-            modifier = Modifier.offset(x = (-2).dp),
+            modifier = modifier,
         )
         ChatMessageReactionPresentation.ReceivedHeart,
         ChatMessageReactionPresentation.None -> Unit
+    }
+}
+
+@Composable
+private fun PassiveReceivedHeartBadge(
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .size(24.dp)
+            .semantics {
+                this.contentDescription = contentDescription
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_heart_filled),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 

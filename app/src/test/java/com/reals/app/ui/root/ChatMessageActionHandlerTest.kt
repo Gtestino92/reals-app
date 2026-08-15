@@ -223,7 +223,11 @@ class ChatMessageActionHandlerTest {
     @Test
     fun `first chat reaction accepted adds pending id without sending or action loading`() {
         val result = ChatMessageActionHandler.prepareFirstChatReaction(
-            current = firstChatState(messages = listOf(chatMessage("incoming", senderId = "other"))),
+            current = firstChatState(
+                messages = listOf(chatMessage("incoming", senderId = "other")),
+                error = ApiError.Unexpected("previous error"),
+                message = "previous message",
+            ),
             messageId = "incoming",
         )
 
@@ -232,7 +236,40 @@ class ChatMessageActionHandlerTest {
         assertEquals(setOf("incoming"), result.pendingState.reaction.pendingMessageIds)
         assertEquals(false, result.pendingState.sending)
         assertEquals(false, result.pendingState.actionLoading)
+        assertEquals("previous error", (result.pendingState.error as ApiError.Unexpected).message)
+        assertEquals("previous message", result.pendingState.message)
         assertEquals("chat-1", result.chatId)
+    }
+
+    @Test
+    fun `first chat reaction accepts while guidance action is loading`() {
+        val result = ChatMessageActionHandler.prepareFirstChatReaction(
+            current = firstChatState(
+                messages = listOf(chatMessage("incoming", senderId = "other")),
+                guidanceActionLoading = true,
+            ),
+            messageId = "incoming",
+        )
+
+        assertTrue(result is ChatReactionPreparation.Accepted<*>)
+    }
+
+    @Test
+    fun `first chat reaction ignores non active first chat`() {
+        val current = firstChatState(
+            messages = listOf(chatMessage("incoming", senderId = "other")),
+        ).copy(chat = activeFirstChatDto(status = "EXPIRED").toDomain())
+
+        assertEquals(ChatReactionPreparation.Ignored, ChatMessageActionHandler.prepareFirstChatReaction(current, "incoming"))
+    }
+
+    @Test
+    fun `first chat reaction ignores non first chat`() {
+        val current = firstChatState(
+            messages = listOf(chatMessage("incoming", senderId = "other")),
+        ).copy(chat = activeFirstChatDto(status = "ACTIVE").copy(chatType = "SECOND_CHAT").toDomain())
+
+        assertEquals(ChatReactionPreparation.Ignored, ChatMessageActionHandler.prepareFirstChatReaction(current, "incoming"))
     }
 
     @Test
@@ -301,6 +338,19 @@ class ChatMessageActionHandlerTest {
     }
 
     @Test
+    fun `first chat reaction ignores local expiry`() {
+        val current = firstChatState(
+            messages = listOf(chatMessage("incoming", senderId = "other")),
+        ).copy(
+            chat = TestDtos.chat()
+                .copy(expiresAt = "2020-06-18T21:00:00Z", inactivityExpiresAt = null)
+                .toDomain(),
+        )
+
+        assertEquals(ChatReactionPreparation.Ignored, ChatMessageActionHandler.prepareFirstChatReaction(current, "incoming"))
+    }
+
+    @Test
     fun `second chat reaction ignores inactive lifecycle`() {
         val current = secondChatState(
             messages = listOf(chatMessage("incoming", senderId = "other")),
@@ -317,7 +367,7 @@ class ChatMessageActionHandlerTest {
     fun `audio send rejects subsecond draft before upload`() {
         val file = createTempFile()
         val state = firstChatState().copy(
-            chat = TestDtos.chat(audioPolicy = TestDtos.audioPolicy(enabled = true)).toDomain(),
+            chat = activeFirstChatDto(audioPolicy = TestDtos.audioPolicy(enabled = true)).toDomain(),
             audioDraft = ChatAudioDraftUiState(
                 filePath = file.absolutePath,
                 clientMessageId = "client-1",
@@ -342,7 +392,7 @@ class ChatMessageActionHandlerTest {
     fun `audio send keeps same file and UUID when accepted`() {
         val file = createTempFile()
         val state = firstChatState().copy(
-            chat = TestDtos.chat(audioPolicy = TestDtos.audioPolicy(enabled = true)).toDomain(),
+            chat = activeFirstChatDto(audioPolicy = TestDtos.audioPolicy(enabled = true)).toDomain(),
             audioDraft = ChatAudioDraftUiState(
                 filePath = file.absolutePath,
                 clientMessageId = "client-1",
@@ -430,19 +480,32 @@ class ChatMessageActionHandlerTest {
         exitRequests: List<ChatExitRequest> = emptyList(),
         messages: List<ChatMessage> = emptyList(),
         sending: Boolean = false,
+        guidanceActionLoading: Boolean = false,
         error: ApiError? = null,
         message: String? = null,
     ): RealsRootUiState.FirstChat = RealsRootUiState.FirstChat(
         session = TestDomain.session(),
         matchId = "match-1",
         chatId = "chat-1",
-        chat = TestDtos.chat().toDomain(),
+        chat = activeFirstChatDto().toDomain(),
         messages = messages,
         optimisticMessages = optimisticMessages,
         exitRequests = exitRequests,
         sending = sending,
+        guidanceActionLoading = guidanceActionLoading,
         error = error,
         message = message,
+    )
+
+    private fun activeFirstChatDto(
+        status: String = "ACTIVE",
+        audioPolicy: com.reals.app.data.dto.ChatAudioPolicyResponseDto? = null,
+    ): com.reals.app.data.dto.ChatResponseDto = TestDtos.chat(
+        status = status,
+        audioPolicy = audioPolicy,
+    ).copy(
+        expiresAt = "2099-06-20T21:00:00Z",
+        inactivityExpiresAt = "2099-06-18T21:05:00Z",
     )
 
     private fun secondChatState(
@@ -460,12 +523,23 @@ class ChatMessageActionHandlerTest {
         messages = messages,
         optimisticMessages = optimisticMessages,
         lifecycle = lifecycle.takeUnless { it.status == null } ?: SecondChatLifecycleUiState(
-            status = TestDtos.secondChatStatus().toDomain(),
+            status = activeSecondChatStatus().toDomain(),
             statusReceivedAtMillis = System.currentTimeMillis(),
         ),
         error = error,
         message = message,
     )
+
+    private fun activeSecondChatStatus(): com.reals.app.data.dto.SecondChatAttendanceResponseDto =
+        TestDtos.secondChatStatus(
+            scheduledAt = "2099-06-18T21:00:00Z",
+            entryClosesAt = "2099-06-18T21:20:00Z",
+            absoluteExpiresAt = "2099-06-18T23:00:00Z",
+            serverTime = "2099-06-18T21:00:00Z",
+            mutualCompletionEligibleAt = "2099-06-18T21:10:00Z",
+            inactivityClaimableAt = "2099-06-18T21:05:00Z",
+            inactivityClosesAt = "2099-06-18T21:10:00Z",
+        )
 
     private fun chatMessage(
         id: String,
