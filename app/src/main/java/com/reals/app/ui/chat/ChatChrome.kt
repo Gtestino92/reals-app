@@ -63,6 +63,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -77,6 +78,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import com.reals.app.R
@@ -114,6 +116,9 @@ private const val MUTUAL_EXIT_TIMEOUT_SECONDS = 20L
 private const val MUTUAL_EXIT_TIMEOUT_RETRY_MILLIS = 2_000L
 private val ChatBubbleOppositeGutter = 28.dp
 private val ChatBubbleMaxWidth = 340.dp
+private val ChatReactionLaneWidth = 48.dp
+private val ChatReactionBadgeBottomExtent = 12.dp
+private val ChatReactionSideOffsetY = 4.dp
 
 @Composable
 internal fun LoadingChatScreen(
@@ -663,12 +668,26 @@ internal fun MessageList(
     var selectionResetGeneration by remember { mutableStateOf(0) }
     var knownMessageIds by remember(chatId) { mutableStateOf<Set<String>?>(null) }
     var knownBackendMessageIds by remember(chatId) { mutableStateOf<Set<String>?>(null) }
+    var knownReactionLayoutIdentities by remember(chatId) {
+        mutableStateOf<List<MessageReactionLayoutIdentity>?>(null)
+    }
     var messageBaselineEstablished by remember(chatId) { mutableStateOf(false) }
     var hasUnseenIncomingMessages by remember(chatId) { mutableStateOf(false) }
     var listNearBottom by remember(chatId) { mutableStateOf(true) }
     val currentMessageIds = messageItems.map { it.stableId }.toSet()
     val backendMessageIdentities = sortedMessages.map {
         BackendMessageIdentity(id = it.id, senderId = it.senderId)
+    }
+    val reactionLayoutIdentities = sortedMessages.map { message ->
+        MessageReactionLayoutIdentity(
+            id = message.id,
+            hasReactionExtent = chatMessageReactionPresentation(
+                message = message,
+                mine = message.senderId == currentUserId,
+                pendingReactionMessageIds = pendingReactionMessageIds,
+                reactableMessageIds = reactableMessageIds,
+            ).hasReactionBadgeExtent(),
+        )
     }
     val currentBackendMessageIds = backendMessageIdentities.mapTo(LinkedHashSet()) { it.id }
     val entranceBaselineIds = knownMessageIds.takeIf { messageBaselineEstablished }
@@ -711,11 +730,31 @@ internal fun MessageList(
         }
     }
 
+    LaunchedEffect(reactionLayoutIdentities) {
+        val previous = knownReactionLayoutIdentities
+        if (previous == null || !messageBaselineEstablished) {
+            knownReactionLayoutIdentities = reactionLayoutIdentities
+            return@LaunchedEffect
+        }
+
+        if (
+            shouldPreserveBottomForReactionLayoutChange(
+                previous = previous,
+                current = reactionLayoutIdentities,
+                wasNearBottomBeforeReactionChange = listNearBottom,
+            ) && messageItems.isNotEmpty()
+        ) {
+            listState.animateLatestItemIntoView(messageItems.lastIndex)
+        }
+        knownReactionLayoutIdentities = reactionLayoutIdentities
+    }
+
     LaunchedEffect(currentMessageIds, currentBackendMessageIds, initialHistoryLoading) {
         if (!messageBaselineEstablished) {
             if (initialHistoryLoading) return@LaunchedEffect
             knownMessageIds = currentMessageIds
             knownBackendMessageIds = currentBackendMessageIds
+            knownReactionLayoutIdentities = reactionLayoutIdentities
             messageBaselineEstablished = true
             if (messageItems.isNotEmpty()) {
                 listState.scrollToItem(messageItems.lastIndex)
@@ -879,6 +918,11 @@ internal data class BackendMessageIdentity(
     val senderId: String,
 )
 
+internal data class MessageReactionLayoutIdentity(
+    val id: String,
+    val hasReactionExtent: Boolean,
+)
+
 internal fun shouldMarkIncomingMessagesUnseen(
     baselineEstablished: Boolean,
     previousBackendMessageIds: Set<String>?,
@@ -891,6 +935,18 @@ internal fun shouldMarkIncomingMessagesUnseen(
 
     return currentBackendMessages.any { message ->
         message.id !in previousBackendMessageIds && message.senderId != currentUserId
+    }
+}
+
+internal fun shouldPreserveBottomForReactionLayoutChange(
+    previous: List<MessageReactionLayoutIdentity>,
+    current: List<MessageReactionLayoutIdentity>,
+    wasNearBottomBeforeReactionChange: Boolean,
+): Boolean {
+    if (!wasNearBottomBeforeReactionChange) return false
+    if (previous.map { it.id } != current.map { it.id }) return false
+    return previous.zip(current).any { (old, new) ->
+        !old.hasReactionExtent && new.hasReactionExtent
     }
 }
 
@@ -1051,8 +1107,8 @@ internal enum class ChatMessageReactionPresentation {
     ReceivedHeart,
 }
 
-private fun ChatMessageReactionPresentation.hasIncomingSideSlot(): Boolean =
-    this == ChatMessageReactionPresentation.AddHeart || this == ChatMessageReactionPresentation.GivenHeart
+private fun ChatMessageReactionPresentation.hasReactionBadgeExtent(): Boolean =
+    this == ChatMessageReactionPresentation.GivenHeart || this == ChatMessageReactionPresentation.ReceivedHeart
 
 internal fun chatMessageReactionPresentation(
     message: ChatMessage,
@@ -1117,33 +1173,79 @@ private fun MessageBubble(
                 }
             }
         } else {
-            val hasIncomingReactionSlot = reactionPresentation.hasIncomingSideSlot()
-            Row(
-                verticalAlignment = Alignment.Bottom,
-            ) {
-                MessageBubbleCard(
-                    message = message,
-                    mine = false,
-                    chatType = chatType,
-                    appearance = appearance,
-                    selectionResetGeneration = selectionResetGeneration,
-                    playbackState = playbackState,
-                    onPlayAudio = onPlayAudio,
-                    onPauseAudio = onPauseAudio,
-                    modifier = if (hasIncomingReactionSlot) {
-                        Modifier.weight(1f, fill = false)
-                    } else {
-                        Modifier
-                    },
-                )
-                if (hasIncomingReactionSlot) {
-                    IncomingReactionSideSlot(
-                        presentation = reactionPresentation,
-                        onReact = { onReactToMessage(message.id) },
-                        modifier = Modifier.offset(y = 4.dp),
-                    )
-                }
-            }
+            IncomingMessageBubbleLayout(
+                message = message,
+                chatType = chatType,
+                appearance = appearance,
+                selectionResetGeneration = selectionResetGeneration,
+                playbackState = playbackState,
+                reactionPresentation = reactionPresentation,
+                onReact = { onReactToMessage(message.id) },
+                onPlayAudio = onPlayAudio,
+                onPauseAudio = onPauseAudio,
+            )
+        }
+    }
+}
+
+@Composable
+private fun IncomingMessageBubbleLayout(
+    message: ChatMessage,
+    chatType: ChatType,
+    appearance: ChatBubbleAppearance,
+    selectionResetGeneration: Int,
+    playbackState: ChatAudioPlaybackUiState,
+    reactionPresentation: ChatMessageReactionPresentation,
+    onReact: () -> Unit,
+    onPlayAudio: (ChatMessage) -> Unit,
+    onPauseAudio: () -> Unit,
+) {
+    Layout(
+        content = {
+            MessageBubbleCard(
+                message = message,
+                mine = false,
+                chatType = chatType,
+                appearance = appearance,
+                selectionResetGeneration = selectionResetGeneration,
+                playbackState = playbackState,
+                onPlayAudio = onPlayAudio,
+                onPauseAudio = onPauseAudio,
+            )
+            IncomingReactionSideSlot(
+                presentation = reactionPresentation,
+                onReact = onReact,
+            )
+        },
+        modifier = Modifier.fillMaxWidth(),
+    ) { measurables, constraints ->
+        val laneWidth = ChatReactionLaneWidth.roundToPx()
+        val bottomExtent = if (reactionPresentation.hasReactionBadgeExtent()) {
+            ChatReactionBadgeBottomExtent.roundToPx()
+        } else {
+            0
+        }
+        val maxBubbleWidth = (constraints.maxWidth - laneWidth)
+            .coerceAtLeast(0)
+            .coerceAtMost(ChatBubbleMaxWidth.roundToPx())
+        val bubble = measurables[0].measure(
+            constraints.copy(
+                minWidth = 0,
+                maxWidth = maxBubbleWidth,
+            ),
+        )
+        val lane = measurables[1].measure(
+            Constraints.fixedWidth(laneWidth),
+        )
+        val layoutWidth = constraints.maxWidth
+        val layoutHeight = (bubble.height + bottomExtent)
+            .coerceAtLeast(constraints.minHeight)
+            .coerceAtMost(constraints.maxHeight)
+        val laneY = (bubble.height - lane.height + ChatReactionSideOffsetY.roundToPx())
+            .coerceAtLeast(0)
+        layout(layoutWidth, layoutHeight) {
+            bubble.placeRelative(0, 0)
+            lane.placeRelative(bubble.width, laneY)
         }
     }
 }

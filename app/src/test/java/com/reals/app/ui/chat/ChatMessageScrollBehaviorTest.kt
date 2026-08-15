@@ -75,6 +75,70 @@ class ChatMessageScrollBehaviorTest {
     }
 
     @Test
+    fun `existing message reaction appearance preserves bottom when already at bottom`() {
+        assertTrue(
+            shouldPreserveBottomForReactionLayoutChange(
+                previous = listOf(MessageReactionLayoutIdentity(id = "a", hasReactionExtent = false)),
+                current = listOf(MessageReactionLayoutIdentity(id = "a", hasReactionExtent = true)),
+                wasNearBottomBeforeReactionChange = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `pending reaction appearance can preserve bottom for an existing message`() {
+        assertTrue(
+            shouldPreserveBottomForReactionLayoutChange(
+                previous = listOf(
+                    MessageReactionLayoutIdentity(id = "a", hasReactionExtent = false),
+                    MessageReactionLayoutIdentity(id = "b", hasReactionExtent = false),
+                ),
+                current = listOf(
+                    MessageReactionLayoutIdentity(id = "a", hasReactionExtent = false),
+                    MessageReactionLayoutIdentity(id = "b", hasReactionExtent = true),
+                ),
+                wasNearBottomBeforeReactionChange = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `new message insertion is not treated as reaction layout preservation`() {
+        assertFalse(
+            shouldPreserveBottomForReactionLayoutChange(
+                previous = listOf(MessageReactionLayoutIdentity(id = "a", hasReactionExtent = false)),
+                current = listOf(
+                    MessageReactionLayoutIdentity(id = "a", hasReactionExtent = false),
+                    MessageReactionLayoutIdentity(id = "b", hasReactionExtent = true),
+                ),
+                wasNearBottomBeforeReactionChange = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `reaction layout change does not force bottom when user is away`() {
+        assertFalse(
+            shouldPreserveBottomForReactionLayoutChange(
+                previous = listOf(MessageReactionLayoutIdentity(id = "a", hasReactionExtent = false)),
+                current = listOf(MessageReactionLayoutIdentity(id = "a", hasReactionExtent = true)),
+                wasNearBottomBeforeReactionChange = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `pending to confirmed reaction does not request second bottom preservation`() {
+        assertFalse(
+            shouldPreserveBottomForReactionLayoutChange(
+                previous = listOf(MessageReactionLayoutIdentity(id = "a", hasReactionExtent = true)),
+                current = listOf(MessageReactionLayoutIdentity(id = "a", hasReactionExtent = true)),
+                wasNearBottomBeforeReactionChange = true,
+            ),
+        )
+    }
+
+    @Test
     fun `own optimistic message does not show unseen indicator`() {
         assertFalse(
             shouldMarkIncomingMessagesUnseen(
