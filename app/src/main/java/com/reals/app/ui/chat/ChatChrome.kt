@@ -733,7 +733,9 @@ internal fun MessageList(
     var messageBaselineEstablished by remember(chatId) { mutableStateOf(false) }
     var hasUnseenIncomingMessages by remember(chatId) { mutableStateOf(false) }
     var listNearBottom by remember(chatId) { mutableStateOf(true) }
-    var previousBottomContentPadding by remember(chatId) { mutableStateOf(bottomContentPadding) }
+    var acceptedBottomContentPadding by remember(chatId) {
+        mutableStateOf(bottomContentPadding)
+    }
     val currentMessageIds = messageItems.map { it.stableId }.toSet()
     val backendMessageIdentities = sortedMessages.map {
         BackendMessageIdentity(id = it.id, senderId = it.senderId)
@@ -753,23 +755,37 @@ internal fun MessageList(
     val entranceBaselineIds = knownMessageIds.takeIf { messageBaselineEstablished }
     val currentMessageIdsForScroll by rememberUpdatedState(currentMessageIds)
     val knownMessageIdsForScroll by rememberUpdatedState(knownMessageIds)
+    val currentBottomContentPadding by rememberUpdatedState(bottomContentPadding)
 
     LaunchedEffect(chatId) {
-        snapshotFlow { listState.isNearBottom() }
-            .collect { nearBottom ->
-                if (currentMessageIdsForScroll.allKnownBy(knownMessageIdsForScroll)) {
-                    listNearBottom = nearBottom
-                    if (nearBottom) {
-                        hasUnseenIncomingMessages = false
-                    }
-                }
+        snapshotFlow {
+            Triple(
+                listState.isNearBottom(),
+                acceptedBottomContentPadding == currentBottomContentPadding,
+                currentMessageIdsForScroll.allKnownBy(knownMessageIdsForScroll),
+            )
+        }.collect { (nearBottom, composerPaddingSettled, messageIdsKnown) ->
+            if (!composerPaddingSettled || !messageIdsKnown) {
+                return@collect
             }
+
+            listNearBottom = nearBottom
+
+            if (nearBottom) {
+                hasUnseenIncomingMessages = false
+            }
+        }
     }
 
     LaunchedEffect(knownMessageIds) {
+        if (acceptedBottomContentPadding != bottomContentPadding) {
+            return@LaunchedEffect
+        }
+
         if (currentMessageIds.allKnownBy(knownMessageIds)) {
             val nearBottom = listState.isNearBottom()
             listNearBottom = nearBottom
+
             if (nearBottom) {
                 hasUnseenIncomingMessages = false
             }
@@ -791,14 +807,38 @@ internal fun MessageList(
     }
 
     LaunchedEffect(bottomContentPadding) {
-        val previousPadding = previousBottomContentPadding
-        previousBottomContentPadding = bottomContentPadding
-        if (previousPadding == bottomContentPadding || !messageBaselineEstablished || messageItems.isEmpty()) {
+        val previousPadding = acceptedBottomContentPadding
+
+        if (previousPadding == bottomContentPadding) {
             return@LaunchedEffect
         }
-        if (shouldPreserveBottomForComposerHeightChange(listNearBottom)) {
-            listState.animateLatestItemIntoView(messageItems.lastIndex)
+
+        // This value is intentionally still the observation from before
+        // the composer changed height. While the padding transition is
+        // pending, the observers above are not allowed to overwrite it.
+        val wasNearBottomBeforeComposerHeightChange = listNearBottom
+
+        if (!messageBaselineEstablished || messageItems.isEmpty()) {
+            // Let LazyColumn consume the new content padding before accepting
+            // observations for the new geometry.
+            withFrameNanos { }
+            acceptedBottomContentPadding = bottomContentPadding
+            return@LaunchedEffect
         }
+
+        if (
+            shouldPreserveBottomForComposerHeightChange(
+                wasNearBottomBeforeComposerHeightChange
+            )
+        ) {
+            listState.animateLatestItemIntoView(messageItems.lastIndex)
+        } else {
+            // We intentionally do not scroll users who were reading older
+            // messages, but still wait until the new layout has been applied.
+            withFrameNanos { }
+        }
+
+        acceptedBottomContentPadding = bottomContentPadding
     }
 
     LaunchedEffect(reactionLayoutIdentities) {
