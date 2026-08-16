@@ -134,10 +134,18 @@ internal fun Modifier.replySwipeTarget(
     if (!enabled) return this
     val density = androidx.compose.ui.platform.LocalDensity.current
     val thresholdPx = with(density) { ReplySwipeThreshold.toPx() }
-    var offsetPx by remember { mutableStateOf(0f) }
+    var rawOffsetPx by remember { mutableStateOf(0f) }
     var selectedForGesture by remember { mutableStateOf(false) }
     return this
-        .offset { IntOffset(offsetPx.roundToInt(), 0) }
+        .offset {
+            IntOffset(
+                resistedReplySwipeOffset(
+                    rawDistancePx = rawOffsetPx,
+                    thresholdPx = thresholdPx,
+                ).roundToInt(),
+                0,
+            )
+        }
         .semantics {
             customActions = listOf(
                 CustomAccessibilityAction("Responder") {
@@ -150,26 +158,31 @@ internal fun Modifier.replySwipeTarget(
             detectHorizontalDragGestures(
                 onDragStart = {
                     selectedForGesture = false
-                    offsetPx = 0f
+                    rawOffsetPx = 0f
                 },
                 onHorizontalDrag = { change, dragAmount ->
-                    val nextOffset = (offsetPx + dragAmount)
+                    val nextOffset = (rawOffsetPx + dragAmount)
                         .coerceAtLeast(0f)
-                        .coerceAtMost(thresholdPx * 1.35f)
-                    if (nextOffset != offsetPx) {
+                        .coerceAtMost(thresholdPx * 2.5f)
+
+                    if (nextOffset != rawOffsetPx) {
                         change.consume()
-                        offsetPx = nextOffset
+                        rawOffsetPx = nextOffset
                     }
                 },
                 onDragEnd = {
-                    if (!selectedForGesture && shouldSelectReplyForSwipe(offsetPx, thresholdPx)) {
+                    if (
+                        !selectedForGesture &&
+                        shouldSelectReplyForSwipe(rawOffsetPx, thresholdPx)
+                    ) {
                         selectedForGesture = true
                         onReply()
                     }
-                    offsetPx = 0f
+
+                    rawOffsetPx = 0f
                 },
                 onDragCancel = {
-                    offsetPx = 0f
+                    rawOffsetPx = 0f
                     selectedForGesture = false
                 },
             )
@@ -2081,4 +2094,15 @@ internal fun chatDecisionSummary(
 
         else -> null
     }
+}
+
+internal fun resistedReplySwipeOffset(
+    rawDistancePx: Float,
+    thresholdPx: Float,
+): Float {
+    if (rawDistancePx <= 0f) return 0f
+    if (rawDistancePx <= thresholdPx) return rawDistancePx
+
+    val excess = rawDistancePx - thresholdPx
+    return thresholdPx + excess * 0.20f
 }
