@@ -620,6 +620,40 @@ class RealsRootSystemBackTest {
         )
     }
 
+    @Test
+    fun `system back is handled while matchmaking search is visible`() {
+        listOf(
+            MatchmakingSearchUiPhase.ResolvingLocation,
+            MatchmakingSearchUiPhase.JoiningQueue,
+            MatchmakingSearchUiPhase.Searching,
+        ).forEach { phase ->
+            val state = RealsRootUiState.Ready(
+                session = TestDomain.session(),
+                home = HomeUiState(matchmakingSearchPhase = phase),
+            )
+
+            assertTrue(state.canHandleSystemBack())
+        }
+    }
+
+    @Test
+    fun `system back cancels matchmaking preparation and returns to idle Home`() = runTest(dispatcher) {
+        val viewModel = viewModel()
+        viewModel.setState(
+            RealsRootUiState.Ready(
+                session = TestDomain.session(),
+                home = HomeUiState(
+                    matchmakingSearchPhase = MatchmakingSearchUiPhase.ResolvingLocation,
+                ),
+            )
+        )
+
+        viewModel.onSystemBack()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Ready
+        assertEquals(MatchmakingSearchUiPhase.Idle, state.home.matchmakingSearchPhase)
+    }
+
     private fun draftSession() = TestDomain.session().copy(
         profileSnapshot = ProfileSnapshot.Found(TestDtos.profile(status = "DRAFT").toDomain()),
     )
