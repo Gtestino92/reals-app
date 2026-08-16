@@ -106,6 +106,10 @@ class FakeRealsApi : RealsApi {
         private set
     var chatAudioClientMessageIdPart: RequestBody? = null
         private set
+    var chatAudioReplyToTypePart: RequestBody? = null
+        private set
+    var chatAudioReplyToTargetIdPart: RequestBody? = null
+        private set
     var chatMessageReactionBody: PutMessageReactionRequestDto? = null
         private set
     var lastChatMessagesLimit: Int? = null
@@ -603,10 +607,14 @@ class FakeRealsApi : RealsApi {
         chatId: String,
         file: MultipartBody.Part,
         clientMessageId: RequestBody,
+        replyToType: RequestBody?,
+        replyToTargetId: RequestBody?,
     ): Response<ChatMessageResponseDto> =
         record("sendChatAudioMessage", authorization, chatId, beforeResponse = beforeSendChatAudioMessageResponse) {
             chatAudioFilePart = file
             chatAudioClientMessageIdPart = clientMessageId
+            chatAudioReplyToTypePart = replyToType
+            chatAudioReplyToTargetIdPart = replyToTargetId
             chatAudioMessageResponse
         }
 
