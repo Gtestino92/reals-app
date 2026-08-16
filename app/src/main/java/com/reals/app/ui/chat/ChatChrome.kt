@@ -7,6 +7,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -69,6 +70,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
@@ -80,6 +82,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.role
 import com.reals.app.R
 import com.reals.app.core.security.TextSafety
@@ -107,6 +111,7 @@ import com.reals.app.ui.theme.RealsType
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
 
 internal const val MUTUAL_EXIT_CONVERSATION_PAUSED_COPY =
@@ -119,6 +124,70 @@ private val ChatBubbleMaxWidth = 340.dp
 private val ChatReactionLaneWidth = 48.dp
 private val ChatReactionBadgeBottomExtent = 12.dp
 private val ChatReactionSideOffsetY = 4.dp
+private val ReplySwipeThreshold = 60.dp
+
+@Composable
+internal fun Modifier.replySwipeTarget(
+    enabled: Boolean,
+    onReply: () -> Unit,
+): Modifier {
+    if (!enabled) return this
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val thresholdPx = with(density) { ReplySwipeThreshold.toPx() }
+    var rawOffsetPx by remember { mutableStateOf(0f) }
+    var selectedForGesture by remember { mutableStateOf(false) }
+    return this
+        .offset {
+            IntOffset(
+                resistedReplySwipeOffset(
+                    rawDistancePx = rawOffsetPx,
+                    thresholdPx = thresholdPx,
+                ).roundToInt(),
+                0,
+            )
+        }
+        .semantics {
+            customActions = listOf(
+                CustomAccessibilityAction("Responder") {
+                    onReply()
+                    true
+                }
+            )
+        }
+        .pointerInput(enabled, thresholdPx) {
+            detectHorizontalDragGestures(
+                onDragStart = {
+                    selectedForGesture = false
+                    rawOffsetPx = 0f
+                },
+                onHorizontalDrag = { change, dragAmount ->
+                    val nextOffset = (rawOffsetPx + dragAmount)
+                        .coerceAtLeast(0f)
+                        .coerceAtMost(thresholdPx * 2.5f)
+
+                    if (nextOffset != rawOffsetPx) {
+                        change.consume()
+                        rawOffsetPx = nextOffset
+                    }
+                },
+                onDragEnd = {
+                    if (
+                        !selectedForGesture &&
+                        shouldSelectReplyForSwipe(rawOffsetPx, thresholdPx)
+                    ) {
+                        selectedForGesture = true
+                        onReply()
+                    }
+
+                    rawOffsetPx = 0f
+                },
+                onDragCancel = {
+                    rawOffsetPx = 0f
+                    selectedForGesture = false
+                },
+            )
+        }
+}
 
 @Composable
 internal fun LoadingChatScreen(
@@ -636,6 +705,7 @@ internal fun MessageList(
     chatId: String?,
     initialHistoryLoading: Boolean,
     currentUserId: String,
+    partnerDisplayName: String?,
     chatType: ChatType,
     messages: List<ChatMessage>,
     optimisticMessages: List<OptimisticOutgoingMessage>,
@@ -643,8 +713,10 @@ internal fun MessageList(
     reactionAddingEnabled: Boolean = false,
     bottomContentPadding: Dp,
     modifier: Modifier,
-    onRetryOptimisticMessage: (localId: String, content: String) -> Unit,
+    onRetryOptimisticMessage: (localId: String) -> Unit,
     onReactToMessage: (messageId: String) -> Unit = {},
+    canInitiateReply: Boolean = false,
+    onReplyToMessage: (ChatMessage) -> Unit = {},
     canRetryFailedTextMessages: Boolean,
     playbackState: ChatAudioPlaybackUiState,
     onPlayAudio: (ChatMessage) -> Unit,
@@ -674,6 +746,9 @@ internal fun MessageList(
     var messageBaselineEstablished by remember(chatId) { mutableStateOf(false) }
     var hasUnseenIncomingMessages by remember(chatId) { mutableStateOf(false) }
     var listNearBottom by remember(chatId) { mutableStateOf(true) }
+    var acceptedBottomContentPadding by remember(chatId) {
+        mutableStateOf(bottomContentPadding)
+    }
     val currentMessageIds = messageItems.map { it.stableId }.toSet()
     val backendMessageIdentities = sortedMessages.map {
         BackendMessageIdentity(id = it.id, senderId = it.senderId)
@@ -693,23 +768,37 @@ internal fun MessageList(
     val entranceBaselineIds = knownMessageIds.takeIf { messageBaselineEstablished }
     val currentMessageIdsForScroll by rememberUpdatedState(currentMessageIds)
     val knownMessageIdsForScroll by rememberUpdatedState(knownMessageIds)
+    val currentBottomContentPadding by rememberUpdatedState(bottomContentPadding)
 
     LaunchedEffect(chatId) {
-        snapshotFlow { listState.isNearBottom() }
-            .collect { nearBottom ->
-                if (currentMessageIdsForScroll.allKnownBy(knownMessageIdsForScroll)) {
-                    listNearBottom = nearBottom
-                    if (nearBottom) {
-                        hasUnseenIncomingMessages = false
-                    }
-                }
+        snapshotFlow {
+            Triple(
+                listState.isNearBottom(),
+                acceptedBottomContentPadding == currentBottomContentPadding,
+                currentMessageIdsForScroll.allKnownBy(knownMessageIdsForScroll),
+            )
+        }.collect { (nearBottom, composerPaddingSettled, messageIdsKnown) ->
+            if (!composerPaddingSettled || !messageIdsKnown) {
+                return@collect
             }
+
+            listNearBottom = nearBottom
+
+            if (nearBottom) {
+                hasUnseenIncomingMessages = false
+            }
+        }
     }
 
     LaunchedEffect(knownMessageIds) {
+        if (acceptedBottomContentPadding != bottomContentPadding) {
+            return@LaunchedEffect
+        }
+
         if (currentMessageIds.allKnownBy(knownMessageIds)) {
             val nearBottom = listState.isNearBottom()
             listNearBottom = nearBottom
+
             if (nearBottom) {
                 hasUnseenIncomingMessages = false
             }
@@ -728,6 +817,41 @@ internal fun MessageList(
             listState.animateLatestItemIntoView(messageItems.lastIndex)
             hasUnseenIncomingMessages = false
         }
+    }
+
+    LaunchedEffect(bottomContentPadding) {
+        val previousPadding = acceptedBottomContentPadding
+
+        if (previousPadding == bottomContentPadding) {
+            return@LaunchedEffect
+        }
+
+        // This value is intentionally still the observation from before
+        // the composer changed height. While the padding transition is
+        // pending, the observers above are not allowed to overwrite it.
+        val wasNearBottomBeforeComposerHeightChange = listNearBottom
+
+        if (!messageBaselineEstablished || messageItems.isEmpty()) {
+            // Let LazyColumn consume the new content padding before accepting
+            // observations for the new geometry.
+            withFrameNanos { }
+            acceptedBottomContentPadding = bottomContentPadding
+            return@LaunchedEffect
+        }
+
+        if (
+            shouldPreserveBottomForComposerHeightChange(
+                wasNearBottomBeforeComposerHeightChange
+            )
+        ) {
+            listState.animateLatestItemIntoView(messageItems.lastIndex)
+        } else {
+            // We intentionally do not scroll users who were reading older
+            // messages, but still wait until the new layout has been applied.
+            withFrameNanos { }
+        }
+
+        acceptedBottomContentPadding = bottomContentPadding
     }
 
     LaunchedEffect(reactionLayoutIdentities) {
@@ -836,6 +960,8 @@ internal fun MessageList(
                             is ChatMessageListItem.Backend -> MessageBubble(
                                 message = item.message,
                                 mine = item.message.senderId == currentUserId,
+                                currentUserId = currentUserId,
+                                partnerDisplayName = partnerDisplayName,
                                 chatType = chatType,
                                 selectionResetGeneration = selectionResetGeneration,
                                 playbackState = playbackState,
@@ -847,12 +973,16 @@ internal fun MessageList(
                                 ),
                                 modifier = itemModifier,
                                 onReactToMessage = onReactToMessage,
+                                canInitiateReply = canInitiateReply,
+                                onReplyToMessage = onReplyToMessage,
                                 onPlayAudio = onPlayAudio,
                                 onPauseAudio = onPauseAudio,
                             )
 
                             is ChatMessageListItem.Optimistic -> OptimisticMessageBubble(
                                 message = item.message,
+                                currentUserId = currentUserId,
+                                partnerDisplayName = partnerDisplayName,
                                 chatType = chatType,
                                 selectionResetGeneration = selectionResetGeneration,
                                 modifier = itemModifier,
@@ -970,6 +1100,64 @@ private fun NewMessagesIndicator(
             text = "\u2193 Mensajes nuevos",
             style = MaterialTheme.typography.labelMedium,
         )
+    }
+}
+
+@Composable
+internal fun ComposerReplyPreview(
+    preview: ChatReplyPreview,
+    modifier: Modifier = Modifier,
+    onClear: () -> Unit,
+) {
+    val accentColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.72f)
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(RealsRadii.Row),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 10.dp, top = 5.dp, end = 2.dp, bottom = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Canvas(modifier = Modifier.size(width = 3.dp, height = 34.dp)) {
+                drawRect(accentColor)
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(0.dp),
+            ) {
+                Text(
+                    text = preview.label,
+                    maxLines = 1,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = preview.text,
+                    maxLines = 2,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            IconButton(
+                onClick = onClear,
+                modifier = Modifier.size(40.dp),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_close),
+                    contentDescription = "Quitar respuesta",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 
@@ -1130,12 +1318,16 @@ internal fun chatMessageReactionPresentation(
 private fun MessageBubble(
     message: ChatMessage,
     mine: Boolean,
+    currentUserId: String,
+    partnerDisplayName: String?,
     chatType: ChatType,
     selectionResetGeneration: Int,
     playbackState: ChatAudioPlaybackUiState,
     reactionPresentation: ChatMessageReactionPresentation,
     modifier: Modifier = Modifier,
     onReactToMessage: (messageId: String) -> Unit,
+    canInitiateReply: Boolean,
+    onReplyToMessage: (ChatMessage) -> Unit,
     onPlayAudio: (ChatMessage) -> Unit,
     onPauseAudio: () -> Unit,
 ) {
@@ -1156,6 +1348,8 @@ private fun MessageBubble(
                 MessageBubbleCard(
                     message = message,
                     mine = true,
+                    currentUserId = currentUserId,
+                    partnerDisplayName = partnerDisplayName,
                     chatType = chatType,
                     appearance = appearance,
                     selectionResetGeneration = selectionResetGeneration,
@@ -1175,11 +1369,15 @@ private fun MessageBubble(
         } else {
             IncomingMessageBubbleLayout(
                 message = message,
+                currentUserId = currentUserId,
+                partnerDisplayName = partnerDisplayName,
                 chatType = chatType,
                 appearance = appearance,
                 selectionResetGeneration = selectionResetGeneration,
                 playbackState = playbackState,
                 reactionPresentation = reactionPresentation,
+                canInitiateReply = canInitiateReply,
+                onReplyToMessage = onReplyToMessage,
                 onReact = { onReactToMessage(message.id) },
                 onPlayAudio = onPlayAudio,
                 onPauseAudio = onPauseAudio,
@@ -1191,11 +1389,15 @@ private fun MessageBubble(
 @Composable
 private fun IncomingMessageBubbleLayout(
     message: ChatMessage,
+    currentUserId: String,
+    partnerDisplayName: String?,
     chatType: ChatType,
     appearance: ChatBubbleAppearance,
     selectionResetGeneration: Int,
     playbackState: ChatAudioPlaybackUiState,
     reactionPresentation: ChatMessageReactionPresentation,
+    canInitiateReply: Boolean,
+    onReplyToMessage: (ChatMessage) -> Unit,
     onReact: () -> Unit,
     onPlayAudio: (ChatMessage) -> Unit,
     onPauseAudio: () -> Unit,
@@ -1205,12 +1407,18 @@ private fun IncomingMessageBubbleLayout(
             MessageBubbleCard(
                 message = message,
                 mine = false,
+                currentUserId = currentUserId,
+                partnerDisplayName = partnerDisplayName,
                 chatType = chatType,
                 appearance = appearance,
                 selectionResetGeneration = selectionResetGeneration,
                 playbackState = playbackState,
                 onPlayAudio = onPlayAudio,
                 onPauseAudio = onPauseAudio,
+                modifier = Modifier.replySwipeTarget(
+                    enabled = canInitiateReply && message.isCitableReplyTarget(currentUserId),
+                    onReply = { onReplyToMessage(message) },
+                ),
             )
             IncomingReactionSideSlot(
                 presentation = reactionPresentation,
@@ -1254,6 +1462,8 @@ private fun IncomingMessageBubbleLayout(
 private fun MessageBubbleCard(
     message: ChatMessage,
     mine: Boolean,
+    currentUserId: String,
+    partnerDisplayName: String?,
     chatType: ChatType,
     appearance: ChatBubbleAppearance,
     selectionResetGeneration: Int,
@@ -1281,6 +1491,11 @@ private fun MessageBubbleCard(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
             verticalArrangement = Arrangement.spacedBy(1.dp),
         ) {
+            message.replyTo
+                ?.toPreview(currentUserId = currentUserId, partnerDisplayName = partnerDisplayName)
+                ?.let { preview ->
+                    InlineReplyQuote(preview = preview)
+                }
             when (val presentation = message.presentation) {
                 is ChatMessagePresentation.Text -> MessageTextWithTimestamp(
                     presentation = chatMessageTextPresentation(
@@ -1308,6 +1523,45 @@ private fun MessageBubbleCard(
                     modifier = Modifier.align(Alignment.End),
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun InlineReplyQuote(
+    preview: ChatReplyPreview,
+    modifier: Modifier = Modifier,
+) {
+    val accentColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.68f)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Canvas(
+            modifier = Modifier
+                .size(width = 3.dp, height = 34.dp),
+        ) {
+            drawRect(accentColor)
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
+        ) {
+            Text(
+                text = preview.label,
+                maxLines = 1,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                text = preview.text,
+                maxLines = 2,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -1542,10 +1796,12 @@ internal fun AudioPlaybackRow(
 @Composable
 private fun OptimisticMessageBubble(
     message: OptimisticOutgoingMessage,
+    currentUserId: String,
+    partnerDisplayName: String?,
     chatType: ChatType,
     selectionResetGeneration: Int,
     modifier: Modifier = Modifier,
-    onRetry: (localId: String, content: String) -> Unit,
+    onRetry: (localId: String) -> Unit,
     canRetryFailedTextMessages: Boolean,
 ) {
     val appearance = chatBubbleAppearance(mine = true)
@@ -1574,6 +1830,11 @@ private fun OptimisticMessageBubble(
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalArrangement = Arrangement.spacedBy(1.dp),
             ) {
+                message.replyTo
+                    ?.toPreview(currentUserId = currentUserId, partnerDisplayName = partnerDisplayName)
+                    ?.let { preview ->
+                        InlineReplyQuote(preview = preview)
+                    }
                 when (message.messageType) {
                     OptimisticOutgoingMessageType.Text -> SelectableMessageText(
                         presentation = chatMessageTextPresentation(
@@ -1600,7 +1861,7 @@ private fun OptimisticMessageBubble(
                     optimisticTextRetryAvailable(message, canRetryFailedTextMessages)
                 ) {
                     TextButton(
-                        onClick = { onRetry(message.localId, message.content) },
+                        onClick = { onRetry(message.localId) },
                         modifier = Modifier.align(Alignment.End),
                     ) {
                         Text("Reintentar")
@@ -1833,4 +2094,15 @@ internal fun chatDecisionSummary(
 
         else -> null
     }
+}
+
+internal fun resistedReplySwipeOffset(
+    rawDistancePx: Float,
+    thresholdPx: Float,
+): Float {
+    if (rawDistancePx <= 0f) return 0f
+    if (rawDistancePx <= thresholdPx) return rawDistancePx
+
+    val excess = rawDistancePx - thresholdPx
+    return thresholdPx + excess * 0.20f
 }

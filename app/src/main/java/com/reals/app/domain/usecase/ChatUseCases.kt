@@ -8,6 +8,7 @@ import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.ChatMessageReactionType
+import com.reals.app.domain.model.ChatReplyTarget
 import com.reals.app.domain.model.FirstChatGuidance
 import com.reals.app.domain.model.SecondChatCompletionDecision
 import com.reals.app.domain.model.SecondChatStatus
@@ -90,15 +91,30 @@ class GetChatMessagesUseCase(
 class SendChatMessageUseCase(
     private val chatRepository: ChatRepository,
 ) {
-    suspend operator fun invoke(chatId: String, content: String): ApiResult<ChatMessage> =
-        chatRepository.sendMessage(chatId, content)
+    suspend operator fun invoke(
+        chatId: String,
+        content: String,
+        clientMessageId: String,
+        replyTo: ChatReplyTarget? = null,
+    ): ApiResult<ChatMessage> =
+        chatRepository.sendMessage(chatId, content, clientMessageId, replyTo)
 }
 
 class SendChatAudioMessageUseCase(
     private val chatRepository: ChatRepository,
 ) {
-    suspend operator fun invoke(chatId: String, file: File, clientMessageId: String): ApiResult<ChatMessage> =
-        chatRepository.sendAudioMessage(chatId, file, clientMessageId)
+    suspend operator fun invoke(
+        chatId: String,
+        file: File,
+        clientMessageId: String,
+        replyTo: ChatReplyTarget? = null,
+    ): ApiResult<ChatMessage> =
+        chatRepository.sendAudioMessage(
+            chatId = chatId,
+            file = file,
+            clientMessageId = clientMessageId,
+            replyTo = replyTo,
+        )
 }
 
 class PutChatMessageReactionUseCase(

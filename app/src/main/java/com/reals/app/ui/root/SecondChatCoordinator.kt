@@ -9,6 +9,7 @@ import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.ChatMessageReactionType
+import com.reals.app.domain.model.ChatReplyTarget
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.SecondChatAttendanceStatus
@@ -262,11 +263,12 @@ internal class SecondChatCoordinator(
         current: RealsRootUiState.SecondChat,
         cleanContent: String,
         localId: String,
+        replyTo: ChatReplyTarget? = null,
     ): RealsRootUiState.SecondChat {
         val chat = current.chat ?: return current
         val cursorBeforeSend = current.messages.lastMessageCursor()
 
-        return when (val result = dependencies.sendChatMessage(chat.id, cleanContent)) {
+        return when (val result = dependencies.sendChatMessage(chat.id, cleanContent, localId, replyTo)) {
             is ApiResult.Success -> {
                 val statusResult = dependencies.getStatus(current.connectionId)
                 val statusSnapshot = (statusResult as? ApiResult.Success)?.value?.receivedNow()
@@ -310,11 +312,17 @@ internal class SecondChatCoordinator(
         current: RealsRootUiState.SecondChat,
         file: File,
         clientMessageId: String,
+        replyTo: ChatReplyTarget? = null,
     ): RealsRootUiState.SecondChat {
         val chat = current.chat ?: return current
         val cursorBeforeSend = current.messages.lastMessageCursor()
 
-        return when (val result = dependencies.sendChatAudioMessage(chat.id, file, clientMessageId)) {
+        return when (val result = dependencies.sendChatAudioMessage(
+            chat.id,
+            file,
+            clientMessageId,
+            replyTo,
+        )) {
             is ApiResult.Success -> {
                 val statusResult = dependencies.getStatus(current.connectionId)
                 val statusSnapshot = (statusResult as? ApiResult.Success)?.value?.receivedNow()

@@ -5,9 +5,15 @@ import com.reals.app.core.security.TextSafety
 import com.reals.app.domain.model.ChatAudioUnavailableReason
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatMessageReactionType
+import com.reals.app.domain.model.ChatMessageReply
+import com.reals.app.domain.model.ChatReplyDraft
+import com.reals.app.domain.model.ChatReplyTarget
+import com.reals.app.domain.model.toOptimisticReply
+import com.reals.app.domain.model.toReplyTarget
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.ChatType
 import com.reals.app.domain.model.isFirstChatDecisionOnly
+import com.reals.app.domain.model.toReplyTargetOrNull
 import com.reals.app.ui.chat.firstChatLifecycleUiState
 import java.io.File
 
@@ -15,6 +21,7 @@ internal object ChatMessageActionHandler {
     fun prepareFirstChatSend(
         current: RealsRootUiState.FirstChat,
         content: String,
+        replyDraft: ChatReplyDraft? = null,
     ): ChatMessageSendPreparation<RealsRootUiState.FirstChat> {
         if (current.loading || current.refreshing || current.sending || current.audioUpload.uploading || current.actionLoading) {
             return ChatMessageSendPreparation.Ignored
@@ -28,6 +35,7 @@ internal object ChatMessageActionHandler {
         }
         return prepareSend(
             content = content,
+            replyDraft = replyDraft,
             chatId = chat.id,
             senderId = current.session.user.id,
             invalidState = {
@@ -52,6 +60,7 @@ internal object ChatMessageActionHandler {
         current: RealsRootUiState.FirstChat,
         filePath: String,
         clientMessageId: String,
+        replyDraft: ChatReplyDraft? = null,
     ): ChatAudioSendPreparation<RealsRootUiState.FirstChat> {
         if (
             current.loading ||
@@ -68,6 +77,26 @@ internal object ChatMessageActionHandler {
         val chat = current.chat ?: return ChatAudioSendPreparation.Ignored
         if (chat.isFirstChatDecisionOnly()) {
             return ChatAudioSendPreparation.Ignored
+        }
+        val matchingDraft = current.audioDraft?.takeIf {
+            it.filePath == filePath && it.clientMessageId == clientMessageId
+        }
+
+        val lockedReplyTo = if (matchingDraft?.sendPayloadLocked == true) {
+            matchingDraft.sendReplyTo
+        } else {
+            replyDraft?.toOptimisticReply()
+        }
+
+        val lockedDraft = matchingDraft?.let { draft ->
+            if (draft.sendPayloadLocked) {
+                draft
+            } else {
+                draft.copy(
+                    sendReplyTo = lockedReplyTo,
+                    sendPayloadLocked = true,
+                )
+            }
         }
         return prepareAudioSend(
             filePath = filePath,
@@ -94,14 +123,17 @@ internal object ChatMessageActionHandler {
                     audioUpload = ChatAudioUploadUiState(uploading = true),
                     error = null,
                     message = null,
+                    audioDraft = lockedDraft,
                 )
             },
+            replyTo = lockedReplyTo,
         )
     }
 
     fun prepareSecondChatSend(
         current: RealsRootUiState.SecondChat,
         content: String,
+        replyDraft: ChatReplyDraft? = null,
     ): ChatMessageSendPreparation<RealsRootUiState.SecondChat> {
         if (current.loading || current.refreshing || current.sending || current.audioUpload.uploading || current.actionLoading) {
             return ChatMessageSendPreparation.Ignored
@@ -112,6 +144,7 @@ internal object ChatMessageActionHandler {
         val chat = current.chat ?: return ChatMessageSendPreparation.Ignored
         return prepareSend(
             content = content,
+            replyDraft = replyDraft,
             chatId = chat.id,
             senderId = current.session.user.id,
             invalidState = {
@@ -136,6 +169,7 @@ internal object ChatMessageActionHandler {
         current: RealsRootUiState.SecondChat,
         filePath: String,
         clientMessageId: String,
+        replyDraft: ChatReplyDraft? = null,
     ): ChatAudioSendPreparation<RealsRootUiState.SecondChat> {
         if (
             current.loading ||
@@ -150,6 +184,26 @@ internal object ChatMessageActionHandler {
         }
         val chat = current.chat ?: return ChatAudioSendPreparation.Ignored
         val audioPolicy = current.lifecycle.status?.audioPolicy ?: chat.audioPolicy
+        val matchingDraft = current.audioDraft?.takeIf {
+            it.filePath == filePath && it.clientMessageId == clientMessageId
+        }
+
+        val lockedReplyTo = if (matchingDraft?.sendPayloadLocked == true) {
+            matchingDraft.sendReplyTo
+        } else {
+            replyDraft?.toOptimisticReply()
+        }
+
+        val lockedDraft = matchingDraft?.let { draft ->
+            if (draft.sendPayloadLocked) {
+                draft
+            } else {
+                draft.copy(
+                    sendReplyTo = lockedReplyTo,
+                    sendPayloadLocked = true,
+                )
+            }
+        }
         return prepareAudioSend(
             filePath = filePath,
             clientMessageId = clientMessageId,
@@ -175,8 +229,10 @@ internal object ChatMessageActionHandler {
                     audioUpload = ChatAudioUploadUiState(uploading = true),
                     error = null,
                     message = null,
+                    audioDraft = lockedDraft,
                 )
             },
+            replyTo = lockedReplyTo,
         )
     }
 
@@ -260,6 +316,7 @@ internal object ChatMessageActionHandler {
 
     private fun <T> prepareSend(
         content: String,
+        replyDraft: ChatReplyDraft?,
         chatId: String,
         senderId: String,
         invalidState: () -> T,
@@ -274,11 +331,13 @@ internal object ChatMessageActionHandler {
             chatId = chatId,
             senderId = senderId,
             content = cleanContent,
+            replyTo = replyDraft?.toOptimisticReply(),
         )
         return ChatMessageSendPreparation.Accepted(
             pendingState = pendingState(optimisticMessage),
             cleanContent = cleanContent,
             localId = optimisticMessage.localId,
+            replyTo = replyDraft?.toReplyTarget(),
         )
     }
 
@@ -290,6 +349,7 @@ internal object ChatMessageActionHandler {
         maxFileSizeBytes: Long?,
         maxDurationMillis: Long?,
         draftDurationMillis: Long?,
+        replyTo: ChatMessageReply?,
         policyEnabled: Boolean,
         unavailableReason: ChatAudioUnavailableReason?,
         invalidState: (ApiError, Boolean) -> T,
@@ -326,12 +386,14 @@ internal object ChatMessageActionHandler {
             senderId = senderId,
             clientMessageId = clientMessageId,
             durationMillis = draftDurationMillis,
+            replyTo = replyTo,
         )
         return ChatAudioSendPreparation.Accepted(
             pendingState = pendingState(optimisticMessage),
             chatId = chatId,
             file = file,
             clientMessageId = clientMessageId,
+            replyTo = replyTo?.toReplyTargetOrNull(),
         )
     }
 
@@ -399,6 +461,7 @@ internal sealed interface ChatMessageSendPreparation<out T> {
         val pendingState: T,
         val cleanContent: String,
         val localId: String,
+        val replyTo: com.reals.app.domain.model.ChatReplyTarget?,
     ) : ChatMessageSendPreparation<T>
 
     data class Rejected<T>(
@@ -414,6 +477,7 @@ internal sealed interface ChatAudioSendPreparation<out T> {
         val chatId: String,
         val file: File,
         val clientMessageId: String,
+        val replyTo: ChatReplyTarget?,
     ) : ChatAudioSendPreparation<T>
 
     data class Rejected<T>(

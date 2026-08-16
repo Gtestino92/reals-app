@@ -35,6 +35,29 @@ class FirstChatGuidancePanelStateTest {
 
         assertEquals(true, state.showButton)
         assertEquals(true, state.buttonEnabled)
+        assertEquals("Siguiente", state.buttonLabel)
+    }
+
+    @Test
+    fun `complete progression shows final action using backend canRequestNext`() {
+        val disabled = panelState(
+            questionOrdinal = 3,
+            progressionAction = "COMPLETE",
+            canRequestNext = false,
+        )
+        val enabled = panelState(
+            questionOrdinal = 3,
+            progressionAction = "COMPLETE",
+            canRequestNext = true,
+        )
+
+        assertEquals(true, disabled.showButton)
+        assertEquals(false, disabled.buttonEnabled)
+        assertEquals("Completar", disabled.buttonLabel)
+        assertEquals(false, disabled.closeAvailable)
+
+        assertEquals(true, enabled.buttonEnabled)
+        assertEquals(false, enabled.closeAvailable)
     }
 
     @Test
@@ -55,6 +78,29 @@ class FirstChatGuidancePanelStateTest {
         assertEquals(false, state.showButton)
         assertEquals(false, state.buttonEnabled)
         assertEquals(true, state.showWaitingCopy)
+        assertEquals(
+            "Cambiaremos la pregunta cuando ambos quieran seguir.",
+            state.waitingCopy,
+        )
+    }
+
+    @Test
+    fun `final question waiting copy describes completion`() {
+        val state = panelState(
+            questionOrdinal = 3,
+            progressionAction = "COMPLETE",
+            canRequestNext = true,
+            myNextRequested = true,
+        )
+
+        assertEquals(false, state.showButton)
+        assertEquals(false, state.buttonEnabled)
+        assertEquals(true, state.showWaitingCopy)
+        assertEquals(true, state.closeAvailable)
+        assertEquals(
+            "Completaremos esta etapa cuando ambos quieran seguir.",
+            state.waitingCopy,
+        )
     }
 
     @Test
@@ -83,6 +129,20 @@ class FirstChatGuidancePanelStateTest {
         assertEquals(false, state.showButton)
         assertEquals(false, state.buttonEnabled)
         assertEquals(false, state.showWaitingCopy)
+        assertNull(state.waitingCopy)
+        assertEquals(true, state.closeAvailable)
+    }
+
+    @Test
+    fun `completed null progression action is safe`() {
+        val state = panelState(
+            progressionAction = null,
+            completed = true,
+            canRequestNext = false,
+        )
+
+        assertEquals(false, state.showButton)
+        assertEquals(false, state.buttonEnabled)
     }
 
     @Test
@@ -105,6 +165,7 @@ class FirstChatGuidancePanelStateTest {
         canRequestNextWhileChatOpen: Boolean = true,
         myNextRequested: Boolean = false,
         completed: Boolean = false,
+        progressionAction: String? = "NEXT_QUESTION",
     ): FirstChatGuidancePanelState =
         firstChatGuidancePanelState(
             guidance = TestDtos.firstChatGuidance(
@@ -114,6 +175,7 @@ class FirstChatGuidancePanelStateTest {
                 canRequestNext = canRequestNext,
                 myNextRequested = myNextRequested,
                 completed = completed,
+                progressionAction = progressionAction,
             ).toDomain(),
             canRequestNextWhileChatOpen = canRequestNextWhileChatOpen,
         ) ?: error("Expected guidance panel state")

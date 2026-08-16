@@ -7,9 +7,11 @@ import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatExitRequestType
 import com.reals.app.domain.model.ChatAudioUnavailableReason
 import com.reals.app.domain.model.ChatMessagePresentation
+import com.reals.app.domain.model.ChatMessageReplyTargetType
 import com.reals.app.domain.model.ChatMessageReactionType
 import com.reals.app.domain.model.ChatMessageType
 import com.reals.app.domain.model.ChatStatus
+import com.reals.app.domain.model.FirstChatGuidanceProgressionAction
 import com.reals.app.testutil.TestDtos
 import com.reals.app.testutil.testJson
 import org.junit.Assert.assertEquals
@@ -109,10 +111,14 @@ class ChatMappersTest {
         val guidance = TestDtos.chat(
             guidance = TestDtos.firstChatGuidance(
                 questionId = "Q002",
+                questionInstanceId = "00000000-0000-0000-0000-000000000002",
                 questionText = "Nueva pregunta",
                 questionOrdinal = 2,
                 maxQuestions = 3,
                 requiredCharacters = 40,
+                requiredParticipationScore = 60,
+                directQuestionReplyMultiplier = 2,
+                progressionAction = "COMPLETE",
                 canRequestNext = false,
                 myNextRequested = true,
                 completed = false,
@@ -120,10 +126,14 @@ class ChatMappersTest {
         ).toDomain().guidance
 
         assertEquals("Q002", guidance?.question?.id)
+        assertEquals("00000000-0000-0000-0000-000000000002", guidance?.question?.instanceId)
         assertEquals("Nueva pregunta", guidance?.question?.text)
         assertEquals(2, guidance?.questionOrdinal)
         assertEquals(3, guidance?.maxQuestions)
         assertEquals(40, guidance?.requiredCharacters)
+        assertEquals(60, guidance?.requiredParticipationScore)
+        assertEquals(2, guidance?.directQuestionReplyMultiplier)
+        assertEquals(FirstChatGuidanceProgressionAction.Complete, guidance?.progressionAction)
         assertEquals(false, guidance?.canRequestNext)
         assertEquals(true, guidance?.myNextRequested)
         assertEquals(false, guidance?.completed)
@@ -160,6 +170,73 @@ class ChatMappersTest {
         assertEquals(ChatMessageType.Text, message.messageType)
         assertTrue(message.presentation is ChatMessagePresentation.Text)
         assertEquals(TestDtos.now, message.sentAt)
+        assertNull(message.replyTo)
+    }
+
+    @Test
+    fun `ChatMessageResponseDto maps MESSAGE TEXT reply`() {
+        val message = TestDtos.chatMessage(
+            id = "message-2",
+            replyTo = TestDtos.messageReplyTo(
+                type = "MESSAGE",
+                targetId = "message-1",
+                senderId = "user-2",
+                messageType = "TEXT",
+                previewText = "texto citado",
+            ),
+        ).toDomain()
+
+        assertEquals(ChatMessageReplyTargetType.Message, message.replyTo?.type)
+        assertEquals("message-1", message.replyTo?.targetId)
+        assertEquals("user-2", message.replyTo?.senderId)
+        assertEquals(ChatMessageType.Text, message.replyTo?.messageType)
+        assertEquals("texto citado", message.replyTo?.previewText)
+    }
+
+    @Test
+    fun `ChatMessageResponseDto maps MESSAGE AUDIO reply with null preview`() {
+        val message = TestDtos.chatMessage(
+            replyTo = TestDtos.messageReplyTo(
+                type = "MESSAGE",
+                targetId = "audio-1",
+                senderId = "user-2",
+                messageType = "AUDIO",
+                previewText = null,
+            ),
+        ).toDomain()
+
+        assertEquals(ChatMessageReplyTargetType.Message, message.replyTo?.type)
+        assertEquals("audio-1", message.replyTo?.targetId)
+        assertEquals(ChatMessageType.Audio, message.replyTo?.messageType)
+        assertNull(message.replyTo?.previewText)
+    }
+
+    @Test
+    fun `ChatMessageResponseDto maps GUIDANCE_QUESTION reply`() {
+        val message = TestDtos.chatMessage(
+            replyTo = TestDtos.messageReplyTo(
+                type = "GUIDANCE_QUESTION",
+                targetId = "00000000-0000-0000-0000-000000000027",
+                senderId = null,
+                messageType = null,
+                previewText = "¿Qué valorás más?",
+            ),
+        ).toDomain()
+
+        assertEquals(ChatMessageReplyTargetType.GuidanceQuestion, message.replyTo?.type)
+        assertEquals("00000000-0000-0000-0000-000000000027", message.replyTo?.targetId)
+        assertNull(message.replyTo?.senderId)
+        assertNull(message.replyTo?.messageType)
+        assertEquals("¿Qué valorás más?", message.replyTo?.previewText)
+    }
+
+    @Test
+    fun `malformed optional reply metadata is ignored`() {
+        val message = TestDtos.chatMessage(
+            replyTo = TestDtos.messageReplyTo(type = "MESSAGE", targetId = null),
+        ).toDomain()
+
+        assertNull(message.replyTo)
     }
 
     @Test
@@ -192,6 +269,18 @@ class ChatMappersTest {
         assertEquals(ChatMessageReactionType.Heart, audio.reactionType)
         assertEquals(ChatMessageType.Text, text.messageType)
         assertEquals(ChatMessageType.Audio, audio.messageType)
+    }
+
+    @Test
+    fun `reaction and reply metadata coexist`() {
+        val message = TestDtos.chatMessage(
+            reactionType = "HEART",
+            replyTo = TestDtos.messageReplyTo(targetId = "message-0"),
+        ).toDomain()
+
+        assertEquals(ChatMessageReactionType.Heart, message.reactionType)
+        assertEquals(ChatMessageReplyTargetType.Message, message.replyTo?.type)
+        assertEquals("message-0", message.replyTo?.targetId)
     }
 
     @Test

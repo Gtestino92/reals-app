@@ -32,6 +32,7 @@ import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.ChatReplyDraft
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.ChatType
 import com.reals.app.domain.model.FirstChatGuidance
@@ -130,14 +131,14 @@ fun ChatScreen(
     onRequestSecondChatCompletion: () -> Unit = {},
     onDecideSecondChatCompletion: (String, SecondChatCompletionDecision) -> Unit = { _, _ -> },
     onClaimSecondChatInactivity: () -> Unit = {},
-    onSendMessage: (String) -> Boolean,
-    onSendAudioMessage: (filePath: String, clientMessageId: String) -> Boolean = { _, _ -> false },
+    onSendMessage: (String, ChatReplyDraft?) -> Boolean,
+    onSendAudioMessage: (filePath: String, clientMessageId: String, replyDraft: ChatReplyDraft?) -> Boolean = { _, _, _ -> false },
     onClearAudioUploadState: () -> Unit = {},
     onAudioDraftReady: (ChatAudioDraftUiState) -> Unit = {},
-    onAudioDraftReadyAndSend: (ChatAudioDraftUiState) -> Boolean = { false },
+    onAudioDraftReadyAndSend: (ChatAudioDraftUiState, ChatReplyDraft?) -> Boolean = { _, _ -> false },
     onDeleteAudioDraft: () -> Unit = {},
     onRefreshAudioUrl: suspend (messageId: String) -> String? = { null },
-    onRetryOptimisticMessage: (localId: String, content: String) -> Unit,
+    onRetryOptimisticMessage: (localId: String) -> Unit,
     onReactToMessage: (messageId: String) -> Unit = {},
     onApprove: () -> Unit,
     onReject: () -> Unit,
@@ -151,6 +152,9 @@ fun ChatScreen(
     onExitRequestTimeout: (String) -> Unit,
 ) {
     var draft by rememberSaveable(chat?.id) { mutableStateOf("") }
+    var replyDraft by rememberSaveable(chat?.id, saver = ChatReplyDraftMutableStateSaver) {
+        mutableStateOf<ChatReplyDraft?>(null)
+    }
     var safetyDetails by rememberSaveable(chat?.id) { mutableStateOf("") }
     var safetyReasonRawValue by rememberSaveable(chat?.id) {
         mutableStateOf(ChatExitReason.InappropriateBehavior.rawValue)
@@ -240,20 +244,35 @@ fun ChatScreen(
                 draft = value
             },
             onSendText = { value: String ->
-                onSendMessage(value)
+                onSendMessage(value, replyDraft).also { accepted ->
+                    if (accepted) replyDraft = null
+                }
             },
             onClearTextDraft = {
                 draft = ""
             },
             onClearUploadState = onClearAudioUploadState,
             onDraftReady = onAudioDraftReady,
-            onDraftReadyAndSend = onAudioDraftReadyAndSend,
+            onDraftReadyAndSend = { draftToSend ->
+                onAudioDraftReadyAndSend(draftToSend, replyDraft).also { accepted ->
+                    if (accepted) {
+                        replyDraft = null
+                    }
+                }
+            },
             onDeleteDraft = onDeleteAudioDraft,
-            onSendAudioMessage = onSendAudioMessage,
+            onSendAudioMessage = { filePath, clientMessageId ->
+                onSendAudioMessage(filePath, clientMessageId, replyDraft).also { accepted ->
+                    if (accepted) {
+                        replyDraft = null
+                    }
+                }
+            },
             onRefreshAudioUrl = onRefreshAudioUrl,
         ),
     )
     val audioInteractionBusy = audioSession.interactionBusy
+    val audioReplyPayloadLocked = audioDraft?.sendPayloadLocked == true
     val secondChatResolution = secondChatLifecycle?.resolutionPresentation(
         currentUserId = currentUserId,
         nowMillis = nowMillis,
@@ -281,6 +300,7 @@ fun ChatScreen(
         firstChatGuidancePanelState(
             guidance = guidance,
             canRequestNextWhileChatOpen = firstChatPolicy.canRequestGuidance && !audioInteractionBusy,
+            canReplyToQuestion = canSendMessages && !audioReplyPayloadLocked,
         )
     }
     val canUseExistingChatActions =
@@ -576,11 +596,13 @@ fun ChatScreen(
                 dismissalScope = chat?.id,
                 actionLoading = guidanceActionLoading || audioInteractionBusy,
                 onRequestNext = onRequestNextGuidanceQuestion,
+                onReply = { replyDraft = it },
             )
             MessageList(
                 chatId = chat?.id,
                 initialHistoryLoading = loading,
                 currentUserId = currentUserId,
+                partnerDisplayName = partnerDisplayName,
                 chatType = chat?.chatType ?: ChatType.Unknown(""),
                 messages = messages,
                 optimisticMessages = optimisticMessages,
@@ -590,6 +612,10 @@ fun ChatScreen(
                 modifier = Modifier.weight(1f),
                 onRetryOptimisticMessage = onRetryOptimisticMessage,
                 onReactToMessage = onReactToMessage,
+                canInitiateReply = canSendMessages && !audioReplyPayloadLocked,
+                onReplyToMessage = { message ->
+                    message.toReplyDraftOrNull(currentUserId)?.let { replyDraft = it }
+                },
                 canRetryFailedTextMessages = firstChatPolicy.canRetryFailedTextMessages,
                 playbackState = audioSession.playbackState,
                 onPlayAudio = audioSession::playRemoteMessage,
@@ -609,6 +635,15 @@ fun ChatScreen(
                 },
             ) {
                 if (showMessageComposer) {
+                    replyDraft
+                        ?.toPreview(currentUserId = currentUserId, partnerDisplayName = partnerDisplayName)
+                        ?.let { preview ->
+                            ComposerReplyPreview(
+                                preview = preview,
+                                modifier = Modifier.padding(bottom = 4.dp),
+                                onClear = { replyDraft = null },
+                            )
+                        }
                     MessageComposer(
                         presentation = audioSession.composerPresentation(),
                         callbacks = audioSession.composerCallbacks(),

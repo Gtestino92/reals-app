@@ -109,6 +109,7 @@ enum class BackendErrorCode(val raw: String) {
     ChatAudioUploadBusy("CHAT_AUDIO_UPLOAD_BUSY"),
     ChatAudioUploadFailed("CHAT_AUDIO_UPLOAD_FAILED"),
     ChatMessageIdempotencyConflict("CHAT_MESSAGE_IDEMPOTENCY_CONFLICT"),
+    ChatMessageReplyTargetNotAvailable("CHAT_MESSAGE_REPLY_TARGET_NOT_AVAILABLE"),
     FirstChatGuidanceParticipationRequired("FIRST_CHAT_GUIDANCE_PARTICIPATION_REQUIRED"),
     FirstChatGuidanceNextAlreadyRequested("FIRST_CHAT_GUIDANCE_NEXT_ALREADY_REQUESTED"),
     FirstChatGuidanceCompleted("FIRST_CHAT_GUIDANCE_COMPLETED"),
@@ -338,7 +339,9 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.ChatAudioUploadBusy -> "La carga de audios está ocupada. Intentá nuevamente en unos segundos."
     BackendErrorCode.ChatAudioUploadFailed -> "No pudimos subir el audio. Intentá nuevamente."
     BackendErrorCode.ChatMessageIdempotencyConflict ->
-        "No pudimos reintentar este audio. Borrá la grabación y creá una nueva."
+        "No pudimos reintentar este mensaje. Creá uno nuevo."
+    BackendErrorCode.ChatMessageReplyTargetNotAvailable ->
+        "No pudimos enviar la respuesta porque el mensaje citado ya no está disponible."
     BackendErrorCode.FirstChatGuidanceParticipationRequired ->
         "Particip\u00e1 un poco m\u00e1s antes de pedir otra pregunta."
     BackendErrorCode.FirstChatGuidanceNextAlreadyRequested -> "Ya pediste cambiar ésta pregunta."

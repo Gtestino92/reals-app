@@ -12,6 +12,7 @@ import com.reals.app.core.network.toUserMessage
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatMessageReactionType
+import com.reals.app.domain.model.ChatReplyTarget
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.testutil.FakeAuthTokenProvider
 import com.reals.app.testutil.FakeRealsApi
@@ -122,12 +123,32 @@ class ChatRepositoryTest {
 
     @Test
     fun `sendMessage sends content as expected`() = runBlocking {
-        val message = repository.sendMessage("chat-1", "  hola  ").successValue()
+        val clientMessageId = "00000000-0000-0000-0000-000000000201"
+        val message = repository.sendMessage("chat-1", "  hola  ", clientMessageId).successValue()
 
         assertEquals("sendChatMessage", api.calls.single())
         assertEquals("chat-1", api.lastPathId)
+        assertEquals(clientMessageId, api.chatMessageBody?.clientMessageId)
         assertEquals("  hola  ", api.chatMessageBody?.content)
+        assertEquals(null, api.chatMessageBody?.replyTo)
         assertEquals("message-1", message.id)
+    }
+
+    @Test
+    fun `sendMessage sends reply target without preview metadata`() = runBlocking {
+        val clientMessageId = "00000000-0000-0000-0000-000000000202"
+
+        repository.sendMessage(
+            chatId = "chat-1",
+            content = "respuesta",
+            clientMessageId = clientMessageId,
+            replyTo = ChatReplyTarget.GuidanceQuestion("00000000-0000-0000-0000-000000000027"),
+        ).successValue()
+
+        assertEquals(clientMessageId, api.chatMessageBody?.clientMessageId)
+        assertEquals("respuesta", api.chatMessageBody?.content)
+        assertEquals("GUIDANCE_QUESTION", api.chatMessageBody?.replyTo?.type)
+        assertEquals("00000000-0000-0000-0000-000000000027", api.chatMessageBody?.replyTo?.targetId)
     }
 
     @Test
@@ -199,7 +220,11 @@ class ChatRepositoryTest {
             message = "raw backend message",
         )
 
-        val error = repository.sendMessage("chat-1", "").failureError() as ApiError.Backend
+        val error = repository.sendMessage(
+            "chat-1",
+            "",
+            "00000000-0000-0000-0000-000000000203",
+        ).failureError() as ApiError.Backend
 
         assertEquals("CHAT_MESSAGE_INVALID", error.code)
         assertEquals(BackendErrorCode.ChatMessageInvalid, error.backendErrorCode)

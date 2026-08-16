@@ -13,6 +13,7 @@ import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.ChatMessageReactionType
+import com.reals.app.domain.model.ChatReplyTarget
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.FirstChatSnapshot
 import com.reals.app.domain.model.MatchState
@@ -235,12 +236,13 @@ internal class FirstChatCoordinator(
         current: RealsRootUiState.FirstChat,
         cleanContent: String,
         localId: String,
+        replyTo: ChatReplyTarget? = null,
         onPostAcknowledged: (ChatMessage) -> Unit = {},
     ): FirstChatSendResult {
         val chat = current.chat ?: return FirstChatSendResult.Show(current)
         val cursorBeforeSend = current.messages.lastMessageCursor()
         val sendStarted = FirstChatSendTiming.markNow()
-        return when (val result = dependencies.sendChatMessage(chat.id, cleanContent)) {
+        return when (val result = dependencies.sendChatMessage(chat.id, cleanContent, localId, replyTo)) {
             is ApiResult.Success -> {
                 val postCompleted = FirstChatSendTiming.markNow()
                 FirstChatSendTiming.logStage(
@@ -331,10 +333,16 @@ internal class FirstChatCoordinator(
         current: RealsRootUiState.FirstChat,
         file: File,
         clientMessageId: String,
+        replyTo: ChatReplyTarget? = null,
     ): FirstChatSendResult {
         val chat = current.chat ?: return FirstChatSendResult.Show(current)
         val cursorBeforeSend = current.messages.lastMessageCursor()
-        return when (val result = dependencies.sendChatAudioMessage(chat.id, file, clientMessageId)) {
+        return when (val result = dependencies.sendChatAudioMessage(
+            chat.id,
+            file,
+            clientMessageId,
+            replyTo,
+        )) {
             is ApiResult.Success -> {
                 val sentMessage = result.value
                 val messagesWithSent = current.messages.appendUnique(listOf(sentMessage))

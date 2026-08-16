@@ -25,6 +25,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,7 +40,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.reals.app.R
 import com.reals.app.core.security.TextSafety
+import com.reals.app.domain.model.ChatReplyDraft
 import com.reals.app.domain.model.FirstChatGuidance
+import com.reals.app.domain.model.FirstChatGuidanceProgressionAction
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
 import com.reals.app.ui.theme.RealsRadii
@@ -125,28 +128,55 @@ internal data class FirstChatGuidancePanelState(
     val questionText: String,
     val showButton: Boolean,
     val buttonEnabled: Boolean,
+    val buttonLabel: String,
+    val buttonContentDescription: String,
     val showWaitingCopy: Boolean,
+    val waitingCopy: String?,
+
     val closeAvailable: Boolean,
+    val replyDraft: ChatReplyDraft.GuidanceQuestion?,
 )
 
 internal fun firstChatGuidancePanelState(
     guidance: FirstChatGuidance?,
     canRequestNextWhileChatOpen: Boolean = true,
+    canReplyToQuestion: Boolean = true,
 ): FirstChatGuidancePanelState? {
     if (guidance == null) return null
     val finalQuestion = guidance.questionOrdinal >= guidance.maxQuestions
+    val progressionAction = guidance.progressionAction
+        ?: FirstChatGuidanceProgressionAction.NextQuestion.takeUnless { finalQuestion || guidance.completed }
+    val requestableProgressionAction = progressionAction.takeUnless {
+        it is FirstChatGuidanceProgressionAction.Unknown
+    }
+    val completeAction = requestableProgressionAction == FirstChatGuidanceProgressionAction.Complete
+    val waitingCopy = when {
+        guidance.completed || !guidance.myNextRequested -> null
+
+        requestableProgressionAction == FirstChatGuidanceProgressionAction.Complete ->
+            "Completaremos esta etapa cuando ambos quieran seguir."
+
+        requestableProgressionAction == FirstChatGuidanceProgressionAction.NextQuestion ->
+            "Cambiaremos la pregunta cuando ambos quieran seguir."
+
+        else -> null
+    }
     return FirstChatGuidancePanelState(
         dismissalKey = "${guidance.questionOrdinal}:${guidance.maxQuestions}:${guidance.question.text}",
         questionOrdinal = guidance.questionOrdinal,
         questionText = guidance.question.text,
-        showButton = !guidance.completed && !finalQuestion && !guidance.myNextRequested,
+        showButton = !guidance.completed && requestableProgressionAction != null && !guidance.myNextRequested,
         buttonEnabled = !guidance.completed &&
-            !finalQuestion &&
+            requestableProgressionAction != null &&
             !guidance.myNextRequested &&
             guidance.canRequestNext &&
             canRequestNextWhileChatOpen,
-        showWaitingCopy = !guidance.completed && guidance.myNextRequested,
-        closeAvailable = guidance.completed || finalQuestion || guidance.myNextRequested,
+        buttonLabel = if (completeAction) "Completar" else "Siguiente",
+        buttonContentDescription = if (completeAction) "Completar" else "Otra pregunta",
+        showWaitingCopy = waitingCopy != null,
+        waitingCopy = waitingCopy,
+        closeAvailable = guidance.completed || guidance.myNextRequested,
+        replyDraft = guidance.toGuidanceReplyDraftOrNull(canReplyToQuestion),
     )
 }
 
@@ -156,6 +186,7 @@ internal fun FirstChatGuidancePanel(
     dismissalScope: String?,
     actionLoading: Boolean,
     onRequestNext: (() -> Unit)?,
+    onReply: (ChatReplyDraft.GuidanceQuestion) -> Unit = {},
 ) {
     if (state == null) return
     var dismissedKeys by rememberSaveable(dismissalScope) { mutableStateOf(emptyList<String>()) }
@@ -172,7 +203,12 @@ internal fun FirstChatGuidancePanel(
             ),
     ) {
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .replySwipeTarget(
+                    enabled = state.replyDraft != null && !actionLoading,
+                    onReply = { state.replyDraft?.let(onReply) },
+                ),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
             ),
@@ -216,9 +252,9 @@ internal fun FirstChatGuidancePanel(
                             color = MaterialTheme.colorScheme.primary,
                         )
 
-                        if (state.showWaitingCopy) {
+                        state.waitingCopy?.let { waitingCopy ->
                             Text(
-                                text = "Cambiaremos la pregunta cuando ambos quieran seguir.",
+                                text = waitingCopy,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -226,13 +262,13 @@ internal fun FirstChatGuidancePanel(
                     }
 
                     Box(
-                        modifier = Modifier.size(48.dp),
+                        modifier = Modifier.heightIn(min = 48.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         when {
-                            nextQuestionAvailable -> IconButton(
+                            nextQuestionAvailable && state.buttonLabel == "Siguiente" -> IconButton(
                                 onClick = { onRequestNext?.invoke() },
-                                modifier = Modifier.semantics { contentDescription = "Otra pregunta" },
+                                modifier = Modifier.semantics { contentDescription = state.buttonContentDescription },
                             ) {
                                 Text(
                                     text = "›",
@@ -240,6 +276,13 @@ internal fun FirstChatGuidancePanel(
                                     style = MaterialTheme.typography.titleLarge,
                                     color = MaterialTheme.colorScheme.primary,
                                 )
+                            }
+
+                            nextQuestionAvailable -> TextButton(
+                                onClick = { onRequestNext?.invoke() },
+                                modifier = Modifier.semantics { contentDescription = state.buttonContentDescription },
+                            ) {
+                                Text(state.buttonLabel)
                             }
 
                             closeVisible -> IconButton(

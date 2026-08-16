@@ -2,6 +2,7 @@ package com.reals.app.ui.root
 
 import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.ChatMessagePresentation
+import com.reals.app.domain.model.ChatMessageReply
 
 private val chatMessageOrder = compareBy<ChatMessage> { it.sentAt }
     .thenBy { it.id }
@@ -63,7 +64,17 @@ internal fun List<ChatMessage>.appendUnique(newMessages: List<ChatMessage>): Lis
 }
 
 private fun ChatMessage.mergeWithIncoming(incoming: ChatMessage): ChatMessage =
-    incoming.copy(reactionType = incoming.reactionType ?: reactionType)
+    incoming.copy(
+        replyTo = replyTo.mergeWithIncoming(incoming.replyTo),
+        reactionType = incoming.reactionType ?: reactionType,
+    )
+
+internal fun ChatMessageReply?.mergeWithIncoming(incoming: ChatMessageReply?): ChatMessageReply? = when {
+    this == null -> incoming
+    incoming == null -> this
+    type == incoming.type && targetId == incoming.targetId -> incoming
+    else -> incoming
+}
 
 internal class SilentChatMessagePollingCursor {
     private var chatId: String? = null

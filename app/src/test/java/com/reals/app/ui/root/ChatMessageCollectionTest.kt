@@ -2,6 +2,8 @@ package com.reals.app.ui.root
 
 import com.reals.app.domain.model.ChatAudio
 import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.ChatMessageReply
+import com.reals.app.domain.model.ChatMessageReplyTargetType
 import com.reals.app.domain.model.ChatMessageReactionType
 import com.reals.app.domain.model.ChatMessageType
 import org.junit.Assert.assertNull
@@ -144,6 +146,42 @@ class ChatMessageCollectionTest {
             listOf(message("1", "2026-06-18T21:01:00Z", reactionType = ChatMessageReactionType.Heart))
         )
 
+        assertEquals(ChatMessageReactionType.Heart, appended.single().reactionType)
+    }
+
+    @Test
+    fun `appendUnique preserves existing reply when stale incoming duplicate omits it`() {
+        val current = listOf(
+            message("1", "2026-06-18T21:00:00Z").copy(replyTo = reply("message-0"))
+        )
+        val appended = current.appendUnique(
+            listOf(message("1", "2026-06-18T21:01:00Z").copy(replyTo = null))
+        )
+
+        assertEquals("message-0", appended.single().replyTo?.targetId)
+    }
+
+    @Test
+    fun `appendUnique adopts incoming reply when existing duplicate has none`() {
+        val current = listOf(message("1", "2026-06-18T21:00:00Z").copy(replyTo = null))
+        val appended = current.appendUnique(
+            listOf(message("1", "2026-06-18T21:01:00Z").copy(replyTo = reply("message-0")))
+        )
+
+        assertEquals("message-0", appended.single().replyTo?.targetId)
+    }
+
+    @Test
+    fun `appendUnique keeps reply and HEART together through stale reaction refresh`() {
+        val current = listOf(
+            message("1", "2026-06-18T21:00:00Z", reactionType = ChatMessageReactionType.Heart)
+                .copy(replyTo = reply("message-0"))
+        )
+        val appended = current.appendUnique(
+            listOf(message("1", "2026-06-18T21:01:00Z", reactionType = null))
+        )
+
+        assertEquals("message-0", appended.single().replyTo?.targetId)
         assertEquals(ChatMessageReactionType.Heart, appended.single().reactionType)
     }
 
@@ -366,5 +404,13 @@ class ChatMessageCollectionTest {
             sizeBytes = 77_832,
         ),
         sentAt = sentAt,
+    )
+
+    private fun reply(targetId: String) = ChatMessageReply(
+        type = ChatMessageReplyTargetType.Message,
+        targetId = targetId,
+        senderId = "other",
+        messageType = ChatMessageType.Text,
+        previewText = "previo",
     )
 }

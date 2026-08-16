@@ -151,6 +151,7 @@ class ApiErrorTest {
             "CHAT_DECISION_ALREADY_SUBMITTED" to BackendErrorCode.ChatDecisionAlreadySubmitted,
             "CHAT_MIN_MESSAGES_REQUIRED" to BackendErrorCode.ChatMinMessagesRequired,
             "CHAT_MUTUAL_CANCELLATION_PENDING" to BackendErrorCode.ChatMutualCancellationPending,
+            "CHAT_MESSAGE_REPLY_TARGET_NOT_AVAILABLE" to BackendErrorCode.ChatMessageReplyTargetNotAvailable,
             "FIRST_CHAT_DECISION_ONLY" to BackendErrorCode.FirstChatDecisionOnly,
             "FIRST_CHAT_GUIDANCE_PARTICIPATION_REQUIRED" to BackendErrorCode.FirstChatGuidanceParticipationRequired,
             "FIRST_CHAT_GUIDANCE_NEXT_ALREADY_REQUESTED" to BackendErrorCode.FirstChatGuidanceNextAlreadyRequested,

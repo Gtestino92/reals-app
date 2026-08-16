@@ -11,6 +11,7 @@ import com.reals.app.data.dto.ChatExitRequestResponseDto
 import com.reals.app.data.dto.ChatAudioPolicyResponseDto
 import com.reals.app.data.dto.ChatAudioResponseDto
 import com.reals.app.data.dto.ChatMessageResponseDto
+import com.reals.app.data.dto.ChatMessageReplyToResponseDto
 import com.reals.app.data.dto.ChatPartnerResponseDto
 import com.reals.app.data.dto.ChatResponseDto
 import com.reals.app.data.dto.ConnectionResponseDto
@@ -363,10 +364,14 @@ object TestDtos {
 
     fun firstChatGuidance(
         questionId: String = "Q027",
+        questionInstanceId: String? = "00000000-0000-0000-0000-000000000027",
         questionText: String = "¿Qué cosa pequeña te mejora mucho el día?",
         questionOrdinal: Int = 1,
         maxQuestions: Int = 3,
         requiredCharacters: Int = 40,
+        requiredParticipationScore: Int? = 60,
+        directQuestionReplyMultiplier: Int? = 2,
+        progressionAction: String? = "NEXT_QUESTION",
         canRequestNext: Boolean = true,
         myNextRequested: Boolean = false,
         completed: Boolean = false,
@@ -374,10 +379,14 @@ object TestDtos {
         question = FirstChatGuidanceQuestionResponseDto(
             id = questionId,
             text = questionText,
+            instanceId = questionInstanceId,
         ),
         questionOrdinal = questionOrdinal,
         maxQuestions = maxQuestions,
         requiredCharacters = requiredCharacters,
+        requiredParticipationScore = requiredParticipationScore,
+        directQuestionReplyMultiplier = directQuestionReplyMultiplier,
+        progressionAction = progressionAction,
         canRequestNext = canRequestNext,
         myNextRequested = myNextRequested,
         completed = completed,
@@ -386,14 +395,18 @@ object TestDtos {
     fun chatMessage(
         id: String = "message-1",
         reactionType: String? = null,
+        senderId: String = "user-1",
+        content: String = "hola",
+        replyTo: ChatMessageReplyToResponseDto? = null,
     ) = ChatMessageResponseDto(
         id = id,
         chatSessionId = "chat-1",
-        senderId = "user-1",
+        senderId = senderId,
         clientMessageId = null,
         messageType = "TEXT",
-        content = "hola",
+        content = content,
         audio = null,
+        replyTo = replyTo,
         reactionType = reactionType,
         sentAt = now,
     )
@@ -403,10 +416,12 @@ object TestDtos {
         clientMessageId: String = "00000000-0000-0000-0000-000000000101",
         url: String = "https://example.test/audio",
         reactionType: String? = null,
+        senderId: String = "user-1",
+        replyTo: ChatMessageReplyToResponseDto? = null,
     ) = ChatMessageResponseDto(
         id = id,
         chatSessionId = "chat-1",
-        senderId = "user-1",
+        senderId = senderId,
         clientMessageId = clientMessageId,
         messageType = "AUDIO",
         content = null,
@@ -416,8 +431,23 @@ object TestDtos {
             contentType = "audio/mp4",
             sizeBytes = 77_832,
         ),
+        replyTo = replyTo,
         reactionType = reactionType,
         sentAt = now,
+    )
+
+    fun messageReplyTo(
+        type: String? = "MESSAGE",
+        targetId: String? = "message-0",
+        senderId: String? = "user-2",
+        messageType: String? = "TEXT",
+        previewText: String? = "mensaje anterior",
+    ) = ChatMessageReplyToResponseDto(
+        type = type,
+        targetId = targetId,
+        senderId = senderId,
+        messageType = messageType,
+        previewText = previewText,
     )
 
     fun chatMessagesArrayPayload(messages: List<ChatMessageResponseDto> = listOf(chatMessage())): JsonElement =
