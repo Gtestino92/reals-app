@@ -346,8 +346,10 @@ interface RealsApi {
         @Path("chatId") chatId: String,
         @Part file: MultipartBody.Part,
         @Part("clientMessageId") clientMessageId: RequestBody,
+        @Part("replyToType") replyToType: RequestBody? = null,
+        @Part("replyToTargetId") replyToTargetId: RequestBody? = null,
     ): Response<ChatMessageResponseDto>
-
+    
     @PUT("api/chats/{chatId}/messages/{messageId}/reaction")
     suspend fun putChatMessageReaction(
         @Header("Authorization") authorization: String,

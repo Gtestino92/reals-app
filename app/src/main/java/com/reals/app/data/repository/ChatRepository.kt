@@ -126,8 +126,11 @@ class ChatRepository(
         chatId: String,
         file: File,
         clientMessageId: String,
+        replyTo: ChatReplyTarget? = null,
     ): ApiResult<ChatMessage> =
         authorizedCall { authorization ->
+            val textPlain = "text/plain".toMediaType()
+
             api.sendChatAudioMessage(
                 authorization = authorization,
                 chatId = chatId,
@@ -136,10 +139,17 @@ class ChatRepository(
                     filename = file.name.ensureM4aExtension(),
                     body = file.asRequestBody(CHAT_AUDIO_MEDIA_TYPE.toMediaType()),
                 ),
-                clientMessageId = clientMessageId.toRequestBody("text/plain".toMediaType()),
+                clientMessageId = clientMessageId.toRequestBody(textPlain),
+                replyToType = replyTo
+                    ?.type
+                    ?.rawValue
+                    ?.toRequestBody(textPlain),
+                replyToTargetId = replyTo
+                    ?.targetId
+                    ?.toRequestBody(textPlain),
             )
         }.map { it.toDomain() }
-
+    
     suspend fun putMessageReaction(
         chatId: String,
         messageId: String,

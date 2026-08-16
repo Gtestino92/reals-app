@@ -272,6 +272,8 @@ data class ChatAudioDraftUiState(
     val clientMessageId: String,
     val durationMillis: Long,
     val sizeBytes: Long,
+    val sendReplyTo: ChatMessageReply? = null,
+    val sendPayloadLocked: Boolean = false,
 )
 
 data class ChatReactionUiState(
@@ -527,6 +529,7 @@ internal fun newOptimisticOutgoingAudioMessage(
     senderId: String,
     clientMessageId: String,
     durationMillis: Long,
+    replyTo: ChatMessageReply? = null,
     createdAtMillis: Long = System.currentTimeMillis(),
 ): OptimisticOutgoingMessage = OptimisticOutgoingMessage(
     localId = clientMessageId,
@@ -537,6 +540,7 @@ internal fun newOptimisticOutgoingAudioMessage(
     deliveryState = OutgoingMessageDeliveryState.Sending,
     messageType = OptimisticOutgoingMessageType.Audio,
     audioDurationMillis = durationMillis,
+    replyTo = replyTo,
 )
 
 private fun optimisticMessageLocalId(): String = UUID.randomUUID().toString()

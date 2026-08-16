@@ -103,8 +103,18 @@ class SendChatMessageUseCase(
 class SendChatAudioMessageUseCase(
     private val chatRepository: ChatRepository,
 ) {
-    suspend operator fun invoke(chatId: String, file: File, clientMessageId: String): ApiResult<ChatMessage> =
-        chatRepository.sendAudioMessage(chatId, file, clientMessageId)
+    suspend operator fun invoke(
+        chatId: String,
+        file: File,
+        clientMessageId: String,
+        replyTo: ChatReplyTarget? = null,
+    ): ApiResult<ChatMessage> =
+        chatRepository.sendAudioMessage(
+            chatId = chatId,
+            file = file,
+            clientMessageId = clientMessageId,
+            replyTo = replyTo,
+        )
 }
 
 class PutChatMessageReactionUseCase(

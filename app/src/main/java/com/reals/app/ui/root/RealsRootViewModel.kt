@@ -637,12 +637,14 @@ class RealsRootViewModel(
         }
     }
 
-    fun sendSecondChatAudioMessage(filePath: String, clientMessageId: String): Boolean {
+    fun sendSecondChatAudioMessage(filePath: String, clientMessageId: String,
+                                   replyDraft: ChatReplyDraft? = null,): Boolean {
         val current = _uiState.value as? RealsRootUiState.SecondChat ?: return false
         return when (val preparation = ChatMessageActionHandler.prepareSecondChatAudioSend(
             current,
             filePath,
             clientMessageId,
+            replyDraft
         )) {
             is ChatAudioSendPreparation.Accepted -> {
                 val instanceKey = preparation.pendingState.expiryKey()
@@ -654,6 +656,7 @@ class RealsRootViewModel(
                         preparation.pendingState,
                         preparation.file,
                         preparation.clientMessageId,
+                        preparation.replyTo,
                     )
                     val latest = _uiState.value as? RealsRootUiState.SecondChat
                     val latestDraft = latest?.audioDraft
@@ -704,9 +707,10 @@ class RealsRootViewModel(
         )
     }
 
-    fun setAndSendSecondChatAudioDraft(draft: ChatAudioDraftUiState): Boolean {
+    fun setAndSendSecondChatAudioDraft(draft: ChatAudioDraftUiState,
+                                       replyDraft: ChatReplyDraft? = null,): Boolean {
         setSecondChatAudioDraft(draft)
-        return sendSecondChatAudioMessage(draft.filePath, draft.clientMessageId)
+        return sendSecondChatAudioMessage(draft.filePath, draft.clientMessageId, replyDraft)
     }
 
     fun deleteSecondChatAudioDraft() {
@@ -1415,12 +1419,17 @@ class RealsRootViewModel(
         }
     }
 
-    fun sendFirstChatAudioMessage(filePath: String, clientMessageId: String): Boolean {
+    fun sendFirstChatAudioMessage(
+        filePath: String,
+        clientMessageId: String,
+        replyDraft: ChatReplyDraft? = null,
+    ): Boolean {
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return false
         return when (val preparation = ChatMessageActionHandler.prepareFirstChatAudioSend(
             current,
             filePath,
             clientMessageId,
+            replyDraft,
         )) {
             is ChatAudioSendPreparation.Accepted -> {
                 val matchId = preparation.pendingState.matchId
@@ -1434,6 +1443,7 @@ class RealsRootViewModel(
                         preparation.pendingState,
                         preparation.file,
                         preparation.clientMessageId,
+                        preparation.replyTo,
                     )
                     val latest = _uiState.value as? RealsRootUiState.FirstChat
                     val latestDraft = latest?.audioDraft
@@ -1488,9 +1498,16 @@ class RealsRootViewModel(
         )
     }
 
-    fun setAndSendFirstChatAudioDraft(draft: ChatAudioDraftUiState): Boolean {
+    fun setAndSendFirstChatAudioDraft(
+        draft: ChatAudioDraftUiState,
+        replyDraft: ChatReplyDraft? = null,
+    ): Boolean {
         setFirstChatAudioDraft(draft)
-        return sendFirstChatAudioMessage(draft.filePath, draft.clientMessageId)
+        return sendFirstChatAudioMessage(
+            draft.filePath,
+            draft.clientMessageId,
+            replyDraft,
+        )
     }
 
     fun deleteFirstChatAudioDraft() {

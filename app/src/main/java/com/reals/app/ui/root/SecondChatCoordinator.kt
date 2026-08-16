@@ -312,11 +312,17 @@ internal class SecondChatCoordinator(
         current: RealsRootUiState.SecondChat,
         file: File,
         clientMessageId: String,
+        replyTo: ChatReplyTarget? = null,
     ): RealsRootUiState.SecondChat {
         val chat = current.chat ?: return current
         val cursorBeforeSend = current.messages.lastMessageCursor()
 
-        return when (val result = dependencies.sendChatAudioMessage(chat.id, file, clientMessageId)) {
+        return when (val result = dependencies.sendChatAudioMessage(
+            chat.id,
+            file,
+            clientMessageId,
+            replyTo,
+        ) {
             is ApiResult.Success -> {
                 val statusResult = dependencies.getStatus(current.connectionId)
                 val statusSnapshot = (statusResult as? ApiResult.Success)?.value?.receivedNow()

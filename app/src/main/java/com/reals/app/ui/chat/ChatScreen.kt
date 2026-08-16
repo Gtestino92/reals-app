@@ -132,10 +132,10 @@ fun ChatScreen(
     onDecideSecondChatCompletion: (String, SecondChatCompletionDecision) -> Unit = { _, _ -> },
     onClaimSecondChatInactivity: () -> Unit = {},
     onSendMessage: (String, ChatReplyDraft?) -> Boolean,
-    onSendAudioMessage: (filePath: String, clientMessageId: String) -> Boolean = { _, _ -> false },
+    onSendAudioMessage: (filePath: String, clientMessageId: String, replyDraft: ChatReplyDraft?) -> Boolean = { _, _, _ -> false },
     onClearAudioUploadState: () -> Unit = {},
     onAudioDraftReady: (ChatAudioDraftUiState) -> Unit = {},
-    onAudioDraftReadyAndSend: (ChatAudioDraftUiState) -> Boolean = { false },
+    onAudioDraftReadyAndSend: (ChatAudioDraftUiState, ChatReplyDraft?) -> Boolean = { _, _ -> false },
     onDeleteAudioDraft: () -> Unit = {},
     onRefreshAudioUrl: suspend (messageId: String) -> String? = { null },
     onRetryOptimisticMessage: (localId: String) -> Unit,
@@ -253,13 +253,26 @@ fun ChatScreen(
             },
             onClearUploadState = onClearAudioUploadState,
             onDraftReady = onAudioDraftReady,
-            onDraftReadyAndSend = onAudioDraftReadyAndSend,
+            onDraftReadyAndSend = { draftToSend ->
+                onAudioDraftReadyAndSend(draftToSend, replyDraft).also { accepted ->
+                    if (accepted) {
+                        replyDraft = null
+                    }
+                }
+            },
             onDeleteDraft = onDeleteAudioDraft,
-            onSendAudioMessage = onSendAudioMessage,
+            onSendAudioMessage = { filePath, clientMessageId ->
+                onSendAudioMessage(filePath, clientMessageId, replyDraft).also { accepted ->
+                    if (accepted) {
+                        replyDraft = null
+                    }
+                }
+            },
             onRefreshAudioUrl = onRefreshAudioUrl,
         ),
     )
     val audioInteractionBusy = audioSession.interactionBusy
+    val audioReplyPayloadLocked = audioDraft?.sendPayloadLocked == true
     val secondChatResolution = secondChatLifecycle?.resolutionPresentation(
         currentUserId = currentUserId,
         nowMillis = nowMillis,
@@ -287,7 +300,7 @@ fun ChatScreen(
         firstChatGuidancePanelState(
             guidance = guidance,
             canRequestNextWhileChatOpen = firstChatPolicy.canRequestGuidance && !audioInteractionBusy,
-            canReplyToQuestion = canSendMessages,
+            canReplyToQuestion = canSendMessages && !audioReplyPayloadLocked,
         )
     }
     val canUseExistingChatActions =
@@ -599,7 +612,7 @@ fun ChatScreen(
                 modifier = Modifier.weight(1f),
                 onRetryOptimisticMessage = onRetryOptimisticMessage,
                 onReactToMessage = onReactToMessage,
-                canInitiateReply = canSendMessages,
+                canInitiateReply = canSendMessages && !audioReplyPayloadLocked,
                 onReplyToMessage = { message ->
                     message.toReplyDraftOrNull(currentUserId)?.let { replyDraft = it }
                 },

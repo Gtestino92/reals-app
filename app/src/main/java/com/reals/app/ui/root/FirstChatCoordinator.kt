@@ -333,10 +333,16 @@ internal class FirstChatCoordinator(
         current: RealsRootUiState.FirstChat,
         file: File,
         clientMessageId: String,
+        replyTo: ChatReplyTarget? = null,
     ): FirstChatSendResult {
         val chat = current.chat ?: return FirstChatSendResult.Show(current)
         val cursorBeforeSend = current.messages.lastMessageCursor()
-        return when (val result = dependencies.sendChatAudioMessage(chat.id, file, clientMessageId)) {
+        return when (val result = dependencies.sendChatAudioMessage(
+            chat.id,
+            file,
+            clientMessageId,
+            replyTo,
+        ) {
             is ApiResult.Success -> {
                 val sentMessage = result.value
                 val messagesWithSent = current.messages.appendUnique(listOf(sentMessage))
