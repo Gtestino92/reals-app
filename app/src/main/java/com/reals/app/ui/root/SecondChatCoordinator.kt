@@ -322,7 +322,7 @@ internal class SecondChatCoordinator(
             file,
             clientMessageId,
             replyTo,
-        ) {
+        )) {
             is ApiResult.Success -> {
                 val statusResult = dependencies.getStatus(current.connectionId)
                 val statusSnapshot = (statusResult as? ApiResult.Success)?.value?.receivedNow()

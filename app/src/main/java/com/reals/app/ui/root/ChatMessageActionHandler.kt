@@ -123,6 +123,7 @@ internal object ChatMessageActionHandler {
                     audioUpload = ChatAudioUploadUiState(uploading = true),
                     error = null,
                     message = null,
+                    audioDraft = lockedDraft,
                 )
             },
             replyTo = lockedReplyTo,

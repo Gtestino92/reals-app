@@ -342,7 +342,7 @@ internal class FirstChatCoordinator(
             file,
             clientMessageId,
             replyTo,
-        ) {
+        )) {
             is ApiResult.Success -> {
                 val sentMessage = result.value
                 val messagesWithSent = current.messages.appendUnique(listOf(sentMessage))
