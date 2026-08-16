@@ -225,6 +225,8 @@ class RealsRootViewModel(
                     navigateBackProfileQuestions()
                 } else if (current.editingActiveProfile) {
                     closeProfileManagement()
+                } else if (current.isMatchmakingSearchSurfaceVisible()) {
+                    cancelMatchmakingSearch()
                 } else if (current.home.surface == HomeSurface.Pending) {
                     showHomeSurface(HomeSurface.Overview)
                 }

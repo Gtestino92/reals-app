@@ -674,10 +674,11 @@ fun RealsRootUiState.canHandleSystemBack(): Boolean = when (this) {
         affinityQuestionnaire.open ||
                 profileQuestions.open ||
                 (
-                    editingActiveProfile &&
-                        session.profileSnapshot is ProfileSnapshot.Found &&
-                        !photos.reorderingPhotos
-                    ) ||
+                        editingActiveProfile &&
+                                session.profileSnapshot is ProfileSnapshot.Found &&
+                                !photos.reorderingPhotos
+                        ) ||
+                isMatchmakingSearchSurfaceVisible() ||
                 isHomePendingSurfaceVisible()
 
     is RealsRootUiState.SecondChat -> canReturnHomeNow() &&
@@ -724,3 +725,9 @@ fun RealsRootUiState.SecondChat.canReturnHomeNow(
         nowMillis = nowMillis,
     ) == true
 }
+
+internal fun RealsRootUiState.Ready.isMatchmakingSearchSurfaceVisible(): Boolean =
+    home.matchmakingSearchPhase == MatchmakingSearchUiPhase.ResolvingLocation ||
+            home.matchmakingSearchPhase == MatchmakingSearchUiPhase.JoiningQueue ||
+            home.matchmakingSearchPhase == MatchmakingSearchUiPhase.Searching ||
+            home.screenModel?.matchmaking?.inQueue == true
