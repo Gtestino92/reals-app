@@ -131,6 +131,8 @@ internal data class FirstChatGuidancePanelState(
     val buttonLabel: String,
     val buttonContentDescription: String,
     val showWaitingCopy: Boolean,
+    val waitingCopy: String?,
+
     val closeAvailable: Boolean,
     val replyDraft: ChatReplyDraft.GuidanceQuestion?,
 )
@@ -148,6 +150,17 @@ internal fun firstChatGuidancePanelState(
         it is FirstChatGuidanceProgressionAction.Unknown
     }
     val completeAction = requestableProgressionAction == FirstChatGuidanceProgressionAction.Complete
+    val waitingCopy = when {
+        guidance.completed || !guidance.myNextRequested -> null
+
+        requestableProgressionAction == FirstChatGuidanceProgressionAction.Complete ->
+            "Completaremos esta etapa cuando ambos quieran seguir."
+
+        requestableProgressionAction == FirstChatGuidanceProgressionAction.NextQuestion ->
+            "Cambiaremos la pregunta cuando ambos quieran seguir."
+
+        else -> null
+    }
     return FirstChatGuidancePanelState(
         dismissalKey = "${guidance.questionOrdinal}:${guidance.maxQuestions}:${guidance.question.text}",
         questionOrdinal = guidance.questionOrdinal,
@@ -160,8 +173,9 @@ internal fun firstChatGuidancePanelState(
             canRequestNextWhileChatOpen,
         buttonLabel = if (completeAction) "Completar" else "Siguiente",
         buttonContentDescription = if (completeAction) "Completar" else "Otra pregunta",
-        showWaitingCopy = !guidance.completed && guidance.myNextRequested,
-        closeAvailable = guidance.completed || finalQuestion || guidance.myNextRequested,
+        showWaitingCopy = waitingCopy != null,
+        waitingCopy = waitingCopy,
+        closeAvailable = guidance.completed || guidance.myNextRequested,
         replyDraft = guidance.toGuidanceReplyDraftOrNull(canReplyToQuestion),
     )
 }
@@ -238,9 +252,9 @@ internal fun FirstChatGuidancePanel(
                             color = MaterialTheme.colorScheme.primary,
                         )
 
-                        if (state.showWaitingCopy) {
+                        state.waitingCopy?.let { waitingCopy ->
                             Text(
-                                text = "Cambiaremos la pregunta cuando ambos quieran seguir.",
+                                text = waitingCopy,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

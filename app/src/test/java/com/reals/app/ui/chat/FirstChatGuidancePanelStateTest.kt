@@ -54,7 +54,10 @@ class FirstChatGuidancePanelStateTest {
         assertEquals(true, disabled.showButton)
         assertEquals(false, disabled.buttonEnabled)
         assertEquals("Completar", disabled.buttonLabel)
+        assertEquals(false, disabled.closeAvailable)
+
         assertEquals(true, enabled.buttonEnabled)
+        assertEquals(false, enabled.closeAvailable)
     }
 
     @Test
@@ -75,6 +78,29 @@ class FirstChatGuidancePanelStateTest {
         assertEquals(false, state.showButton)
         assertEquals(false, state.buttonEnabled)
         assertEquals(true, state.showWaitingCopy)
+        assertEquals(
+            "Cambiaremos la pregunta cuando ambos quieran seguir.",
+            state.waitingCopy,
+        )
+    }
+
+    @Test
+    fun `final question waiting copy describes completion`() {
+        val state = panelState(
+            questionOrdinal = 3,
+            progressionAction = "COMPLETE",
+            canRequestNext = true,
+            myNextRequested = true,
+        )
+
+        assertEquals(false, state.showButton)
+        assertEquals(false, state.buttonEnabled)
+        assertEquals(true, state.showWaitingCopy)
+        assertEquals(true, state.closeAvailable)
+        assertEquals(
+            "Completaremos esta etapa cuando ambos quieran seguir.",
+            state.waitingCopy,
+        )
     }
 
     @Test
@@ -103,6 +129,8 @@ class FirstChatGuidancePanelStateTest {
         assertEquals(false, state.showButton)
         assertEquals(false, state.buttonEnabled)
         assertEquals(false, state.showWaitingCopy)
+        assertNull(state.waitingCopy)
+        assertEquals(true, state.closeAvailable)
     }
 
     @Test
