@@ -124,7 +124,7 @@ private val ChatBubbleMaxWidth = 340.dp
 private val ChatReactionLaneWidth = 48.dp
 private val ChatReactionBadgeBottomExtent = 12.dp
 private val ChatReactionSideOffsetY = 4.dp
-private val ReplySwipeThreshold = 72.dp
+private val ReplySwipeThreshold = 60.dp
 
 @Composable
 internal fun Modifier.replySwipeTarget(
