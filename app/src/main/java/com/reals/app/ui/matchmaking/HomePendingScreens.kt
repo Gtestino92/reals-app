@@ -184,11 +184,7 @@ private fun HomePriorityRow(
         }
         is HomePriorityItem.SecondChatStartingSoon -> onOpenPending
     }
-    val title = when (item) {
-        is HomePriorityItem.VisualReview -> "Revisión visual por vencer"
-        is HomePriorityItem.SecondChatOpen -> "Tu segundo chat ya empezó"
-        is HomePriorityItem.SecondChatStartingSoon -> "Tu segundo chat empieza pronto"
-    }
+    val title = item.homePriorityTitle()
     val actionLabel = when (item) {
         is HomePriorityItem.VisualReview -> "Revisar ahora"
         is HomePriorityItem.SecondChatOpen -> "Entrar al chat"

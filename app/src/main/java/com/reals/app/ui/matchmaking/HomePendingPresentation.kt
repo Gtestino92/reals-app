@@ -312,6 +312,30 @@ internal fun HomeActionItem.VisualReview.pendingVisualReviewTitle(): String =
         ?.let { "Descubrí el perfil de $it" }
         ?: "Descubrí el perfil"
 
+internal fun HomePriorityItem.homePriorityTitle(): String =
+    when (this) {
+        is HomePriorityItem.VisualReview ->
+            action.partnerDisplayName
+                ?.takeIf { it.isNotBlank() }
+                ?.let(TextSafety::safeDisplay)
+                ?.let { "El perfil de $it está por vencer" }
+                ?: "Revisión visual por vencer"
+
+        is HomePriorityItem.SecondChatOpen ->
+            item.partnerDisplayName()
+                ?.takeIf { it.isNotBlank() }
+                ?.let(TextSafety::safeDisplay)
+                ?.let { "Tu segundo chat con $it ya empezó" }
+                ?: "Tu segundo chat ya empezó"
+
+        is HomePriorityItem.SecondChatStartingSoon ->
+            item.partnerDisplayName()
+                ?.takeIf { it.isNotBlank() }
+                ?.let(TextSafety::safeDisplay)
+                ?.let { "Tu segundo chat con $it empieza pronto" }
+                ?: "Tu segundo chat empieza pronto"
+    }
+
 internal fun HomeNextStepItem.pendingNextStepTitle(): String =
     when (this) {
         is HomeNextStepItem.Scheduling ->
