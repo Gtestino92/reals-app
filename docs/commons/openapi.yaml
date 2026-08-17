@@ -870,7 +870,7 @@ paths:
     post:
       tags: [Chats]
       summary: Send chat message
-      description: Sends a message as the authenticated chat participant. First chats preserve existing `MUTUAL_CANCEL` pending-request behavior; while exactly one first-chat participant has approved and the other remains pending, ordinary message sends from either participant are rejected with `FIRST_CHAT_DECISION_ONLY`. For second chats, sends cancel pending mutual-completion or partner-inactivity requests before expiry; at or after partner-inactivity expiry the lifecycle transition commits and the message is rejected without insertion.
+      description: Sends a TEXT message as the authenticated chat participant. `clientMessageId` is optional for legacy no-reply TEXT sends; when present it makes the TEXT send idempotent in the same `(chat, sender, clientMessageId)` namespace as audio. `replyTo` is optional and requires `clientMessageId`; V1 supports shallow replies to another participant's TEXT/AUDIO message in the same chat or to a same-chat first-chat guidance question snapshot. First chats preserve existing `MUTUAL_CANCEL` pending-request behavior; while exactly one first-chat participant has approved and the other remains pending, ordinary message sends from either participant are rejected with `FIRST_CHAT_DECISION_ONLY`. For second chats, sends cancel pending mutual-completion or partner-inactivity requests before expiry; at or after partner-inactivity expiry the lifecycle transition commits and the message is rejected without insertion. Exact idempotent replay returns the original canonical message before ordinary mutable eligibility checks; key reuse with different content, target or message type returns `CHAT_MESSAGE_IDEMPOTENCY_CONFLICT`.
       parameters:
         - $ref: '#/components/parameters/ChatId'
       requestBody:
@@ -960,7 +960,7 @@ paths:
     post:
       tags: [Chats]
       summary: Send chat audio message
-      description: Sends an audio message into the existing ordered chat stream. Requires multipart `file` and client-generated UUID `clientMessageId`. New messages return 201; idempotent replay with matching SHA-256 returns 200; same id with different content returns CHAT_MESSAGE_IDEMPOTENCY_CONFLICT. Server validation requires MPEG-4/M4A audio-only AAC with AAC codec configuration and at least one non-empty media sample; metadata-only declarations are rejected. Persisted durationMillis is rounded up from the MP4 timescale rational value. First-chat decision-only state rejects new audio with `FIRST_CHAT_DECISION_ONLY`.
+      description: Sends an AUDIO message into the existing ordered chat stream. Requires multipart `file` and client-generated UUID `clientMessageId`. An optional shallow reply target is represented by `replyToType` plus `replyToTargetId`; both parts must be provided together, `replyToType` is `MESSAGE` or `GUIDANCE_QUESTION`, and the target follows the same availability rules as TEXT replies. Malformed or partial reply metadata returns `CHAT_MESSAGE_INVALID`; an unavailable reply target returns `CHAT_MESSAGE_REPLY_TARGET_NOT_AVAILABLE`. New messages return 201. An exact idempotent replay with the same accepted audio SHA-256 and the same direct reply target returns 200 before ordinary mutable eligibility checks; reusing the same `(chat, sender, clientMessageId)` with different audio bytes, direct reply target, or message type returns `CHAT_MESSAGE_IDEMPOTENCY_CONFLICT`. Server validation requires MPEG-4/M4A audio-only AAC with AAC codec configuration and at least one non-empty media sample; metadata-only declarations are rejected. Persisted `durationMillis` is rounded up from the MP4 timescale rational value. First-chat decision-only state rejects new audio with `FIRST_CHAT_DECISION_ONLY`.
       parameters:
         - $ref: '#/components/parameters/ChatId'
       requestBody:
@@ -978,6 +978,23 @@ paths:
                 clientMessageId:
                   type: string
                   format: uuid
+                replyToType:
+                  allOf:
+                    - $ref: '#/components/schemas/ChatReplyTargetType'
+                  nullable: true
+                  description: Optional shallow reply target type. Must be provided together with `replyToTargetId`.
+                replyToTargetId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  description: Optional direct reply target UUID. Must be provided together with `replyToType`.
+            encoding:
+              clientMessageId:
+                contentType: text/plain
+              replyToType:
+                contentType: text/plain
+              replyToTargetId:
+                contentType: text/plain
       responses:
         '200':
           description: Existing message returned for an idempotent replay
@@ -1016,7 +1033,7 @@ paths:
     post:
       tags: [Chats]
       summary: Request next first-chat guidance question
-      description: Authenticated first-chat participant requests advancement from the current guided question. The request has no body. The question advances only after both participants have independently requested it and each requester has met the configured participation threshold for the active question interval. Partner request/readiness metadata is never returned. While a `MUTUAL_CANCEL` exit request is `PENDING`, guidance next requests are rejected with `CHAT_MUTUAL_CANCELLATION_PENDING` and guidance timestamps are not changed. First-chat decision-only state rejects next requests with `FIRST_CHAT_DECISION_ONLY`.
+      description: Authenticated first-chat participant requests the current guidance progression action. The request has no body. The next question activates, or final guidance completes, only after both participants have independently requested the action and each requester has met the configured weighted participation score for the active question interval. Ordinary authored TEXT characters count 1 point; authored TEXT characters directly replying to the current guidance question snapshot count with `directQuestionReplyMultiplier`; quoted preview text and AUDIO count 0. Partner request/readiness metadata is never returned. While a `MUTUAL_CANCEL` exit request is `PENDING`, guidance next requests are rejected with `CHAT_MUTUAL_CANCELLATION_PENDING` and guidance timestamps are not changed. First-chat decision-only state rejects next requests with `FIRST_CHAT_DECISION_ONLY`.
       parameters:
         - $ref: '#/components/parameters/ChatId'
       responses:
@@ -1974,7 +1991,7 @@ components:
             error: Not Found
             message: Chat was not found
     ChatAvailabilityConflict:
-      description: Chat is not currently readable or writable. First-chat ordinary conversation and unilateral-cancellation writes may also return `FIRST_CHAT_DECISION_ONLY`; message sends and new reactions may also return `CHAT_MUTUAL_CANCELLATION_PENDING`; new reactions may return `CHAT_MESSAGE_REACTION_NOT_AVAILABLE`; active chat participation writes may also return `LEGAL_ACTION_REQUIRED`.
+      description: Chat is not currently readable or writable. First-chat ordinary conversation and unilateral-cancellation writes may also return `FIRST_CHAT_DECISION_ONLY`; message sends and new reactions may also return `CHAT_MUTUAL_CANCELLATION_PENDING`; message sends may return `CHAT_MESSAGE_REPLY_TARGET_NOT_AVAILABLE` or `CHAT_MESSAGE_IDEMPOTENCY_CONFLICT`; new reactions may return `CHAT_MESSAGE_REACTION_NOT_AVAILABLE`; active chat participation writes may also return `LEGAL_ACTION_REQUIRED`.
       content:
         application/json:
           schema:
@@ -2010,6 +2027,16 @@ components:
                 code: CHAT_MESSAGE_REACTION_NOT_AVAILABLE
                 error: Conflict
                 message: Chat message reaction is not available
+            messageReplyTargetNotAvailable:
+              value:
+                code: CHAT_MESSAGE_REPLY_TARGET_NOT_AVAILABLE
+                error: Conflict
+                message: Chat message reply target is not available
+            messageIdempotencyConflict:
+              value:
+                code: CHAT_MESSAGE_IDEMPOTENCY_CONFLICT
+                error: Conflict
+                message: Client message id was already used with a different message payload
     FirstChatGuidanceConflict:
       description: First-chat guidance cannot be advanced in the current state. Requesting the next guidance question may also return `CHAT_MUTUAL_CANCELLATION_PENDING`, `FIRST_CHAT_DECISION_ONLY` or `LEGAL_ACTION_REQUIRED`.
       content:
@@ -2649,7 +2676,7 @@ components:
       type: object
       required: [displayName, birthDate, gender, lookingForGenders, intention, city, countryCode, preferredMinAge, preferredMaxAge, maxDistanceKm]
       properties:
-        displayName: { type: string, minLength: 2, maxLength: 100, pattern: '^[^\u0000-\u001F\u007F-\u009F\u2028\u2029<>]*$' }
+        displayName: { type: string, minLength: 2, maxLength: 100, pattern: '^[^\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029<>]*$' }
         birthDate: { type: string, format: date }
         gender: { $ref: '#/components/schemas/Gender' }
         lookingForGenders:
@@ -2664,35 +2691,35 @@ components:
           type: string
           minLength: 1
           maxLength: 100
-          pattern: '^[^\u0000-\u001F\u007F-\u009F\u2028\u2029<>]*$'
+          pattern: '^[^\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029<>]*$'
           description: Free-text city value.
         countryCode:
           type: string
           minLength: 1
           maxLength: 100
-          pattern: '^[^\u0000-\u001F\u007F-\u009F\u2028\u2029<>]*$'
+          pattern: '^[^\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029<>]*$'
           description: ISO 3166-1 alpha-2 country code. Input is trimmed and normalized to uppercase; display names are not accepted. Clients should obtain allowed values from `GET /api/reference/countries`.
-        bio: { type: string, maxLength: 1000, pattern: '^[^\u0000-\u0009\u000B\u000C\u000E-\u001F\u007F-\u009F<>]*$', nullable: true }
+        bio: { type: string, maxLength: 1000, pattern: '^[^\\u0000-\\u0009\\u000B\\u000C\\u000E-\\u001F\\u007F-\\u009F<>]*$', nullable: true }
         preferredMinAge: { type: integer, minimum: 18, maximum: 99 }
         preferredMaxAge: { type: integer, minimum: 18, maximum: 99 }
         maxDistanceKm: { type: integer, minimum: 1, maximum: 1000 }
     UpdateProfileRequest:
       type: object
       properties:
-        displayName: { type: string, minLength: 2, maxLength: 100, pattern: '^[^\u0000-\u001F\u007F-\u009F\u2028\u2029<>]*$', nullable: true }
-        bio: { type: string, maxLength: 1000, pattern: '^[^\u0000-\u0009\u000B\u000C\u000E-\u001F\u007F-\u009F<>]*$', nullable: true }
+        displayName: { type: string, minLength: 2, maxLength: 100, pattern: '^[^\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029<>]*$', nullable: true }
+        bio: { type: string, maxLength: 1000, pattern: '^[^\\u0000-\\u0009\\u000B\\u000C\\u000E-\\u001F\\u007F-\\u009F<>]*$', nullable: true }
         city:
           type: string
           minLength: 1
           maxLength: 100
-          pattern: '^[^\u0000-\u001F\u007F-\u009F\u2028\u2029<>]*$'
+          pattern: '^[^\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029<>]*$'
           nullable: true
           description: Free-text city value.
         countryCode:
           type: string
           minLength: 1
           maxLength: 100
-          pattern: '^[^\u0000-\u001F\u007F-\u009F\u2028\u2029<>]*$'
+          pattern: '^[^\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029<>]*$'
           nullable: true
           description: Optional ISO 3166-1 alpha-2 country code. Null preserves the existing country code; non-null input is trimmed, uppercased and validated.
     UpdateMatchFiltersRequest:
@@ -2910,7 +2937,7 @@ components:
         contentVersion:
           type: integer
           minimum: 1
-          description: Wording-only version. Content-only changes do not invalidate stored answers.
+          description: Wording-only version. Content-only changes do not invalidate answers.
         prompt:
           type: string
           description: Single-line Spanish prompt.
@@ -3100,7 +3127,7 @@ components:
       type: object
       required: [message]
       properties:
-        message: { type: string, minLength: 1, maxLength: 280, pattern: '^[^\p{Cntrl}<>]*$' }
+        message: { type: string, minLength: 1, maxLength: 280, pattern: '^[^\\p{Cntrl}<>]*$' }
     PartnerMessageResponse:
       type: object
       required: [message]
@@ -3176,7 +3203,14 @@ components:
       type: object
       required: [id, text]
       properties:
-        id: { type: string }
+        id:
+          type: string
+          description: Stable source/catalog question id.
+        instanceId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Stable `conversation_prompt_snapshots.id` for this chat question instance. New first chats return a real UUID; legacy rows without snapshots may return null.
         text: { type: string }
     FirstChatGuidanceResponse:
       type: object
@@ -3185,6 +3219,8 @@ components:
         - questionOrdinal
         - maxQuestions
         - requiredCharacters
+        - requiredParticipationScore
+        - directQuestionReplyMultiplier
         - canRequestNext
         - myNextRequested
         - completed
@@ -3200,7 +3236,19 @@ components:
           example: 3
         requiredCharacters:
           type: integer
-          example: 40
+          example: 60
+          description: Legacy compatibility field equal to the ordinary-character count needed to satisfy `requiredParticipationScore`.
+        requiredParticipationScore:
+          type: integer
+          example: 60
+        directQuestionReplyMultiplier:
+          type: integer
+          example: 2
+        progressionAction:
+          allOf:
+            - $ref: '#/components/schemas/FirstChatGuidanceProgressionAction'
+          nullable: true
+          description: Current action the user can request after reaching score; null when guidance is completed.
         canRequestNext:
           type: boolean
           description: Eligibility for the authenticated user only.
@@ -3209,17 +3257,36 @@ components:
           description: Whether the authenticated user has requested continuation for the current question.
         completed:
           type: boolean
-          description: True when the final configured guidance question is active. The final question remains returned as `question`, and no further next-request action is available.
+          description: True only after the terminal guidance completion state has been persisted (`completedAt != null`). The final question remains active and incomplete until both participants reach score and request `COMPLETE`.
     SendMessageRequest:
       type: object
       required: [content]
       properties:
+        clientMessageId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Client-generated idempotency key. Optional for legacy no-reply TEXT sends; required when `replyTo` is present.
         content:
           type: string
           minLength: 1
           maxLength: 1000
-          pattern: '^[^\u0000-\u0009\u000B\u000C\u000E-\u001F\u007F-\u009F<>]*$'
+          pattern: '^[^\\u0000-\\u0009\\u000B\\u000C\\u000E-\\u001F\\u007F-\\u009F<>]*$'
           description: Plain-text chat content. Line breaks are allowed and normalized to LF by the backend.
+        replyTo:
+          allOf:
+            - $ref: '#/components/schemas/ChatReplyTargetRequest'
+          nullable: true
+          description: Optional shallow quoted-reply target. Requires `clientMessageId`.
+    ChatReplyTargetRequest:
+      type: object
+      required: [type, targetId]
+      properties:
+        type:
+          $ref: '#/components/schemas/ChatReplyTargetType'
+        targetId:
+          type: string
+          format: uuid
     PutMessageReactionRequest:
       type: object
       required: [type]
@@ -3244,7 +3311,35 @@ components:
           allOf:
             - $ref: '#/components/schemas/ChatMessageReactionType'
           nullable: true
+        replyTo:
+          allOf:
+            - $ref: '#/components/schemas/ChatMessageReplyResponse'
+          nullable: true
+          description: Server-derived shallow preview of the direct reply target. Never contains nested reply metadata or target reaction metadata.
         sentAt: { type: string, format: date-time }
+    ChatMessageReplyResponse:
+      type: object
+      required: [type, targetId]
+      properties:
+        type:
+          $ref: '#/components/schemas/ChatReplyTargetType'
+        targetId:
+          type: string
+          format: uuid
+        senderId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Present for MESSAGE targets, null for GUIDANCE_QUESTION.
+        messageType:
+          allOf:
+            - $ref: '#/components/schemas/ChatMessageType'
+          nullable: true
+          description: Present for MESSAGE targets, null for GUIDANCE_QUESTION.
+        previewText:
+          type: string
+          nullable: true
+          description: TEXT target content or immutable guidance prompt text. Null for AUDIO targets.
     ChatMessageAudioResponse:
       type: object
       required: [url, durationMillis, contentType, sizeBytes]
@@ -3274,7 +3369,7 @@ components:
           allOf: [{ $ref: '#/components/schemas/ChatExitReason' }]
           default: NO_LONGER_INTERESTED
           nullable: true
-        details: { type: string, maxLength: 1000, pattern: '^[^\p{Cntrl}<>]*$', nullable: true }
+        details: { type: string, maxLength: 1000, pattern: '^[^\\p{Cntrl}<>]*$', nullable: true }
     ChatCancellationRequest:
       type: object
       properties:
@@ -3282,7 +3377,7 @@ components:
           allOf: [{ $ref: '#/components/schemas/ChatExitReason' }]
           default: NO_LONGER_INTERESTED
           nullable: true
-        details: { type: string, maxLength: 1000, pattern: '^[^\p{Cntrl}<>]*$', nullable: true }
+        details: { type: string, maxLength: 1000, pattern: '^[^\\p{Cntrl}<>]*$', nullable: true }
     ChatSafetyCancellationRequest:
       type: object
       required: [reason, details]
@@ -3290,7 +3385,7 @@ components:
         reason:
           allOf: [{ $ref: '#/components/schemas/ChatExitReason' }]
           default: INAPPROPRIATE_BEHAVIOR
-        details: { type: string, minLength: 1, maxLength: 1000, pattern: '^[^\p{Cntrl}<>]*$' }
+        details: { type: string, minLength: 1, maxLength: 1000, pattern: '^[^\\p{Cntrl}<>]*$' }
     CreateSafetyReportRequest:
       type: object
       required: [reportedUserId, contextType, reason, details]
@@ -3302,7 +3397,7 @@ components:
         connectionId: { type: string, format: uuid, nullable: true }
         profilePhotoId: { type: string, format: uuid, nullable: true }
         reason: { $ref: '#/components/schemas/SafetyReportReason' }
-        details: { type: string, minLength: 1, maxLength: 1000, pattern: '^[^\p{Cntrl}<>]*$' }
+        details: { type: string, minLength: 1, maxLength: 1000, pattern: '^[^\\p{Cntrl}<>]*$' }
     SafetyReportResponse:
       type: object
       required: [id, reporterUserId, reportedUserId, matchId, contextType, reason, status, createdAt]
@@ -3386,7 +3481,7 @@ components:
           description: Version from the queue item the admin reviewed. Stale versions are rejected with PROFILE_PHOTO_MODERATION_REVIEW_NOT_AVAILABLE.
         decision:
           $ref: '#/components/schemas/AdminPhotoModerationDecision'
-        notes: { type: string, nullable: true, maxLength: 1000, pattern: '^[^\p{Cntrl}<>]*$' }
+        notes: { type: string, nullable: true, maxLength: 1000, pattern: '^[^\\p{Cntrl}<>]*$' }
     AdminSafetyReportResponse:
       type: object
       required: [id, reporterUserId, reportedUserId, matchId, contextType, reason, details, status, priorityReview, createdAt]
@@ -3465,7 +3560,7 @@ components:
     SafetyReportDismissRequest:
       type: object
       properties:
-        notes: { type: string, nullable: true, maxLength: 1000, pattern: '^[^\p{Cntrl}<>]*$' }
+        notes: { type: string, nullable: true, maxLength: 1000, pattern: '^[^\\p{Cntrl}<>]*$' }
     SafetyReportPenaltyRequest:
       type: object
       required: [type, reason]
@@ -3477,8 +3572,8 @@ components:
           minimum: 1
           nullable: true
           description: Required for TEMPORARY_BAN and rejected for PERMANENT_BAN.
-        reason: { type: string, minLength: 1, maxLength: 255, pattern: '^[^\p{Cntrl}<>]*$' }
-        notes: { type: string, nullable: true, maxLength: 1000, pattern: '^[^\p{Cntrl}<>]*$' }
+        reason: { type: string, minLength: 1, maxLength: 255, pattern: '^[^\\p{Cntrl}<>]*$' }
+        notes: { type: string, nullable: true, maxLength: 1000, pattern: '^[^\\p{Cntrl}<>]*$' }
     ConnectionResponse:
       type: object
       required: [id, matchId, userAId, userBId, state, schedulingExpiresAt, createdAt, updatedAt]
@@ -3707,6 +3802,12 @@ components:
     ChatMessageReactionType:
       type: string
       enum: [HEART]
+    ChatReplyTargetType:
+      type: string
+      enum: [MESSAGE, GUIDANCE_QUESTION]
+    FirstChatGuidanceProgressionAction:
+      type: string
+      enum: [NEXT_QUESTION, COMPLETE]
     ChatAudioUnavailableReason:
       type: string
       enum: [FEATURE_DISABLED, CHAT_NOT_WRITABLE, GUIDANCE_NOT_AVAILABLE, GUIDANCE_REQUIRED, LIMIT_REACHED, WAITING_FOR_BOTH, WAITING_DELAY]

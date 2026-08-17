@@ -226,26 +226,26 @@ affinity catalog and the pair's valid answers visible at that moment; remaining
 slots use the deterministic generic Spanish catalog sequence from the chat id.
 One active question is shared by both participants and copied into
 `first_chat_guidance`.
-Users can chat freely; the backend does not semantically evaluate answers. A
-participant can request another question only after sending at least the
-configured `chat.first-chat.guidance.required-characters` threshold during the
-current question interval. One long message can satisfy this threshold. The
-question advances only after both
-participants independently request it, and partner readiness/request state is not
-exposed. A first chat has at most 3 questions. When both users request
-continuation from the penultimate question and the final configured question
-becomes active, guidance completes immediately, no question 4 is selected, and
-the final question remains available as the final prompt. Clients observe
+Users can chat freely; the backend does not semantically evaluate answers.
+`guidance.question.id` is the source/catalog id; `guidance.question.instanceId`
+is the `conversation_prompt_snapshots.id` for this chat and is the quoted-reply
+target id clients use for guidance questions. A participant can request the
+current `progressionAction` only after reaching the configured
+`chat.first-chat.guidance.required-participation-score` during the current
+question interval. Ordinary authored TEXT characters count 1 point; TEXT that
+directly replies to the current guidance question snapshot counts with
+`direct-question-reply-multiplier`, default 2. Quoted preview text and AUDIO
+count 0. Replies to partner messages or older guidance questions count x1. The
+question advances, or final guidance completes, only after both participants
+independently request the action, and partner readiness/request state is not
+exposed. A first chat has at most 3 questions. The final question remains active
+and incomplete until both users reach score and request `COMPLETE`; then
+`completedAt` is set and no question 4 is selected. Clients observe
 question changes through the existing first-chat polling response. Later
 affinity-answer edits/deletions or catalog wording changes do not alter active
 or future prompts in that first chat. Legacy chats without prompt snapshots keep
 their persisted active guidance question and advance with generic deterministic
 fallback. No analytics events are implemented for guidance.
-
-For compatibility with rows created before this completion semantics change, a
-guidance row already at the final configured ordinal with `completedAt = null`
-is treated as completed. The backend normalizes `completedAt` and clears
-next-request timestamps when that row is read or mutated.
 
 Client countdowns are advisory. The backend remains the source of truth and
 rejects first-chat mutations with `CHAT_EXPIRED` after the absolute deadline or
@@ -256,7 +256,11 @@ Message polling can use `GET /api/chats/{chatId}/messages` for the initial legac
 
 Participants can add one irreversible `HEART` reaction to the other participant's `TEXT` or `AUDIO` message. New reactions are allowed only in the user's latest incoming block: incoming messages after the user's latest own message strictly before the latest incoming message, up to and including that latest incoming message. Own messages after the latest incoming block do not invalidate it, but a newer incoming block supersedes older unreacted incoming messages. Existing hearts remain visible whenever that message row is fetched, even after the block expires or the chat becomes read-only. Reactions do not count as conversation, reset inactivity, extend lifecycle deadlines, trigger notifications or alter Home/scheduling/reliability behavior.
 
-Audio messages use the same polling stream. First-chat audio unlocks from shared guidance progress, not per-user counters: `answeredGuidanceQuestions = max(currentQuestionOrdinal - 1, 0)`. Local and test unlock when question 2 becomes active (`requiredAnsweredGuidanceQuestions = 1`); dev/prod unlock when question 3 becomes active (`requiredAnsweredGuidanceQuestions = 2`). With the current three-question flow, dev/prod unlock after both users answered the penultimate question. Legacy first chats without guidance keep audio unavailable. Each participant may create one first-chat audio message, and idempotent replay of the already-created message does not consume another slot.
+Quoted replies are backend-normalized and shallow. A TEXT or AUDIO message can quote exactly one direct target: the other participant's same-chat TEXT/AUDIO message, or a same-chat first-chat guidance question snapshot. Replies to own messages, wrong-chat targets, missing targets and guidance targets in second chat are rejected with the same opaque `CHAT_MESSAGE_REPLY_TARGET_NOT_AVAILABLE` conflict. If a quoted message is itself later quoted, the response previews only that direct message and never recursively serializes the older target.
+
+TEXT sends represent the optional target as `replyTo: { type, targetId }` and require `clientMessageId` whenever a reply is present. AUDIO sends use multipart `file`, required `clientMessageId`, and optional `replyToType` plus `replyToTargetId`; both reply parts must be sent together or omitted together, and the scalar multipart parts are `text/plain`. Malformed or partial AUDIO reply metadata returns `CHAT_MESSAGE_INVALID`. `replyToType` is `MESSAGE` or `GUIDANCE_QUESTION`, and target availability follows the same rules as TEXT. Exact idempotent replay uses the same direct target as part of the semantic payload: TEXT compares normalized content plus target and message type, while AUDIO compares accepted audio SHA-256 plus target and message type. Reusing the same `(chat, sender, clientMessageId)` with a different payload returns `CHAT_MESSAGE_IDEMPOTENCY_CONFLICT`; clients retrying the same AUDIO draft must therefore preserve both the audio bytes and the direct reply target.
+
+Audio messages use the same polling stream. First-chat audio unlocks from shared guidance progress, not per-user counters: `answeredGuidanceQuestions = max(currentQuestionOrdinal - 1, 0)`. Local and test unlock when question 2 becomes active (`requiredAnsweredGuidanceQuestions = 1`); dev/prod unlock when question 3 becomes active (`requiredAnsweredGuidanceQuestions = 2`). With the current three-question flow, dev/prod unlock after both users answered the penultimate question. Legacy first chats without guidance keep audio unavailable. Each participant may create one first-chat audio message, and exact idempotent replay of the already-created message with the same direct reply target does not consume another slot.
 
 ## 4. Chat Decision
 
