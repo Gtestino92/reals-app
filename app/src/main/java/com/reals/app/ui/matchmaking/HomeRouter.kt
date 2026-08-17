@@ -4,6 +4,7 @@ class HomeRouter {
     fun resolve(
         screenModel: HomeScreenModel,
         autoNavigate: Boolean,
+        nowMillis: Long = System.currentTimeMillis(),
     ): HomeRoute {
         val firstChat = screenModel.pendingActions
             .filterIsInstance<HomeActionItem.FirstChat>()
@@ -16,7 +17,11 @@ class HomeRouter {
             )
         } else if (autoNavigate) {
             val activeSecondChat = screenModel.nextSteps
-                .firstNotNullOfOrNull { it.activeSecondChatRoute() }
+                .mapNotNull { nextStep: HomeNextStepItem  ->
+                    nextStep.activeSecondChatRoute(nowMillis)
+                }
+                .firstOrNull()
+
             activeSecondChat ?: HomeRoute.StayHome
         } else {
             HomeRoute.StayHome
@@ -24,28 +29,27 @@ class HomeRouter {
     }
 }
 
-sealed interface HomeRoute {
-    data object StayHome : HomeRoute
-
-    data class OpenFirstChat(
-        val matchId: String,
-        val chatId: String,
-    ) : HomeRoute
-
-    data class OpenSecondChat(
-        val connectionId: String,
-        val matchId: String,
-        val partnerName: String?,
-    ) : HomeRoute
-}
-
-private fun HomeNextStepItem.activeSecondChatRoute(): HomeRoute.OpenSecondChat? {
+private fun HomeNextStepItem.activeSecondChatRoute(
+    nowMillis: Long,
+): HomeRoute.OpenSecondChat? {
     val hasActiveChat = when (this) {
-        is HomeNextStepItem.SecondChatScheduled -> chatId?.isNotBlank() == true && chatStatus == "ACTIVE" && myAttendanceStatus.isJoinedSecondChatAttendance()
-        is HomeNextStepItem.SecondChatAvailable -> chatId?.isNotBlank() == true && chatStatus == "ACTIVE" && myAttendanceStatus.isJoinedSecondChatAttendance()
+        is HomeNextStepItem.SecondChatScheduled ->
+            chatId?.isNotBlank() == true &&
+                    chatStatus == "ACTIVE" &&
+                    myAttendanceStatus.isJoinedSecondChatAttendance() &&
+                    canOpenSecondChatNow(nowMillis)
+
+        is HomeNextStepItem.SecondChatAvailable ->
+            chatId?.isNotBlank() == true &&
+                    chatStatus == "ACTIVE" &&
+                    myAttendanceStatus.isJoinedSecondChatAttendance() &&
+                    canOpenSecondChatNow(nowMillis)
+
         else -> false
     }
+
     if (!hasActiveChat) return null
+
     return HomeRoute.OpenSecondChat(
         connectionId = connectionIdForSecondChat(),
         matchId = when (this) {
