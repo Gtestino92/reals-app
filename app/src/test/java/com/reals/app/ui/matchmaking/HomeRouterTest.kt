@@ -2,7 +2,7 @@ package com.reals.app.ui.matchmaking
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import kotlin.time.Instant
+import java.time.Instant
 
 class HomeRouterTest {
     private val router = HomeRouter()
