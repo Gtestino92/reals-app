@@ -41,8 +41,8 @@ sealed interface HomeRoute {
 
 private fun HomeNextStepItem.activeSecondChatRoute(): HomeRoute.OpenSecondChat? {
     val hasActiveChat = when (this) {
-        is HomeNextStepItem.SecondChatScheduled -> chatId?.isNotBlank() == true && chatStatus == "ACTIVE"
-        is HomeNextStepItem.SecondChatAvailable -> chatId?.isNotBlank() == true && chatStatus == "ACTIVE"
+        is HomeNextStepItem.SecondChatScheduled -> chatId?.isNotBlank() == true && chatStatus == "ACTIVE" && myAttendanceStatus.isJoinedSecondChatAttendance()
+        is HomeNextStepItem.SecondChatAvailable -> chatId?.isNotBlank() == true && chatStatus == "ACTIVE" && myAttendanceStatus.isJoinedSecondChatAttendance()
         else -> false
     }
     if (!hasActiveChat) return null
@@ -63,3 +63,5 @@ private fun HomeNextStepItem.activeSecondChatRoute(): HomeRoute.OpenSecondChat? 
     )
 }
 
+private fun String?.isJoinedSecondChatAttendance(): Boolean =
+    this == "ON_TIME" || this == "LATE"
