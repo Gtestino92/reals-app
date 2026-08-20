@@ -1,10 +1,8 @@
 package com.reals.app.ui.common
 
 import java.time.Instant
-import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.time.format.DateTimeParseException
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -53,7 +51,7 @@ fun formatVisualReviewHomeDeadline(
     locale: Locale = Locale.forLanguageTag("es-AR"),
     strings: VisualReviewHomeDeadlineStrings = defaultVisualReviewHomeDeadlineStrings,
 ): String? {
-    val expiresAt = visualExpiresAt.toBackendInstantOrNull() ?: return null
+    val expiresAt = backendInstantOrNull(visualExpiresAt) ?: return null
     val now = Instant.ofEpochMilli(nowMillis)
     val expiresDateTime = expiresAt.atZone(zoneId)
     val nowDateTime = now.atZone(zoneId)
@@ -96,7 +94,7 @@ fun formatVisualReviewDetailDeadline(
     locale: Locale = Locale.forLanguageTag("es-AR"),
     strings: VisualReviewDetailDeadlineStrings = defaultVisualReviewDetailDeadlineStrings,
 ): String? {
-    val expiresAt = visualExpiresAt.toBackendInstantOrNull() ?: return null
+    val expiresAt = backendInstantOrNull(visualExpiresAt) ?: return null
     val now = Instant.ofEpochMilli(nowMillis)
     val expiresDateTime = expiresAt.atZone(zoneId)
     val nowDateTime = now.atZone(zoneId)
@@ -136,16 +134,7 @@ fun visualReviewRemainingFraction(
     visualStartedAt: String?,
     visualExpiresAt: String?,
     nowMillis: Long,
-): Double? {
-    val startedAt = visualStartedAt.toBackendInstantOrNull() ?: return null
-    val expiresAt = visualExpiresAt.toBackendInstantOrNull() ?: return null
-    val totalMillis = expiresAt.toEpochMilli() - startedAt.toEpochMilli()
-    if (totalMillis <= 0L) return null
-
-    val remainingMillis = expiresAt.toEpochMilli() - nowMillis
-    val fraction = remainingMillis.toDouble() / totalMillis.toDouble()
-    return fraction.coerceIn(0.0, 1.0)
-}
+): Double? = deadlineRemainingFraction(visualStartedAt, visualExpiresAt, nowMillis)
 
 fun visualReviewProgressUrgency(remainingFraction: Double): VisualReviewProgressUrgency =
     when {
@@ -156,12 +145,3 @@ fun visualReviewProgressUrgency(remainingFraction: Double): VisualReviewProgress
 
 fun visualReviewRemainingPercentLabel(remainingFraction: Double): String =
     "${(remainingFraction.coerceIn(0.0, 1.0) * 100).roundToInt()} % del tiempo restante"
-
-private fun String?.toBackendInstantOrNull(): Instant? =
-    this?.takeIf { it.isNotBlank() }?.let { value ->
-        try {
-            OffsetDateTime.parse(value).toInstant()
-        } catch (_: DateTimeParseException) {
-            null
-        }
-    }

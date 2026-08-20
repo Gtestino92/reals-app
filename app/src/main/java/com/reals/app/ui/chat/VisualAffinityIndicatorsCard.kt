@@ -46,22 +46,35 @@ internal fun VisualAffinityIndicatorsCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
-        Column(
+        VisualAffinityIndicatorsContent(
+            indicators = indicators,
             modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+        )
+    }
+}
+
+@Composable
+internal fun VisualAffinityIndicatorsContent(
+    indicators: List<VisualAffinityIndicator>,
+    modifier: Modifier = Modifier,
+) {
+    if (indicators.isEmpty()) return
+
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text("Afinidades compartidas", style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = "Temas en los que encontraron afinidad.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("Afinidades compartidas", style = MaterialTheme.typography.titleMedium)
-            Text(
-                text = "Temas en los que encontraron afinidad.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                indicators.forEach { indicator ->
-                    VisualAffinityIndicatorPill(indicator)
-                }
+            indicators.forEach { indicator ->
+                VisualAffinityIndicatorPill(indicator)
             }
         }
     }

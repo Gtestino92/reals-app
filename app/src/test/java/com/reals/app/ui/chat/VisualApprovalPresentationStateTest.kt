@@ -228,7 +228,7 @@ class VisualApprovalPresentationStateTest {
         assertFalse(state.hasUnreadPartnerMessage)
         assertFalse(state.emphasized)
         assertEquals(null, state.badgeLabel)
-        assertEquals("La otra persona todavía no dejó un mensaje personal.", state.body)
+        assertEquals("No dejó un mensaje personal.", state.body)
         assertFalse(state.showReadAction)
     }
 }

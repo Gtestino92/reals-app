@@ -112,16 +112,16 @@ internal fun partnerPersonalMessagePresentationState(
     val hasUnreadPartnerMessage = submitted && profile?.partnerPersonalMessageRead == false
     val body = when {
         profile == null -> "Cargando mensaje personal..."
-        !submitted -> "La otra persona todavía no dejó un mensaje personal."
+        !submitted -> "No dejó un mensaje personal."
         readingPartnerMessage -> "Leyendo mensaje..."
         partnerMessageError != null -> "No pudimos cargar el mensaje personal. Intentá nuevamente."
         hasUnreadPartnerMessage -> "La otra persona dejó un mensaje personal para vos."
         partnerMessageLoaded -> partnerMessage
             ?.takeIf { it.isNotBlank() }
             ?.let { TextSafety.safeDisplay(it, maxLength = 280) }
-            ?: "La otra persona todavía no dejó un mensaje personal."
+            ?: "No dejó un mensaje personal."
         !partnerMessageLoaded -> "Cargando mensaje personal..."
-        else -> "La otra persona todavía no dejó un mensaje personal."
+        else -> "No dejó un mensaje personal."
     }
     val showReadAction = submitted && !partnerMessageLoaded
     return PartnerPersonalMessagePresentationState(
@@ -228,7 +228,7 @@ fun VisualApprovalScreen(
                 verticalAlignment = Alignment.Top,
             ) {
                 Text(
-                    text = "Aprobación visual",
+                    text = "Revisión visual",
                     modifier = Modifier.weight(1f),
                     style = RealsType.ScreenTitle,
                     color = MaterialTheme.colorScheme.primary,
@@ -289,7 +289,7 @@ fun VisualApprovalScreen(
         } else if (lifecycle.showWarning) {
             FeedbackCard(
                 title = "Revisi\u00f3n por vencer",
-                message = "La revisi\u00f3n visual vence pronto. Complet\u00e1 tu decisi\u00f3n para no perder ésta oportunidad.",
+                message = "La revisi\u00f3n visual vence pronto. Complet\u00e1 tu decisi\u00f3n para no perder esta oportunidad.",
                 tone = FeedbackTone.Warning,
             )
             Spacer(modifier = Modifier.height(16.dp))
@@ -316,12 +316,10 @@ fun VisualApprovalScreen(
                 }
             }
         } else {
-            val visibleAffinityIndicators = affinityIndicatorsForDisplay(profile.affinityIndicators)
-            if (visibleAffinityIndicators.isNotEmpty()) {
-                VisualAffinityIndicatorsCard(visibleAffinityIndicators)
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-            VisualProfileCard(profile)
+            VisualProfileCard(
+                profile = profile,
+                presentationMode = ProfilePresentationMode.Review,
+            )
         }
         Spacer(modifier = Modifier.height(16.dp))
         PartnerMessageCard(

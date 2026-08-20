@@ -2,6 +2,7 @@ package com.reals.app.ui.scheduling
 
 import com.reals.app.core.time.isExpired
 import com.reals.app.core.time.isWithinWarningWindow
+import com.reals.app.ui.common.deadlineElapsedFraction
 
 internal const val SCHEDULING_WARNING_MINUTES = 24L * 60L
 
@@ -23,3 +24,13 @@ internal fun schedulingLifecycleUiState(
         ),
         expired = isExpired(schedulingExpiresAt, nowMillis),
     )
+
+internal fun schedulingDeadlineProgressFraction(
+    negotiationCreatedAt: String?,
+    schedulingExpiresAt: String?,
+    nowMillis: Long = System.currentTimeMillis(),
+): Double? = deadlineElapsedFraction(
+    startedAt = negotiationCreatedAt,
+    expiresAt = schedulingExpiresAt,
+    nowMillis = nowMillis,
+)
