@@ -326,7 +326,9 @@ private fun SchedulingDeadlineProgressCard(
     negotiation: SchedulingNegotiation?,
     nowMillis: Long,
 ) {
-    val progress = schedulingDeadlineProgressFraction(
+    if (!shouldShowSchedulingDeadlineProgress(negotiation)) return
+
+    val progress = schedulingDeadlineRemainingFraction(
         negotiationCreatedAt = negotiation?.createdAt,
         schedulingExpiresAt = negotiation?.schedulingExpiresAt,
         nowMillis = nowMillis,

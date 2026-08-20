@@ -105,10 +105,61 @@ class VisualProfileCardPresentationTest {
     }
 
     @Test
+    fun `browse photo selection initially uses first sorted photo`() {
+        val selection = browseProfilePhotoSelection(
+            photos = listOf(photo(3), photo(1), photo(2)),
+            selectedPhotoId = null,
+        )
+
+        assertEquals("photo-1", selection?.selectedPhoto?.id)
+        assertEquals(0, selection?.selectedIndex)
+        assertEquals(listOf("photo-1", "photo-2", "photo-3"), selection?.photos?.map { it.id })
+    }
+
+    @Test
+    fun `browse photo selection uses selected stable photo id`() {
+        val selection = browseProfilePhotoSelection(
+            photos = listOf(photo(3), photo(1), photo(2)),
+            selectedPhotoId = "photo-3",
+        )
+
+        assertEquals("photo-3", selection?.selectedPhoto?.id)
+        assertEquals(2, selection?.selectedIndex)
+    }
+
+    @Test
+    fun `browse photo selection falls back safely when selected photo disappears`() {
+        val onePhotoSelection = browseProfilePhotoSelection(
+            photos = listOf(photo(2)),
+            selectedPhotoId = "photo-3",
+        )
+        val emptySelection = browseProfilePhotoSelection(
+            photos = emptyList(),
+            selectedPhotoId = "photo-1",
+        )
+
+        assertEquals("photo-2", onePhotoSelection?.selectedPhoto?.id)
+        assertEquals(0, onePhotoSelection?.selectedIndex)
+        assertEquals(null, emptySelection)
+    }
+
+    @Test
     fun `content description includes photo position count and partner name`() {
         assertEquals(
             "Foto 2 de 4 de Ana",
             visualProfilePhotoContentDescription(profile = profile(displayName = "Ana"), photoIndex = 1, totalPhotos = 4),
+        )
+    }
+
+    @Test
+    fun `thumbnail description communicates selectable action`() {
+        assertEquals(
+            "Mostrar foto 3 de 4 de Ana",
+            visualProfileThumbnailContentDescription(
+                profile = profile(displayName = "Ana"),
+                photoIndex = 2,
+                totalPhotos = 4,
+            ),
         )
     }
 

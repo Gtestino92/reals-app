@@ -20,10 +20,17 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.reals.app.core.security.TextSafety
@@ -76,7 +83,7 @@ internal fun visualProfileContentBlocks(
     profile: VisualProfile,
     presentationMode: ProfilePresentationMode,
 ): List<VisualProfileContentBlock> {
-    val photos = profile.photos.sortedBy { it.position }
+    val photos = visualProfilePhotosForDisplay(profile.photos)
     val hasBio = profile.bio?.isNotBlank() == true
     val hasAffinities = affinityIndicatorsForDisplay(profile.affinityIndicators).isNotEmpty()
     val hasQuestions = publicProfileQuestionsForDisplay(profile.profileQuestions).isNotEmpty()
@@ -105,6 +112,32 @@ internal fun visualProfileContentBlocks(
     }
 }
 
+internal data class BrowseProfilePhotoSelection(
+    val selectedPhoto: ProfilePhoto,
+    val selectedIndex: Int,
+    val photos: List<ProfilePhoto>,
+)
+
+internal fun visualProfilePhotosForDisplay(
+    photos: List<ProfilePhoto>,
+): List<ProfilePhoto> = photos.sortedBy { it.position }
+
+internal fun browseProfilePhotoSelection(
+    photos: List<ProfilePhoto>,
+    selectedPhotoId: String?,
+): BrowseProfilePhotoSelection? {
+    val orderedPhotos = visualProfilePhotosForDisplay(photos)
+    val selectedIndex = orderedPhotos.indexOfFirst { it.id == selectedPhotoId }
+        .takeIf { it >= 0 }
+        ?: 0
+    val selectedPhoto = orderedPhotos.getOrNull(selectedIndex) ?: return null
+    return BrowseProfilePhotoSelection(
+        selectedPhoto = selectedPhoto,
+        selectedIndex = selectedIndex,
+        photos = orderedPhotos,
+    )
+}
+
 internal fun visualProfilePhotoContentDescription(
     profile: VisualProfile,
     photoIndex: Int,
@@ -118,6 +151,22 @@ internal fun visualProfilePhotoContentDescription(
         "Foto $ordinal de $totalPhotos del perfil"
     } else {
         "Foto $ordinal de $totalPhotos de $name"
+    }
+}
+
+internal fun visualProfileThumbnailContentDescription(
+    profile: VisualProfile,
+    photoIndex: Int,
+    totalPhotos: Int,
+): String {
+    val name = profile.displayName
+        .takeIf { it.isNotBlank() }
+        ?.let { TextSafety.safeDisplay(it, maxLength = 100) }
+    val ordinal = photoIndex + 1
+    return if (name == null) {
+        "Mostrar foto $ordinal de $totalPhotos del perfil"
+    } else {
+        "Mostrar foto $ordinal de $totalPhotos de $name"
     }
 }
 
@@ -226,45 +275,74 @@ private fun VisualProfilePhotoFrame(
 
 @Composable
 private fun CompactProfilePhotos(profile: VisualProfile) {
-    val photos = profile.photos.sortedBy { it.position }
-    val hero = photos.firstOrNull() ?: return
+    var selectedPhotoId by rememberSaveable(profile.profileId) { mutableStateOf<String?>(null) }
+    val selection = browseProfilePhotoSelection(
+        photos = profile.photos,
+        selectedPhotoId = selectedPhotoId,
+    ) ?: return
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         VisualProfilePhotoFrame(
             profile = profile,
-            photo = hero,
-            photoIndex = 0,
-            totalPhotos = photos.size,
+            photo = selection.selectedPhoto,
+            photoIndex = selection.selectedIndex,
+            totalPhotos = selection.photos.size,
         )
-        if (photos.size > 1) {
+        if (selection.photos.size > 1) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                itemsIndexed(photos.drop(1)) { offset, photo ->
-                    val photoIndex = offset + 1
-                    Box(
-                        modifier = Modifier
-                            .width(108.dp)
-                            .height(136.dp),
-                    ) {
-                        AsyncImage(
-                            model = photo.url,
-                            contentDescription = visualProfilePhotoContentDescription(
+                itemsIndexed(selection.photos) { photoIndex, photo ->
+                    val selected = photo.id == selection.selectedPhoto.id
+                    Card(
+                        onClick = { selectedPhotoId = photo.id },
+                        shape = RoundedCornerShape(RealsRadii.Row),
+                        border = BorderStroke(
+                            width = if (selected) 2.dp else 1.dp,
+                            color = if (selected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.outlineVariant
+                            },
+                        ),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (selected) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surface
+                            },
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                        modifier = Modifier.semantics {
+                            contentDescription = visualProfileThumbnailContentDescription(
                                 profile = profile,
                                 photoIndex = photoIndex,
-                                totalPhotos = photos.size,
-                            ),
-                            contentScale = ContentScale.Crop,
+                                totalPhotos = selection.photos.size,
+                            )
+                            stateDescription = if (selected) "Seleccionada" else "No seleccionada"
+                        },
+                    ) {
+                        Box(
                             modifier = Modifier
-                                .fillMaxWidth()
+                                .width(108.dp)
                                 .height(136.dp)
-                                .clip(RoundedCornerShape(RealsRadii.Row))
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
-                        )
-                        PhotoCounterPill(
-                            label = "${photoIndex + 1}/${photos.size}",
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(8.dp),
-                        )
+                                .padding(4.dp),
+                        ) {
+                            AsyncImage(
+                                model = photo.url,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(128.dp)
+                                    .clip(RoundedCornerShape(RealsRadii.Row))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                            )
+                            PhotoCounterPill(
+                                label = "${photoIndex + 1}/${selection.photos.size}",
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(8.dp),
+                            )
+                        }
                     }
                 }
             }
