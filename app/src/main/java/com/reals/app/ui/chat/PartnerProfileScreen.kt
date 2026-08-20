@@ -126,7 +126,11 @@ fun PartnerProfileScreen(
                 }
             }
         } else {
-            VisualProfileCard(profile, showHeader = false)
+            VisualProfileCard(
+                profile = profile,
+                showHeader = false,
+                presentationMode = ProfilePresentationMode.Browse,
+            )
             PartnerProfilePersonalMessageSection(
                 profile = profile,
                 partnerMessage = partnerMessage,
@@ -195,7 +199,7 @@ private fun PartnerProfilePersonalMessageSection(
                         text = partnerMessage
                             ?.takeIf { it.isNotBlank() }
                             ?.let { TextSafety.safeDisplay(it, maxLength = 280) }
-                            ?: "La otra persona todavía no dejó un mensaje personal.",
+                            ?: "No dejó un mensaje personal.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     if (loadingPartnerMessage) {

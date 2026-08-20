@@ -27,6 +27,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -217,6 +218,11 @@ fun SchedulingScreen(
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
+            SchedulingDeadlineProgressCard(
+                negotiation = negotiation,
+                nowMillis = nowMillis,
+            )
+
             if (lifecycle.expired) {
                 FeedbackCard(
                     title = "Estado",
@@ -313,6 +319,42 @@ fun SchedulingScreen(
             },
         )
     }
+}
+
+@Composable
+private fun SchedulingDeadlineProgressCard(
+    negotiation: SchedulingNegotiation?,
+    nowMillis: Long,
+) {
+    if (!shouldShowSchedulingDeadlineProgress(negotiation)) return
+
+    val progress = schedulingDeadlineRemainingFraction(
+        negotiationCreatedAt = negotiation?.createdAt,
+        schedulingExpiresAt = negotiation?.schedulingExpiresAt,
+        nowMillis = nowMillis,
+    ) ?: return
+    val deadlineLabel = formatBackendContextualDateTime(negotiation?.schedulingExpiresAt, nowMillis)
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(RealsRadii.Row),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Tiempo de coordinación", style = MaterialTheme.typography.titleSmall)
+            Text(
+                text = "Vence: $deadlineLabel",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            LinearProgressIndicator(
+                progress = { progress.toFloat().coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+    Spacer(modifier = Modifier.height(12.dp))
 }
 
 @Composable
@@ -450,7 +492,7 @@ internal fun ProposalSelectorCard(
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Elegir horarios", style = MaterialTheme.typography.titleMedium)
             Text(
-                text = "Seleccioná entre 1 y 3 opciones futuras. El orden en que las agregas marca tu prioridad.",
+                text = "Seleccioná entre 1 y 3 opciones futuras. El orden en que las agregás marca tu prioridad.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
@@ -1046,7 +1088,7 @@ private fun WaitingPartnerCard(
                 text = if (myPendingProposals.isNotEmpty()) {
                     "Esperando que la otra persona revise tus opciones."
                 } else {
-                    "La otra persona rechazó tus opciones. Ahora esperamos que envie las suyas."
+                    "La otra persona rechazó tus opciones. Ahora esperamos que envíe las suyas."
                 },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1085,7 +1127,7 @@ private fun ReviewProposalsCard(
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Revisá las opciones recibidas", style = MaterialTheme.typography.titleMedium)
             Text(
-                text = "Elegí una opción recibida o rechaza estas opciones antes de proponer las tuyas.",
+                text = "Elegí una opción recibida o rechazá estas opciones antes de proponer las tuyas.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             ReceivedProposalList(reviewState, nowMillis)
