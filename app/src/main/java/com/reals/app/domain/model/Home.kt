@@ -66,7 +66,7 @@ sealed interface HomeNextStep {
         val connectionId: String,
         val matchId: String,
         val partner: ChatPartner?,
-        val schedulingStartedAt: String? = null,
+        val createdAt: String? = null,
         val schedulingExpiresAt: String? = null,
     ) : HomeNextStep
 

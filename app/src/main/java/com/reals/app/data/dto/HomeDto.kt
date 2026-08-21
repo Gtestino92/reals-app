@@ -75,7 +75,6 @@ data class HomeNextStepResponseDto(
     val connectionId: String,
     val matchId: String,
     val createdAt: String? = null,
-    val schedulingStartedAt: String? = null,
     val schedulingExpiresAt: String? = null,
     val partner: ChatPartnerResponseDto? = null,
     val secondChat: HomeChatResponseDto? = null,
@@ -87,7 +86,6 @@ data class HomeNextStepLiteResponseDto(
     val connectionId: String,
     val matchId: String,
     val createdAt: String? = null,
-    val schedulingStartedAt: String? = null,
     val schedulingExpiresAt: String? = null,
     val secondChat: HomePendingSecondChatLiteResponseDto? = null,
 )

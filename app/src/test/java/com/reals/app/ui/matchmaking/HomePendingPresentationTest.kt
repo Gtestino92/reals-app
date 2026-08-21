@@ -420,7 +420,7 @@ class HomePendingPresentationTest {
             connectionId = connectionId,
             matchId = "match-$connectionId",
             partnerDisplayName = partnerDisplayName,
-            schedulingStartedAt = "2026-07-15T10:00:00Z",
+            createdAt = "2026-07-15T10:00:00Z",
             schedulingExpiresAt = "2026-07-15T14:00:00Z",
         )
 

@@ -703,7 +703,7 @@ internal fun NextStepItem(
     }
     val schedulingRemainingFraction = (item as? HomeNextStepItem.Scheduling)?.let {
         schedulingDeadlineRemainingFraction(
-            negotiationCreatedAt = it.schedulingStartedAt,
+            negotiationCreatedAt = it.createdAt,
             schedulingExpiresAt = it.schedulingExpiresAt,
             nowMillis = nowMillis,
         )

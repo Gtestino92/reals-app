@@ -38,7 +38,7 @@ sealed interface HomeNextStepItem {
         val connectionId: String,
         val matchId: String,
         val partnerDisplayName: String?,
-        val schedulingStartedAt: String? = null,
+        val createdAt: String? = null,
         val schedulingExpiresAt: String? = null,
     ) : HomeNextStepItem
 

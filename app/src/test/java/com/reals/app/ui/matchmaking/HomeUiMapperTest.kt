@@ -88,7 +88,7 @@ class HomeUiMapperTest {
                         connectionId = "connection-1",
                         matchId = "match-1",
                         partner = partner("Sam"),
-                        schedulingStartedAt = "2026-06-19T18:00:00Z",
+                        createdAt = "2026-06-19T18:00:00Z",
                         schedulingExpiresAt = "2026-06-20T18:00:00Z",
                     ),
                 ),
@@ -101,7 +101,7 @@ class HomeUiMapperTest {
         assertEquals("connection-1", item.connectionId)
         assertEquals("match-1", item.matchId)
         assertEquals("Sam", item.partnerDisplayName)
-        assertEquals("2026-06-19T18:00:00Z", item.schedulingStartedAt)
+        assertEquals("2026-06-19T18:00:00Z", item.createdAt)
         assertEquals("2026-06-20T18:00:00Z", item.schedulingExpiresAt)
     }
 

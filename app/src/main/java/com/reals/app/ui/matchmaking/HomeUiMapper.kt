@@ -93,7 +93,7 @@ class HomeUiMapper {
                     connectionId = nextStep.connectionId,
                     matchId = nextStep.matchId,
                     partnerDisplayName = nextStep.partner?.displayName?.takeIf { it.isNotBlank() },
-                    schedulingStartedAt = nextStep.schedulingStartedAt,
+                    createdAt = nextStep.createdAt,
                     schedulingExpiresAt = nextStep.schedulingExpiresAt,
                 )
 
