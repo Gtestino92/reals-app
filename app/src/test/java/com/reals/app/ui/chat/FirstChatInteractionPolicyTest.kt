@@ -123,6 +123,36 @@ class FirstChatInteractionPolicyTest {
     }
 
     @Test
+    fun `normal active first chat keeps approve actionable and reject in overflow`() {
+        val chat = TestDtos.chat(
+            myDecision = "PENDING",
+            partnerDecision = "PENDING",
+        ).toDomain()
+
+        val policy = firstChatInteractionPolicy(
+            chat = chat,
+            canChat = true,
+            exitFlowLocked = false,
+            showDecisionActions = true,
+            matchIsChatActive = true,
+            firstChatLocallyExpired = false,
+            audioInteractionBusy = false,
+        )
+        val visibility = firstChatOverflowActionVisibility(
+            showMutualExitActions = true,
+            showDecisionActions = true,
+            decisionOnlyForCurrentUser = false,
+            canRequestOrdinaryExit = policy.canRequestOrdinaryExit,
+            canDecide = policy.canDecide,
+            canUseSafetyActions = policy.safetyAvailable,
+            canManualBlock = policy.manualBlockAvailable,
+        )
+
+        assertTrue(policy.canDecide)
+        assertTrue(visibility.showReject)
+    }
+
+    @Test
     fun `failed optimistic text retry follows first-chat retry policy`() {
         val failedText = newOptimisticOutgoingMessage(
             chatId = "chat-1",

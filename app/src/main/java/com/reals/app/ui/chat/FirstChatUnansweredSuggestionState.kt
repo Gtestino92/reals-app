@@ -9,7 +9,8 @@ import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.ChatType
 import com.reals.app.domain.model.isFirstChatDecisionOnly
 
-private const val FIRST_CHAT_UNANSWERED_EXIT_SUGGESTION_MILLIS = 3 * 60 * 1000L
+internal const val INITIAL_FIRST_CHAT_UNANSWERED_MILLIS = 30_000L
+internal const val ONGOING_FIRST_CHAT_UNANSWERED_MILLIS = 3 * 60_000L
 
 internal data class FirstChatUnansweredSuggestionState(
     val visible: Boolean,
@@ -44,10 +45,7 @@ internal fun firstChatUnansweredSuggestionState(
     val period = firstChatUnansweredPeriodReference(chat, currentUserId, confirmedMessages)
         ?: return hiddenFirstChatUnansweredSuggestionState
     if (period.reference == dismissedPeriodReference) return hiddenFirstChatUnansweredSuggestionState
-    if (!hasConfirmedOwnMessageAfterPeriod(chat, currentUserId, confirmedMessages, period)) {
-        return hiddenFirstChatUnansweredSuggestionState
-    }
-    val visible = nowMillis >= period.referenceTimeEpochMillis + FIRST_CHAT_UNANSWERED_EXIT_SUGGESTION_MILLIS
+    val visible = nowMillis >= period.referenceTimeEpochMillis + period.thresholdMillis
     return FirstChatUnansweredSuggestionState(
         visible = visible,
         actionEnabled = visible,
@@ -70,26 +68,30 @@ internal fun firstChatUnansweredPeriodReference(
     val latestPartnerMessage = parsedMessages
         .filter { it.message.senderId != currentUserId }
         .maxWithOrNull(compareBy<ParsedChatMessage> { it.sentAtMillis }.thenBy { it.message.id })
-    return if (latestPartnerMessage != null) {
-        FirstChatUnansweredPeriodReference(
-            reference = "partner:${latestPartnerMessage.message.id}",
-            referenceTimeEpochMillis = latestPartnerMessage.sentAtMillis,
-            referenceMessageId = latestPartnerMessage.message.id,
-        )
-    } else {
-        val startedAtMillis = backendInstantOrNull(chat.startedAt)?.toEpochMilli() ?: return null
-        FirstChatUnansweredPeriodReference(
-            reference = "started:${chat.startedAt}",
-            referenceTimeEpochMillis = startedAtMillis,
-            referenceMessageId = null,
-        )
-    }
+    val firstUnansweredOwnMessage = parsedMessages
+        .filter { it.message.senderId == currentUserId }
+        .filter { ownMessage ->
+            latestPartnerMessage == null || ownMessage.isAfter(latestPartnerMessage)
+        }
+        .minWithOrNull(compareBy<ParsedChatMessage> { it.sentAtMillis }.thenBy { it.message.id })
+        ?: return null
+    return FirstChatUnansweredPeriodReference(
+        reference = "own:${firstUnansweredOwnMessage.message.id}",
+        referenceTimeEpochMillis = firstUnansweredOwnMessage.sentAtMillis,
+        referenceMessageId = firstUnansweredOwnMessage.message.id,
+        thresholdMillis = if (latestPartnerMessage == null) {
+            INITIAL_FIRST_CHAT_UNANSWERED_MILLIS
+        } else {
+            ONGOING_FIRST_CHAT_UNANSWERED_MILLIS
+        },
+    )
 }
 
 internal data class FirstChatUnansweredPeriodReference(
     val reference: String,
     val referenceTimeEpochMillis: Long,
     val referenceMessageId: String?,
+    val thresholdMillis: Long,
 )
 
 private data class ParsedChatMessage(
@@ -97,20 +99,6 @@ private data class ParsedChatMessage(
     val sentAtMillis: Long,
 )
 
-private fun hasConfirmedOwnMessageAfterPeriod(
-    chat: Chat,
-    currentUserId: String,
-    confirmedMessages: List<ChatMessage>,
-    period: FirstChatUnansweredPeriodReference,
-): Boolean =
-    confirmedMessages
-        .filter { it.chatSessionId == chat.id && it.senderId == currentUserId }
-        .any { message ->
-            val sentAtMillis = backendInstantOrNull(message.sentAt)?.toEpochMilli()
-            when {
-                sentAtMillis == null -> false
-                period.referenceMessageId == null -> sentAtMillis >= period.referenceTimeEpochMillis
-                else -> sentAtMillis > period.referenceTimeEpochMillis ||
-                    (sentAtMillis == period.referenceTimeEpochMillis && message.id > period.referenceMessageId)
-            }
-        }
+private fun ParsedChatMessage.isAfter(other: ParsedChatMessage): Boolean =
+    sentAtMillis > other.sentAtMillis ||
+        (sentAtMillis == other.sentAtMillis && message.id > other.message.id)
