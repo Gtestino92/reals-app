@@ -93,6 +93,8 @@ class HomeMappersTest {
                     type = "SCHEDULING",
                     connectionId = "connection-scheduling",
                     matchId = "match-scheduling",
+                    schedulingStartedAt = "2026-06-19T18:00:00Z",
+                    schedulingExpiresAt = "2026-06-20T18:00:00Z",
                     partner = partnerDto("scheduling-partner"),
                 ),
                 HomeNextStepResponseDto(
@@ -131,6 +133,8 @@ class HomeMappersTest {
         val scheduling = home.nextSteps[0] as HomeNextStep.Scheduling
         assertEquals("connection-scheduling", scheduling.connectionId)
         assertEquals("match-scheduling", scheduling.matchId)
+        assertEquals("2026-06-19T18:00:00Z", scheduling.schedulingStartedAt)
+        assertEquals("2026-06-20T18:00:00Z", scheduling.schedulingExpiresAt)
 
         val secondChat = home.nextSteps[1] as HomeNextStep.SecondChatAvailable
         assertEquals(ChatType.SecondChat, secondChat.secondChat?.chatType)
@@ -329,6 +333,8 @@ class HomeMappersTest {
                     type = "SCHEDULING",
                     connectionId = "connection-scheduling",
                     matchId = "match-scheduling",
+                    schedulingStartedAt = "2026-06-19T18:00:00Z",
+                    schedulingExpiresAt = "2026-06-20T18:00:00Z",
                 ),
                 HomeNextStepLiteResponseDto(
                     type = "SECOND_CHAT_SCHEDULED",
@@ -398,6 +404,8 @@ class HomeMappersTest {
         val scheduling = pending.nextSteps[0] as HomeNextStep.Scheduling
         assertEquals("connection-scheduling", scheduling.connectionId)
         assertEquals(null, scheduling.partner)
+        assertEquals("2026-06-19T18:00:00Z", scheduling.schedulingStartedAt)
+        assertEquals("2026-06-20T18:00:00Z", scheduling.schedulingExpiresAt)
 
         val scheduled = pending.nextSteps[1] as HomeNextStep.SecondChatScheduled
         assertEquals(120L, scheduled.secondChat?.durationMinutes)
@@ -526,6 +534,114 @@ class HomeMappersTest {
         assertEquals(null, legacy.visualStartedAt)
         assertEquals(null, legacy.visualExpiresAt)
         assertTrue(firstChat is HomePendingAction.FirstChat)
+    }
+
+    @Test
+    fun `Home next step DTO deserializes scheduling timestamps and remains additive`() {
+        val scheduling = testJson.decodeFromString<HomeNextStepResponseDto>(
+            """
+            {
+              "type": "SCHEDULING",
+              "connectionId": "connection-scheduling",
+              "matchId": "match-scheduling",
+              "schedulingStartedAt": "2026-06-19T18:00:00Z",
+              "schedulingExpiresAt": "2026-06-20T18:00:00Z"
+            }
+            """.trimIndent()
+        )
+        val legacy = testJson.decodeFromString<HomeNextStepResponseDto>(
+            """
+            {
+              "type": "SCHEDULING",
+              "connectionId": "connection-legacy",
+              "matchId": "match-legacy"
+            }
+            """.trimIndent()
+        )
+        val createdAtFallback = testJson.decodeFromString<HomeNextStepResponseDto>(
+            """
+            {
+              "type": "SCHEDULING",
+              "connectionId": "connection-created-at",
+              "matchId": "match-created-at",
+              "createdAt": "2026-06-19T17:00:00Z",
+              "schedulingExpiresAt": "2026-06-20T18:00:00Z"
+            }
+            """.trimIndent()
+        ).toDomain() as HomeNextStep.Scheduling
+        val secondChat = testJson.decodeFromString<HomeNextStepResponseDto>(
+            """
+            {
+              "type": "SECOND_CHAT_AVAILABLE",
+              "connectionId": "connection-second",
+              "matchId": "match-second",
+              "schedulingStartedAt": "bad",
+              "schedulingExpiresAt": "bad"
+            }
+            """.trimIndent()
+        ).toDomain()
+
+        assertEquals("2026-06-19T18:00:00Z", scheduling.schedulingStartedAt)
+        assertEquals("2026-06-20T18:00:00Z", scheduling.schedulingExpiresAt)
+        assertEquals(null, legacy.schedulingStartedAt)
+        assertEquals(null, legacy.schedulingExpiresAt)
+        assertEquals("2026-06-19T17:00:00Z", createdAtFallback.schedulingStartedAt)
+        assertEquals("2026-06-20T18:00:00Z", createdAtFallback.schedulingExpiresAt)
+        assertTrue(secondChat is HomeNextStep.SecondChatAvailable)
+    }
+
+    @Test
+    fun `Home next step lite DTO deserializes scheduling timestamps and remains additive`() {
+        val scheduling = testJson.decodeFromString<HomeNextStepLiteResponseDto>(
+            """
+            {
+              "type": "SCHEDULING",
+              "connectionId": "connection-scheduling",
+              "matchId": "match-scheduling",
+              "schedulingStartedAt": "2026-06-19T18:00:00Z",
+              "schedulingExpiresAt": "2026-06-20T18:00:00Z"
+            }
+            """.trimIndent()
+        )
+        val legacy = testJson.decodeFromString<HomeNextStepLiteResponseDto>(
+            """
+            {
+              "type": "SCHEDULING",
+              "connectionId": "connection-legacy",
+              "matchId": "match-legacy"
+            }
+            """.trimIndent()
+        )
+        val createdAtFallback = testJson.decodeFromString<HomeNextStepLiteResponseDto>(
+            """
+            {
+              "type": "SCHEDULING",
+              "connectionId": "connection-created-at",
+              "matchId": "match-created-at",
+              "createdAt": "2026-06-19T17:00:00Z",
+              "schedulingExpiresAt": "2026-06-20T18:00:00Z"
+            }
+            """.trimIndent()
+        ).toDomain() as HomeNextStep.Scheduling
+        val secondChat = testJson.decodeFromString<HomeNextStepLiteResponseDto>(
+            """
+            {
+              "type": "SECOND_CHAT_AVAILABLE",
+              "connectionId": "connection-second",
+              "matchId": "match-second",
+              "schedulingStartedAt": "bad",
+              "schedulingExpiresAt": "bad"
+            }
+            """.trimIndent()
+        ).toDomain()
+
+        assertEquals("2026-06-19T18:00:00Z", scheduling.schedulingStartedAt)
+        assertEquals("2026-06-20T18:00:00Z", scheduling.schedulingExpiresAt)
+        assertEquals(null, legacy.schedulingStartedAt)
+        assertEquals(null, legacy.schedulingExpiresAt)
+        assertEquals("2026-06-19T17:00:00Z", createdAtFallback.schedulingStartedAt)
+        assertEquals("2026-06-20T18:00:00Z", createdAtFallback.schedulingExpiresAt)
+        assertTrue(secondChat is HomeNextStep.SecondChatAvailable)
     }
 
     @Test

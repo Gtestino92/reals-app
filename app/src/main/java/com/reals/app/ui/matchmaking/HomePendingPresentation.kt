@@ -31,7 +31,7 @@ internal data class HomePendingSecondaryGroup(
 
 internal enum class HomePendingItemKind(val title: String) {
     VisualReview("Perfiles por descubrir"),
-    Scheduling("Coordinación"),
+    Scheduling("Horarios"),
     SecondChat("Segundos chats"),
 }
 
@@ -342,8 +342,8 @@ internal fun HomeNextStepItem.pendingNextStepTitle(): String =
             partnerDisplayName
                 ?.takeIf { it.isNotBlank() }
                 ?.let(TextSafety::safeDisplay)
-                ?.let { "Coordinación con $it" }
-                ?: "Coordinación pendiente"
+                ?.let { "Con $it" }
+                ?: "Elegí horarios"
         is HomeNextStepItem.SecondChatScheduled,
         is HomeNextStepItem.SecondChatAvailable,
         is HomeNextStepItem.SecondChatExpired,
@@ -358,7 +358,7 @@ internal fun HomeNextStepItem.pendingNextStepTitle(): String =
 
 internal fun HomeNextStepItem.pendingNextStepBody(nowMillis: Long): String =
     when (this) {
-        is HomeNextStepItem.Scheduling -> "Elegí horarios para el segundo chat."
+        is HomeNextStepItem.Scheduling -> "Proponé opciones para el segundo chat."
         else -> homeNextStepBody(nowMillis)
     }
 

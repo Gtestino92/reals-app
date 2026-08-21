@@ -14,9 +14,16 @@ class SchedulingLifecycleTest {
     fun `scheduling warning appears only inside configured window and expires after deadline`() {
         val now = millis("2026-06-18T21:00:00Z")
 
-        assertFalse(schedulingLifecycleUiState("2026-06-19T21:01:00Z", now).showWarning)
-        assertTrue(schedulingLifecycleUiState("2026-06-19T21:00:00Z", now).showWarning)
+        assertFalse(schedulingLifecycleUiState("2026-06-18T22:01:00Z", now).showWarning)
+        assertTrue(schedulingLifecycleUiState("2026-06-18T22:00:00Z", now).showWarning)
         assertTrue(schedulingLifecycleUiState("2026-06-18T20:59:00Z", now).expired)
+    }
+
+    @Test
+    fun `scheduling warning does not appear with almost a day remaining`() {
+        val now = millis("2026-06-18T21:00:00Z")
+
+        assertFalse(schedulingLifecycleUiState("2026-06-19T20:00:00Z", now).showWarning)
     }
 
     @Test

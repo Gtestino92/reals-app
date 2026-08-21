@@ -188,6 +188,17 @@ class HomeCardsTest {
     }
 
     @Test
+    fun `scheduling next step body stays concise`() {
+        val item = HomeNextStepItem.Scheduling(
+            connectionId = "connection-1",
+            matchId = "match-1",
+            partnerDisplayName = "Alex",
+        )
+
+        assertEquals("Proponé opciones para el segundo chat.", item.homeNextStepBody(nowMillis))
+    }
+
+    @Test
     fun `available second chat body uses contextual today date`() {
         val item = HomeNextStepItem.SecondChatAvailable(
             connectionId = "connection-1",

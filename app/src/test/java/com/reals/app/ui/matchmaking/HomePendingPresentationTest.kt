@@ -94,7 +94,7 @@ class HomePendingPresentationTest {
             listOf(HomePendingItemKind.VisualReview, HomePendingItemKind.Scheduling),
             section.secondaryGroups.map { it.kind },
         )
-        assertEquals(listOf("Perfiles por descubrir", "Coordinación"), section.secondaryGroups.map { it.title })
+        assertEquals(listOf("Perfiles por descubrir", "Horarios"), section.secondaryGroups.map { it.title })
         assertEquals(listOf("visual:match-visual"), section.secondaryGroups[0].items.map { it.idForTest() })
         assertEquals(listOf("next:connection-scheduling"), section.secondaryGroups[1].items.map { it.idForTest() })
     }
@@ -170,7 +170,7 @@ class HomePendingPresentationTest {
         )
         assertEquals("Descubrí el perfil", visualReview(partnerDisplayName = null).pendingVisualReviewTitle())
         assertEquals(
-            "Coordinación con Ana",
+            "Con Ana",
             scheduling("connection-scheduling", partnerDisplayName = "Ana").pendingNextStepTitle(),
         )
         assertEquals(
@@ -182,7 +182,7 @@ class HomePendingPresentationTest {
     @Test
     fun `pending scheduling body is specific to second chat coordination`() {
         assertEquals(
-            "Elegí horarios para el segundo chat.",
+            "Proponé opciones para el segundo chat.",
             scheduling("connection-scheduling").pendingNextStepBody(nowMillis),
         )
     }
@@ -420,6 +420,8 @@ class HomePendingPresentationTest {
             connectionId = connectionId,
             matchId = "match-$connectionId",
             partnerDisplayName = partnerDisplayName,
+            schedulingStartedAt = "2026-07-15T10:00:00Z",
+            schedulingExpiresAt = "2026-07-15T14:00:00Z",
         )
 
     private fun scheduled(
