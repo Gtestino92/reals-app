@@ -149,6 +149,9 @@ class ApiErrorTest {
             "CHAT_MESSAGE_INVALID" to BackendErrorCode.ChatMessageInvalid,
             "CHAT_DECISION_NOT_AVAILABLE" to BackendErrorCode.ChatDecisionNotAvailable,
             "CHAT_DECISION_ALREADY_SUBMITTED" to BackendErrorCode.ChatDecisionAlreadySubmitted,
+            "FIRST_CHAT_APPROVAL_TOO_EARLY" to BackendErrorCode.FirstChatApprovalTooEarly,
+            "FIRST_CHAT_APPROVAL_PARTICIPATION_REQUIRED" to
+                BackendErrorCode.FirstChatApprovalParticipationRequired,
             "CHAT_MIN_MESSAGES_REQUIRED" to BackendErrorCode.ChatMinMessagesRequired,
             "CHAT_MUTUAL_CANCELLATION_PENDING" to BackendErrorCode.ChatMutualCancellationPending,
             "CHAT_MESSAGE_REPLY_TARGET_NOT_AVAILABLE" to BackendErrorCode.ChatMessageReplyTargetNotAvailable,
@@ -177,8 +180,12 @@ class ApiErrorTest {
                 "La decisión sobre ésta conversación ya no está disponible. Actualizá el estado.",
             "CHAT_DECISION_ALREADY_SUBMITTED" to
                 "Ya enviaste tu decisión para ésta conversación.",
+            "FIRST_CHAT_APPROVAL_TOO_EARLY" to
+                "Todavía es muy pronto para avanzar. Conversen un poco más antes de decidir.",
+            "FIRST_CHAT_APPROVAL_PARTICIPATION_REQUIRED" to
+                "Ambas personas tienen que participar un poco más antes de avanzar.",
             "CHAT_MIN_MESSAGES_REQUIRED" to
-                "Antes de decidir, enviá al menos un poco más de conversación.",
+                "Ambas personas tienen que participar un poco más antes de avanzar.",
             "CHAT_MUTUAL_CANCELLATION_PENDING" to
                 "La conversaci\u00f3n est\u00e1 pausada mientras se resuelve la solicitud.",
             "FIRST_CHAT_DECISION_ONLY" to

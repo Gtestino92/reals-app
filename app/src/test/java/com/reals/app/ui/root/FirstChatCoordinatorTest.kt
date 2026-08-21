@@ -39,6 +39,7 @@ import com.reals.app.testutil.TestDtos
 import com.reals.app.testutil.backendErrorResponse
 import com.reals.app.testutil.testApiExecutor
 import com.reals.app.testutil.testJson
+import com.reals.app.ui.chat.firstChatInteractionPolicy
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
@@ -1059,6 +1060,47 @@ class FirstChatCoordinatorTest {
         val state = (result as FirstChatActionResult.Show).state
         assertFalse(state.actionLoading)
         assertTrue(state.error is ApiError.Backend)
+    }
+
+    @Test
+    fun `approval eligibility failure keeps first chat state pending and retryable`() = runBlocking {
+        api.matchResponse = backendErrorResponse(
+            statusCode = 409,
+            code = "FIRST_CHAT_APPROVAL_TOO_EARLY",
+        )
+        val current = firstChatState(chatStatus = ChatStatus.Active)
+
+        val result = coordinator.submitDecision(
+            current = current,
+            decision = ChatContinueDecision.Approved,
+            onPending = {},
+        )
+
+        assertTrue(result is FirstChatActionResult.Show)
+        val state = (result as FirstChatActionResult.Show).state
+        val error = state.error as ApiError.Backend
+        assertFalse(state.actionLoading)
+        assertEquals(null, state.actionLoadingLabel)
+        assertEquals(ChatDecisionState.Pending, state.chat?.myDecision)
+        assertEquals(ChatDecisionState.Pending, state.chat?.partnerDecision)
+        assertEquals("CHAT_ACTIVE", state.match?.state?.rawValue)
+        assertEquals(BackendErrorCode.FirstChatApprovalTooEarly, error.backendErrorCode)
+        assertEquals(
+            "Todavía es muy pronto para avanzar. Conversen un poco más antes de decidir.",
+            error.toUserMessage(ErrorContext.Chat),
+        )
+        assertTrue(
+            firstChatInteractionPolicy(
+                chat = state.chat,
+                canChat = true,
+                exitFlowLocked = false,
+                showDecisionActions = true,
+                matchIsChatActive = state.match?.state?.rawValue == "CHAT_ACTIVE",
+                firstChatLocallyExpired = false,
+                audioInteractionBusy = false,
+            ).canDecide
+        )
+        assertEquals(listOf("submitChatDecision"), api.calls)
     }
 
     @Test

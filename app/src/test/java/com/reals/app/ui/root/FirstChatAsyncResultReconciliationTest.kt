@@ -64,7 +64,7 @@ class FirstChatAsyncResultReconciliationTest {
         runCurrent()
         refreshStarted.await()
 
-        val period = "started:2026-06-18T21:00:00Z"
+        val period = "own:own-1"
         viewModel.dismissFirstChatUnansweredSuggestion(period)
         runCurrent()
 
@@ -113,7 +113,7 @@ class FirstChatAsyncResultReconciliationTest {
         sendStarted.await()
         assertTrue((viewModel.uiState.value as RealsRootUiState.FirstChat).sending)
 
-        val period = "started:2026-06-18T21:00:00Z"
+        val period = "own:own-1"
         viewModel.dismissFirstChatUnansweredSuggestion(period)
         runCurrent()
 
@@ -304,7 +304,7 @@ class FirstChatAsyncResultReconciliationTest {
         runCurrent()
         refreshStarted.await()
 
-        val period = "started:2026-06-18T21:00:00Z"
+        val period = "own:own-1"
         viewModel.setState(firstChatState(serverTime = S1, lastMessageAt = S1).copy(
             refreshing = true,
             dismissedUnansweredPeriodReference = period,

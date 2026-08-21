@@ -93,6 +93,8 @@ enum class BackendErrorCode(val raw: String) {
     ChatMessageInvalid("CHAT_MESSAGE_INVALID"),
     ChatDecisionNotAvailable("CHAT_DECISION_NOT_AVAILABLE"),
     ChatDecisionAlreadySubmitted("CHAT_DECISION_ALREADY_SUBMITTED"),
+    FirstChatApprovalTooEarly("FIRST_CHAT_APPROVAL_TOO_EARLY"),
+    FirstChatApprovalParticipationRequired("FIRST_CHAT_APPROVAL_PARTICIPATION_REQUIRED"),
     ChatMinMessagesRequired("CHAT_MIN_MESSAGES_REQUIRED"),
     ChatMutualCancellationPending("CHAT_MUTUAL_CANCELLATION_PENDING"),
     ChatMessageReactionNotAvailable("CHAT_MESSAGE_REACTION_NOT_AVAILABLE"),
@@ -320,7 +322,10 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.ChatMessageInvalid -> "Revisá el mensaje. No puede estar vacío ni superar el límite permitido."
     BackendErrorCode.ChatDecisionNotAvailable -> "La decisión sobre ésta conversación ya no está disponible. Actualizá el estado."
     BackendErrorCode.ChatDecisionAlreadySubmitted -> "Ya enviaste tu decisión para ésta conversación."
-    BackendErrorCode.ChatMinMessagesRequired -> "Antes de decidir, enviá al menos un poco más de conversación."
+    BackendErrorCode.FirstChatApprovalTooEarly ->
+        "Todavía es muy pronto para avanzar. Conversen un poco más antes de decidir."
+    BackendErrorCode.FirstChatApprovalParticipationRequired,
+    BackendErrorCode.ChatMinMessagesRequired -> "Ambas personas tienen que participar un poco más antes de avanzar."
     BackendErrorCode.ChatMutualCancellationPending ->
         "La conversaci\u00f3n est\u00e1 pausada mientras se resuelve la solicitud."
     BackendErrorCode.ChatMessageReactionNotAvailable ->
