@@ -17,6 +17,7 @@ import com.reals.app.ui.matchmaking.HomeRoute
 import com.reals.app.ui.matchmaking.HomeRouter
 import com.reals.app.ui.matchmaking.HomeUiMapper
 import com.reals.app.ui.matchmaking.LocalHiddenInteractions
+import com.reals.app.ui.matchmaking.toHomeMatchmakingBlockedReasonUiState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -197,6 +198,28 @@ internal class HomeCoordinator(
 
                 is ApiResult.Failure -> {
                     if (attemptId != searchAttemptId) return@launch
+                    if (result.error.isVisualAdvancementLimitError()) {
+                        val capBlocked = pending.copy(
+                            home = pending.home.copy(
+                                screenModel = buildHomeScreenModel(
+                                    home = pending.home.homeState,
+                                    localMatchmakingBlockedReason = result.error,
+                                ),
+                                homeLoading = false,
+                                homeError = null,
+                                matchmakingBlockedReason = result.error,
+                                matchmakingSearchPhase = MatchmakingSearchUiPhase.Failed,
+                            ),
+                        )
+                        uiState.value = capBlocked
+                        loadHomeForReady(
+                            ready = capBlocked,
+                            publishLoadingState = false,
+                            autoNavigateEngagements = false,
+                        )
+                        return@launch
+                    }
+
                     val blockedReason = result.error.takeIf { it.isActiveInteractionLimitError() }
                     uiState.value = pending.copy(
                         home = pending.home.copy(
@@ -524,7 +547,7 @@ internal class HomeCoordinator(
     ) = homeUiMapper.toScreenModel(
         home = home,
         localHidden = localHiddenSnapshot(),
-        localMatchmakingBlockedReason = localMatchmakingBlockedReason,
+        localMatchmakingBlockedReason = localMatchmakingBlockedReason?.toHomeMatchmakingBlockedReasonUiState(),
     )
 
     private suspend fun publishHomeSuccess(
@@ -549,9 +572,11 @@ internal class HomeCoordinator(
         homeStatusVersion: Long?,
     ): RealsRootUiState.Ready {
         pruneLocalHiddenInteractions(home)
+        val retainedLocalBlocker = ready.home.matchmakingBlockedReason
+            .takeIf { home.matchmaking.blockedReason == null && !home.matchmaking.canSearch }
         val screenModel = buildHomeScreenModel(
             home = home,
-            localMatchmakingBlockedReason = ready.home.matchmakingBlockedReason,
+            localMatchmakingBlockedReason = retainedLocalBlocker,
         )
         val session = ready.session.withProfileStatusFrom(home)
 
@@ -563,6 +588,7 @@ internal class HomeCoordinator(
                 screenModel = screenModel,
                 homeLoading = false,
                 homeError = null,
+                matchmakingBlockedReason = retainedLocalBlocker,
                 matchmakingSearchPhase = searchPhaseAfterHomeLoad(
                     ready = ready,
                     screenModel = screenModel,
@@ -645,6 +671,11 @@ internal class HomeCoordinator(
             BackendErrorCode.ActiveConnectionLimitReached -> true
             else -> false
         }
+    }
+
+    private fun ApiError.isVisualAdvancementLimitError(): Boolean {
+        if (this !is ApiError.Backend) return false
+        return backendErrorCode == BackendErrorCode.VisualAdvancementLimitReached
     }
 }
 

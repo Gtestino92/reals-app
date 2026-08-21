@@ -6,6 +6,7 @@ import com.reals.app.domain.model.ChatType
 import com.reals.app.domain.model.HomeActiveInteractionsSummary
 import com.reals.app.domain.model.HomeChat
 import com.reals.app.domain.model.HomeMatchmaking
+import com.reals.app.domain.model.HomeMatchmakingBlockedReason
 import com.reals.app.domain.model.HomeNextStep
 import com.reals.app.domain.model.HomePassiveNotice
 import com.reals.app.domain.model.HomePendingAction
@@ -360,6 +361,30 @@ class HomeUiMapperTest {
 
         assertFalse(model.matchmaking.canSearch)
         assertEquals(null, model.matchmaking.blockedReason)
+    }
+
+    @Test
+    fun `matchmaking UI preserves structured visual advancement blocker`() {
+        val model = mapper.toScreenModel(
+            home = homeState(
+                matchmaking = HomeMatchmaking(
+                    inQueue = false,
+                    canSearch = false,
+                    blockedReason = HomeMatchmakingBlockedReason(
+                        code = "VISUAL_ADVANCEMENT_LIMIT_REACHED",
+                        message = "Wait",
+                        nextAvailableAt = "2026-08-21T15:20:00Z",
+                    ),
+                ),
+            ),
+            localHidden = noHiddenInteractions(),
+            localMatchmakingBlockedReason = null,
+        )
+
+        assertFalse(model.matchmaking.canSearch)
+        assertEquals("VISUAL_ADVANCEMENT_LIMIT_REACHED", model.matchmaking.blockedReason?.code)
+        assertEquals("Wait", model.matchmaking.blockedReason?.message)
+        assertEquals("2026-08-21T15:20:00Z", model.matchmaking.blockedReason?.nextAvailableAt)
     }
 
     @Test

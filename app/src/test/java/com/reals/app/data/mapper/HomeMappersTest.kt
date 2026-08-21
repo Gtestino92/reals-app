@@ -4,6 +4,7 @@ import com.reals.app.data.dto.ChatPartnerResponseDto
 import com.reals.app.data.dto.HomeActiveInteractionsSummaryResponseDto
 import com.reals.app.data.dto.HomeChatResponseDto
 import com.reals.app.data.dto.HomeMatchmakingResponseDto
+import com.reals.app.data.dto.HomeMatchmakingBlockedReasonResponseDto
 import com.reals.app.data.dto.HomeNextStepResponseDto
 import com.reals.app.data.dto.HomePassiveNoticeResponseDto
 import com.reals.app.data.dto.HomePendingActionLiteResponseDto
@@ -588,6 +589,27 @@ class HomeMappersTest {
         assertEquals("2026-06-19T17:00:00Z", createdAtFallback.createdAt)
         assertEquals("2026-06-20T18:00:00Z", createdAtFallback.schedulingExpiresAt)
         assertTrue(secondChat is HomeNextStep.SecondChatAvailable)
+    }
+
+    @Test
+    fun `Home matchmaking blocker DTO preserves next available timestamp`() {
+        val home = HomeResponseDto(
+            profileStatus = null,
+            matchmaking = HomeMatchmakingResponseDto(
+                inQueue = false,
+                canSearch = false,
+                blockedReason = HomeMatchmakingBlockedReasonResponseDto(
+                    code = "VISUAL_ADVANCEMENT_LIMIT_REACHED",
+                    message = "Wait",
+                    nextAvailableAt = "2026-08-21T15:20:00Z",
+                ),
+            ),
+            activeInteractionsSummary = HomeActiveInteractionsSummaryResponseDto(),
+        ).toDomain()
+
+        assertEquals("VISUAL_ADVANCEMENT_LIMIT_REACHED", home.matchmaking.blockedReason?.code)
+        assertEquals("Wait", home.matchmaking.blockedReason?.message)
+        assertEquals("2026-08-21T15:20:00Z", home.matchmaking.blockedReason?.nextAvailableAt)
     }
 
     @Test

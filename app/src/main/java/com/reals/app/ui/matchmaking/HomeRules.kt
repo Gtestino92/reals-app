@@ -21,23 +21,30 @@ internal fun ApiError?.matchmakingBlockedMessage(): String? {
     if (this == null) return null
 
     if (isActiveMatchLimitReached()) {
-        return "Ya tenés conversaciones o experiencias activas. Terminá una antes de buscar otra."
+        return matchmakingBlockedMessageForCode(BackendErrorCode.ActiveMatchLimitReached)
     }
 
     return when (this) {
-        is ApiError.Backend -> when (backendErrorCode) {
-            BackendErrorCode.ProfileRequired -> "Necesitás crear tu perfil antes de buscar chat."
-            BackendErrorCode.ProfileNotActive ->
-                "Tu perfil está en borrador. Reactivalo para buscar nuevas personas."
-            BackendErrorCode.ActivePenalty ->
-                "Por ahora no podés entrar a la búsqueda. Intentá nuevamente más adelante."
-            BackendErrorCode.ActiveMatchLimitReached,
-            BackendErrorCode.ActiveConnectionLimitReached ->
-                "Ya tenés conversaciones o experiencias activas. Terminá una antes de buscar otra."
-            else -> null
-        }
+        is ApiError.Backend -> matchmakingBlockedMessageForCode(backendErrorCode)
         else -> null
     }
+}
+
+internal fun HomeMatchmakingBlockedReasonUiState?.matchmakingBlockedMessage(): String? {
+    if (this == null) return null
+    return matchmakingBlockedMessageForCode(backendErrorCode())
+}
+
+private fun matchmakingBlockedMessageForCode(code: BackendErrorCode): String? = when (code) {
+    BackendErrorCode.ProfileRequired -> "Necesitás crear tu perfil antes de buscar chat."
+    BackendErrorCode.ProfileNotActive ->
+        "Tu perfil está en borrador. Reactivalo para buscar nuevas personas."
+    BackendErrorCode.ActivePenalty ->
+        "Por ahora no podés entrar a la búsqueda. Intentá nuevamente más adelante."
+    BackendErrorCode.ActiveMatchLimitReached,
+    BackendErrorCode.ActiveConnectionLimitReached ->
+        "Ya tenés conversaciones o experiencias activas. Terminá una antes de buscar otra."
+    else -> null
 }
 
 internal fun emptyHomeScreenModel(): HomeScreenModel = HomeScreenModel(

@@ -16,6 +16,17 @@ class ApiErrorTest {
     }
 
     @Test
+    fun `visual advancement cap parses and maps to pacing message`() {
+        val error = backendError("VISUAL_ADVANCEMENT_LIMIT_REACHED")
+
+        assertEquals(BackendErrorCode.VisualAdvancementLimitReached, error.backendErrorCode)
+        assertEquals(
+            "Podrás volver a buscar a alguien nuevo más adelante.",
+            error.toUserMessage(ErrorContext.Matchmaking),
+        )
+    }
+
+    @Test
     fun `account deleted maps to specific user message`() {
         val error = backendError("ACCOUNT_DELETED")
 

@@ -4,6 +4,8 @@ import com.reals.app.data.repository.ChatRepository
 import com.reals.app.data.repository.MatchmakingRepository
 import com.reals.app.data.repository.MeRepository
 import com.reals.app.data.dto.HomeNextStepResponseDto
+import com.reals.app.data.dto.HomeMatchmakingBlockedReasonResponseDto
+import com.reals.app.data.dto.HomeMatchmakingResponseDto
 import com.reals.app.di.HomeFeatureDependencies
 import com.reals.app.domain.model.HomeActiveInteractionsSummary
 import com.reals.app.domain.model.HomeMatchmaking
@@ -26,6 +28,7 @@ import com.reals.app.testutil.testJson
 import com.reals.app.ui.matchmaking.HomeUiMapper
 import com.reals.app.ui.matchmaking.LocalHiddenInteractions
 import com.reals.app.ui.matchmaking.HomeNextStepItem
+import com.reals.app.ui.matchmaking.toHomeMatchmakingBlockedReasonUiState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -35,6 +38,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import retrofit2.Response
@@ -443,6 +447,94 @@ class HomeCoordinatorCancelTest {
         yield()
 
         assertTrue(api.calls.isEmpty())
+    }
+
+    @Test
+    fun `visual advancement cap enqueue failure refreshes Home without generic cap error`() = runBlocking {
+        val api = FakeRealsApi().apply {
+            queueResponse = backendErrorResponse(409, "VISUAL_ADVANCEMENT_LIMIT_REACHED")
+            homeResponse = Response.success(
+                TestDtos.home().copy(
+                    matchmaking = HomeMatchmakingResponseDto(
+                        inQueue = false,
+                        canSearch = false,
+                        blockedReason = HomeMatchmakingBlockedReasonResponseDto(
+                            code = "VISUAL_ADVANCEMENT_LIMIT_REACHED",
+                            message = "Wait",
+                            nextAvailableAt = "2026-08-21T15:20:00Z",
+                        ),
+                    ),
+                    pendingActions = emptyList(),
+                    nextSteps = emptyList(),
+                )
+            )
+        }
+        val state = MutableStateFlow<RealsRootUiState>(
+            ready(phase = MatchmakingSearchUiPhase.Idle, inQueue = false),
+        )
+
+        coordinator(api, state, this).enqueueMatchmaking(
+            SearchLocationInput(latitude = -34.6037, longitude = -58.3816, accuracyMeters = 50),
+        )
+        yield()
+
+        val ready = state.value as RealsRootUiState.Ready
+        assertEquals(listOf("enqueueMatchmaking", "getHome"), api.calls)
+        assertEquals(false, ready.home.homeLoading)
+        assertNull(ready.home.homeError)
+        assertEquals(MatchmakingSearchUiPhase.Idle, ready.home.matchmakingSearchPhase)
+        assertEquals("VISUAL_ADVANCEMENT_LIMIT_REACHED", ready.home.screenModel?.matchmaking?.blockedReason?.code)
+        assertEquals("2026-08-21T15:20:00Z", ready.home.screenModel?.matchmaking?.blockedReason?.nextAvailableAt)
+    }
+
+    @Test
+    fun `later Home can search clears visual advancement local blocker`() = runBlocking {
+        val capError = com.reals.app.core.network.ApiError.Backend(
+            statusCode = 409,
+            code = "VISUAL_ADVANCEMENT_LIMIT_REACHED",
+            error = "VISUAL_ADVANCEMENT_LIMIT_REACHED",
+            message = "Wait",
+        )
+        val api = FakeRealsApi().apply {
+            homeResponse = Response.success(
+                TestDtos.home().copy(
+                    matchmaking = HomeMatchmakingResponseDto(
+                        inQueue = false,
+                        canSearch = true,
+                        blockedReason = null,
+                    ),
+                    pendingActions = emptyList(),
+                    nextSteps = emptyList(),
+                )
+            )
+        }
+        val home = homeState(inQueue = false)
+        val state = MutableStateFlow<RealsRootUiState>(
+            RealsRootUiState.Ready(
+                session = TestDomain.session(),
+                home = HomeUiState(
+                    homeState = home,
+                    screenModel = HomeUiMapper().toScreenModel(
+                        home = home,
+                        localHidden = LocalHiddenInteractions(
+                            hiddenFirstChatMatchIds = emptySet(),
+                            hiddenVisualMatchIds = emptySet(),
+                        ),
+                        localMatchmakingBlockedReason = capError.toHomeMatchmakingBlockedReasonUiState(),
+                    ),
+                    matchmakingBlockedReason = capError,
+                    matchmakingSearchPhase = MatchmakingSearchUiPhase.Failed,
+                ),
+            )
+        )
+
+        coordinator(api, state, this).refreshHomeState()
+        yield()
+
+        val ready = state.value as RealsRootUiState.Ready
+        assertEquals(true, ready.home.screenModel?.matchmaking?.canSearch)
+        assertNull(ready.home.screenModel?.matchmaking?.blockedReason)
+        assertNull(ready.home.matchmakingBlockedReason)
     }
 
     private fun coordinator(

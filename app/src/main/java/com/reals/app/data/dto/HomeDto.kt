@@ -40,6 +40,7 @@ data class HomeMatchmakingResponseDto(
 data class HomeMatchmakingBlockedReasonResponseDto(
     val code: String,
     val message: String,
+    val nextAvailableAt: String? = null,
 )
 
 @Serializable

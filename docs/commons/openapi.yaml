@@ -788,7 +788,7 @@ paths:
     post:
       tags: [Matches]
       summary: Submit first-chat continuation decision
-      description: APPROVED requires current legal requirements to be satisfied. REJECTED remains available without legal compliance.
+      description: APPROVED requires current legal requirements, the configured minimum elapsed first-chat time, and the configured minimum confirmed messages from both participants. REJECTED remains available without legal compliance or approval prerequisites.
       parameters:
         - $ref: '#/components/parameters/MatchId'
       requestBody:
@@ -1110,7 +1110,7 @@ paths:
     post:
       tags: [Chats]
       summary: Reject mutual cancellation request
-      description: Rejects a pending mutual cancellation request and closes the chat. Future scoring may apply a lower penalty to the requester, but no penalty is applied today.
+      description: Rejects a pending mutual cancellation request and closes the chat without penalty.
       parameters:
         - $ref: '#/components/parameters/ChatId'
         - $ref: '#/components/parameters/ExitRequestId'
@@ -1125,7 +1125,7 @@ paths:
     post:
       tags: [Chats]
       summary: Timeout mutual cancellation request
-      description: Resolves an unanswered mutual cancellation request after the configured timeout and closes the chat without penalty. This is not treated as a unilateral cancellation; if the requester calls it because the responder did not answer in time, the requester must not be penalized.
+      description: Resolves an unanswered mutual cancellation request after the configured timeout and closes the chat without penalty. This is not treated as a unilateral cancellation; if the requester calls it because the responder did not answer in time, the requester is not penalized.
       parameters:
         - $ref: '#/components/parameters/ChatId'
         - $ref: '#/components/parameters/ExitRequestId'
@@ -2080,7 +2080,7 @@ components:
                 error: Conflict
                 message: Only a final first-chat decision is available now
     ChatDecisionConflict:
-      description: First-chat continuation decision is not currently available. APPROVED may also return `LEGAL_ACTION_REQUIRED`; REJECTED remains available without legal compliance.
+      description: First-chat continuation decision is not currently available. APPROVED may also return `LEGAL_ACTION_REQUIRED`, `FIRST_CHAT_APPROVAL_TOO_EARLY` or `FIRST_CHAT_APPROVAL_PARTICIPATION_REQUIRED`; REJECTED remains available without legal compliance or approval prerequisites.
       content:
         application/json:
           schema:
@@ -2101,11 +2101,16 @@ components:
                 code: CHAT_DECISION_ALREADY_SUBMITTED
                 error: Conflict
                 message: Chat decision was already submitted
-            minimumMessagesRequired:
+            approvalTooEarly:
               value:
-                code: CHAT_MIN_MESSAGES_REQUIRED
+                code: FIRST_CHAT_APPROVAL_TOO_EARLY
                 error: Conflict
-                message: Minimum chat messages are required before approval
+                message: More conversation time is required before continuing
+            approvalParticipationRequired:
+              value:
+                code: FIRST_CHAT_APPROVAL_PARTICIPATION_REQUIRED
+                error: Conflict
+                message: Both participants need to take part in the conversation before continuing
             mutualCancellationPending:
               value:
                 code: CHAT_MUTUAL_CANCELLATION_PENDING
@@ -2531,8 +2536,13 @@ components:
       properties:
         code:
           type: string
-          enum: [PROFILE_REQUIRED, PROFILE_NOT_ACTIVE, ACTIVE_MATCH_LIMIT_REACHED, ACTIVE_CONNECTION_LIMIT_REACHED, ACTIVE_PENALTY]
+          enum: [PROFILE_REQUIRED, PROFILE_NOT_ACTIVE, ACTIVE_MATCH_LIMIT_REACHED, ACTIVE_CONNECTION_LIMIT_REACHED, ACTIVE_PENALTY, VISUAL_ADVANCEMENT_LIMIT_REACHED]
         message: { type: string }
+        nextAvailableAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Authoritative backend timestamp when search may be attempted again for rolling-window blocked reasons. Populated for VISUAL_ADVANCEMENT_LIMIT_REACHED and null or absent for existing reasons without a natural retry time.
     HomePendingActionResponse:
       type: object
       required: [type, matchId]
@@ -2586,6 +2596,16 @@ components:
           allOf:
             - $ref: '#/components/schemas/HomeChatResponse'
           nullable: true
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: For SCHEDULING next steps, the current ScheduleNegotiation.createdAt used as the scheduling progress start; null for non-scheduling next steps.
+        schedulingExpiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: For SCHEDULING next steps, the parent Connection.schedulingExpiresAt used as the scheduling progress end; null for non-scheduling next steps.
     HomeNextStepLiteResponse:
       type: object
       required: [type, connectionId, matchId]
@@ -2597,6 +2617,16 @@ components:
           allOf:
             - $ref: '#/components/schemas/HomePendingSecondChatLiteResponse'
           nullable: true
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: For SCHEDULING next steps, the current ScheduleNegotiation.createdAt used as the scheduling progress start; null for non-scheduling next steps.
+        schedulingExpiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: For SCHEDULING next steps, the parent Connection.schedulingExpiresAt used as the scheduling progress end; null for non-scheduling next steps.
     HomePendingSecondChatLiteResponse:
       type: object
       properties:

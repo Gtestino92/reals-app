@@ -33,6 +33,7 @@ data class HomeMatchmaking(
 data class HomeMatchmakingBlockedReason(
     val code: String,
     val message: String,
+    val nextAvailableAt: String? = null,
 )
 
 data class HomeActiveInteractionsSummary(
