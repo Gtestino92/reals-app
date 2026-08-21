@@ -27,7 +27,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -218,11 +217,6 @@ fun SchedulingScreen(
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
-            SchedulingDeadlineProgressCard(
-                negotiation = negotiation,
-                nowMillis = nowMillis,
-            )
-
             if (lifecycle.expired) {
                 FeedbackCard(
                     title = "Estado",
@@ -319,42 +313,6 @@ fun SchedulingScreen(
             },
         )
     }
-}
-
-@Composable
-private fun SchedulingDeadlineProgressCard(
-    negotiation: SchedulingNegotiation?,
-    nowMillis: Long,
-) {
-    if (!shouldShowSchedulingDeadlineProgress(negotiation)) return
-
-    val progress = schedulingDeadlineRemainingFraction(
-        negotiationCreatedAt = negotiation?.createdAt,
-        schedulingExpiresAt = negotiation?.schedulingExpiresAt,
-        nowMillis = nowMillis,
-    ) ?: return
-    val deadlineLabel = formatBackendContextualDateTime(negotiation?.schedulingExpiresAt, nowMillis)
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(RealsRadii.Row),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Tiempo de coordinación", style = MaterialTheme.typography.titleSmall)
-            Text(
-                text = "Vence: $deadlineLabel",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            LinearProgressIndicator(
-                progress = { progress.toFloat().coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-    }
-    Spacer(modifier = Modifier.height(12.dp))
 }
 
 @Composable

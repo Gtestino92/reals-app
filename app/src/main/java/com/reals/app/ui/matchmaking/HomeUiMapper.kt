@@ -93,6 +93,8 @@ class HomeUiMapper {
                     connectionId = nextStep.connectionId,
                     matchId = nextStep.matchId,
                     partnerDisplayName = nextStep.partner?.displayName?.takeIf { it.isNotBlank() },
+                    createdAt = nextStep.createdAt,
+                    schedulingExpiresAt = nextStep.schedulingExpiresAt,
                 )
 
                 is HomeNextStep.SecondChatScheduled ->

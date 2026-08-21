@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -53,6 +54,7 @@ import com.reals.app.ui.profile.overviewActionPolicy
 import com.reals.app.ui.profile.progress
 import com.reals.app.ui.profile.reviewRows
 import com.reals.app.ui.root.AffinityHomeSummaryUiState
+import com.reals.app.ui.scheduling.schedulingDeadlineRemainingFraction
 import com.reals.app.ui.theme.RealsRadii
 import kotlinx.coroutines.delay
 import java.time.ZoneId
@@ -526,8 +528,9 @@ internal fun VisualApprovalItem(
                 HomeTrailingChevron()
             }
             remainingFraction?.let {
-                VisualReviewProgressLine(
+                DeadlineProgressLine(
                     remainingFraction = it,
+                    progressColor = visualReviewProgressColor(it),
                     modifier = Modifier
                         .padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
                         .fillMaxWidth(),
@@ -564,16 +567,12 @@ internal fun HomeTrailingChevron() {
 }
 
 @Composable
-private fun VisualReviewProgressLine(
+private fun DeadlineProgressLine(
     remainingFraction: Double,
+    progressColor: Color,
     modifier: Modifier = Modifier,
 ) {
     val trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
-    val progressColor = when (visualReviewProgressUrgency(remainingFraction)) {
-        VisualReviewProgressUrgency.Normal -> MaterialTheme.colorScheme.primary
-        VisualReviewProgressUrgency.Warning -> MaterialTheme.colorScheme.secondary
-        VisualReviewProgressUrgency.Critical -> MaterialTheme.colorScheme.error
-    }
     val shape = RoundedCornerShape(percent = 50)
 
     Box(
@@ -592,6 +591,22 @@ private fun VisualReviewProgressLine(
         )
     }
 }
+
+@Composable
+private fun visualReviewProgressColor(remainingFraction: Double): Color =
+    when (visualReviewProgressUrgency(remainingFraction)) {
+        VisualReviewProgressUrgency.Normal -> MaterialTheme.colorScheme.primary
+        VisualReviewProgressUrgency.Warning -> MaterialTheme.colorScheme.secondary
+        VisualReviewProgressUrgency.Critical -> MaterialTheme.colorScheme.error
+    }
+
+@Composable
+private fun schedulingProgressColor(remainingFraction: Double): Color =
+    when {
+        remainingFraction <= 0.10 -> MaterialTheme.colorScheme.error
+        remainingFraction <= 0.40 -> MaterialTheme.colorScheme.secondary
+        else -> MaterialTheme.colorScheme.primary
+    }
 
 @Composable
 private fun visualReviewHomeDeadlineStrings(): VisualReviewHomeDeadlineStrings =
@@ -682,9 +697,16 @@ internal fun NextStepItem(
             else -> false
         }
     val primaryLabel = when {
-        item is HomeNextStepItem.Scheduling -> "Coordinar horarios"
+        item is HomeNextStepItem.Scheduling -> "Elegir horarios"
         secondChatPresentation?.canOpenChat == true -> secondChatPresentation.primaryCtaLabel
         else -> secondChatPresentation?.primaryCtaLabel
+    }
+    val schedulingRemainingFraction = (item as? HomeNextStepItem.Scheduling)?.let {
+        schedulingDeadlineRemainingFraction(
+            negotiationCreatedAt = it.createdAt,
+            schedulingExpiresAt = it.schedulingExpiresAt,
+            nowMillis = nowMillis,
+        )
     }
     val showPartnerProfile = item.canShowPartnerProfile(nowMillis)
     val showDismiss = item.canShowSecondChatDismissAction(nowMillis)
@@ -730,6 +752,15 @@ internal fun NextStepItem(
                             MaterialTheme.colorScheme.onSurfaceVariant
                         },
                         style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+                schedulingRemainingFraction?.let {
+                    DeadlineProgressLine(
+                        remainingFraction = it,
+                        progressColor = schedulingProgressColor(it),
+                        modifier = Modifier
+                            .padding(top = 2.dp)
+                            .fillMaxWidth(),
                     )
                 }
                 if (showPartnerProfile) {
@@ -830,7 +861,7 @@ internal fun HomeNextStepItem.homeNextStepBody(
         SecondChatHomeState.Expired -> "La ventana para entrar terminó."
         else ->
         when (this) {
-            is HomeNextStepItem.Scheduling -> "Coordinando próximo encuentro."
+            is HomeNextStepItem.Scheduling -> "Proponé opciones para el segundo chat."
             is HomeNextStepItem.SecondChatScheduled ->
                 "Programado para ${
                     formatBackendContextualDateTime(

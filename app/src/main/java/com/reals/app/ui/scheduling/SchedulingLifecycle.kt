@@ -6,7 +6,7 @@ import com.reals.app.domain.model.NegotiationStatus
 import com.reals.app.domain.model.SchedulingNegotiation
 import com.reals.app.ui.common.deadlineRemainingFraction
 
-internal const val SCHEDULING_WARNING_MINUTES = 24L * 60L
+internal const val SCHEDULING_WARNING_MINUTES = 60L
 
 internal data class SchedulingLifecycleUiState(
     val showWarning: Boolean,

@@ -115,6 +115,8 @@ fun HomeNextStepResponseDto.toDomain(): HomeNextStep = when (type.uppercase()) {
         connectionId = connectionId,
         matchId = matchId,
         partner = partner?.toDomain(),
+        createdAt = createdAt,
+        schedulingExpiresAt = schedulingExpiresAt,
     )
 
     "SECOND_CHAT_SCHEDULED" -> HomeNextStep.SecondChatScheduled(
@@ -158,6 +160,8 @@ fun HomeNextStepLiteResponseDto.toDomain(): HomeNextStep = when (type.uppercase(
         connectionId = connectionId,
         matchId = matchId,
         partner = null,
+        createdAt = createdAt,
+        schedulingExpiresAt = schedulingExpiresAt,
     )
 
     "SECOND_CHAT_SCHEDULED" -> HomeNextStep.SecondChatScheduled(
