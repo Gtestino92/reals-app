@@ -1,6 +1,5 @@
 package com.reals.app.ui.matchmaking
 
-import com.reals.app.core.network.ApiError
 import com.reals.app.domain.model.HomeActiveInteractionsSummary
 
 data class HomeScreenModel(
@@ -111,5 +110,11 @@ sealed interface HomePassiveNoticeItem {
 data class HomeMatchmakingUiState(
     val inQueue: Boolean,
     val canSearch: Boolean,
-    val blockedReason: ApiError?,
+    val blockedReason: HomeMatchmakingBlockedReasonUiState?,
+)
+
+data class HomeMatchmakingBlockedReasonUiState(
+    val code: String,
+    val message: String,
+    val nextAvailableAt: String? = null,
 )

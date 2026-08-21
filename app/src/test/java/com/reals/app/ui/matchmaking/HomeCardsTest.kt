@@ -6,6 +6,7 @@ import java.util.Locale
 import com.reals.app.data.mapper.toDomain
 import com.reals.app.testutil.TestDtos
 import com.reals.app.ui.root.AffinityHomeSummaryUiState
+import com.reals.app.ui.scheduling.schedulingDeadlineRemainingFraction
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -188,14 +189,69 @@ class HomeCardsTest {
     }
 
     @Test
-    fun `scheduling next step body stays concise`() {
+    fun `scheduling next step row omits generic body copy`() {
         val item = HomeNextStepItem.Scheduling(
             connectionId = "connection-1",
             matchId = "match-1",
             partnerDisplayName = "Alex",
         )
 
-        assertEquals("Proponé opciones para el segundo chat.", item.homeNextStepBody(nowMillis))
+        assertEquals(null, item.homeNextStepRowBody(nowMillis))
+    }
+
+    @Test
+    fun `scheduling deadline uses scheduling expiry contextual date`() {
+        val item = HomeNextStepItem.Scheduling(
+            connectionId = "connection-1",
+            matchId = "match-1",
+            partnerDisplayName = "Alex",
+            createdAt = "2026-07-14T12:00:00Z",
+            schedulingExpiresAt = "2026-07-17T00:04:00Z",
+        )
+
+        assertEquals(
+            "Vence: Mañana, 21:04",
+            item.schedulingDeadlineText(nowMillis, buenosAires, locale),
+        )
+    }
+
+    @Test
+    fun `scheduling deadline omits null blank and malformed expiry`() {
+        listOf(null, "", " ", "not-a-date").forEach { value ->
+            val item = HomeNextStepItem.Scheduling(
+                connectionId = "connection-1",
+                matchId = "match-1",
+                partnerDisplayName = "Alex",
+                createdAt = "2026-07-14T12:00:00Z",
+                schedulingExpiresAt = value,
+            )
+
+            assertEquals(null, item.schedulingDeadlineText(nowMillis, buenosAires, locale))
+        }
+    }
+
+    @Test
+    fun `scheduling progress calculation keeps created to expiry semantics`() {
+        val item = HomeNextStepItem.Scheduling(
+            connectionId = "connection-1",
+            matchId = "match-1",
+            partnerDisplayName = "Alex",
+            createdAt = "2026-07-15T00:00:00Z",
+            schedulingExpiresAt = "2026-07-16T00:00:00Z",
+        )
+
+        val expected = schedulingDeadlineRemainingFraction(
+            negotiationCreatedAt = "2026-07-15T00:00:00Z",
+            schedulingExpiresAt = "2026-07-16T00:00:00Z",
+            nowMillis = Instant.parse("2026-07-15T12:00:00Z").toEpochMilli(),
+        )
+        val actual = schedulingDeadlineRemainingFraction(
+            negotiationCreatedAt = item.createdAt,
+            schedulingExpiresAt = item.schedulingExpiresAt,
+            nowMillis = Instant.parse("2026-07-15T12:00:00Z").toEpochMilli(),
+        )
+
+        assertEquals(expected ?: error("Expected valid scheduling progress"), actual ?: error("Expected item progress"), 0.0)
     }
 
     @Test

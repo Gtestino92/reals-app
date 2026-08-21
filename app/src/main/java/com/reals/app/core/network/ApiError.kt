@@ -47,6 +47,7 @@ enum class BackendErrorCode(val raw: String) {
     ActivePenalty("ACTIVE_PENALTY"),
     ActiveMatchLimitReached("ACTIVE_MATCH_LIMIT_REACHED"),
     ActiveConnectionLimitReached("ACTIVE_CONNECTION_LIMIT_REACHED"),
+    VisualAdvancementLimitReached("VISUAL_ADVANCEMENT_LIMIT_REACHED"),
     InvalidSearchLocation("INVALID_SEARCH_LOCATION"),
     ProfileAlreadyExists("PROFILE_ALREADY_EXISTS"),
     ProfileNotFound("PROFILE_NOT_FOUND"),
@@ -266,6 +267,7 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.ActivePenalty -> "Por ahora no podés entrar a la búsqueda. Intentá nuevamente más adelante."
     BackendErrorCode.ActiveMatchLimitReached,
     BackendErrorCode.ActiveConnectionLimitReached -> "Ya tenés conversaciones o experiencias activas. Terminá una antes de buscar otra."
+    BackendErrorCode.VisualAdvancementLimitReached -> "Podrás volver a buscar a alguien nuevo más adelante."
     BackendErrorCode.InvalidSearchLocation -> "No pudimos usar tu ubicación actual. Revisá los permisos o intentá nuevamente."
     BackendErrorCode.ProfileAlreadyExists -> "Ya tenés un perfil creado."
     BackendErrorCode.ProfileNotFound -> "No encontramos tu perfil. Actualizá la sesión e intentá nuevamente."

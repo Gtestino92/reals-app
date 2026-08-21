@@ -344,7 +344,7 @@ private fun PendingHubSection(
                         nowMillis = nowMillis,
                         dismissContentDescription = "Quitar de Pendientes",
                         titleOverride = item.item.pendingNextStepTitle(),
-                        bodyOverride = item.item.pendingNextStepBody(nowMillis),
+                        bodyOverride = item.item.pendingNextStepBodyOverride(nowMillis),
                         usePendingRowOutline = true,
                         onOpenScheduling = onOpenScheduling,
                         onOpenSecondChat = onOpenSecondChat,

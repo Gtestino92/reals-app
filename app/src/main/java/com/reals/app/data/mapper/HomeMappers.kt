@@ -62,6 +62,7 @@ fun HomeMatchmakingBlockedReasonResponseDto.toDomain(): HomeMatchmakingBlockedRe
     HomeMatchmakingBlockedReason(
         code = code,
         message = message,
+        nextAvailableAt = nextAvailableAt,
     )
 
 fun HomeActiveInteractionsSummaryResponseDto.toDomain(): HomeActiveInteractionsSummary =

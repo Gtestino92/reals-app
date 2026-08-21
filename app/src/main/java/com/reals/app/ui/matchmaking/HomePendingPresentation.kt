@@ -362,6 +362,12 @@ internal fun HomeNextStepItem.pendingNextStepBody(nowMillis: Long): String =
         else -> homeNextStepBody(nowMillis)
     }
 
+internal fun HomeNextStepItem.pendingNextStepBodyOverride(nowMillis: Long): String? =
+    when (this) {
+        is HomeNextStepItem.Scheduling -> null
+        else -> pendingNextStepBody(nowMillis)
+    }
+
 private fun HomePriorityItem.priorityTypeOrder(): Int =
     when (this) {
         is HomePriorityItem.VisualReview -> 0

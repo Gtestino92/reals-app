@@ -43,6 +43,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import com.reals.app.R
 import com.reals.app.core.security.TextSafety
+import com.reals.app.core.time.backendInstantOrNull
 import com.reals.app.ui.common.VisualReviewHomeDeadlineStrings
 import com.reals.app.ui.common.VisualReviewProgressUrgency
 import com.reals.app.ui.common.formatBackendContextualDateTime
@@ -708,6 +709,8 @@ internal fun NextStepItem(
             nowMillis = nowMillis,
         )
     }
+    val schedulingDeadlineText = (item as? HomeNextStepItem.Scheduling)
+        ?.schedulingDeadlineText(nowMillis = nowMillis)
     val showPartnerProfile = item.canShowPartnerProfile(nowMillis)
     val showDismiss = item.canShowSecondChatDismissAction(nowMillis)
     val rowBorderColor = if (usePendingRowOutline) {
@@ -738,11 +741,14 @@ internal fun NextStepItem(
                     },
                     style = MaterialTheme.typography.titleMedium,
                 )
-                Text(
-                    text = bodyOverride ?: item.homeNextStepBody(nowMillis),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                val body = bodyOverride ?: item.homeNextStepRowBody(nowMillis)
+                body?.let {
+                    Text(
+                        text = it,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
                 primaryLabel?.let { label ->
                     Text(
                         text = label,
@@ -752,6 +758,13 @@ internal fun NextStepItem(
                             MaterialTheme.colorScheme.onSurfaceVariant
                         },
                         style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+                schedulingDeadlineText?.let {
+                    Text(
+                        text = it,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                 }
                 schedulingRemainingFraction?.let {
@@ -816,6 +829,25 @@ internal fun NextStepItem(
             Content(showPrimaryChevron = false)
         }
     }
+}
+
+internal fun HomeNextStepItem.homeNextStepRowBody(
+    nowMillis: Long = System.currentTimeMillis(),
+    zoneId: ZoneId = ZoneId.systemDefault(),
+    locale: Locale = Locale.forLanguageTag("es-AR"),
+): String? = when (this) {
+    is HomeNextStepItem.Scheduling -> null
+    else -> homeNextStepBody(nowMillis, zoneId, locale)
+}
+
+internal fun HomeNextStepItem.Scheduling.schedulingDeadlineText(
+    nowMillis: Long = System.currentTimeMillis(),
+    zoneId: ZoneId = ZoneId.systemDefault(),
+    locale: Locale = Locale.forLanguageTag("es-AR"),
+): String? {
+    val expiresAt = schedulingExpiresAt?.takeIf { it.isNotBlank() } ?: return null
+    backendInstantOrNull(expiresAt) ?: return null
+    return "Vence: ${formatBackendContextualDateTime(expiresAt, nowMillis, zoneId, locale)}"
 }
 
 internal fun HomeNextStepItem.partnerDisplayName(): String? = when (this) {

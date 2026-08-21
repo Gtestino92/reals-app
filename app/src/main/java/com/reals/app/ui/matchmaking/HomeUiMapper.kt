@@ -1,8 +1,10 @@
 package com.reals.app.ui.matchmaking
 
 import com.reals.app.core.network.ApiError
+import com.reals.app.core.network.BackendErrorCode
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.HomeMatchmaking
+import com.reals.app.domain.model.HomeMatchmakingBlockedReason
 import com.reals.app.domain.model.HomeNextStep
 import com.reals.app.domain.model.HomePassiveNotice
 import com.reals.app.domain.model.HomePendingAction
@@ -18,7 +20,7 @@ class HomeUiMapper {
     fun toScreenModel(
         home: HomeState?,
         localHidden: LocalHiddenInteractions,
-        localMatchmakingBlockedReason: ApiError?,
+        localMatchmakingBlockedReason: HomeMatchmakingBlockedReasonUiState?,
     ): HomeScreenModel {
         val pendingActionItems = home.pendingActionItems(localHidden)
         val nextStepItems = home.nextStepItems()
@@ -197,7 +199,7 @@ class HomeUiMapper {
     }
 
     private fun HomeState?.matchmakingUiState(
-        localMatchmakingBlockedReason: ApiError?,
+        localMatchmakingBlockedReason: HomeMatchmakingBlockedReasonUiState?,
     ): HomeMatchmakingUiState {
         val matchmaking = this?.matchmaking ?: HomeMatchmaking(
             inQueue = false,
@@ -208,15 +210,7 @@ class HomeUiMapper {
         return HomeMatchmakingUiState(
             inQueue = matchmaking.inQueue,
             canSearch = matchmaking.canSearch && localMatchmakingBlockedReason == null,
-            blockedReason = localMatchmakingBlockedReason
-                ?: matchmaking.blockedReason?.let {
-                    ApiError.Backend(
-                        statusCode = 409,
-                        code = it.code,
-                        error = it.code,
-                        message = it.message,
-                    )
-                },
+            blockedReason = localMatchmakingBlockedReason ?: matchmaking.blockedReason?.toUiState(),
         )
     }
 
@@ -240,3 +234,23 @@ class HomeUiMapper {
         this == ChatStatus.Cancelled ||
             this == ChatStatus.Closed
 }
+
+fun HomeMatchmakingBlockedReason.toUiState(): HomeMatchmakingBlockedReasonUiState =
+    HomeMatchmakingBlockedReasonUiState(
+        code = code,
+        message = message,
+        nextAvailableAt = nextAvailableAt,
+    )
+
+fun ApiError.toHomeMatchmakingBlockedReasonUiState(): HomeMatchmakingBlockedReasonUiState? {
+    val backend = this as? ApiError.Backend ?: return null
+    val code = backend.code?.takeIf { it.isNotBlank() } ?: backend.error?.takeIf { it.isNotBlank() } ?: return null
+    return HomeMatchmakingBlockedReasonUiState(
+        code = code,
+        message = backend.message,
+        nextAvailableAt = null,
+    )
+}
+
+fun HomeMatchmakingBlockedReasonUiState.backendErrorCode(): BackendErrorCode =
+    BackendErrorCode.fromRaw(code)

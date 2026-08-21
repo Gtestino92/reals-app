@@ -457,6 +457,8 @@ private fun MatchmakingIdleScreen(
     val canSearch = screenModel.matchmaking.canSearch
     val blockedReason = screenModel.matchmaking.blockedReason
     val pendingPresentation = homePendingPresentation(screenModel, nowMillis)
+    val visualAdvancementWait = visualAdvancementWaitPresentation(screenModel.matchmaking, nowMillis)
+    var refreshedVisualAdvancementAt by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
 
     if (homeSurface == HomeSurface.Pending) {
         PendingInteractionsScreen(
@@ -477,6 +479,19 @@ private fun MatchmakingIdleScreen(
         if (!accountExpanded) return@LaunchedEffect
         withFrameNanos { }
         scrollState.animateScrollTo(scrollState.maxValue)
+    }
+
+    LaunchedEffect(visualAdvancementWait?.nextAvailableAt, nowMillis) {
+        if (
+            shouldRequestVisualAdvancementReconciliation(
+                presentation = visualAdvancementWait,
+                nowMillis = nowMillis,
+                refreshedNextAvailableAt = refreshedVisualAdvancementAt,
+            )
+        ) {
+            refreshedVisualAdvancementAt = visualAdvancementWait?.nextAvailableAt
+            onRefreshHome()
+        }
     }
 
     Column(
@@ -533,7 +548,10 @@ private fun MatchmakingIdleScreen(
             busy = busy,
             onOpenPending = onOpenPendingSurface,
         )
-        Card(
+        if (visualAdvancementWait != null) {
+            VisualAdvancementWaitCard(visualAdvancementWait)
+        } else {
+            Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(RealsRadii.Hero),
             border = BorderStroke(1.dp, RealsColors.SoftGold.copy(alpha = 0.42f)),
@@ -628,6 +646,7 @@ private fun MatchmakingIdleScreen(
                     }
                 }
             }
+            }
         }
         Spacer(modifier = Modifier.height(16.dp))
         HomeAffinityCard(
@@ -670,6 +689,39 @@ private fun MatchmakingIdleScreen(
         )
     }
 }
+
+@Composable
+private fun VisualAdvancementWaitCard(
+    presentation: VisualAdvancementWaitPresentation,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(RealsRadii.Hero),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.56f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = presentation.title,
+                style = RealsType.SectionTitle,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = presentation.body,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            presentation.remainingTimeText?.let { text ->
+                Text(
+                    text = text,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun ActiveInteractionsSummary(
     summary: HomeActiveInteractionsSummary?,

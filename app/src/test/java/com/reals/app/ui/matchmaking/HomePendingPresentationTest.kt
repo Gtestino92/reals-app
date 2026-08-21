@@ -180,10 +180,10 @@ class HomePendingPresentationTest {
     }
 
     @Test
-    fun `pending scheduling body is specific to second chat coordination`() {
+    fun `pending scheduling body override is omitted for cleaner row`() {
         assertEquals(
-            "Proponé opciones para el segundo chat.",
-            scheduling("connection-scheduling").pendingNextStepBody(nowMillis),
+            null,
+            scheduling("connection-scheduling").pendingNextStepBodyOverride(nowMillis),
         )
     }
 
