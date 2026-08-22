@@ -478,19 +478,38 @@ internal class HomeCoordinator(
             )
 
             is ApiResult.Failure -> {
-                val reachedLimit = enqueueResult.error.isActiveInteractionLimitError()
+                val normalAvailability = enqueueResult.error.isNormalMatchmakingAvailabilityError()
+                val readyForRefresh = ready.copy(
+                    home = ready.home.copy(
+                        screenModel = if (normalAvailability) {
+                            buildHomeScreenModel(
+                                home = ready.home.homeState,
+                                localMatchmakingBlockedReason = enqueueResult.error,
+                            )
+                        } else {
+                            ready.home.screenModel
+                        },
+                        homeLoading = false,
+                        homeError = null,
+                        homeMessage = if (normalAvailability) {
+                            null
+                        } else {
+                            "Aprobaste el chat. No pudimos volver a iniciar la b\u00fasqueda autom\u00e1ticamente."
+                        },
+                        matchmakingBlockedReason = enqueueResult.error,
+                        matchmakingSearchPhase = if (normalAvailability) {
+                            MatchmakingSearchUiPhase.Failed
+                        } else {
+                            ready.home.matchmakingSearchPhase
+                        },
+                    ),
+                )
+                if (normalAvailability) {
+                    uiState.value = readyForRefresh
+                }
 
                 loadHomeForReady(
-                    ready = ready.copy(
-                        home = ready.home.copy(
-                            homeMessage = if (reachedLimit) {
-                                "Aprobaste el chat. Ya ten\u00e9s el m\u00e1ximo de interacciones activas."
-                            } else {
-                                "Aprobaste el chat. No pudimos volver a iniciar la b\u00fasqueda autom\u00e1ticamente."
-                            },
-                            matchmakingBlockedReason = enqueueResult.error,
-                        ),
-                    ),
+                    ready = readyForRefresh,
                     publishLoadingState = false,
                     autoNavigateEngagements = false,
                 )
