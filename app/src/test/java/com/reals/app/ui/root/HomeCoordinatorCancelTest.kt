@@ -487,6 +487,110 @@ class HomeCoordinatorCancelTest {
         assertEquals("2026-08-21T15:20:00Z", ready.home.screenModel?.matchmaking?.blockedReason?.nextAvailableAt)
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `active match limit enqueue failure blocks locally and refreshes Home without generic error`() = runTest {
+        val getHomeStarted = CompletableDeferred<Unit>()
+        val releaseGetHome = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            queueResponse = backendErrorResponse(409, "ACTIVE_MATCH_LIMIT_REACHED")
+            homeResponse = Response.success(
+                TestDtos.home().copy(
+                    matchmaking = HomeMatchmakingResponseDto(
+                        inQueue = false,
+                        canSearch = true,
+                        blockedReason = null,
+                    ),
+                    pendingActions = emptyList(),
+                    nextSteps = emptyList(),
+                )
+            )
+            beforeGetHomeResponse = {
+                getHomeStarted.complete(Unit)
+                releaseGetHome.await()
+            }
+        }
+        val state = MutableStateFlow<RealsRootUiState>(
+            ready(phase = MatchmakingSearchUiPhase.Idle, inQueue = false),
+        )
+
+        coordinator(api, state, this).enqueueMatchmaking(
+            SearchLocationInput(latitude = -34.6037, longitude = -58.3816, accuracyMeters = 50),
+        )
+        runCurrent()
+        getHomeStarted.await()
+
+        val blocked = state.value as RealsRootUiState.Ready
+        assertEquals(listOf("enqueueMatchmaking", "getHome"), api.calls)
+        assertEquals(false, blocked.home.homeLoading)
+        assertNull(blocked.home.homeError)
+        assertEquals(MatchmakingSearchUiPhase.Failed, blocked.home.matchmakingSearchPhase)
+        assertEquals("ACTIVE_MATCH_LIMIT_REACHED", blocked.home.screenModel?.matchmaking?.blockedReason?.code)
+        assertEquals(null, blocked.home.screenModel?.matchmaking?.blockedReason?.nextAvailableAt)
+
+        releaseGetHome.complete(Unit)
+        runCurrent()
+
+        val ready = state.value as RealsRootUiState.Ready
+        assertEquals(true, ready.home.screenModel?.matchmaking?.canSearch)
+        assertNull(ready.home.screenModel?.matchmaking?.blockedReason)
+        assertNull(ready.home.matchmakingBlockedReason)
+        assertNull(ready.home.homeError)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `active connection limit enqueue failure blocks locally and keeps authoritative refreshed blocker`() = runTest {
+        val getHomeStarted = CompletableDeferred<Unit>()
+        val releaseGetHome = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            queueResponse = backendErrorResponse(409, "ACTIVE_CONNECTION_LIMIT_REACHED")
+            homeResponse = Response.success(
+                TestDtos.home().copy(
+                    matchmaking = HomeMatchmakingResponseDto(
+                        inQueue = false,
+                        canSearch = false,
+                        blockedReason = HomeMatchmakingBlockedReasonResponseDto(
+                            code = "ACTIVE_CONNECTION_LIMIT_REACHED",
+                            message = "Still blocked",
+                            nextAvailableAt = null,
+                        ),
+                    ),
+                    pendingActions = emptyList(),
+                    nextSteps = emptyList(),
+                )
+            )
+            beforeGetHomeResponse = {
+                getHomeStarted.complete(Unit)
+                releaseGetHome.await()
+            }
+        }
+        val state = MutableStateFlow<RealsRootUiState>(
+            ready(phase = MatchmakingSearchUiPhase.Idle, inQueue = false),
+        )
+
+        coordinator(api, state, this).enqueueMatchmaking(
+            SearchLocationInput(latitude = -34.6037, longitude = -58.3816, accuracyMeters = 50),
+        )
+        runCurrent()
+        getHomeStarted.await()
+
+        val blocked = state.value as RealsRootUiState.Ready
+        assertEquals(listOf("enqueueMatchmaking", "getHome"), api.calls)
+        assertNull(blocked.home.homeError)
+        assertEquals("ACTIVE_CONNECTION_LIMIT_REACHED", blocked.home.screenModel?.matchmaking?.blockedReason?.code)
+        assertEquals(null, blocked.home.screenModel?.matchmaking?.blockedReason?.nextAvailableAt)
+
+        releaseGetHome.complete(Unit)
+        runCurrent()
+
+        val ready = state.value as RealsRootUiState.Ready
+        assertEquals(false, ready.home.screenModel?.matchmaking?.canSearch)
+        assertEquals("ACTIVE_CONNECTION_LIMIT_REACHED", ready.home.screenModel?.matchmaking?.blockedReason?.code)
+        assertNull(ready.home.matchmakingBlockedReason)
+        assertNull(ready.home.homeError)
+    }
+
     @Test
     fun `later Home can search clears visual advancement local blocker`() = runBlocking {
         val capError = com.reals.app.core.network.ApiError.Backend(

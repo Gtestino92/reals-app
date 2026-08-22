@@ -388,6 +388,52 @@ class HomeUiMapperTest {
     }
 
     @Test
+    fun `matchmaking UI preserves structured active match blocker without next availability`() {
+        val model = mapper.toScreenModel(
+            home = homeState(
+                matchmaking = HomeMatchmaking(
+                    inQueue = false,
+                    canSearch = false,
+                    blockedReason = HomeMatchmakingBlockedReason(
+                        code = "ACTIVE_MATCH_LIMIT_REACHED",
+                        message = "Active match cap",
+                        nextAvailableAt = null,
+                    ),
+                ),
+            ),
+            localHidden = noHiddenInteractions(),
+            localMatchmakingBlockedReason = null,
+        )
+
+        assertFalse(model.matchmaking.canSearch)
+        assertEquals("ACTIVE_MATCH_LIMIT_REACHED", model.matchmaking.blockedReason?.code)
+        assertEquals(null, model.matchmaking.blockedReason?.nextAvailableAt)
+    }
+
+    @Test
+    fun `active interaction counts do not disable matchmaking without backend blocker`() {
+        val model = mapper.toScreenModel(
+            home = homeState(
+                matchmaking = HomeMatchmaking(
+                    inQueue = false,
+                    canSearch = true,
+                    blockedReason = null,
+                ),
+                activeInteractionsSummary = summary(
+                    activeInitialCount = 5,
+                    activeConnectionCount = 2,
+                    actionableConnectionCount = 2,
+                ),
+            ),
+            localHidden = noHiddenInteractions(),
+            localMatchmakingBlockedReason = null,
+        )
+
+        assertTrue(model.matchmaking.canSearch)
+        assertEquals(null, model.matchmaking.blockedReason)
+    }
+
+    @Test
     fun `draft warning presentation is derived from Home profile status`() {
         val model = mapper.toScreenModel(
             home = homeState(profileStatus = ProfileStatus.Draft),

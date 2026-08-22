@@ -198,8 +198,8 @@ internal class HomeCoordinator(
 
                 is ApiResult.Failure -> {
                     if (attemptId != searchAttemptId) return@launch
-                    if (result.error.isVisualAdvancementLimitError()) {
-                        val capBlocked = pending.copy(
+                    if (result.error.isNormalMatchmakingAvailabilityError()) {
+                        val availabilityBlocked = pending.copy(
                             home = pending.home.copy(
                                 screenModel = buildHomeScreenModel(
                                     home = pending.home.homeState,
@@ -211,25 +211,24 @@ internal class HomeCoordinator(
                                 matchmakingSearchPhase = MatchmakingSearchUiPhase.Failed,
                             ),
                         )
-                        uiState.value = capBlocked
+                        uiState.value = availabilityBlocked
                         loadHomeForReady(
-                            ready = capBlocked,
+                            ready = availabilityBlocked,
                             publishLoadingState = false,
                             autoNavigateEngagements = false,
                         )
                         return@launch
                     }
 
-                    val blockedReason = result.error.takeIf { it.isActiveInteractionLimitError() }
                     uiState.value = pending.copy(
                         home = pending.home.copy(
                             screenModel = buildHomeScreenModel(
                                 home = pending.home.homeState,
-                                localMatchmakingBlockedReason = blockedReason,
+                                localMatchmakingBlockedReason = null,
                             ),
                             homeLoading = false,
                             homeError = result.error,
-                            matchmakingBlockedReason = blockedReason,
+                            matchmakingBlockedReason = null,
                             matchmakingSearchPhase = MatchmakingSearchUiPhase.Failed,
                         ),
                     )
@@ -677,6 +676,9 @@ internal class HomeCoordinator(
         if (this !is ApiError.Backend) return false
         return backendErrorCode == BackendErrorCode.VisualAdvancementLimitReached
     }
+
+    private fun ApiError.isNormalMatchmakingAvailabilityError(): Boolean =
+        isVisualAdvancementLimitError() || isActiveInteractionLimitError()
 }
 
 private fun ProvisionedSession.withProfileStatusFrom(home: HomeState): ProvisionedSession {
