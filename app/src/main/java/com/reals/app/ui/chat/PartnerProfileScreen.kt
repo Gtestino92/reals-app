@@ -181,7 +181,17 @@ private fun PartnerProfilePersonalMessageSection(
     busy: Boolean,
     onRetryPartnerMessage: () -> Unit,
 ) {
-    if (!profile.partnerPersonalMessageSubmitted) return
+    if (
+        !shouldShowPartnerProfilePersonalMessageSection(
+            profile = profile,
+            partnerMessage = partnerMessage,
+            partnerMessageLoaded = partnerMessageLoaded,
+            loadingPartnerMessage = loadingPartnerMessage,
+            partnerMessageError = partnerMessageError,
+        )
+    ) {
+        return
+    }
 
     Spacer(modifier = Modifier.height(12.dp))
     Card(
@@ -238,4 +248,17 @@ private fun PartnerProfilePersonalMessageSection(
             }
         }
     }
+}
+
+internal fun shouldShowPartnerProfilePersonalMessageSection(
+    profile: VisualProfile,
+    partnerMessage: String?,
+    partnerMessageLoaded: Boolean,
+    loadingPartnerMessage: Boolean,
+    partnerMessageError: ApiError?,
+): Boolean {
+    if (!profile.partnerPersonalMessageSubmitted) return false
+    if (!partnerMessageLoaded) return true
+    if (loadingPartnerMessage || partnerMessageError != null) return true
+    return partnerMessage?.isNotBlank() == true
 }

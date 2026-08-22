@@ -51,7 +51,6 @@ import com.reals.app.ui.common.RealsBrandDivider
 import com.reals.app.ui.common.realsOutlinedTextFieldColors
 import com.reals.app.ui.common.VisualReviewDetailDeadlineStrings
 import com.reals.app.ui.common.formatVisualReviewDetailDeadline
-import com.reals.app.ui.common.userLabel
 import com.reals.app.ui.theme.RealsRadii
 import com.reals.app.ui.theme.RealsType
 
@@ -271,14 +270,14 @@ fun VisualApprovalScreen(
                 Text("Volver a Inicio")
             }
         } else {
-        StatusCard(
-            match = match,
-            loading = loading,
-            refreshing = refreshing,
-            error = error,
-            message = message,
-        )
-        Spacer(modifier = Modifier.height(16.dp))
+        error?.let {
+            ApiErrorFeedbackCard(it, ErrorContext.VisualReview)
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+        message?.let {
+            SuccessFeedback(it)
+            Spacer(modifier = Modifier.height(16.dp))
+        }
         if (lifecycle.expired) {
             FeedbackCard(
                 title = "Estado",
@@ -570,36 +569,6 @@ private fun VisualApprovalInitialFailureCard(
             OutlinedButton(onClick = onRefresh, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
                 Text(if (refreshing) "Actualizando..." else "Reintentar")
             }
-        }
-    }
-}
-
-@Composable
-private fun StatusCard(
-    match: Match?,
-    loading: Boolean,
-    refreshing: Boolean,
-    error: ApiError?,
-    message: String?,
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(RealsRadii.Row),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
-        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Estado", style = MaterialTheme.typography.titleLarge)
-            Text("Match: ${match?.state?.userLabel() ?: "Cargando"}")
-            if (loading || refreshing) {
-                Text(
-                    text = if (loading) "Cargando revisión visual..." else "Actualizando revisión visual...",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            error?.let { ApiErrorFeedbackCard(it, ErrorContext.VisualReview) }
-            message?.let { SuccessFeedback(it) }
         }
     }
 }

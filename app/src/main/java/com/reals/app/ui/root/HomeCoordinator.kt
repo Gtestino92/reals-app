@@ -198,8 +198,8 @@ internal class HomeCoordinator(
 
                 is ApiResult.Failure -> {
                     if (attemptId != searchAttemptId) return@launch
-                    if (result.error.isVisualAdvancementLimitError()) {
-                        val capBlocked = pending.copy(
+                    if (result.error.isNormalMatchmakingAvailabilityError()) {
+                        val availabilityBlocked = pending.copy(
                             home = pending.home.copy(
                                 screenModel = buildHomeScreenModel(
                                     home = pending.home.homeState,
@@ -211,25 +211,24 @@ internal class HomeCoordinator(
                                 matchmakingSearchPhase = MatchmakingSearchUiPhase.Failed,
                             ),
                         )
-                        uiState.value = capBlocked
+                        uiState.value = availabilityBlocked
                         loadHomeForReady(
-                            ready = capBlocked,
+                            ready = availabilityBlocked,
                             publishLoadingState = false,
                             autoNavigateEngagements = false,
                         )
                         return@launch
                     }
 
-                    val blockedReason = result.error.takeIf { it.isActiveInteractionLimitError() }
                     uiState.value = pending.copy(
                         home = pending.home.copy(
                             screenModel = buildHomeScreenModel(
                                 home = pending.home.homeState,
-                                localMatchmakingBlockedReason = blockedReason,
+                                localMatchmakingBlockedReason = null,
                             ),
                             homeLoading = false,
                             homeError = result.error,
-                            matchmakingBlockedReason = blockedReason,
+                            matchmakingBlockedReason = null,
                             matchmakingSearchPhase = MatchmakingSearchUiPhase.Failed,
                         ),
                     )
@@ -479,19 +478,38 @@ internal class HomeCoordinator(
             )
 
             is ApiResult.Failure -> {
-                val reachedLimit = enqueueResult.error.isActiveInteractionLimitError()
+                val normalAvailability = enqueueResult.error.isNormalMatchmakingAvailabilityError()
+                val readyForRefresh = ready.copy(
+                    home = ready.home.copy(
+                        screenModel = if (normalAvailability) {
+                            buildHomeScreenModel(
+                                home = ready.home.homeState,
+                                localMatchmakingBlockedReason = enqueueResult.error,
+                            )
+                        } else {
+                            ready.home.screenModel
+                        },
+                        homeLoading = false,
+                        homeError = null,
+                        homeMessage = if (normalAvailability) {
+                            null
+                        } else {
+                            "Aprobaste el chat. No pudimos volver a iniciar la b\u00fasqueda autom\u00e1ticamente."
+                        },
+                        matchmakingBlockedReason = enqueueResult.error,
+                        matchmakingSearchPhase = if (normalAvailability) {
+                            MatchmakingSearchUiPhase.Failed
+                        } else {
+                            ready.home.matchmakingSearchPhase
+                        },
+                    ),
+                )
+                if (normalAvailability) {
+                    uiState.value = readyForRefresh
+                }
 
                 loadHomeForReady(
-                    ready = ready.copy(
-                        home = ready.home.copy(
-                            homeMessage = if (reachedLimit) {
-                                "Aprobaste el chat. Ya ten\u00e9s el m\u00e1ximo de interacciones activas."
-                            } else {
-                                "Aprobaste el chat. No pudimos volver a iniciar la b\u00fasqueda autom\u00e1ticamente."
-                            },
-                            matchmakingBlockedReason = enqueueResult.error,
-                        ),
-                    ),
+                    ready = readyForRefresh,
                     publishLoadingState = false,
                     autoNavigateEngagements = false,
                 )
@@ -677,6 +695,9 @@ internal class HomeCoordinator(
         if (this !is ApiError.Backend) return false
         return backendErrorCode == BackendErrorCode.VisualAdvancementLimitReached
     }
+
+    private fun ApiError.isNormalMatchmakingAvailabilityError(): Boolean =
+        isVisualAdvancementLimitError() || isActiveInteractionLimitError()
 }
 
 private fun ProvisionedSession.withProfileStatusFrom(home: HomeState): ProvisionedSession {

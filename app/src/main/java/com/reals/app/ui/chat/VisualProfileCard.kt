@@ -98,8 +98,8 @@ internal fun visualProfileContentBlocks(
         }
 
         ProfilePresentationMode.Review -> buildList {
-            photos.getOrNull(0)?.let { add(VisualProfileContentBlock.Photo(it, index = 0, total = photos.size)) }
             add(VisualProfileContentBlock.Identity)
+            photos.getOrNull(0)?.let { add(VisualProfileContentBlock.Photo(it, index = 0, total = photos.size)) }
             if (hasBio) add(VisualProfileContentBlock.Bio)
             photos.getOrNull(1)?.let { add(VisualProfileContentBlock.Photo(it, index = 1, total = photos.size)) }
             if (hasAffinities) add(VisualProfileContentBlock.Affinities)

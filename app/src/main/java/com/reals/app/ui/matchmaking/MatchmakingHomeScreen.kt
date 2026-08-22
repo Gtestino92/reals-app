@@ -457,7 +457,9 @@ private fun MatchmakingIdleScreen(
     val canSearch = screenModel.matchmaking.canSearch
     val blockedReason = screenModel.matchmaking.blockedReason
     val pendingPresentation = homePendingPresentation(screenModel, nowMillis)
-    val visualAdvancementWait = visualAdvancementWaitPresentation(screenModel.matchmaking, nowMillis)
+    val matchmakingUnavailable = matchmakingUnavailablePresentation(screenModel.matchmaking, nowMillis)
+    val visualAdvancementWait = matchmakingUnavailable
+        ?.takeIf { it.kind == MatchmakingUnavailableKind.VisualAdvancementWait }
     var refreshedVisualAdvancementAt by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
 
     if (homeSurface == HomeSurface.Pending) {
@@ -548,8 +550,8 @@ private fun MatchmakingIdleScreen(
             busy = busy,
             onOpenPending = onOpenPendingSurface,
         )
-        if (visualAdvancementWait != null) {
-            VisualAdvancementWaitCard(visualAdvancementWait)
+        if (matchmakingUnavailable != null) {
+            MatchmakingUnavailableCard(matchmakingUnavailable)
         } else {
             Card(
             modifier = Modifier.fillMaxWidth(),
@@ -691,8 +693,8 @@ private fun MatchmakingIdleScreen(
 }
 
 @Composable
-private fun VisualAdvancementWaitCard(
-    presentation: VisualAdvancementWaitPresentation,
+private fun MatchmakingUnavailableCard(
+    presentation: MatchmakingUnavailablePresentation,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -711,7 +713,7 @@ private fun VisualAdvancementWaitCard(
                 text = presentation.body,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            presentation.remainingTimeText?.let { text ->
+            presentation.supportingText?.let { text ->
                 Text(
                     text = text,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
