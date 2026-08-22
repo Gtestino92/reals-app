@@ -24,8 +24,8 @@ class VisualProfileCardPresentationTest {
 
         assertEquals(
             listOf(
-                VisualProfileContentBlock.Photo(photo(1), index = 0, total = 4),
                 VisualProfileContentBlock.Identity,
+                VisualProfileContentBlock.Photo(photo(1), index = 0, total = 4),
                 VisualProfileContentBlock.Bio,
                 VisualProfileContentBlock.Photo(photo(2), index = 1, total = 4),
                 VisualProfileContentBlock.Affinities,
@@ -85,8 +85,8 @@ class VisualProfileCardPresentationTest {
 
         assertEquals(
             listOf(
-                VisualProfileContentBlock.Photo(photo(1), index = 0, total = 1),
                 VisualProfileContentBlock.Identity,
+                VisualProfileContentBlock.Photo(photo(1), index = 0, total = 1),
             ),
             reviewBlocks,
         )
