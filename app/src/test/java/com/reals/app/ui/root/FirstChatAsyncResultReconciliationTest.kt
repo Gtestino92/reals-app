@@ -1,20 +1,28 @@
 package com.reals.app.ui.root
 
+import com.reals.app.core.network.ApiError
+import com.reals.app.core.network.BackendErrorCode
+import com.reals.app.core.network.ErrorContext
+import com.reals.app.core.network.backendErrorCode
+import com.reals.app.core.network.toUserMessage
 import com.reals.app.core.time.ServerClockSnapshot
+import com.reals.app.data.dto.MatchResponseDto
 import com.reals.app.data.mapper.toDomain
 import com.reals.app.data.preferences.InMemoryFirstChatUnansweredSuggestionDismissalStore
-import com.reals.app.domain.model.Chat
+import com.reals.app.domain.model.ChatContinueDecision
 import com.reals.app.domain.model.ChatDecisionState
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.isFirstChatDecisionOnly
 import com.reals.app.testutil.FakeRealsApi
 import com.reals.app.testutil.TestDomain
 import com.reals.app.testutil.TestDtos
+import com.reals.app.testutil.backendErrorResponse
 import com.reals.app.ui.chat.firstChatUnansweredSuggestionState
 import java.time.Instant
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -22,6 +30,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -42,6 +51,180 @@ class FirstChatAsyncResultReconciliationTest {
     @After
     fun tearDown() {
         Dispatchers.resetMain()
+    }
+
+    @Test
+    fun `older silent refresh cannot erase newer approval participation error`() = runTest(dispatcher) {
+        val refreshGate = CompletableDeferred<Unit>()
+        val refreshStarted = CompletableDeferred<Unit>()
+        val decisionGate = CompletableDeferred<Unit>()
+        val decisionStarted = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            chatResponse = Response.success(chatDto(serverTime = S2, lastMessageAt = S2))
+            chatMessagesResponse = Response.success(TestDtos.chatMessagesArrayPayload(emptyList()))
+            exitRequestsResponse = Response.success(emptyList())
+            beforeGetFirstChatForMatchResponse = {
+                refreshStarted.complete(Unit)
+                withContext(NonCancellable) {
+                    refreshGate.await()
+                }
+            }
+            matchResponse = approvalParticipationRequiredResponse()
+            beforeSubmitChatDecisionResponse = {
+                decisionStarted.complete(Unit)
+                decisionGate.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(firstChatState(serverTime = S1, lastMessageAt = S1))
+
+        viewModel.refreshFirstChat(silent = true)
+        runCurrent()
+        refreshStarted.await()
+
+        viewModel.submitFirstChatDecision(ChatContinueDecision.Approved)
+        runCurrent()
+        decisionStarted.await()
+
+        decisionGate.complete(Unit)
+        runCurrent()
+
+        val actionState = viewModel.uiState.value as RealsRootUiState.FirstChat
+        assertFalse(actionState.actionLoading)
+        assertApprovalParticipationRequired(actionState.error)
+
+        refreshGate.complete(Unit)
+        advanceUntilIdle()
+
+        val finalState = viewModel.uiState.value as RealsRootUiState.FirstChat
+        assertFalse(finalState.actionLoading)
+        assertApprovalParticipationRequired(finalState.error)
+        assertEquals(null, finalState.message)
+        assertTrue(api.calls.contains("getMatch"))
+    }
+
+    @Test
+    fun `older silent refresh cannot restore stale prior feedback after newer approval error`() = runTest(dispatcher) {
+        val refreshGate = CompletableDeferred<Unit>()
+        val refreshStarted = CompletableDeferred<Unit>()
+        val decisionGate = CompletableDeferred<Unit>()
+        val decisionStarted = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            chatResponse = Response.success(chatDto(serverTime = S2, lastMessageAt = S2))
+            chatMessagesResponse = Response.success(TestDtos.chatMessagesArrayPayload(emptyList()))
+            exitRequestsResponse = Response.success(emptyList())
+            beforeGetFirstChatForMatchResponse = {
+                refreshStarted.complete(Unit)
+                withContext(NonCancellable) {
+                    refreshGate.await()
+                }
+            }
+            matchResponse = approvalParticipationRequiredResponse()
+            beforeSubmitChatDecisionResponse = {
+                decisionStarted.complete(Unit)
+                decisionGate.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(
+            firstChatState(serverTime = S1, lastMessageAt = S1).copy(
+                error = ApiError.Unexpected("old feedback"),
+                message = "Mensaje viejo",
+            )
+        )
+
+        viewModel.refreshFirstChat(silent = true)
+        runCurrent()
+        refreshStarted.await()
+
+        viewModel.submitFirstChatDecision(ChatContinueDecision.Approved)
+        runCurrent()
+        decisionStarted.await()
+
+        val pendingState = viewModel.uiState.value as RealsRootUiState.FirstChat
+        assertTrue(pendingState.actionLoading)
+        assertEquals(null, pendingState.error)
+        assertEquals(null, pendingState.message)
+
+        decisionGate.complete(Unit)
+        runCurrent()
+
+        val actionState = viewModel.uiState.value as RealsRootUiState.FirstChat
+        assertFalse(actionState.actionLoading)
+        assertApprovalParticipationRequired(actionState.error)
+        assertEquals(null, actionState.message)
+
+        refreshGate.complete(Unit)
+        advanceUntilIdle()
+
+        val finalState = viewModel.uiState.value as RealsRootUiState.FirstChat
+        assertFalse(finalState.actionLoading)
+        assertApprovalParticipationRequired(finalState.error)
+        assertEquals(null, finalState.message)
+        assertTrue(api.calls.contains("getMatch"))
+    }
+
+    @Test
+    fun `silent refresh preserves current feedback when no newer action occurred`() = runTest(dispatcher) {
+        val currentError = ApiError.Unexpected("current feedback")
+        val currentMessage = "Mensaje actual"
+        val api = FakeRealsApi().apply {
+            chatResponse = Response.success(chatDto(serverTime = S2, lastMessageAt = S2))
+            chatMessagesResponse = Response.success(TestDtos.chatMessagesArrayPayload(emptyList()))
+            exitRequestsResponse = Response.success(emptyList())
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(
+            firstChatState(serverTime = S1, lastMessageAt = S1).copy(
+                error = currentError,
+                message = currentMessage,
+            )
+        )
+
+        viewModel.refreshFirstChat(silent = true)
+        advanceUntilIdle()
+
+        val finalState = viewModel.uiState.value as RealsRootUiState.FirstChat
+        assertEquals(currentError, finalState.error)
+        assertEquals(currentMessage, finalState.message)
+        assertEquals(S2, finalState.chat?.lastMessageAt)
+    }
+
+    @Test
+    fun `explicit approval action can replace previous feedback`() = runTest(dispatcher) {
+        val decisionGate = CompletableDeferred<Unit>()
+        val decisionStarted = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            matchResponse = approvalParticipationRequiredResponse()
+            beforeSubmitChatDecisionResponse = {
+                decisionStarted.complete(Unit)
+                decisionGate.await()
+            }
+        }
+        val viewModel = viewModel(api)
+        viewModel.setState(
+            firstChatState(serverTime = S1, lastMessageAt = S1).copy(
+                error = ApiError.Unexpected("old feedback"),
+                message = "Mensaje viejo",
+            )
+        )
+
+        viewModel.submitFirstChatDecision(ChatContinueDecision.Approved)
+        runCurrent()
+        decisionStarted.await()
+
+        val pendingState = viewModel.uiState.value as RealsRootUiState.FirstChat
+        assertTrue(pendingState.actionLoading)
+        assertEquals(null, pendingState.error)
+        assertEquals(null, pendingState.message)
+
+        decisionGate.complete(Unit)
+        advanceUntilIdle()
+
+        val finalState = viewModel.uiState.value as RealsRootUiState.FirstChat
+        assertFalse(finalState.actionLoading)
+        assertApprovalParticipationRequired(finalState.error)
+        assertEquals(null, finalState.message)
     }
 
     @Test
@@ -465,6 +648,22 @@ class FirstChatAsyncResultReconciliationTest {
         id: String = "own-1",
         sentAt: String = "2026-06-18T21:01:00Z",
     ) = TestDtos.chatMessage(id).copy(sentAt = sentAt)
+
+    private fun approvalParticipationRequiredResponse() =
+        backendErrorResponse<MatchResponseDto>(
+            statusCode = 409,
+            code = "FIRST_CHAT_APPROVAL_PARTICIPATION_REQUIRED",
+            message = "Conflict",
+        )
+
+    private fun assertApprovalParticipationRequired(error: ApiError?) {
+        val backendError = error as ApiError.Backend
+        assertEquals(BackendErrorCode.FirstChatApprovalParticipationRequired, backendError.backendErrorCode)
+        assertEquals(
+            "Ambas personas tienen que participar un poco más antes de avanzar.",
+            backendError.toUserMessage(ErrorContext.Chat),
+        )
+    }
 
     private fun millis(value: String): Long = Instant.parse(value).toEpochMilli()
 
