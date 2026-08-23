@@ -55,6 +55,7 @@ internal fun AccountSection(
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     onSignOut: () -> Unit,
+    onOpenNotifications: () -> Unit,
     onChangePassword: (currentPassword: String, newPassword: String) -> Unit,
     onDeleteAccount: () -> Unit,
     onSupportReals: () -> Unit,
@@ -173,6 +174,13 @@ internal fun AccountSection(
             if (expanded) {
                 OutlinedButton(onClick = onSignOut, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
                     Text("Cerrar sesión")
+                }
+                OutlinedButton(
+                    onClick = onOpenNotifications,
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Notificaciones")
                 }
                 if (canChangePassword) {
                     OutlinedButton(
@@ -450,6 +458,7 @@ internal const val wrongCurrentPasswordMessage = "La contraseña actual no es co
 internal fun expandedAccountActionLabels(canChangePassword: Boolean): List<String> {
     return buildList {
         add("Cerrar sesión")
+        add("Notificaciones")
         if (canChangePassword) add("Cambiar contraseña de Reals")
         add("Eliminar cuenta")
     }

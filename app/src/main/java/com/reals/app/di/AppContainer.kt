@@ -52,6 +52,7 @@ import com.reals.app.domain.usecase.GetHomeUseCase
 import com.reals.app.domain.usecase.GetLegalStatusUseCase
 import com.reals.app.domain.usecase.GetMatchUseCase
 import com.reals.app.domain.usecase.GetMeUseCase
+import com.reals.app.domain.usecase.GetNotificationPreferencesUseCase
 import com.reals.app.domain.usecase.GetMyAffinityAnswersUseCase
 import com.reals.app.domain.usecase.GetMyProfileQuestionAnswersUseCase
 import com.reals.app.domain.usecase.GetPartnerPersonalMessageUseCase
@@ -90,6 +91,7 @@ import com.reals.app.domain.usecase.SubmitSchedulingProposalsUseCase
 import com.reals.app.domain.usecase.SubmitVisualDecisionUseCase
 import com.reals.app.domain.usecase.TimeoutChatExitRequestUseCase
 import com.reals.app.domain.usecase.UpdateMatchFiltersUseCase
+import com.reals.app.domain.usecase.UpdateNotificationPreferencesUseCase
 import com.reals.app.domain.usecase.UpdateProfileUseCase
 import com.reals.app.domain.usecase.UpsertMyProfileQuestionAnswerUseCase
 import com.reals.app.foreground.AtomicForegroundDestinationTracker
@@ -148,6 +150,8 @@ class AppContainer(context: Context) {
     val getHomeStatusUseCase = GetHomeStatusUseCase(meRepository)
     val getHomePendingUseCase = GetHomePendingUseCase(meRepository)
     val registerPushTokenUseCase = RegisterPushTokenUseCase(meRepository)
+    val getNotificationPreferencesUseCase = GetNotificationPreferencesUseCase(meRepository)
+    val updateNotificationPreferencesUseCase = UpdateNotificationPreferencesUseCase(meRepository)
     val pushTokenRegistrationService = PushTokenRegistrationService(appContext, registerPushTokenUseCase)
     val markLocalFirebaseEmailVerifiedUseCase = MarkLocalFirebaseEmailVerifiedUseCase(meRepository)
     val localFirebaseEmailVerificationCoordinator = LocalFirebaseEmailVerificationCoordinator(
@@ -234,6 +238,8 @@ class AppContainer(context: Context) {
             reactivateAccount = reactivateAccountUseCase,
             deleteAccount = deleteAccountUseCase,
             finalizeAccountDeletion = finalizeAccountDeletionUseCase,
+            getNotificationPreferences = getNotificationPreferencesUseCase,
+            updateNotificationPreferences = updateNotificationPreferencesUseCase,
         ),
         legal = LegalFeatureDependencies(
             getCurrentDocuments = getCurrentLegalDocumentsUseCase,

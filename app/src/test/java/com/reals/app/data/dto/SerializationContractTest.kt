@@ -2,8 +2,14 @@ package com.reals.app.data.dto
 
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import com.reals.app.domain.model.Profile
+import com.reals.app.domain.model.ProfileSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -81,6 +87,44 @@ class SerializationContractTest {
         assertTrue(body.contains(""""lookingForGenders":["MAN"]"""))
         assertTrue(body.contains(""""countryCode":"AR""""))
         assertTrue(body.contains(""""maxDistanceKm":25"""))
+    }
+
+    @Test
+    fun `notification preferences request serializes all required booleans`() {
+        val body = json.encodeToString(
+            NotificationPreferencesRequestDto(
+                activityEnabled = true,
+                remindersEnabled = false,
+                availabilityEnabled = true,
+            ),
+        )
+
+        val fields = json.parseToJsonElement(body).jsonObject
+        assertEquals(true, fields.getValue("activityEnabled").jsonPrimitive.boolean)
+        assertEquals(false, fields.getValue("remindersEnabled").jsonPrimitive.boolean)
+        assertEquals(true, fields.getValue("availabilityEnabled").jsonPrimitive.boolean)
+        assertEquals(3, fields.size)
+    }
+
+    @Test
+    fun `profile DTOs and models do not contain notification preferences`() {
+        listOf(
+            ProfileResponseDto::class.java,
+            CreateProfileRequestDto::class.java,
+            UpdateProfileRequestDto::class.java,
+            Profile::class.java,
+            ProfileSnapshot::class.java,
+        ).forEach { type ->
+            assertFalse(
+                "${type.simpleName} must not contain notification preferences",
+                type.declaredFields.any { field ->
+                    field.name.contains("notification", ignoreCase = true) ||
+                        field.name.contains("activityEnabled", ignoreCase = true) ||
+                        field.name.contains("remindersEnabled", ignoreCase = true) ||
+                        field.name.contains("availabilityEnabled", ignoreCase = true)
+                },
+            )
+        }
     }
 
     @Test

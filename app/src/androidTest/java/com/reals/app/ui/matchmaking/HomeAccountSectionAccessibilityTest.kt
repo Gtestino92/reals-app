@@ -94,6 +94,7 @@ class HomeAccountSectionAccessibilityTest {
         setAccountSection(width = 276.dp, fontScale = 1.5f, expanded = true)
 
         composeRule.onNodeWithText("Cerrar sesión").assertIsDisplayed()
+        composeRule.onNodeWithText("Notificaciones").assertIsDisplayed()
         composeRule.onNodeWithText("Cambiar contraseña de Reals").assertIsDisplayed()
         composeRule.onNodeWithText("Eliminar cuenta").assertIsDisplayed()
     }
@@ -207,6 +208,7 @@ class HomeAccountSectionAccessibilityTest {
                             expanded = expanded,
                             onExpandedChange = {},
                             onSignOut = {},
+                            onOpenNotifications = {},
                             onChangePassword = { _, _ -> },
                             onDeleteAccount = {},
                             onSupportReals = onSupportReals,

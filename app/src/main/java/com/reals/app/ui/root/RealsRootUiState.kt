@@ -15,6 +15,7 @@ import com.reals.app.domain.model.HomeState
 import com.reals.app.domain.model.LegalDocumentAction
 import com.reals.app.domain.model.LegalDocumentType
 import com.reals.app.domain.model.Match
+import com.reals.app.domain.model.NotificationPreferences
 import com.reals.app.domain.model.ProfileActivationResult
 import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.ProfileQuestionAnswer
@@ -76,6 +77,7 @@ sealed interface RealsRootUiState {
         val photos: PhotoManagementUiState = PhotoManagementUiState(),
         val home: HomeUiState = HomeUiState(),
         val account: AccountUiState = AccountUiState(),
+        val notificationPreferences: NotificationPreferencesUiState = NotificationPreferencesUiState(),
         val editingActiveProfile: Boolean = false,
         val profileManagementDestination: ProfileManagementDestination? = null,
         val affinityHomeSummary: AffinityHomeSummaryUiState = AffinityHomeSummaryUiState(),
@@ -358,6 +360,17 @@ data class AccountUiState(
     val changePasswordMessage: String? = null,
 )
 
+data class NotificationPreferencesUiState(
+    val open: Boolean = false,
+    val loading: Boolean = false,
+    val preferences: NotificationPreferences? = null,
+    val confirmedPreferences: NotificationPreferences? = null,
+    val saving: Boolean = false,
+    val loadError: ApiError? = null,
+    val saveError: ApiError? = null,
+    val requestId: Long = 0L,
+)
+
 enum class ProfileManagementDestination {
     Profile,
     Search,
@@ -612,6 +625,20 @@ fun RealsRootUiState.clearLegalActionRequiredForResume(): RealsRootUiState = whe
                 home.matchmakingSearchPhase
             },
         ),
+        notificationPreferences = notificationPreferences.copy(
+            loading = if (notificationPreferences.loadError.isLegalActionRequired()) {
+                false
+            } else {
+                notificationPreferences.loading
+            },
+            saving = if (notificationPreferences.saveError.isLegalActionRequired()) {
+                false
+            } else {
+                notificationPreferences.saving
+            },
+            loadError = notificationPreferences.loadError.takeUnless { it.isLegalActionRequired() },
+            saveError = notificationPreferences.saveError.takeUnless { it.isLegalActionRequired() },
+        ),
         affinityQuestionnaire = affinityQuestionnaire.copy(
             loading = if (affinityQuestionnaire.error.isLegalActionRequired()) {
                 false
@@ -671,7 +698,8 @@ private fun ApiError?.isLegalActionRequired(): Boolean = this?.isLegalActionRequ
 
 fun RealsRootUiState.canHandleSystemBack(): Boolean = when (this) {
     is RealsRootUiState.Ready ->
-        affinityQuestionnaire.open ||
+        notificationPreferences.open ||
+                affinityQuestionnaire.open ||
                 profileQuestions.open ||
                 (
                         editingActiveProfile &&

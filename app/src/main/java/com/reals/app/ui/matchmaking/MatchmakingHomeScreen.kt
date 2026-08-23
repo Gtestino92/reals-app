@@ -49,9 +49,11 @@ import com.reals.app.BuildConfig
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
 import com.reals.app.domain.model.HomeActiveInteractionsSummary
+import com.reals.app.domain.model.NotificationPreferenceGroup
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.SearchLocationInput
+import com.reals.app.ui.account.NotificationSettingsScreen
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
@@ -64,6 +66,7 @@ import com.reals.app.ui.theme.RealsType
 import com.reals.app.ui.root.AffinityHomeSummaryUiState
 import com.reals.app.ui.root.HomeSurface
 import com.reals.app.ui.root.MatchmakingSearchUiPhase
+import com.reals.app.ui.root.NotificationPreferencesUiState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
@@ -93,6 +96,7 @@ fun MatchmakingHomeScreen(
     changePasswordMessage: String?,
     canChangePassword: Boolean,
     homeSurface: HomeSurface,
+    notificationPreferences: NotificationPreferencesUiState,
     onHomeSurfaceChange: (HomeSurface) -> Unit,
     onEnqueue: (SearchLocationInput) -> Unit,
     onDeviceLocationResolved: (SearchLocationInput) -> Unit,
@@ -112,6 +116,10 @@ fun MatchmakingHomeScreen(
     onOpenAffinityQuestions: () -> Unit,
     onEditProfile: () -> Unit,
     onEditSearch: () -> Unit,
+    onOpenNotifications: () -> Unit,
+    onRetryNotifications: () -> Unit,
+    onCloseNotifications: () -> Unit,
+    onNotificationPreferenceChange: (NotificationPreferenceGroup, Boolean) -> Unit,
     onSignOut: () -> Unit,
     onChangePassword: (currentPassword: String, newPassword: String) -> Unit,
     onDeleteAccount: () -> Unit,
@@ -371,6 +379,11 @@ fun MatchmakingHomeScreen(
             onOpenAffinityQuestions = onOpenAffinityQuestions,
             onEditProfile = onEditProfile,
             onEditSearch = onEditSearch,
+            onOpenNotifications = onOpenNotifications,
+            notificationPreferences = notificationPreferences,
+            onRetryNotifications = onRetryNotifications,
+            onCloseNotifications = onCloseNotifications,
+            onNotificationPreferenceChange = onNotificationPreferenceChange,
             onSignOut = onSignOut,
             onChangePassword = onChangePassword,
             onDeleteAccount = onDeleteAccount,
@@ -440,6 +453,11 @@ private fun MatchmakingIdleScreen(
     onOpenAffinityQuestions: () -> Unit,
     onEditProfile: () -> Unit,
     onEditSearch: () -> Unit,
+    onOpenNotifications: () -> Unit,
+    notificationPreferences: NotificationPreferencesUiState,
+    onRetryNotifications: () -> Unit,
+    onCloseNotifications: () -> Unit,
+    onNotificationPreferenceChange: (NotificationPreferenceGroup, Boolean) -> Unit,
     onSignOut: () -> Unit,
     onChangePassword: (currentPassword: String, newPassword: String) -> Unit,
     onDeleteAccount: () -> Unit,
@@ -461,6 +479,20 @@ private fun MatchmakingIdleScreen(
     val visualAdvancementWait = matchmakingUnavailable
         ?.takeIf { it.kind == MatchmakingUnavailableKind.VisualAdvancementWait }
     var refreshedVisualAdvancementAt by rememberSaveable(profile.id) { mutableStateOf<String?>(null) }
+
+    if (notificationPreferences.open) {
+        NotificationSettingsScreen(
+            loading = notificationPreferences.loading,
+            preferences = notificationPreferences.preferences,
+            saving = notificationPreferences.saving,
+            loadError = notificationPreferences.loadError,
+            saveError = notificationPreferences.saveError,
+            onRetry = onRetryNotifications,
+            onBack = onCloseNotifications,
+            onPreferenceChange = onNotificationPreferenceChange,
+        )
+        return
+    }
 
     if (homeSurface == HomeSurface.Pending) {
         PendingInteractionsScreen(
@@ -685,6 +717,7 @@ private fun MatchmakingIdleScreen(
             expanded = accountExpanded,
             onExpandedChange = { accountExpanded = it },
             onSignOut = onSignOut,
+            onOpenNotifications = onOpenNotifications,
             onChangePassword = onChangePassword,
             onDeleteAccount = onDeleteAccount,
             onSupportReals = onSupportReals,

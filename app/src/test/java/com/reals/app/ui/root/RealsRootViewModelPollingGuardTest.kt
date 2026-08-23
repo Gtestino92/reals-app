@@ -1093,6 +1093,10 @@ internal fun rootViewModelTestDependencies(
                 reactivateAccount = ReactivateAccountUseCase(meRepository),
                 deleteAccount = DeleteAccountUseCase(meRepository),
                 finalizeAccountDeletion = com.reals.app.domain.usecase.FinalizeAccountDeletionUseCase(meRepository),
+                getNotificationPreferences =
+                    com.reals.app.domain.usecase.GetNotificationPreferencesUseCase(meRepository),
+                updateNotificationPreferences =
+                    com.reals.app.domain.usecase.UpdateNotificationPreferencesUseCase(meRepository),
             ),
             legal = LegalFeatureDependencies(
                 getCurrentDocuments = GetCurrentLegalDocumentsUseCase(legalRepository),

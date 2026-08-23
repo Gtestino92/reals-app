@@ -7,10 +7,12 @@ import com.reals.app.data.api.AuthTokenProvider
 import com.reals.app.data.api.RealsApi
 import com.reals.app.data.dto.RegisterPushTokenRequestDto
 import com.reals.app.data.mapper.toDomain
+import com.reals.app.data.mapper.toRequestDto
 import com.reals.app.domain.model.BackendUser
 import com.reals.app.domain.model.HomePendingState
 import com.reals.app.domain.model.HomeState
 import com.reals.app.domain.model.HomeStatus
+import com.reals.app.domain.model.NotificationPreferences
 
 class MeRepository(
     private val api: RealsApi,
@@ -44,6 +46,20 @@ class MeRepository(
                 body = RegisterPushTokenRequestDto(token = token, platform = "ANDROID"),
             )
         }.map { it.registered }
+
+    suspend fun getNotificationPreferences(): ApiResult<NotificationPreferences> =
+        authorizedCall { authorization -> api.getNotificationPreferences(authorization) }
+            .map { it.toDomain() }
+
+    suspend fun updateNotificationPreferences(
+        preferences: NotificationPreferences,
+    ): ApiResult<NotificationPreferences> =
+        authorizedCall { authorization ->
+            api.updateNotificationPreferences(
+                authorization = authorization,
+                body = preferences.toRequestDto(),
+            )
+        }.map { it.toDomain() }
 
     suspend fun deleteMe(): ApiResult<Unit> =
         authorizedUnitCall { authorization -> api.deleteMe(authorization) }
