@@ -1334,8 +1334,14 @@ class RealsRootViewModel(
                 return@launch
             }
             when (result) {
-                is FirstChatRefreshResult.Show ->
-                    _uiState.value = result.state.reconcileAsyncFirstChatResult(latest) ?: return@launch
+                is FirstChatRefreshResult.Show -> {
+                    val reconciled = if (silent) {
+                        result.state.reconcileSilentFirstChatRefreshResult(latest)
+                    } else {
+                        result.state.reconcileAsyncFirstChatResult(latest)
+                    } ?: return@launch
+                    _uiState.value = reconciled
+                }
                 is FirstChatRefreshResult.Reopen -> openFirstChat(result.matchId, result.chatId)
                 is FirstChatRefreshResult.Closed -> {
                     homeCoordinator.hideFirstChatLocally(current.matchId)
@@ -1366,7 +1372,7 @@ class RealsRootViewModel(
             applyFirstChatGuidanceActionResult(
                 result = firstChatCoordinator.requestNextGuidanceQuestion(
                     current = current,
-                    onPending = { _uiState.value = it },
+                    onPending = { setFirstChatMutationPending(current, it) },
                 ),
                 original = current,
             )
@@ -1658,7 +1664,7 @@ class RealsRootViewModel(
                 firstChatCoordinator.submitDecision(
                     current = current,
                     decision = decision,
-                    onPending = { _uiState.value = it },
+                    onPending = { setFirstChatMutationPending(current, it) },
                 )
             )
         }
@@ -1697,7 +1703,7 @@ class RealsRootViewModel(
             applyFirstChatActionResult(
                 firstChatCoordinator.requestMutualExit(
                     current = current,
-                    onPending = { _uiState.value = it },
+                    onPending = { setFirstChatMutationPending(current, it) },
                 )
             )
         }
@@ -1709,7 +1715,7 @@ class RealsRootViewModel(
             applyFirstChatActionResult(
                 firstChatCoordinator.cancelUnilaterally(
                     current = current,
-                    onPending = { _uiState.value = it },
+                    onPending = { setFirstChatMutationPending(current, it) },
                 )
             )
         }
@@ -1725,7 +1731,7 @@ class RealsRootViewModel(
                     current = current,
                     reason = reason,
                     details = details,
-                    onPending = { _uiState.value = it },
+                    onPending = { setFirstChatMutationPending(current, it) },
                 )
             )
         }
@@ -1738,7 +1744,7 @@ class RealsRootViewModel(
                 firstChatCoordinator.acceptExitRequest(
                     current = current,
                     exitRequestId = exitRequestId,
-                    onPending = { _uiState.value = it },
+                    onPending = { setFirstChatMutationPending(current, it) },
                 )
             )
         }
@@ -1751,7 +1757,7 @@ class RealsRootViewModel(
                 firstChatCoordinator.rejectExitRequest(
                     current = current,
                     exitRequestId = exitRequestId,
-                    onPending = { _uiState.value = it },
+                    onPending = { setFirstChatMutationPending(current, it) },
                 )
             )
         }
@@ -1764,7 +1770,7 @@ class RealsRootViewModel(
                 firstChatCoordinator.timeoutExitRequest(
                     current = current,
                     exitRequestId = exitRequestId,
-                    onPending = { _uiState.value = it },
+                    onPending = { setFirstChatMutationPending(current, it) },
                 )
             )
         }
@@ -1970,6 +1976,14 @@ class RealsRootViewModel(
                 )
             }
         }
+    }
+
+    private fun setFirstChatMutationPending(
+        current: RealsRootUiState.FirstChat,
+        pending: RealsRootUiState.FirstChat,
+    ) {
+        cancelSilentRefreshFor(current)
+        _uiState.value = pending
     }
 
     private suspend fun applyFirstChatGuidanceActionResult(
@@ -2540,6 +2554,14 @@ private fun RealsRootUiState.FirstChat.reconcileAsyncFirstChatResult(
         dismissedUnansweredPeriodReference = displayed.dismissedUnansweredPeriodReference,
     )
 }
+
+private fun RealsRootUiState.FirstChat.reconcileSilentFirstChatRefreshResult(
+    displayed: RealsRootUiState.FirstChat,
+): RealsRootUiState.FirstChat? =
+    reconcileAsyncFirstChatResult(displayed)?.copy(
+        error = displayed.error,
+        message = displayed.message,
+    )
 
 private fun RealsRootUiState.SecondChat.reconcileAsyncSecondChatResult(
     displayed: RealsRootUiState.SecondChat,
