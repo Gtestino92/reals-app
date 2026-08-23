@@ -1,7 +1,6 @@
 package com.reals.app.ui.account
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -59,10 +58,7 @@ fun NotificationSettingsScreen(
             .padding(24.dp),
         verticalArrangement = Arrangement.Top,
     ) {
-        Column(
-            modifier = Modifier.animateContentSize(),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
-        ) {
+        Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
             NotificationSettingsHeader()
             when {
                 preferences == null && loading -> NotificationSettingsLoading()
