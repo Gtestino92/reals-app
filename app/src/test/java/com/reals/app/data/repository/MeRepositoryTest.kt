@@ -1,6 +1,8 @@
 package com.reals.app.data.repository
 
 import com.reals.app.core.network.ApiError
+import com.reals.app.data.dto.NotificationPreferencesResponseDto
+import com.reals.app.domain.model.NotificationPreferences
 import com.reals.app.domain.model.HomeNextStep
 import com.reals.app.domain.model.HomePendingAction
 import com.reals.app.testutil.FakeAuthTokenProvider
@@ -93,6 +95,53 @@ class MeRepositoryTest {
         assertEquals("Bearer test-token", api.lastAuthorization)
         assertEquals("fcm-token", api.registerPushTokenBody?.token)
         assertEquals("ANDROID", api.registerPushTokenBody?.platform)
+    }
+
+    @Test
+    fun `getNotificationPreferences maps all backend groups`() = runBlocking {
+        api.notificationPreferencesResponse = retrofit2.Response.success(
+            NotificationPreferencesResponseDto(
+                activityEnabled = false,
+                remindersEnabled = true,
+                availabilityEnabled = false,
+            )
+        )
+
+        val preferences = repository.getNotificationPreferences().successValue()
+
+        assertEquals("getNotificationPreferences", api.calls.single())
+        assertEquals("Bearer test-token", api.lastAuthorization)
+        assertEquals(false, preferences.activityEnabled)
+        assertEquals(true, preferences.remindersEnabled)
+        assertEquals(false, preferences.availabilityEnabled)
+    }
+
+    @Test
+    fun `updateNotificationPreferences sends complete body and trusts response`() = runBlocking {
+        api.updateNotificationPreferencesResponse = retrofit2.Response.success(
+            NotificationPreferencesResponseDto(
+                activityEnabled = true,
+                remindersEnabled = true,
+                availabilityEnabled = false,
+            )
+        )
+
+        val result = repository.updateNotificationPreferences(
+            NotificationPreferences(
+                activityEnabled = true,
+                remindersEnabled = false,
+                availabilityEnabled = true,
+            )
+        ).successValue()
+
+        assertEquals("updateNotificationPreferences", api.calls.single())
+        assertEquals("Bearer test-token", api.lastAuthorization)
+        assertEquals(true, api.notificationPreferencesBody?.activityEnabled)
+        assertEquals(false, api.notificationPreferencesBody?.remindersEnabled)
+        assertEquals(true, api.notificationPreferencesBody?.availabilityEnabled)
+        assertEquals(true, result.activityEnabled)
+        assertEquals(true, result.remindersEnabled)
+        assertEquals(false, result.availabilityEnabled)
     }
 
     @Test

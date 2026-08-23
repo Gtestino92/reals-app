@@ -1,5 +1,7 @@
 package com.reals.app.di
 
+import com.reals.app.core.network.ApiError
+import com.reals.app.core.network.ApiResult
 import com.reals.app.data.repository.FirebaseAuthRepository
 import com.reals.app.data.preferences.FirstChatUnansweredSuggestionDismissalStore
 import com.reals.app.domain.usecase.AcceptChatExitRequestUseCase
@@ -34,6 +36,7 @@ import com.reals.app.domain.usecase.GetLegalStatusUseCase
 import com.reals.app.domain.usecase.GetMatchUseCase
 import com.reals.app.domain.usecase.GetMeUseCase
 import com.reals.app.domain.usecase.GetMyAffinityAnswersUseCase
+import com.reals.app.domain.usecase.GetNotificationPreferences
 import com.reals.app.domain.usecase.GetMyProfileQuestionAnswersUseCase
 import com.reals.app.domain.usecase.GetPartnerPersonalMessageUseCase
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
@@ -70,6 +73,7 @@ import com.reals.app.domain.usecase.SubmitSchedulingProposalsUseCase
 import com.reals.app.domain.usecase.SubmitVisualDecisionUseCase
 import com.reals.app.domain.usecase.TimeoutChatExitRequestUseCase
 import com.reals.app.domain.usecase.UpdateMatchFiltersUseCase
+import com.reals.app.domain.usecase.UpdateNotificationPreferences
 import com.reals.app.domain.usecase.UpdateProfileUseCase
 import com.reals.app.domain.usecase.UpsertMyProfileQuestionAnswerUseCase
 import com.reals.app.notifications.registration.PushTokenRegistrationService
@@ -116,6 +120,10 @@ data class AccountFeatureDependencies(
     val reactivateAccount: ReactivateAccountUseCase,
     val deleteAccount: DeleteAccountUseCase,
     val finalizeAccountDeletion: FinalizeAccountDeletionUseCase,
+    val getNotificationPreferences: GetNotificationPreferences =
+        GetNotificationPreferences { ApiResult.Failure(ApiError.Unexpected("Notification preferences unavailable.")) },
+    val updateNotificationPreferences: UpdateNotificationPreferences =
+        UpdateNotificationPreferences { ApiResult.Failure(ApiError.Unexpected("Notification preferences unavailable.")) },
 )
 
 data class LegalFeatureDependencies(

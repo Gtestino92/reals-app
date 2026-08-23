@@ -43,6 +43,7 @@ import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.VisualDecision
 import com.reals.app.foreground.ForegroundDestinationLifecyclePublisher
 import com.reals.app.ui.account.AccountDeletionRecoveryScreen
+import com.reals.app.ui.account.NotificationSettingsScreen
 import com.reals.app.ui.auth.GoogleCredentialClient
 import com.reals.app.ui.auth.LoginScreen
 import com.reals.app.ui.chat.ChatScreen
@@ -199,7 +200,18 @@ fun RealsApp(
                 is ProfileSnapshot.Found -> {
                     val profile = (current.session.profileSnapshot).profile
                     val homeAvailable = current.shouldRenderHomeSurface()
-                    if (current.shouldRenderAffinityQuestionnaireSurface()) {
+                    if (current.notificationPreferences.open) {
+                        NotificationSettingsScreen(
+                            loading = current.notificationPreferences.loading,
+                            preferences = current.notificationPreferences.preferences,
+                            saving = current.notificationPreferences.saving,
+                            loadError = current.notificationPreferences.loadError,
+                            saveError = current.notificationPreferences.saveError,
+                            onRetry = viewModel::retryNotificationPreferences,
+                            onBack = viewModel::closeNotificationPreferences,
+                            onPreferenceChange = viewModel::updateNotificationPreference,
+                        )
+                    } else if (current.shouldRenderAffinityQuestionnaireSurface()) {
                         AffinityQuestionnaireScreen(
                             state = current.affinityQuestionnaire,
                             onBack = viewModel::navigateBackAffinityQuestionnaire,
@@ -327,6 +339,7 @@ fun RealsApp(
                             onOpenAffinityQuestions = viewModel::openAffinityQuestionnaire,
                             onEditProfile = viewModel::openProfileManagement,
                             onEditSearch = viewModel::openSearchManagement,
+                            onOpenNotifications = viewModel::openNotificationPreferences,
                             onSignOut = viewModel::signOut,
                             onChangePassword = viewModel::changePassword,
                             onDeleteAccount = viewModel::deleteAccount,

@@ -24,6 +24,7 @@ import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.CreateProfileInput
 import com.reals.app.domain.model.FirstChatGuidance
 import com.reals.app.domain.model.LegalDocumentAction
+import com.reals.app.domain.model.NotificationPreferenceGroup
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.SearchLocationInput
@@ -87,6 +88,11 @@ class RealsRootViewModel(
         dependencies.manualBlock.blockMatchParticipant,
     )
     private val legalCoordinator = LegalCoordinator(dependencies.legal)
+    private val notificationPreferencesCoordinator = NotificationPreferencesCoordinator(
+        uiState = _uiState,
+        dependencies = dependencies.account,
+        scope = viewModelScope,
+    )
     private lateinit var sessionCoordinator: SessionCoordinator
     private var silentFirstChatRefreshJob: Job? = null
     private var silentSecondChatRefreshJob: Job? = null
@@ -209,6 +215,19 @@ class RealsRootViewModel(
     fun changePassword(currentPassword: String, newPassword: String) =
         sessionCoordinator.changePassword(currentPassword, newPassword)
 
+    fun openNotificationPreferences() {
+        val current = _uiState.value as? RealsRootUiState.Ready ?: return
+        if (current.session.profileSnapshot !is ProfileSnapshot.Found || !current.shouldRenderHomeSurface()) return
+        notificationPreferencesCoordinator.open()
+    }
+
+    fun closeNotificationPreferences() = notificationPreferencesCoordinator.close()
+
+    fun retryNotificationPreferences() = notificationPreferencesCoordinator.retryLoad()
+
+    fun updateNotificationPreference(group: NotificationPreferenceGroup, enabled: Boolean) =
+        notificationPreferencesCoordinator.update(group, enabled)
+
     fun reactivateAccount() = sessionCoordinator.reactivateAccount()
 
     fun finalizeAccountDeletion() = sessionCoordinator.finalizeAccountDeletion()
@@ -219,7 +238,9 @@ class RealsRootViewModel(
 
         when (current) {
             is RealsRootUiState.Ready -> {
-                if (current.affinityQuestionnaire.open) {
+                if (current.notificationPreferences.open) {
+                    closeNotificationPreferences()
+                } else if (current.affinityQuestionnaire.open) {
                     navigateBackAffinityQuestionnaire()
                 } else if (current.profileQuestions.open) {
                     navigateBackProfileQuestions()

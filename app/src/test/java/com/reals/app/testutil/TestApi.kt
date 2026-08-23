@@ -25,6 +25,8 @@ import com.reals.app.data.dto.LegalDocumentActionResponseDto
 import com.reals.app.data.dto.LegalStatusResponseDto
 import com.reals.app.data.dto.MatchResponseDto
 import com.reals.app.data.dto.NegotiationResponseDto
+import com.reals.app.data.dto.NotificationPreferencesRequestDto
+import com.reals.app.data.dto.NotificationPreferencesResponseDto
 import com.reals.app.data.dto.PartnerPersonalMessageResponseDto
 import com.reals.app.data.dto.PhotoResponseDto
 import com.reals.app.data.dto.PasswordResetRequestDto
@@ -140,6 +142,8 @@ class FakeRealsApi : RealsApi {
         private set
     var registerPushTokenBody: RegisterPushTokenRequestDto? = null
         private set
+    var notificationPreferencesBody: NotificationPreferencesRequestDto? = null
+        private set
     var passwordResetBody: PasswordResetRequestDto? = null
         private set
     var legalActionBody: RecordLegalDocumentActionRequestDto? = null
@@ -155,6 +159,8 @@ class FakeRealsApi : RealsApi {
 
     var beforeGetHomeResponse: suspend () -> Unit = {}
     var beforeGetHomeStatusResponse: suspend () -> Unit = {}
+    var beforeGetNotificationPreferencesResponse: suspend () -> Unit = {}
+    var beforeUpdateNotificationPreferencesResponse: suspend () -> Unit = {}
     var beforeGetMatchResponse: suspend () -> Unit = {}
     var beforeGetVisualProfileResponse: suspend () -> Unit = {}
     var beforeGetFirstChatForMatchResponse: suspend () -> Unit = {}
@@ -199,6 +205,15 @@ class FakeRealsApi : RealsApi {
     var homePendingResponse: Response<HomePendingStateResponseDto> = Response.success(TestDtos.homePending())
     var registerPushTokenResponse: Response<RegisterPushTokenResponseDto> =
         Response.success(RegisterPushTokenResponseDto(registered = true))
+    var notificationPreferencesResponse: Response<NotificationPreferencesResponseDto> =
+        Response.success(
+            NotificationPreferencesResponseDto(
+                activityEnabled = true,
+                remindersEnabled = true,
+                availabilityEnabled = true,
+            )
+        )
+    var updateNotificationPreferencesResponse: Response<NotificationPreferencesResponseDto>? = null
     var localFirebaseEmailVerificationResponse: Response<Unit> = Response.success(Unit)
     var currentLegalDocumentsResponse: Response<CurrentLegalDocumentsResponseDto> =
         Response.success(TestDtos.currentLegalDocuments())
@@ -284,6 +299,31 @@ class FakeRealsApi : RealsApi {
             registerPushTokenBody = body
             registerPushTokenResponse
         }
+
+    override suspend fun getNotificationPreferences(
+        authorization: String,
+    ): Response<NotificationPreferencesResponseDto> =
+        record(
+            "getNotificationPreferences",
+            authorization,
+            beforeResponse = beforeGetNotificationPreferencesResponse,
+        ) {
+            notificationPreferencesResponse
+        }
+
+    override suspend fun updateNotificationPreferences(
+        authorization: String,
+        body: NotificationPreferencesRequestDto,
+    ): Response<NotificationPreferencesResponseDto> {
+        notificationPreferencesBody = body
+        return record(
+            "updateNotificationPreferences",
+            authorization,
+            beforeResponse = beforeUpdateNotificationPreferencesResponse,
+        ) {
+            updateNotificationPreferencesResponse ?: notificationPreferencesResponse
+        }
+    }
 
     override suspend fun deleteMe(authorization: String): Response<Unit> =
         record("deleteMe", authorization) { deleteMeResponse }

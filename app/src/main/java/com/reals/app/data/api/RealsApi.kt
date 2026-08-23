@@ -23,6 +23,8 @@ import com.reals.app.data.dto.LegalStatusResponseDto
 import com.reals.app.data.dto.MatchResponseDto
 import com.reals.app.data.dto.FirstChatGuidanceResponseDto
 import com.reals.app.data.dto.NegotiationResponseDto
+import com.reals.app.data.dto.NotificationPreferencesRequestDto
+import com.reals.app.data.dto.NotificationPreferencesResponseDto
 import com.reals.app.data.dto.PartnerPersonalMessageResponseDto
 import com.reals.app.data.dto.PersonalMessageRequestDto
 import com.reals.app.data.dto.PasswordResetRequestDto
@@ -107,6 +109,17 @@ interface RealsApi {
         @Header("Authorization") authorization: String,
         @Body body: RegisterPushTokenRequestDto,
     ): Response<RegisterPushTokenResponseDto>
+
+    @GET("api/me/notification-preferences")
+    suspend fun getNotificationPreferences(
+        @Header("Authorization") authorization: String,
+    ): Response<NotificationPreferencesResponseDto>
+
+    @PUT("api/me/notification-preferences")
+    suspend fun updateNotificationPreferences(
+        @Header("Authorization") authorization: String,
+        @Body body: NotificationPreferencesRequestDto,
+    ): Response<NotificationPreferencesResponseDto>
 
     @DELETE("api/me")
     suspend fun deleteMe(
