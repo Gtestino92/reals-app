@@ -1,6 +1,7 @@
 package com.reals.app.notifications
 
 import com.reals.app.notifications.PushNotificationContract.TYPE_MATCH_FOUND
+import com.reals.app.notifications.PushNotificationContract.TYPE_MATCHMAKING_AVAILABLE
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_AVAILABLE
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_CONFIRMED
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_PROPOSALS_RECEIVED
@@ -23,7 +24,8 @@ object PushNotificationOpenContract {
         TYPE_SCHEDULING_PROPOSALS_RECEIVED,
         TYPE_SCHEDULING_CONFIRMED,
         TYPE_SECOND_CHAT_REMINDER,
-        TYPE_SECOND_CHAT_STARTED -> true
+        TYPE_SECOND_CHAT_STARTED,
+        TYPE_MATCHMAKING_AVAILABLE -> true
         else -> false
     }
 }

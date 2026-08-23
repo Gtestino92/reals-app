@@ -2,6 +2,7 @@ package com.reals.app.notifications
 
 import com.reals.app.notifications.PushNotificationContract.TYPE_MATCH_FOUND
 import com.reals.app.notifications.PushNotificationContract.TYPE_MATCH_FOUND_INVALIDATED
+import com.reals.app.notifications.PushNotificationContract.TYPE_MATCHMAKING_AVAILABLE
 import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_STARTED
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -52,7 +53,40 @@ class RealsFirebaseMessagingServiceContractTest {
         assertTrue(isKnownForegroundNotificationType(TYPE_MATCH_FOUND))
         assertTrue(isKnownForegroundNotificationType(TYPE_MATCH_FOUND_INVALIDATED))
         assertTrue(isKnownForegroundNotificationType(TYPE_SECOND_CHAT_STARTED))
+        assertTrue(isKnownForegroundNotificationType(TYPE_MATCHMAKING_AVAILABLE))
         assertFalse(isKnownForegroundNotificationType("UNKNOWN"))
+    }
+
+    @Test
+    fun `matchmaking available contract uses exact backend type and no resource ids`() {
+        val context = mapOf(
+            "type" to " $TYPE_MATCHMAKING_AVAILABLE ",
+        ).incomingNotificationContext()
+
+        assertEquals("MATCHMAKING_AVAILABLE", TYPE_MATCHMAKING_AVAILABLE)
+        assertEquals(TYPE_MATCHMAKING_AVAILABLE, context.type)
+        assertEquals(null, context.matchId)
+        assertEquals(null, context.connectionId)
+        assertEquals(null, context.availableAt)
+        assertEquals(null, context.expiresAt)
+    }
+
+    @Test
+    fun `matchmaking available dispatch always refreshes Home and follows presentation policy`() {
+        assertEquals(
+            MatchmakingAvailableDispatchAction(
+                requestHomeRefresh = true,
+                presentNotification = true,
+            ),
+            matchmakingAvailableDispatchAction(shouldPresent = true),
+        )
+        assertEquals(
+            MatchmakingAvailableDispatchAction(
+                requestHomeRefresh = true,
+                presentNotification = false,
+            ),
+            matchmakingAvailableDispatchAction(shouldPresent = false),
+        )
     }
 
     @Test
