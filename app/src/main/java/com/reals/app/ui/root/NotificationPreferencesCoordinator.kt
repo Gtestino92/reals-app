@@ -58,6 +58,8 @@ internal class NotificationPreferencesCoordinator(
     fun close() {
         val current = uiState.value as? RealsRootUiState.Ready ?: return
         if (!current.notificationPreferences.open) return
+        loadJob?.cancel()
+        loadJob = null
         uiState.value = current.copy(notificationPreferences = NotificationPreferencesUiState())
     }
 
@@ -85,6 +87,7 @@ internal class NotificationPreferencesCoordinator(
     private fun load(requestId: Long) {
         loadJob?.cancel()
         loadJob = scope.launch {
+            saveJob?.takeIf { it.isActive }?.join()
             when (val result = dependencies.getNotificationPreferences()) {
                 is ApiResult.Success -> publishLoadSuccess(requestId, result.value)
                 is ApiResult.Failure -> publishLoadFailure(requestId, result.error)

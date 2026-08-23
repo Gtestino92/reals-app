@@ -250,6 +250,110 @@ class NotificationPreferencesCoordinatorTest {
     }
 
     @Test
+    fun `reopening waits for in-flight save before authoritative GET`() = runTest(dispatcher) {
+        val saveStarted = CompletableDeferred<Unit>()
+        val releaseSave = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            notificationPreferencesResponse = retrofit2.Response.success(preferencesDto(true, true, true))
+            updateNotificationPreferencesResponse = retrofit2.Response.success(preferencesDto(false, true, true))
+            beforeUpdateNotificationPreferencesResponse = {
+                saveStarted.complete(Unit)
+                releaseSave.await()
+            }
+        }
+        val harness = harness(api)
+        harness.coordinator.open()
+        advanceUntilIdle()
+
+        harness.coordinator.update(NotificationPreferenceGroup.Activity, false)
+        runCurrent()
+        saveStarted.await()
+        harness.coordinator.close()
+        harness.coordinator.open()
+        runCurrent()
+
+        val reopened = harness.ready().notificationPreferences
+        assertTrue(reopened.open)
+        assertTrue(reopened.loading)
+        assertEquals(
+            listOf("getNotificationPreferences", "updateNotificationPreferences"),
+            api.calls,
+        )
+
+        api.notificationPreferencesResponse = retrofit2.Response.success(preferencesDto(false, true, true))
+        releaseSave.complete(Unit)
+        advanceUntilIdle()
+
+        val finalState = harness.ready().notificationPreferences
+        assertEquals(
+            listOf("getNotificationPreferences", "updateNotificationPreferences", "getNotificationPreferences"),
+            api.calls,
+        )
+        assertEquals(NotificationPreferences(false, true, true), finalState.preferences)
+        assertEquals(NotificationPreferences(false, true, true), finalState.confirmedPreferences)
+        assertFalse(finalState.loading)
+        assertFalse(finalState.saving)
+    }
+
+    @Test
+    fun `old save result does not directly mutate reopened screen`() = runTest(dispatcher) {
+        val releaseSave = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            notificationPreferencesResponse = retrofit2.Response.success(preferencesDto(true, true, true))
+            updateNotificationPreferencesResponse = retrofit2.Response.success(preferencesDto(false, false, false))
+            beforeUpdateNotificationPreferencesResponse = { releaseSave.await() }
+        }
+        val harness = harness(api)
+        harness.coordinator.open()
+        advanceUntilIdle()
+
+        harness.coordinator.update(NotificationPreferenceGroup.Activity, false)
+        runCurrent()
+        harness.coordinator.close()
+        harness.coordinator.open()
+        runCurrent()
+
+        api.notificationPreferencesResponse = retrofit2.Response.success(preferencesDto(false, true, true))
+        releaseSave.complete(Unit)
+        advanceUntilIdle()
+
+        val finalState = harness.ready().notificationPreferences
+        assertEquals(
+            listOf("getNotificationPreferences", "updateNotificationPreferences", "getNotificationPreferences"),
+            api.calls,
+        )
+        assertEquals(NotificationPreferences(false, true, true), finalState.preferences)
+        assertEquals(NotificationPreferences(false, true, true), finalState.confirmedPreferences)
+    }
+
+    @Test
+    fun `closing cancels obsolete load without republishing after release`() = runTest(dispatcher) {
+        val getStarted = CompletableDeferred<Unit>()
+        val releaseGet = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            notificationPreferencesResponse = retrofit2.Response.success(preferencesDto(false, true, false))
+            beforeGetNotificationPreferencesResponse = {
+                getStarted.complete(Unit)
+                releaseGet.await()
+            }
+        }
+        val harness = harness(api)
+
+        harness.coordinator.open()
+        runCurrent()
+        getStarted.await()
+        harness.coordinator.close()
+        releaseGet.complete(Unit)
+        advanceUntilIdle()
+
+        val state = harness.ready().notificationPreferences
+        assertFalse(state.open)
+        assertFalse(state.loading)
+        assertNull(state.preferences)
+        assertNull(state.confirmedPreferences)
+    }
+
+    @Test
     fun `system back closes notification settings`() = runTest(dispatcher) {
         val api = FakeRealsApi()
         val viewModel = RealsRootViewModel(rootViewModelTestDependencies(api), autoRefreshSession = false)
