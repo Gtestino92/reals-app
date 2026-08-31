@@ -945,13 +945,6 @@ internal fun FilledPhotoSlot(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = ProfilePhotoReplaceActionMinHeight)
-                    .clip(actionShape)
-                    .background(MaterialTheme.colorScheme.surface)
-                    .border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outline,
-                        shape = actionShape,
-                    )
                     .clickable(
                         enabled = !busy,
                         onClickLabel = "Reemplazar foto ${photo.position}",
@@ -959,15 +952,30 @@ internal fun FilledPhotoSlot(
                     .semantics { contentDescription = "Reemplazar foto ${photo.position}" }
                     .testTag(profilePhotoReplaceTag(photo.position)),
             ) {
-                Text(
-                    text = "Cambiar",
+                Box(
                     modifier = Modifier
                         .align(Alignment.Center)
-                        .padding(horizontal = 6.dp, vertical = 3.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.labelSmall,
-                    textAlign = TextAlign.Center,
-                )
+                        .heightIn(min = ProfilePhotoReplaceVisualMinHeight)
+                        .fillMaxWidth()
+                        .clip(actionShape)
+                        .background(MaterialTheme.colorScheme.surface)
+                        .border(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outline,
+                            shape = actionShape,
+                        )
+                        .testTag(profilePhotoReplaceVisualTag(photo.position)),
+                ) {
+                    Text(
+                        text = "Cambiar",
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.labelSmall,
+                        textAlign = TextAlign.Center,
+                    )
+                }
             }
         }
     }
@@ -1206,7 +1214,8 @@ internal val ProfilePhotoGridPositions: IntRange = 1..9
 
 internal val ProfilePhotoDeleteTouchTargetSize = 48.dp
 internal val ProfilePhotoDeleteVisualSize = 24.dp
-internal val ProfilePhotoReplaceActionMinHeight = 32.dp
+internal val ProfilePhotoReplaceActionMinHeight = 48.dp
+internal val ProfilePhotoReplaceVisualMinHeight = 32.dp
 
 internal const val ProfilePhotoGridRootTag = "profile_photo_grid"
 internal const val ProfilePhotoActionProgressTag = "profile_photo_action_progress"
@@ -1221,6 +1230,7 @@ internal fun profilePhotoLocalPreviewTag(position: Int): String = "profile_photo
 internal fun profilePhotoDeleteTag(position: Int): String = "profile_photo_delete_$position"
 internal fun profilePhotoDeleteVisualTag(position: Int): String = "profile_photo_delete_visual_$position"
 internal fun profilePhotoReplaceTag(position: Int): String = "profile_photo_replace_$position"
+internal fun profilePhotoReplaceVisualTag(position: Int): String = "profile_photo_replace_visual_$position"
 internal fun profilePhotoModerationStatusTag(position: Int): String = "profile_photo_moderation_status_$position"
 internal fun profilePhotoAddTag(position: Int): String = "profile_photo_add_$position"
 internal fun profilePhotoAddPlusTag(position: Int): String = "profile_photo_add_plus_$position"
