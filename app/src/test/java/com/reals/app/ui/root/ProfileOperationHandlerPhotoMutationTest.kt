@@ -4,6 +4,7 @@ import com.reals.app.data.mapper.toDomain
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.ProfilePhotoModerationStatusNeedsReview
+import com.reals.app.domain.model.ProfilePhotoModerationStatusRejected
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.testutil.TestDomain
@@ -91,6 +92,50 @@ class ProfileOperationHandlerPhotoMutationTest {
         assertEquals("NEEDS_REVIEW", updated.profilePhotos.single().moderationStatus)
         assertEquals(
             "Foto guardada. Está pendiente de revisión y no será visible para otras personas hasta que la aprobemos.",
+            updated.photoActionMessage,
+        )
+        assertFalse(updated.addingPhoto)
+    }
+
+    @Test
+    fun `add photo success message uses backend rejected moderation status`() {
+        val addedPhoto = testPhoto(
+            id = "photo-1",
+            position = 1,
+            moderationStatus = ProfilePhotoModerationStatusRejected,
+        )
+        val previous = readyState(
+            profile = activeProfile(photoCount = 0),
+            photos = emptyList(),
+        )
+
+        val updated = photoAddedState(previous, addedPhoto, "Foto subida correctamente.")
+
+        assertEquals("REJECTED", updated.profilePhotos.single().moderationStatus)
+        assertEquals(
+            "Foto guardada, pero fue rechazada. Reemplazala para que pueda mostrarse a otras personas.",
+            updated.photoActionMessage,
+        )
+        assertFalse(updated.addingPhoto)
+    }
+
+    @Test
+    fun `replace photo success message uses backend rejected moderation status`() {
+        val replacedPhoto = testPhoto(
+            id = "photo-1",
+            position = 1,
+            moderationStatus = ProfilePhotoModerationStatusRejected,
+        )
+        val previous = readyState(
+            profile = activeProfile(photoCount = 1),
+            photos = listOf(testPhoto(id = "photo-1", position = 1)),
+        )
+
+        val updated = photoReplacedState(previous, replacedPhoto, "Foto reemplazada correctamente.")
+
+        assertEquals("REJECTED", updated.profilePhotos.single().moderationStatus)
+        assertEquals(
+            "Foto guardada, pero fue rechazada. Reemplazala para que pueda mostrarse a otras personas.",
             updated.photoActionMessage,
         )
         assertFalse(updated.addingPhoto)
