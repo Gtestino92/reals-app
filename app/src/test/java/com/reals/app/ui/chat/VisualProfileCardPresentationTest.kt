@@ -1,6 +1,7 @@
 package com.reals.app.ui.chat
 
 import com.reals.app.domain.model.ProfilePhoto
+import com.reals.app.domain.model.ProfilePhotoModerationStatusNeedsReview
 import com.reals.app.domain.model.PublicProfileQuestion
 import com.reals.app.domain.model.VisualAffinityIndicator
 import com.reals.app.domain.model.VisualProfile
@@ -117,6 +118,31 @@ class VisualProfileCardPresentationTest {
     }
 
     @Test
+    fun `external visual profile hides photos that are not approved`() {
+        val approvedSecond = photo(2)
+        val pendingFirst = photo(1, moderationStatus = ProfilePhotoModerationStatusNeedsReview)
+        val rejectedThird = photo(3, moderationStatus = "REJECTED")
+
+        val photos = visualProfilePhotosForDisplay(listOf(pendingFirst, rejectedThird, approvedSecond))
+
+        assertEquals(listOf("photo-2"), photos.map { it.id })
+    }
+
+    @Test
+    fun `browse selection falls back when selected photo is not approved`() {
+        val selection = browseProfilePhotoSelection(
+            photos = listOf(
+                photo(1, moderationStatus = ProfilePhotoModerationStatusNeedsReview),
+                photo(2),
+            ),
+            selectedPhotoId = "photo-1",
+        )
+
+        assertEquals("photo-2", selection?.selectedPhoto?.id)
+        assertEquals(0, selection?.selectedIndex)
+    }
+
+    @Test
     fun `browse photo selection uses selected stable photo id`() {
         val selection = browseProfilePhotoSelection(
             photos = listOf(photo(3), photo(1), photo(2)),
@@ -200,14 +226,17 @@ class VisualProfileCardPresentationTest {
 
     private fun photos(count: Int): List<ProfilePhoto> = (1..count).map(::photo)
 
-    private fun photo(position: Int) = ProfilePhoto(
+    private fun photo(
+        position: Int,
+        moderationStatus: String = "APPROVED",
+    ) = ProfilePhoto(
         id = "photo-$position",
         url = "https://example.com/$position.jpg",
         position = position,
         isPersonPhoto = true,
         isFullBody = position > 1,
         validationStatus = "VALIDATED",
-        moderationStatus = "APPROVED",
+        moderationStatus = moderationStatus,
     )
 
     private fun publicQuestion(
