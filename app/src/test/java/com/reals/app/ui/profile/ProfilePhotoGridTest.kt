@@ -1,9 +1,12 @@
 package com.reals.app.ui.profile
 
 import com.reals.app.domain.model.ProfilePhoto
+import com.reals.app.domain.model.ProfilePhotoModerationStatusNeedsReview
 import com.reals.app.domain.model.PhotoPlacementInput
+import com.reals.app.domain.model.isPendingModerationReview
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ProfilePhotoGridTest {
@@ -23,6 +26,20 @@ class ProfilePhotoGridTest {
         assertEquals(firstSlot, photosByPosition[1])
         assertEquals(ninthSlot, photosByPosition[9])
         assertFalse(photosByPosition.containsKey(10))
+    }
+
+    @Test
+    fun profilePhotosByGridPositionKeepsPendingReviewPhotosVisibleToOwner() {
+        val pendingReview = testPhoto(
+            id = "photo-1",
+            position = 1,
+            moderationStatus = ProfilePhotoModerationStatusNeedsReview,
+        )
+
+        val photosByPosition = listOf(pendingReview).profilePhotosByGridPosition()
+
+        assertEquals(pendingReview, photosByPosition[1])
+        assertTrue(photosByPosition.getValue(1).isPendingModerationReview())
     }
 
     @Test
@@ -119,7 +136,11 @@ class ProfilePhotoGridTest {
         assertEquals(photos.first().url, display.first { it.id == "photo-1" }.url)
     }
 
-    private fun testPhoto(id: String, position: Int): ProfilePhoto =
+    private fun testPhoto(
+        id: String,
+        position: Int,
+        moderationStatus: String = "APPROVED",
+    ): ProfilePhoto =
         ProfilePhoto(
             id = id,
             url = "https://static.reals.local/$id.jpg",
@@ -127,6 +148,6 @@ class ProfilePhotoGridTest {
             isPersonPhoto = true,
             isFullBody = false,
             validationStatus = "APPROVED",
-            moderationStatus = "APPROVED",
+            moderationStatus = moderationStatus,
         )
 }

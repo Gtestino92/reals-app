@@ -80,6 +80,7 @@ import com.reals.app.core.network.backendErrorCode
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.ProfileStatus
+import com.reals.app.domain.model.isPendingModerationReview
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
@@ -338,6 +339,9 @@ private fun PhotoManagerActions(
                     photoActionMessage = photoActionMessage,
                 )
             }
+            if (photos.any { it.isPendingModerationReview() }) {
+                ProfilePhotoPendingReviewNotice()
+            }
             PhotoGrid(
                 photos = photos,
                 busy = busy,
@@ -510,6 +514,18 @@ internal fun ProfilePhotoActionFeedback(
             photoActionMessage?.let { SuccessFeedback(it) }
         }
     }
+}
+
+@Composable
+private fun ProfilePhotoPendingReviewNotice(
+    modifier: Modifier = Modifier,
+) {
+    FeedbackCard(
+        title = "Fotos en revisión",
+        message = "Podés verlas acá, pero no serán visibles para otras personas hasta que las aprobemos.",
+        tone = FeedbackTone.Info,
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -838,6 +854,14 @@ internal fun FilledPhotoSlot(
                         .testTag(profilePhotoLocalPreviewTag(photo.position)),
                 )
             }
+            if (photo.isPendingModerationReview()) {
+                ProfilePhotoPendingReviewPill(
+                    position = photo.position,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(8.dp),
+                )
+            }
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -930,6 +954,30 @@ internal fun FilledPhotoSlot(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun ProfilePhotoPendingReviewPill(
+    position: Int,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier
+            .semantics { contentDescription = "Foto $position pendiente de revisión" }
+            .testTag(profilePhotoPendingReviewTag(position)),
+        shape = RoundedCornerShape(999.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Text(
+            text = "En revisión",
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelSmall,
+        )
     }
 }
 
@@ -1159,6 +1207,7 @@ internal fun profilePhotoLocalPreviewTag(position: Int): String = "profile_photo
 internal fun profilePhotoDeleteTag(position: Int): String = "profile_photo_delete_$position"
 internal fun profilePhotoDeleteVisualTag(position: Int): String = "profile_photo_delete_visual_$position"
 internal fun profilePhotoReplaceTag(position: Int): String = "profile_photo_replace_$position"
+internal fun profilePhotoPendingReviewTag(position: Int): String = "profile_photo_pending_review_$position"
 internal fun profilePhotoAddTag(position: Int): String = "profile_photo_add_$position"
 internal fun profilePhotoAddPlusTag(position: Int): String = "profile_photo_add_plus_$position"
 internal fun profilePhotoAddLabelTag(position: Int): String = "profile_photo_add_label_$position"

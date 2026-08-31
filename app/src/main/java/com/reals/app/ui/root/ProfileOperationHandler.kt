@@ -18,6 +18,7 @@ import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.UpdateProfileInput
 import com.reals.app.domain.model.UpdateMatchFiltersInput
+import com.reals.app.domain.model.isPendingModerationReview
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
 import com.reals.app.ui.profile.movePhotoLocally
 import com.reals.app.ui.profile.photosWithPendingOrder
@@ -664,7 +665,7 @@ internal fun photoAddedState(
             reorderingPhotos = false,
             photoReorderError = null,
             photoReorderMessage = null,
-            photoActionMessage = successMessage,
+            photoActionMessage = profilePhotoUploadSuccessMessage(addedPhoto, successMessage),
             photoActionError = null,
         ),
     )
@@ -683,7 +684,7 @@ internal fun photoReplacedState(
         reorderingPhotos = false,
         photoReorderError = null,
         photoReorderMessage = null,
-        photoActionMessage = successMessage,
+        photoActionMessage = profilePhotoUploadSuccessMessage(replacedPhoto, successMessage),
         photoActionError = null,
     ),
 )
@@ -764,3 +765,13 @@ internal fun markProfileDraftAfterPhotoMutation(
     )
     return session.copy(profileSnapshot = ProfileSnapshot.Found(updatedProfile))
 }
+
+internal fun profilePhotoUploadSuccessMessage(
+    photo: ProfilePhoto,
+    defaultMessage: String,
+): String =
+    if (photo.isPendingModerationReview()) {
+        "Foto guardada. Está pendiente de revisión y no será visible para otras personas hasta que la aprobemos."
+    } else {
+        defaultMessage
+    }

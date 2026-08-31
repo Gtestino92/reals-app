@@ -37,6 +37,7 @@ import com.reals.app.core.security.TextSafety
 import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.PublicProfileQuestion
 import com.reals.app.domain.model.VisualProfile
+import com.reals.app.domain.model.isApprovedForExternalDisplay
 import com.reals.app.ui.common.RealsSectionLabel
 import com.reals.app.ui.common.RealsThinDivider
 import com.reals.app.ui.profile.ProfilePhotoPresentationAspectRatio
@@ -120,7 +121,9 @@ internal data class BrowseProfilePhotoSelection(
 
 internal fun visualProfilePhotosForDisplay(
     photos: List<ProfilePhoto>,
-): List<ProfilePhoto> = photos.sortedBy { it.position }
+): List<ProfilePhoto> = photos
+    .filter { it.isApprovedForExternalDisplay() }
+    .sortedBy { it.position }
 
 internal fun browseProfilePhotoSelection(
     photos: List<ProfilePhoto>,
