@@ -733,6 +733,33 @@ class RealsRootViewModelPasswordResetTest {
     }
 
     @Test
+    fun `account ban published mid session routes to login with ban reason`() = runTest(dispatcher) {
+        val authRepository = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
+        val viewModel = viewModel(authRepository)
+        viewModel.setState(
+            RealsRootUiState.FirstChat(
+                session = TestDomain.session(),
+                matchId = "match-1",
+                error = ApiError.Backend(
+                    statusCode = 403,
+                    code = "ACCOUNT_TEMPORARILY_BANNED",
+                    error = "Forbidden",
+                    message = "forbidden",
+                ),
+            )
+        )
+
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Login
+        assertEquals(
+            "Tu cuenta está suspendida temporalmente. Podrás volver a entrar cuando termine la suspensión.",
+            state.error,
+        )
+        assertEquals(1, authRepository.signOutCalls)
+    }
+
+    @Test
     fun `token unavailable published mid session does not invalidate session`() = runTest(dispatcher) {
         val authRepository = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
         val viewModel = viewModel(authRepository)
@@ -892,6 +919,49 @@ class RealsRootViewModelPasswordResetTest {
 
         val state = viewModel.uiState.value as RealsRootUiState.Login
         assertEquals("Ese método de inicio de sesión no está habilitado para esta cuenta.", state.error)
+        assertEquals(1, authRepository.signOutCalls)
+        assertEquals(listOf("getMe"), api.calls.filter { it == "getMe" || it == "provisionMe" })
+    }
+
+    @Test
+    fun `temporarily banned backend user clears local session and returns to login`() = runTest(dispatcher) {
+        val api = FakeRealsApi().apply {
+            getMeResponse = backendErrorResponse(403, "ACCOUNT_TEMPORARILY_BANNED", "forbidden")
+        }
+        val authRepository = FakeFirebaseAuthRepository(
+            passwordResetResult = PasswordResetResult.SentOrHandledGenerically,
+        )
+        val viewModel = viewModel(authRepository, api)
+        viewModel.setState(RealsRootUiState.Login())
+
+        viewModel.signIn("alex@example.com", "password")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Login
+        assertEquals(
+            "Tu cuenta está suspendida temporalmente. Podrás volver a entrar cuando termine la suspensión.",
+            state.error,
+        )
+        assertEquals(1, authRepository.signOutCalls)
+        assertEquals(listOf("getMe"), api.calls.filter { it == "getMe" || it == "provisionMe" })
+    }
+
+    @Test
+    fun `permanently banned backend user clears local session and returns to login`() = runTest(dispatcher) {
+        val api = FakeRealsApi().apply {
+            getMeResponse = backendErrorResponse(403, "ACCOUNT_PERMANENTLY_BANNED", "forbidden")
+        }
+        val authRepository = FakeFirebaseAuthRepository(
+            passwordResetResult = PasswordResetResult.SentOrHandledGenerically,
+        )
+        val viewModel = viewModel(authRepository, api)
+        viewModel.setState(RealsRootUiState.Login())
+
+        viewModel.signIn("alex@example.com", "password")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Login
+        assertEquals("Tu cuenta fue suspendida permanentemente.", state.error)
         assertEquals(1, authRepository.signOutCalls)
         assertEquals(listOf("getMe"), api.calls.filter { it == "getMe" || it == "provisionMe" })
     }

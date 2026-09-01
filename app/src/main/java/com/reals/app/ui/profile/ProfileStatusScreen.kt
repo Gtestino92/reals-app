@@ -145,11 +145,25 @@ fun ProfileStatusScreen(
             .padding(24.dp),
         verticalArrangement = Arrangement.Center,
     ) {
-        Text(
-            text = managementSurface.screenTitle(onBackHome == null),
-            style = RealsType.ScreenTitle,
-            color = MaterialTheme.colorScheme.primary,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Text(
+                text = managementSurface.screenTitle(onBackHome == null),
+                modifier = Modifier.weight(1f),
+                style = RealsType.ScreenTitle,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            onBackHome?.let { backHome ->
+                TextButton(
+                    onClick = backHome,
+                    enabled = !busy,
+                ) {
+                    Text("Volver")
+                }
+            }
+        }
         Text(
             text = managementSurface.screenBody(),
             modifier = Modifier.padding(top = 8.dp),

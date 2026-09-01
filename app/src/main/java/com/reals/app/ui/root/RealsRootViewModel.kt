@@ -8,6 +8,7 @@ import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ApiResult
 import com.reals.app.core.network.BackendErrorCode
 import com.reals.app.core.network.backendErrorCode
+import com.reals.app.core.network.isAccountBanned
 import com.reals.app.core.network.isLegalActionRequired
 import com.reals.app.core.network.isTerminalAuthFailure
 import com.reals.app.core.network.isUserPairBlocked
@@ -129,6 +130,7 @@ class RealsRootViewModel(
                 showReactivatedSession(session)
             },
         )
+        observeAccountBanned()
         observeTerminalAuthFailure()
         observeLegalActionRequired()
         observeUserPairBlocked()
@@ -2292,6 +2294,20 @@ class RealsRootViewModel(
         }
     }
 
+    private fun observeAccountBanned() {
+        viewModelScope.launch {
+            uiState.collect { current ->
+                if (sessionInvalidationJob?.isActive == true) return@collect
+                val error = current.accountBannedError() ?: return@collect
+                cancelSilentRefreshFor(current)
+                pendingSecondChatStartedHomeOpen = false
+                sessionInvalidationJob = launch {
+                    sessionCoordinator.invalidateAccountBannedSession(error)
+                }
+            }
+        }
+    }
+
     private fun observePendingSecondChatStartedHomeOpenInvalidation() {
         viewModelScope.launch {
             uiState.collect { current ->
@@ -2506,6 +2522,47 @@ private fun ApiError?.isLegalActionRequiredError(): Boolean =
 
 private fun ApiError?.isTerminalAuthFailure(): Boolean =
     this?.isTerminalAuthFailure() == true
+
+private fun RealsRootUiState.accountBannedError(): ApiError? = when (this) {
+    is RealsRootUiState.Failure -> error.takeIfAccountBanned()
+    is RealsRootUiState.AccountDeletionPending -> error.takeIfAccountBanned()
+    is RealsRootUiState.LegalRequirements -> firstAccountBannedError(error, accountDeleteError)
+    is RealsRootUiState.Ready -> firstAccountBannedError(
+        profileCreateError,
+        countriesError,
+        profileUpdateError,
+        matchFiltersError,
+        profileActivationError,
+        profilePhotosError,
+        photoReorderError,
+        photoActionError,
+        homeError,
+        matchmakingBlockedReason,
+        accountDeleteError,
+        affinityQuestionnaire.error,
+        affinityQuestionnaire.mutationError,
+        profileQuestions.error,
+        profileQuestions.mutationError,
+    )
+
+    is RealsRootUiState.FirstChat -> firstAccountBannedError(error, manualBlock.error)
+    is RealsRootUiState.SecondChat -> firstAccountBannedError(error, manualBlock.error)
+    is RealsRootUiState.VisualApproval -> firstAccountBannedError(
+        error,
+        partnerMessageError,
+        manualBlock.error,
+    )
+
+    is RealsRootUiState.Scheduling -> firstAccountBannedError(error, manualBlock.error)
+    is RealsRootUiState.PartnerProfile -> firstAccountBannedError(error, manualBlock.error)
+    else -> null
+}
+
+private fun firstAccountBannedError(vararg errors: ApiError?): ApiError? =
+    errors.firstNotNullOfOrNull { it.takeIfAccountBanned() }
+
+private fun ApiError?.takeIfAccountBanned(): ApiError? =
+    this?.takeIf { it.isAccountBanned() }
 
 private fun RealsRootUiState.hasUserPairBlockedInteractionError(): Boolean = when (this) {
     is RealsRootUiState.FirstChat -> error.isUserPairBlockedError()

@@ -21,8 +21,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ApiError
 import com.reals.app.domain.model.ChatExitReason
@@ -101,7 +103,18 @@ private fun SafetyReportDialog(
                         enabled = !actionLoading,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text(selectedOption.label)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "Motivo: ${selectedOption.label}",
+                                modifier = Modifier.weight(1f),
+                                textAlign = TextAlign.Start,
+                            )
+                            Text("▼")
+                        }
                     }
                     DropdownMenu(
                         expanded = reasonMenuExpanded,

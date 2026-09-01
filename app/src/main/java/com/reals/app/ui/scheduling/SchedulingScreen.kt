@@ -174,6 +174,12 @@ fun SchedulingScreen(
                         style = RealsType.ScreenTitle,
                         color = MaterialTheme.colorScheme.primary,
                     )
+                    TextButton(
+                        onClick = onBackHome,
+                        enabled = !interactionBusy,
+                    ) {
+                        Text("Volver")
+                    }
                     ManualBlockOverflowMenu(
                         enabled = !interactionBusy,
                         onRequestBlock = {

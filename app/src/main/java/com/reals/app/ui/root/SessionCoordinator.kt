@@ -4,8 +4,10 @@ import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ApiResult
 import com.reals.app.core.network.BackendErrorCode
 import com.reals.app.core.network.backendErrorCode
+import com.reals.app.core.network.isAccountBanned
 import com.reals.app.core.network.isAccountDeleted
 import com.reals.app.core.network.isTerminalAuthFailure
+import com.reals.app.core.network.toUserMessage
 import com.reals.app.data.repository.AuthOperationResult
 import com.reals.app.data.repository.ChangePasswordResult
 import com.reals.app.data.repository.FirebaseAuthRepository
@@ -181,6 +183,12 @@ internal class SessionCoordinator(
             clearLocalSessionAndShowLogin(
                 error = "Tu sesión terminó. Volvé a iniciar sesión.",
             )
+        }
+    }
+
+    fun invalidateAccountBannedSession(error: ApiError) {
+        scope.launch {
+            clearLocalSessionAndShowLogin(error = error.toUserMessage())
         }
     }
 
@@ -429,7 +437,9 @@ internal class SessionCoordinator(
             }
 
             is ApiResult.Failure -> {
-                if (userResult.error.isTerminalAuthFailure()) {
+                if (userResult.error.isAccountBanned()) {
+                    clearLocalSessionAndShowLogin(error = userResult.error.toUserMessage())
+                } else if (userResult.error.isTerminalAuthFailure()) {
                     invalidateTerminalSession()
                 } else {
                     uiState.value = RealsRootUiState.Failure(userResult.error)
@@ -560,6 +570,11 @@ internal class SessionCoordinator(
     }
 
     private suspend fun handleSessionLoadFailure(error: ApiError) {
+        if (error.isAccountBanned()) {
+            clearLocalSessionAndShowLogin(error = error.toUserMessage())
+            return
+        }
+
         if (error.isAuthenticationMethodNotAllowed()) {
             clearLocalSessionAndShowLogin(
                 error = "Ese método de inicio de sesión no está habilitado para esta cuenta.",

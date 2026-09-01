@@ -78,6 +78,8 @@ enum class BackendErrorCode(val raw: String) {
     ProfilePhotoNotFound("PROFILE_PHOTO_NOT_FOUND"),
     AccountDeleted("ACCOUNT_PENDING_DELETION"),
     AccountDeletionFinalized("ACCOUNT_DELETION_FINALIZED"),
+    AccountTemporarilyBanned("ACCOUNT_TEMPORARILY_BANNED"),
+    AccountPermanentlyBanned("ACCOUNT_PERMANENTLY_BANNED"),
     LegalActionRequired("LEGAL_ACTION_REQUIRED"),
     LegalDocumentActionInvalid("LEGAL_DOCUMENT_ACTION_INVALID"),
     LegalDocumentNotFound("LEGAL_DOCUMENT_NOT_FOUND"),
@@ -194,6 +196,15 @@ fun ApiError.isAccountDeletionFinalized(): Boolean {
     return this is ApiError.Backend && backendErrorCode == BackendErrorCode.AccountDeletionFinalized
 }
 
+fun ApiError.isAccountBanned(): Boolean {
+    if (this !is ApiError.Backend) return false
+    return when (backendErrorCode) {
+        BackendErrorCode.AccountTemporarilyBanned,
+        BackendErrorCode.AccountPermanentlyBanned -> true
+        else -> false
+    }
+}
+
 fun ApiError.isTerminalAuthFailure(): Boolean {
     return (this is ApiError.Auth && reason == AuthFailureReason.NOT_SIGNED_IN) ||
         (this is ApiError.Backend && backendErrorCode == BackendErrorCode.AuthMethodNotAllowed)
@@ -303,6 +314,9 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.ProfilePhotoNotFound -> "No encontramos esa foto. Actualizá la lista e intentá nuevamente."
     BackendErrorCode.AccountDeleted -> "Esta cuenta está pendiente de eliminación. Podés recuperarla si todavía está dentro del plazo."
     BackendErrorCode.AccountDeletionFinalized -> "La cuenta ya no puede recuperarse. Podés crear una cuenta nueva."
+    BackendErrorCode.AccountTemporarilyBanned ->
+        "Tu cuenta está suspendida temporalmente. Podrás volver a entrar cuando termine la suspensión."
+    BackendErrorCode.AccountPermanentlyBanned -> "Tu cuenta fue suspendida permanentemente."
     BackendErrorCode.LegalActionRequired -> "Necesitás completar los documentos vigentes antes de continuar."
     BackendErrorCode.LegalDocumentVersionNotCurrent,
     BackendErrorCode.LegalDocumentNotFound -> "Los documentos vigentes cambiaron. Actualizá la información e intentá nuevamente."

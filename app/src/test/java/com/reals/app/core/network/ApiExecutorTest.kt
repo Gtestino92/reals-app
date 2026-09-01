@@ -122,4 +122,30 @@ class ApiExecutorTest {
             ApiError.Auth(AuthFailureReason.TOKEN_MISSING, "missing").toUserMessage(),
         )
     }
+
+    @Test
+    fun `auth helper messages cover account ban errors`() {
+        val temporaryBan = ApiError.Backend(
+            403,
+            "ACCOUNT_TEMPORARILY_BANNED",
+            "ACCOUNT_TEMPORARILY_BANNED",
+            "",
+        )
+        val permanentBan = ApiError.Backend(
+            403,
+            "ACCOUNT_PERMANENTLY_BANNED",
+            "ACCOUNT_PERMANENTLY_BANNED",
+            "",
+        )
+
+        assertEquals(BackendErrorCode.AccountTemporarilyBanned, temporaryBan.backendErrorCode)
+        assertTrue(temporaryBan.isAccountBanned())
+        assertEquals(
+            "Tu cuenta está suspendida temporalmente. Podrás volver a entrar cuando termine la suspensión.",
+            temporaryBan.toUserMessage(),
+        )
+        assertEquals(BackendErrorCode.AccountPermanentlyBanned, permanentBan.backendErrorCode)
+        assertTrue(permanentBan.isAccountBanned())
+        assertEquals("Tu cuenta fue suspendida permanentemente.", permanentBan.toUserMessage())
+    }
 }
