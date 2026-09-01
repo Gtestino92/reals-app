@@ -9,6 +9,7 @@ import com.reals.app.data.dto.ChatExitRequestCreateRequestDto
 import com.reals.app.data.dto.ChatExitRequestResponseDto
 import com.reals.app.data.dto.ChatMessageResponseDto
 import com.reals.app.data.dto.ChatResponseDto
+import com.reals.app.data.dto.ChatSafetyCancellationRequestDto
 import com.reals.app.data.dto.ConnectionDismissalResponseDto
 import com.reals.app.data.dto.ConnectionResponseDto
 import com.reals.app.data.dto.CountryReferenceResponseDto
@@ -431,7 +432,7 @@ interface RealsApi {
     suspend fun safetyCancelChat(
         @Header("Authorization") authorization: String,
         @Path("chatId") chatId: String,
-        @Body body: ChatExitRequestCreateRequestDto,
+        @Body body: ChatSafetyCancellationRequestDto,
     ): Response<ChatExitOutcomeResponseDto>
 
     @GET("api/connections/{connectionId}")

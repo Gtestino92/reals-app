@@ -128,6 +128,13 @@ data class ChatExitRequestCreateRequestDto(
 )
 
 @Serializable
+data class ChatSafetyCancellationRequestDto(
+    val reason: String,
+    val details: String,
+    val blockUser: Boolean,
+)
+
+@Serializable
 data class ChatExitRequestResponseDto(
     val id: String,
     val chatId: String,

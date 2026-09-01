@@ -752,6 +752,7 @@ internal class FirstChatCoordinator(
         current: RealsRootUiState.FirstChat,
         reason: ChatExitReason,
         details: String,
+        blockUser: Boolean,
         onPending: (RealsRootUiState.FirstChat) -> Unit,
     ): FirstChatActionResult {
         if (current.loading || current.refreshing || current.sending || current.audioUpload.uploading || current.actionLoading) {
@@ -768,7 +769,7 @@ internal class FirstChatCoordinator(
 
         return runExitAction(
             current = current,
-            successMessage = "Reporte enviado. Cerramos ésta conversación por seguridad y no volveremos a cruzarte con ésta persona.",
+            successMessage = safetyReportSuccessMessage(blockUser),
             loadingLabel = "Enviando reporte...",
             onPending = onPending,
         ) { chatId ->
@@ -776,6 +777,7 @@ internal class FirstChatCoordinator(
                 chatId,
                 reason,
                 cleanDetails,
+                blockUser,
             )
         }
     }

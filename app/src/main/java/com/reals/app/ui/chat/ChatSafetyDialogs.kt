@@ -4,8 +4,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -19,6 +22,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ApiError
 import com.reals.app.domain.model.ChatExitReason
@@ -34,11 +38,13 @@ internal fun ChatSafetyDialogs(
     canUseSafetyActions: Boolean,
     safetyDetails: String,
     selectedSafetyReason: ChatExitReason,
+    blockUser: Boolean,
     actionLoading: Boolean,
     manualBlockLoading: Boolean,
     manualBlockError: ApiError?,
     onSafetyDetailsChange: (String) -> Unit,
     onSafetyReasonChange: (ChatExitReason) -> Unit,
+    onBlockUserChange: (Boolean) -> Unit,
     onDismissSafetyDialog: () -> Unit,
     onConfirmSafetyReport: () -> Unit,
     onDismissManualBlockDialog: () -> Unit,
@@ -48,9 +54,11 @@ internal fun ChatSafetyDialogs(
         SafetyReportDialog(
             details = safetyDetails,
             selectedReason = selectedSafetyReason,
+            blockUser = blockUser,
             actionLoading = actionLoading,
             onDetailsChange = onSafetyDetailsChange,
             onReasonChange = onSafetyReasonChange,
+            onBlockUserChange = onBlockUserChange,
             onDismiss = onDismissSafetyDialog,
             onConfirm = onConfirmSafetyReport,
         )
@@ -70,9 +78,11 @@ internal fun ChatSafetyDialogs(
 private fun SafetyReportDialog(
     details: String,
     selectedReason: ChatExitReason,
+    blockUser: Boolean,
     actionLoading: Boolean,
     onDetailsChange: (String) -> Unit,
     onReasonChange: (ChatExitReason) -> Unit,
+    onBlockUserChange: (Boolean) -> Unit,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
@@ -84,7 +94,7 @@ private fun SafetyReportDialog(
         title = { Text("Reportar y cerrar chat") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Describí que pasó. Este reporte cerrará el chat por seguridad y será revisado.")
+                Text("Describí qué pasó. Este reporte cerrará el chat por seguridad y será revisado.")
                 Box(modifier = Modifier.fillMaxWidth()) {
                     OutlinedButton(
                         onClick = { reasonMenuExpanded = true },
@@ -124,6 +134,30 @@ private fun SafetyReportDialog(
                     colors = realsOutlinedTextFieldColors(),
                     modifier = Modifier.fillMaxWidth(),
                 )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = blockUser,
+                            enabled = !actionLoading,
+                            role = Role.Checkbox,
+                            onValueChange = onBlockUserChange,
+                        ),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Checkbox(
+                        checked = blockUser,
+                        onCheckedChange = null,
+                        enabled = !actionLoading,
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("También bloquear a esta persona")
+                        Text(
+                            text = "Si la bloqueás, no volverán a ser emparejados. El bloqueo es definitivo.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
             }
         },
         confirmButton = {

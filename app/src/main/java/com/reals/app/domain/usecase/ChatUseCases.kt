@@ -188,6 +188,11 @@ class CancelChatUseCase(
 class SafetyCancelChatUseCase(
     private val chatRepository: ChatRepository,
 ) {
-    suspend operator fun invoke(chatId: String, reason: ChatExitReason, details: String): ApiResult<ChatExitOutcome> =
-        chatRepository.safetyCancelChat(chatId, reason, details)
+    suspend operator fun invoke(
+        chatId: String,
+        reason: ChatExitReason,
+        details: String,
+        blockUser: Boolean,
+    ): ApiResult<ChatExitOutcome> =
+        chatRepository.safetyCancelChat(chatId, reason, details, blockUser)
 }

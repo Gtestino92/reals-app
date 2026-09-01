@@ -11,6 +11,7 @@ import com.reals.app.data.dto.ChatExitRequestCreateRequestDto
 import com.reals.app.data.dto.ChatExitRequestResponseDto
 import com.reals.app.data.dto.ChatMessageResponseDto
 import com.reals.app.data.dto.ChatResponseDto
+import com.reals.app.data.dto.ChatSafetyCancellationRequestDto
 import com.reals.app.data.dto.ConnectionDismissalResponseDto
 import com.reals.app.data.dto.ConnectionResponseDto
 import com.reals.app.data.dto.CountryReferenceResponseDto
@@ -121,6 +122,8 @@ class FakeRealsApi : RealsApi {
     var lastChatMessagesAfterAlias: String? = null
         private set
     var exitBody: ChatExitRequestCreateRequestDto? = null
+        private set
+    var safetyCancellationBody: ChatSafetyCancellationRequestDto? = null
         private set
     var visualDecisionBody: VisualDecisionRequestDto? = null
         private set
@@ -742,10 +745,10 @@ class FakeRealsApi : RealsApi {
     override suspend fun safetyCancelChat(
         authorization: String,
         chatId: String,
-        body: ChatExitRequestCreateRequestDto,
+        body: ChatSafetyCancellationRequestDto,
     ): Response<ChatExitOutcomeResponseDto> =
         record("safetyCancelChat", authorization, chatId) {
-            exitBody = body
+            safetyCancellationBody = body
             exitOutcomeResponse
         }
 

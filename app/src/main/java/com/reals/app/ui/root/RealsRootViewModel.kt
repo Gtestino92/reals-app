@@ -821,7 +821,7 @@ class RealsRootViewModel(
         }
     }
 
-    fun safetyCancelSecondChat(reason: ChatExitReason, details: String) {
+    fun safetyCancelSecondChat(reason: ChatExitReason, details: String, blockUser: Boolean) {
         val current = ((_uiState.value as? RealsRootUiState.SecondChat)
             ?.withDiscardedAudioTransaction() as? RealsRootUiState.SecondChat) ?: return
         _uiState.value = current
@@ -831,6 +831,7 @@ class RealsRootViewModel(
                     current = current,
                     reason = reason,
                     details = details,
+                    blockUser = blockUser,
                     onPending = { _uiState.value = it },
                 )
             )
@@ -1742,7 +1743,7 @@ class RealsRootViewModel(
         }
     }
 
-    fun safetyCancelChat(reason: ChatExitReason, details: String) {
+    fun safetyCancelChat(reason: ChatExitReason, details: String, blockUser: Boolean) {
         val current = ((_uiState.value as? RealsRootUiState.FirstChat)
             ?.withDiscardedAudioTransaction() as? RealsRootUiState.FirstChat) ?: return
         _uiState.value = current
@@ -1752,6 +1753,7 @@ class RealsRootViewModel(
                     current = current,
                     reason = reason,
                     details = details,
+                    blockUser = blockUser,
                     onPending = { setFirstChatMutationPending(current, it) },
                 )
             )

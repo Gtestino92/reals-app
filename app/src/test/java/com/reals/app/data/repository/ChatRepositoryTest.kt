@@ -269,23 +269,46 @@ class ChatRepositoryTest {
     }
 
     @Test
-    fun `cancelChat and safetyCancelChat send bodies and map outcome`() = runBlocking {
+    fun `cancelChat sends ordinary exit body without safety block field`() = runBlocking {
         repository.cancelChat("chat-1", ChatExitReason.Other, "  cancel  ").successValue()
+
         assertEquals("cancelChat", api.calls.last())
         assertEquals("OTHER", api.exitBody?.reason)
         assertEquals("cancel", api.exitBody?.details)
+        assertEquals(null, api.safetyCancellationBody)
+    }
 
+    @Test
+    fun `safetyCancelChat sends block false and maps outcome`() = runBlocking {
         val outcome = repository.safetyCancelChat(
             chatId = "chat-1",
             reason = ChatExitReason.Harassment,
             details = "  safety  ",
+            blockUser = false,
         ).successValue()
 
         assertEquals("safetyCancelChat", api.calls.last())
-        assertEquals("HARASSMENT", api.exitBody?.reason)
-        assertEquals("safety", api.exitBody?.details)
+        assertEquals("HARASSMENT", api.safetyCancellationBody?.reason)
+        assertEquals("safety", api.safetyCancellationBody?.details)
+        assertEquals(false, api.safetyCancellationBody?.blockUser)
         assertEquals(false, outcome.penaltyApplied)
         assertEquals(null, outcome.penalizedUserId)
+    }
+
+    @Test
+    fun `safetyCancelChat sends block true`() = runBlocking {
+        repository.safetyCancelChat(
+            chatId = "chat-1",
+            reason = ChatExitReason.ChildSafetyConcern,
+            details = "  bloquear  ",
+            blockUser = true,
+        ).successValue()
+
+        assertEquals("safetyCancelChat", api.calls.single())
+        assertEquals("CHILD_SAFETY_CONCERN", api.safetyCancellationBody?.reason)
+        assertEquals("bloquear", api.safetyCancellationBody?.details)
+        assertEquals(true, api.safetyCancellationBody?.blockUser)
+        assertEquals(null, api.exitBody)
     }
 
     @Test

@@ -1486,6 +1486,7 @@ class SecondChatTimingPresentationTest {
             ),
             reason = ChatExitReason.InappropriateBehavior,
             details = "detalle válido",
+            blockUser = false,
             onPending = {},
         )
 
@@ -1507,6 +1508,7 @@ class SecondChatTimingPresentationTest {
             ),
             reason = ChatExitReason.InappropriateBehavior,
             details = "detalle válido",
+            blockUser = false,
             onPending = {},
         )
 
@@ -1525,6 +1527,7 @@ class SecondChatTimingPresentationTest {
             ),
             reason = ChatExitReason.InappropriateBehavior,
             details = "detalle válido",
+            blockUser = false,
             onPending = {},
         )
 
