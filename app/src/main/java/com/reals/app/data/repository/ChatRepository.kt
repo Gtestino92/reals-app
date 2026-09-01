@@ -9,6 +9,7 @@ import com.reals.app.data.api.RealsApi
 import com.reals.app.data.dto.ChatExitRequestCreateRequestDto
 import com.reals.app.data.dto.ChatMessageResponseDto
 import com.reals.app.data.dto.ChatMessagesResponseDto
+import com.reals.app.data.dto.ChatSafetyCancellationRequestDto
 import com.reals.app.data.dto.PutMessageReactionRequestDto
 import com.reals.app.data.dto.SecondChatCompletionDecisionRequestDto
 import com.reals.app.data.dto.SendMessageRequestDto
@@ -218,12 +219,17 @@ class ChatRepository(
         chatId: String,
         reason: ChatExitReason,
         details: String,
+        blockUser: Boolean,
     ): ApiResult<ChatExitOutcome> =
         authorizedCall { authorization ->
             api.safetyCancelChat(
                 authorization = authorization,
                 chatId = chatId,
-                body = exitBody(reason, details),
+                body = ChatSafetyCancellationRequestDto(
+                    reason = reason.rawValue,
+                    details = details.trim(),
+                    blockUser = blockUser,
+                ),
             )
         }.map { it.toDomain() }
 

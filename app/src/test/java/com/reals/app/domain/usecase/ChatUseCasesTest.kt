@@ -60,11 +60,12 @@ class ChatUseCasesTest {
     }
 
     @Test
-    fun `SafetyCancelChatUseCase delegates with reason and details`() = runBlocking {
-        SafetyCancelChatUseCase(repository)("chat-1", ChatExitReason.Harassment, " acoso ").successValue()
+    fun `SafetyCancelChatUseCase delegates with reason details and block choice`() = runBlocking {
+        SafetyCancelChatUseCase(repository)("chat-1", ChatExitReason.Harassment, " acoso ", true).successValue()
 
         assertEquals("safetyCancelChat", api.calls.single())
-        assertEquals("HARASSMENT", api.exitBody?.reason)
-        assertEquals("acoso", api.exitBody?.details)
+        assertEquals("HARASSMENT", api.safetyCancellationBody?.reason)
+        assertEquals("acoso", api.safetyCancellationBody?.details)
+        assertEquals(true, api.safetyCancellationBody?.blockUser)
     }
 }

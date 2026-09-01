@@ -151,4 +151,54 @@ class SerializationContractTest {
         assertEquals(false, dto.hasMore)
         assertNull(dto.serverTime)
     }
+
+    @Test
+    fun `chat safety cancellation request serializes explicit block false`() {
+        val body = json.encodeToString(
+            ChatSafetyCancellationRequestDto(
+                reason = "HARASSMENT",
+                details = "detalle",
+                blockUser = false,
+            ),
+        )
+
+        val fields = json.parseToJsonElement(body).jsonObject
+        assertEquals("HARASSMENT", fields.getValue("reason").jsonPrimitive.content)
+        assertEquals("detalle", fields.getValue("details").jsonPrimitive.content)
+        assertEquals(false, fields.getValue("blockUser").jsonPrimitive.boolean)
+        assertEquals(3, fields.size)
+    }
+
+    @Test
+    fun `chat safety cancellation request serializes explicit block true`() {
+        val body = json.encodeToString(
+            ChatSafetyCancellationRequestDto(
+                reason = "CHILD_SAFETY_CONCERN",
+                details = "detalle",
+                blockUser = true,
+            ),
+        )
+
+        val fields = json.parseToJsonElement(body).jsonObject
+        assertEquals("CHILD_SAFETY_CONCERN", fields.getValue("reason").jsonPrimitive.content)
+        assertEquals("detalle", fields.getValue("details").jsonPrimitive.content)
+        assertEquals(true, fields.getValue("blockUser").jsonPrimitive.boolean)
+        assertEquals(3, fields.size)
+    }
+
+    @Test
+    fun `ordinary chat exit request does not serialize safety block field`() {
+        val body = json.encodeToString(
+            ChatExitRequestCreateRequestDto(
+                reason = "NO_LONGER_INTERESTED",
+                details = "detalle",
+            ),
+        )
+
+        val fields = json.parseToJsonElement(body).jsonObject
+        assertEquals("NO_LONGER_INTERESTED", fields.getValue("reason").jsonPrimitive.content)
+        assertEquals("detalle", fields.getValue("details").jsonPrimitive.content)
+        assertFalse(fields.containsKey("blockUser"))
+        assertEquals(2, fields.size)
+    }
 }

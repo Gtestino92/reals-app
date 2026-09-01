@@ -370,6 +370,7 @@ internal class SecondChatCoordinator(
         current: RealsRootUiState.SecondChat,
         reason: ChatExitReason,
         details: String,
+        blockUser: Boolean,
         onPending: (RealsRootUiState.SecondChat) -> Unit,
     ): SecondChatActionResult {
         if (current.loading || current.refreshing || current.sending || current.audioUpload.uploading || current.actionLoading) {
@@ -399,10 +400,11 @@ internal class SecondChatCoordinator(
             chat.id,
             reason,
             cleanDetails,
+            blockUser,
         )) {
             is ApiResult.Success -> SecondChatActionResult.ReturnHome(
                 session = current.session,
-                message = "Reporte enviado. Cerramos ésta conversación por seguridad y no volveremos a cruzarte con ésta persona.",
+                message = safetyReportSuccessMessage(blockUser),
             )
 
             is ApiResult.Failure -> SecondChatActionResult.Show(

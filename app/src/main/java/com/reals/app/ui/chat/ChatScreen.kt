@@ -144,7 +144,7 @@ fun ChatScreen(
     onReject: () -> Unit,
     onRequestMutualExit: () -> Unit,
     onDismissFirstChatUnansweredSuggestion: (String) -> Unit = {},
-    onSafetyCancel: (ChatExitReason, String) -> Unit,
+    onSafetyCancel: (ChatExitReason, String, Boolean) -> Unit,
     onManualBlock: () -> Unit,
     onClearManualBlockError: () -> Unit,
     onAcceptExitRequest: (String) -> Unit,
@@ -155,9 +155,8 @@ fun ChatScreen(
     var replyDraft by rememberSaveable(chat?.id, saver = ChatReplyDraftMutableStateSaver) {
         mutableStateOf<ChatReplyDraft?>(null)
     }
-    var safetyDetails by rememberSaveable(chat?.id) { mutableStateOf("") }
-    var safetyReasonRawValue by rememberSaveable(chat?.id) {
-        mutableStateOf(ChatExitReason.InappropriateBehavior.rawValue)
+    var safetyReportForm by rememberSaveable(chat?.id, stateSaver = ChatSafetyReportFormStateSaver) {
+        mutableStateOf(ChatSafetyReportFormState.initial())
     }
     var showingSafetyDialog by rememberSaveable(chat?.id) { mutableStateOf(false) }
     var actionsMenuExpanded by rememberSaveable(chat?.id) { mutableStateOf(false) }
@@ -658,24 +657,26 @@ fun ChatScreen(
         showingManualBlockDialog = showingManualBlockDialog,
         showExitActions = showExitActions,
         canUseSafetyActions = canUseSafetyActions,
-        safetyDetails = safetyDetails,
-        selectedSafetyReason = safetyReportReasonFromRawValue(safetyReasonRawValue),
+        safetyDetails = safetyReportForm.details,
+        selectedSafetyReason = safetyReportReasonFromRawValue(safetyReportForm.reasonRawValue),
+        blockUser = safetyReportForm.blockUser,
         actionLoading = actionLoading,
         manualBlockLoading = manualBlockLoading,
         manualBlockError = manualBlockError,
-        onSafetyDetailsChange = { safetyDetails = it.take(1_000) },
-        onSafetyReasonChange = { safetyReasonRawValue = it.rawValue },
+        onSafetyDetailsChange = { safetyReportForm = safetyReportForm.copy(details = it.take(1_000)) },
+        onSafetyReasonChange = { safetyReportForm = safetyReportForm.copy(reasonRawValue = it.rawValue) },
+        onBlockUserChange = { safetyReportForm = safetyReportForm.copy(blockUser = it) },
         onDismissSafetyDialog = {
             if (!actionLoading) showingSafetyDialog = false
         },
         onConfirmSafetyReport = {
             audioSession.cleanupForSafetyAction()
             onSafetyCancel(
-                safetyReportReasonFromRawValue(safetyReasonRawValue),
-                safetyDetails,
+                safetyReportReasonFromRawValue(safetyReportForm.reasonRawValue),
+                safetyReportForm.details,
+                safetyReportForm.blockUser,
             )
-            safetyDetails = ""
-            safetyReasonRawValue = ChatExitReason.InappropriateBehavior.rawValue
+            safetyReportForm = safetyReportForm.resetAfterAcceptedSubmit()
             showingSafetyDialog = false
         },
         onDismissManualBlockDialog = {

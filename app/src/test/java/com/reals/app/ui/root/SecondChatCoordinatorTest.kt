@@ -48,6 +48,7 @@ class SecondChatCoordinatorTest {
             current = current,
             reason = ChatExitReason.InappropriateBehavior,
             details = "<script>alert(1)</script>",
+            blockUser = false,
             onPending = {},
         )
 
@@ -58,7 +59,7 @@ class SecondChatCoordinatorTest {
     }
 
     @Test
-    fun `second chat safety cancel success returns home with report message`() = runBlocking {
+    fun `second chat safety cancel report-only passes false and avoids permanent block copy`() = runBlocking {
         val secondCoordinator = SecondChatCoordinator(secondChatDependencies(api))
         val current = secondChatState()
 
@@ -66,17 +67,44 @@ class SecondChatCoordinatorTest {
             current = current,
             reason = ChatExitReason.ChildSafetyConcern,
             details = "detalle válido",
+            blockUser = false,
             onPending = {},
         )
 
         assertTrue(result is SecondChatActionResult.ReturnHome)
         result as SecondChatActionResult.ReturnHome
         assertEquals(
-            "Reporte enviado. Cerramos ésta conversación por seguridad y no volveremos a cruzarte con ésta persona.",
+            "Reporte enviado. Cerramos esta conversación por seguridad y será revisado.",
             result.message,
         )
         assertEquals(listOf("safetyCancelChat"), api.calls)
-        assertEquals("CHILD_SAFETY_CONCERN", api.exitBody?.reason)
+        assertEquals("CHILD_SAFETY_CONCERN", api.safetyCancellationBody?.reason)
+        assertEquals(false, api.safetyCancellationBody?.blockUser)
+        assertFalse(result.message.orEmpty().contains("No volverán a ser emparejados"))
+    }
+
+    @Test
+    fun `second chat safety cancel report and block passes true and explains permanent block`() = runBlocking {
+        val secondCoordinator = SecondChatCoordinator(secondChatDependencies(api))
+        val current = secondChatState()
+
+        val result = secondCoordinator.safetyCancel(
+            current = current,
+            reason = ChatExitReason.ChildSafetyConcern,
+            details = "detalle válido",
+            blockUser = true,
+            onPending = {},
+        )
+
+        assertTrue(result is SecondChatActionResult.ReturnHome)
+        result as SecondChatActionResult.ReturnHome
+        assertEquals(
+            "Reporte enviado. Cerramos esta conversación y bloqueamos a esta persona. No volverán a ser emparejados.",
+            result.message,
+        )
+        assertEquals(listOf("safetyCancelChat"), api.calls)
+        assertEquals("CHILD_SAFETY_CONCERN", api.safetyCancellationBody?.reason)
+        assertEquals(true, api.safetyCancellationBody?.blockUser)
     }
 
     @Test
