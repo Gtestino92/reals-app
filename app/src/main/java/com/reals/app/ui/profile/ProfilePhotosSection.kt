@@ -81,6 +81,7 @@ import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.isPendingModerationReview
+import com.reals.app.domain.model.isRejectedByModeration
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
@@ -342,6 +343,9 @@ private fun PhotoManagerActions(
             if (photos.any { it.isPendingModerationReview() }) {
                 ProfilePhotoPendingReviewNotice()
             }
+            if (photos.any { it.isRejectedByModeration() }) {
+                ProfilePhotoRejectedNotice()
+            }
             PhotoGrid(
                 photos = photos,
                 busy = busy,
@@ -524,6 +528,18 @@ private fun ProfilePhotoPendingReviewNotice(
         title = "Fotos en revisión",
         message = "Podés verlas acá, pero no serán visibles para otras personas hasta que las aprobemos.",
         tone = FeedbackTone.Info,
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun ProfilePhotoRejectedNotice(
+    modifier: Modifier = Modifier,
+) {
+    FeedbackCard(
+        title = "Fotos para reemplazar",
+        message = "Reemplazá las fotos rechazadas. No serán visibles para otras personas.",
+        tone = FeedbackTone.Warning,
         modifier = modifier,
     )
 }
@@ -854,9 +870,9 @@ internal fun FilledPhotoSlot(
                         .testTag(profilePhotoLocalPreviewTag(photo.position)),
                 )
             }
-            if (photo.isPendingModerationReview()) {
-                ProfilePhotoPendingReviewPill(
-                    position = photo.position,
+            if (photo.hasOwnerModerationStatusPill()) {
+                ProfilePhotoOwnerModerationStatusPill(
+                    photo = photo,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(8.dp),
@@ -929,13 +945,6 @@ internal fun FilledPhotoSlot(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = ProfilePhotoReplaceActionMinHeight)
-                    .clip(actionShape)
-                    .background(MaterialTheme.colorScheme.surface)
-                    .border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outline,
-                        shape = actionShape,
-                    )
                     .clickable(
                         enabled = !busy,
                         onClickLabel = "Reemplazar foto ${photo.position}",
@@ -943,39 +952,52 @@ internal fun FilledPhotoSlot(
                     .semantics { contentDescription = "Reemplazar foto ${photo.position}" }
                     .testTag(profilePhotoReplaceTag(photo.position)),
             ) {
-                Text(
-                    text = "Cambiar",
+                Box(
                     modifier = Modifier
                         .align(Alignment.Center)
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.labelMedium,
-                    textAlign = TextAlign.Center,
-                )
+                        .heightIn(min = ProfilePhotoReplaceVisualMinHeight)
+                        .fillMaxWidth()
+                        .clip(actionShape)
+                        .background(MaterialTheme.colorScheme.surface)
+                        .border(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outline,
+                            shape = actionShape,
+                        )
+                        .testTag(profilePhotoReplaceVisualTag(photo.position)),
+                ) {
+                    Text(
+                        text = "Cambiar",
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.labelSmall,
+                        textAlign = TextAlign.Center,
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun ProfilePhotoPendingReviewPill(
-    position: Int,
+private fun ProfilePhotoOwnerModerationStatusPill(
+    photo: ProfilePhoto,
     modifier: Modifier = Modifier,
 ) {
-    Card(
+    val presentation = photo.ownerModerationStatusPresentation() ?: return
+    Box(
         modifier = modifier
-            .semantics { contentDescription = "Foto $position pendiente de revisión" }
-            .testTag(profilePhotoPendingReviewTag(position)),
-        shape = RoundedCornerShape(999.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            .semantics { contentDescription = presentation.contentDescription }
+            .testTag(profilePhotoModerationStatusTag(photo.position))
+            .clip(RoundedCornerShape(999.dp))
+            .background(presentation.containerColor()),
     ) {
         Text(
-            text = "En revisión",
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            text = presentation.label,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            color = presentation.contentColor(),
             style = MaterialTheme.typography.labelSmall,
         )
     }
@@ -1193,6 +1215,7 @@ internal val ProfilePhotoGridPositions: IntRange = 1..9
 internal val ProfilePhotoDeleteTouchTargetSize = 48.dp
 internal val ProfilePhotoDeleteVisualSize = 24.dp
 internal val ProfilePhotoReplaceActionMinHeight = 48.dp
+internal val ProfilePhotoReplaceVisualMinHeight = 32.dp
 
 internal const val ProfilePhotoGridRootTag = "profile_photo_grid"
 internal const val ProfilePhotoActionProgressTag = "profile_photo_action_progress"
@@ -1207,10 +1230,54 @@ internal fun profilePhotoLocalPreviewTag(position: Int): String = "profile_photo
 internal fun profilePhotoDeleteTag(position: Int): String = "profile_photo_delete_$position"
 internal fun profilePhotoDeleteVisualTag(position: Int): String = "profile_photo_delete_visual_$position"
 internal fun profilePhotoReplaceTag(position: Int): String = "profile_photo_replace_$position"
-internal fun profilePhotoPendingReviewTag(position: Int): String = "profile_photo_pending_review_$position"
+internal fun profilePhotoReplaceVisualTag(position: Int): String = "profile_photo_replace_visual_$position"
+internal fun profilePhotoModerationStatusTag(position: Int): String = "profile_photo_moderation_status_$position"
 internal fun profilePhotoAddTag(position: Int): String = "profile_photo_add_$position"
 internal fun profilePhotoAddPlusTag(position: Int): String = "profile_photo_add_plus_$position"
 internal fun profilePhotoAddLabelTag(position: Int): String = "profile_photo_add_label_$position"
+
+internal data class ProfilePhotoOwnerModerationStatusPresentation(
+    val label: String,
+    val contentDescription: String,
+    val tone: ProfilePhotoOwnerModerationStatusTone,
+)
+
+internal enum class ProfilePhotoOwnerModerationStatusTone {
+    PendingReview,
+    Rejected,
+}
+
+internal fun ProfilePhoto.hasOwnerModerationStatusPill(): Boolean =
+    ownerModerationStatusPresentation() != null
+
+internal fun ProfilePhoto.ownerModerationStatusPresentation(): ProfilePhotoOwnerModerationStatusPresentation? =
+    when {
+        isRejectedByModeration() -> ProfilePhotoOwnerModerationStatusPresentation(
+            label = "Rechazada",
+            contentDescription = "Foto $position rechazada. Debe ser reemplazada.",
+            tone = ProfilePhotoOwnerModerationStatusTone.Rejected,
+        )
+        isPendingModerationReview() -> ProfilePhotoOwnerModerationStatusPresentation(
+            label = "En revisión",
+            contentDescription = "Foto $position pendiente de revisión",
+            tone = ProfilePhotoOwnerModerationStatusTone.PendingReview,
+        )
+        else -> null
+    }
+
+@Composable
+private fun ProfilePhotoOwnerModerationStatusPresentation.containerColor(): Color =
+    when (tone) {
+        ProfilePhotoOwnerModerationStatusTone.PendingReview -> Color.Black.copy(alpha = 0.58f)
+        ProfilePhotoOwnerModerationStatusTone.Rejected -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.92f)
+    }
+
+@Composable
+private fun ProfilePhotoOwnerModerationStatusPresentation.contentColor(): Color =
+    when (tone) {
+        ProfilePhotoOwnerModerationStatusTone.PendingReview -> Color.White
+        ProfilePhotoOwnerModerationStatusTone.Rejected -> MaterialTheme.colorScheme.onErrorContainer
+    }
 
 internal fun List<ProfilePhoto>.profilePhotosByGridPosition(): Map<Int, ProfilePhoto> =
     filter { it.position in ProfilePhotoGridPositions }

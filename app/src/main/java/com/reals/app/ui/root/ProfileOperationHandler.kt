@@ -19,6 +19,7 @@ import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.UpdateProfileInput
 import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.isPendingModerationReview
+import com.reals.app.domain.model.isRejectedByModeration
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
 import com.reals.app.ui.profile.movePhotoLocally
 import com.reals.app.ui.profile.photosWithPendingOrder
@@ -770,8 +771,10 @@ internal fun profilePhotoUploadSuccessMessage(
     photo: ProfilePhoto,
     defaultMessage: String,
 ): String =
-    if (photo.isPendingModerationReview()) {
-        "Foto guardada. Está pendiente de revisión y no será visible para otras personas hasta que la aprobemos."
-    } else {
-        defaultMessage
+    when {
+        photo.isRejectedByModeration() ->
+            "Foto guardada, pero fue rechazada. Reemplazala para que pueda mostrarse a otras personas."
+        photo.isPendingModerationReview() ->
+            "Foto guardada. Está pendiente de revisión y no será visible para otras personas hasta que la aprobemos."
+        else -> defaultMessage
     }

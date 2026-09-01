@@ -2,8 +2,10 @@ package com.reals.app.ui.profile
 
 import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.ProfilePhotoModerationStatusNeedsReview
+import com.reals.app.domain.model.ProfilePhotoModerationStatusRejected
 import com.reals.app.domain.model.PhotoPlacementInput
 import com.reals.app.domain.model.isPendingModerationReview
+import com.reals.app.domain.model.isRejectedByModeration
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -40,6 +42,34 @@ class ProfilePhotoGridTest {
 
         assertEquals(pendingReview, photosByPosition[1])
         assertTrue(photosByPosition.getValue(1).isPendingModerationReview())
+    }
+
+    @Test
+    fun profilePhotosByGridPositionKeepsRejectedPhotosVisibleToOwner() {
+        val rejected = testPhoto(
+            id = "photo-1",
+            position = 1,
+            moderationStatus = ProfilePhotoModerationStatusRejected,
+        )
+
+        val photosByPosition = listOf(rejected).profilePhotosByGridPosition()
+
+        assertEquals(rejected, photosByPosition[1])
+        assertTrue(photosByPosition.getValue(1).isRejectedByModeration())
+    }
+
+    @Test
+    fun ownerModerationStatusPresentationExplainsRejectedReplacement() {
+        val rejected = testPhoto(
+            id = "photo-1",
+            position = 1,
+            moderationStatus = ProfilePhotoModerationStatusRejected,
+        )
+
+        val presentation = rejected.ownerModerationStatusPresentation()
+
+        assertEquals("Rechazada", presentation?.label)
+        assertEquals("Foto 1 rechazada. Debe ser reemplazada.", presentation?.contentDescription)
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.reals.app.ui.chat
 
 import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.ProfilePhotoModerationStatusNeedsReview
+import com.reals.app.domain.model.ProfilePhotoModerationStatusRejected
 import com.reals.app.domain.model.PublicProfileQuestion
 import com.reals.app.domain.model.VisualAffinityIndicator
 import com.reals.app.domain.model.VisualProfile
@@ -121,7 +122,7 @@ class VisualProfileCardPresentationTest {
     fun `external visual profile hides photos that are not approved`() {
         val approvedSecond = photo(2)
         val pendingFirst = photo(1, moderationStatus = ProfilePhotoModerationStatusNeedsReview)
-        val rejectedThird = photo(3, moderationStatus = "REJECTED")
+        val rejectedThird = photo(3, moderationStatus = ProfilePhotoModerationStatusRejected)
 
         val photos = visualProfilePhotosForDisplay(listOf(pendingFirst, rejectedThird, approvedSecond))
 

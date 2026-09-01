@@ -171,6 +171,9 @@ class ProfilePhotoGridAccessibilityTest {
             .assertHasClickAction()
             .assertIsEnabled()
             .getUnclippedBoundsInRoot()
+        val replaceVisual = composeRule.onNodeWithTag(profilePhotoReplaceVisualTag(1), useUnmergedTree = true)
+            .assertIsDisplayed()
+            .getUnclippedBoundsInRoot()
 
         composeRule.onAllNodesWithText("Cambiar").assertCountEquals(2)
         composeRule.onNodeWithContentDescription("Borrar foto 1").assertIsDisplayed()
@@ -186,6 +189,9 @@ class ProfilePhotoGridAccessibilityTest {
         assertClose(deleteVisual.top, delete.top)
         assertClose(deleteVisual.right, delete.right)
         assertTrue(replace.height >= ProfilePhotoReplaceActionMinHeight)
+        assertTrue(replaceVisual.height >= ProfilePhotoReplaceVisualMinHeight)
+        assertTrue(replaceVisual.height < replace.height)
+        assertWithin(replace, replaceVisual)
         assertFalse(delete.overlaps(replace))
     }
 
