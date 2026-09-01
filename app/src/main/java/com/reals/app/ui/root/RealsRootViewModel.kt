@@ -234,6 +234,8 @@ class RealsRootViewModel(
 
     fun finalizeAccountDeletion() = sessionCoordinator.finalizeAccountDeletion()
 
+    fun retryAccountSuspension() = sessionCoordinator.retryAccountSuspension()
+
     fun onSystemBack() {
         val current = _uiState.value
         if (!current.canHandleSystemBack()) return
@@ -265,6 +267,7 @@ class RealsRootViewModel(
 
             is RealsRootUiState.AccountDeletionPending,
             is RealsRootUiState.AccountDeletionScheduled,
+            is RealsRootUiState.AccountSuspended,
             RealsRootUiState.Checking,
             is RealsRootUiState.Failure,
             is RealsRootUiState.LegalRequirements,
@@ -315,6 +318,7 @@ class RealsRootViewModel(
             RealsRootUiState.Checking -> refreshSession()
             is RealsRootUiState.AccountDeletionPending,
             is RealsRootUiState.AccountDeletionScheduled,
+            is RealsRootUiState.AccountSuspended,
             is RealsRootUiState.Failure,
             is RealsRootUiState.Login,
             is RealsRootUiState.MissingFirebase -> Unit
@@ -365,6 +369,7 @@ class RealsRootViewModel(
             }
             is RealsRootUiState.AccountDeletionPending,
             is RealsRootUiState.AccountDeletionScheduled,
+            is RealsRootUiState.AccountSuspended,
             is RealsRootUiState.Failure,
             is RealsRootUiState.Login,
             is RealsRootUiState.MissingFirebase -> {
@@ -2583,6 +2588,7 @@ private fun RealsRootUiState.blockedPairSession(): ProvisionedSession? = when (t
 private fun RealsRootUiState.clearsPendingSecondChatStartedHomeOpen(): Boolean = when (this) {
     is RealsRootUiState.AccountDeletionPending,
     is RealsRootUiState.AccountDeletionScheduled,
+    is RealsRootUiState.AccountSuspended,
     is RealsRootUiState.Failure,
     is RealsRootUiState.Login,
     is RealsRootUiState.MissingFirebase -> true

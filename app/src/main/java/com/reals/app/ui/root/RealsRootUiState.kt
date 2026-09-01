@@ -1,6 +1,8 @@
 package com.reals.app.ui.root
 
 import com.reals.app.core.network.ApiError
+import com.reals.app.core.network.BackendErrorCode
+import com.reals.app.core.network.backendErrorCode
 import com.reals.app.core.network.isLegalActionRequired
 import com.reals.app.core.time.ServerClockSnapshot
 import com.reals.app.domain.model.AffinityAnswer
@@ -57,6 +59,12 @@ sealed interface RealsRootUiState {
         val reactivating: Boolean = false,
         val finalizingDeletion: Boolean = false,
         val error: ApiError? = null,
+    ) : RealsRootUiState
+
+    data class AccountSuspended(
+        val suspension: AccountSuspension,
+        val retrying: Boolean = false,
+        val retryError: ApiError? = null,
     ) : RealsRootUiState
 
     data class LegalRequirements(
@@ -261,6 +269,21 @@ data class ManualBlockUiState(
     val loading: Boolean = false,
     val error: ApiError? = null,
 )
+
+sealed interface AccountSuspension {
+    data class Temporary(val expiresAt: String?) : AccountSuspension
+    data object Permanent : AccountSuspension
+}
+
+internal fun ApiError.accountSuspendedState(): RealsRootUiState.AccountSuspended? {
+    val backend = this as? ApiError.Backend ?: return null
+    val suspension = when (backend.backendErrorCode) {
+        BackendErrorCode.AccountTemporarilyBanned -> AccountSuspension.Temporary(backend.expiresAt)
+        BackendErrorCode.AccountPermanentlyBanned -> AccountSuspension.Permanent
+        else -> return null
+    }
+    return RealsRootUiState.AccountSuspended(suspension = suspension)
+}
 
 data class ChatAudioUploadUiState(
     val uploading: Boolean = false,
@@ -727,6 +750,7 @@ fun RealsRootUiState.canHandleSystemBack(): Boolean = when (this) {
     is RealsRootUiState.LoadingSession,
     is RealsRootUiState.AccountDeletionScheduled,
     is RealsRootUiState.AccountDeletionPending,
+    is RealsRootUiState.AccountSuspended,
     is RealsRootUiState.LegalRequirements,
     is RealsRootUiState.Failure -> false
 }

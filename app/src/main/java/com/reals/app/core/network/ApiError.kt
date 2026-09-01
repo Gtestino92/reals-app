@@ -9,6 +9,7 @@ sealed interface ApiError {
         val code: String?,
         val error: String?,
         val message: String,
+        val expiresAt: String? = null,
     ) : ApiError
 
     data class Network(val message: String) : ApiError
