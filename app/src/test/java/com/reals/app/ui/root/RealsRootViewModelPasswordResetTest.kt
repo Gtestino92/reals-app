@@ -761,6 +761,113 @@ class RealsRootViewModelPasswordResetTest {
     }
 
     @Test
+    fun `notification preferences load ban routes to account suspended without sign out`() = runTest(dispatcher) {
+        val expiresAt = "2026-09-02T01:30:00Z"
+        val authRepository = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
+        val viewModel = viewModel(authRepository)
+        viewModel.setState(
+            RealsRootUiState.Ready(
+                session = TestDomain.session(),
+                notificationPreferences = NotificationPreferencesUiState(
+                    loadError = temporaryBanError(expiresAt),
+                ),
+            )
+        )
+
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.AccountSuspended
+        assertEquals(AccountSuspension.Temporary(expiresAt), state.suspension)
+        assertEquals(0, authRepository.signOutCalls)
+    }
+
+    @Test
+    fun `notification preferences save ban routes to account suspended without sign out`() = runTest(dispatcher) {
+        val authRepository = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
+        val viewModel = viewModel(authRepository)
+        viewModel.setState(
+            RealsRootUiState.Ready(
+                session = TestDomain.session(),
+                notificationPreferences = NotificationPreferencesUiState(
+                    saveError = permanentBanError(),
+                ),
+            )
+        )
+
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.AccountSuspended
+        assertEquals(AccountSuspension.Permanent, state.suspension)
+        assertEquals(0, authRepository.signOutCalls)
+    }
+
+    @Test
+    fun `first chat audio upload ban routes to account suspended without sign out`() = runTest(dispatcher) {
+        val expiresAt = "2026-09-02T01:30:00Z"
+        val authRepository = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
+        val viewModel = viewModel(authRepository)
+        viewModel.setState(
+            RealsRootUiState.FirstChat(
+                session = TestDomain.session(),
+                matchId = "match-1",
+                audioUpload = ChatAudioUploadUiState(error = temporaryBanError(expiresAt)),
+            )
+        )
+
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.AccountSuspended
+        assertEquals(AccountSuspension.Temporary(expiresAt), state.suspension)
+        assertEquals(0, authRepository.signOutCalls)
+    }
+
+    @Test
+    fun `second chat audio upload ban routes to account suspended without sign out`() = runTest(dispatcher) {
+        val authRepository = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
+        val viewModel = viewModel(authRepository)
+        viewModel.setState(
+            RealsRootUiState.SecondChat(
+                session = TestDomain.session(),
+                connectionId = "connection-1",
+                matchId = "match-1",
+                audioUpload = ChatAudioUploadUiState(error = permanentBanError()),
+            )
+        )
+
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.AccountSuspended
+        assertEquals(AccountSuspension.Permanent, state.suspension)
+        assertEquals(0, authRepository.signOutCalls)
+    }
+
+    @Test
+    fun `non ban nested errors do not route to account suspended`() = runTest(dispatcher) {
+        val authRepository = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
+        val viewModel = viewModel(authRepository)
+        val notificationState = RealsRootUiState.Ready(
+            session = TestDomain.session(),
+            notificationPreferences = NotificationPreferencesUiState(
+                loadError = ApiError.Backend(500, "SERVER_ERROR", "SERVER_ERROR", "server"),
+            ),
+        )
+        viewModel.setState(notificationState)
+        advanceUntilIdle()
+        assertEquals(notificationState, viewModel.uiState.value)
+
+        val audioState = RealsRootUiState.FirstChat(
+            session = TestDomain.session(),
+            matchId = "match-1",
+            audioUpload = ChatAudioUploadUiState(error = ApiError.Network("offline")),
+        )
+        viewModel.setState(audioState)
+        advanceUntilIdle()
+
+        assertEquals(audioState, viewModel.uiState.value)
+        assertEquals(0, authRepository.signOutCalls)
+    }
+
+    @Test
     fun `token unavailable published mid session does not invalidate session`() = runTest(dispatcher) {
         val authRepository = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
         val viewModel = viewModel(authRepository)
@@ -1399,5 +1506,20 @@ class RealsRootViewModelPasswordResetTest {
     private fun authError(reason: AuthFailureReason): ApiError.Auth = ApiError.Auth(
         reason = reason,
         message = "auth failure",
+    )
+
+    private fun temporaryBanError(expiresAt: String): ApiError.Backend = ApiError.Backend(
+        statusCode = 403,
+        code = "ACCOUNT_TEMPORARILY_BANNED",
+        error = "Forbidden",
+        message = "forbidden",
+        expiresAt = expiresAt,
+    )
+
+    private fun permanentBanError(): ApiError.Backend = ApiError.Backend(
+        statusCode = 403,
+        code = "ACCOUNT_PERMANENTLY_BANNED",
+        error = "Forbidden",
+        message = "forbidden",
     )
 }

@@ -2544,14 +2544,16 @@ private fun RealsRootUiState.accountBannedError(): ApiError? = when (this) {
         homeError,
         matchmakingBlockedReason,
         accountDeleteError,
+        notificationPreferences.loadError,
+        notificationPreferences.saveError,
         affinityQuestionnaire.error,
         affinityQuestionnaire.mutationError,
         profileQuestions.error,
         profileQuestions.mutationError,
     )
 
-    is RealsRootUiState.FirstChat -> firstAccountBannedError(error, manualBlock.error)
-    is RealsRootUiState.SecondChat -> firstAccountBannedError(error, manualBlock.error)
+    is RealsRootUiState.FirstChat -> firstAccountBannedError(error, manualBlock.error, audioUpload.error)
+    is RealsRootUiState.SecondChat -> firstAccountBannedError(error, manualBlock.error, audioUpload.error)
     is RealsRootUiState.VisualApproval -> firstAccountBannedError(
         error,
         partnerMessageError,
