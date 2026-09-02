@@ -19,6 +19,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -80,6 +81,12 @@ fun PartnerProfileScreen(
                     style = RealsType.ScreenTitle,
                     color = MaterialTheme.colorScheme.primary,
                 )
+            }
+            TextButton(
+                onClick = onBackHome,
+                enabled = !busy,
+            ) {
+                Text("Volver")
             }
             ManualBlockOverflowMenu(
                 enabled = !busy,

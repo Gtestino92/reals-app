@@ -80,6 +80,7 @@ class RealsRootSystemBackTest {
             RealsRootUiState.Login(),
             RealsRootUiState.Checking,
             RealsRootUiState.LoadingSession(email = "alex@example.com"),
+            RealsRootUiState.AccountSuspended(AccountSuspension.Temporary("2026-09-02T01:30:00Z")),
             RealsRootUiState.MissingFirebase("missing"),
             RealsRootUiState.Ready(session = session),
             RealsRootUiState.Ready(

@@ -157,6 +157,23 @@ class RealsRootViewModelExternalNotificationTest {
     }
 
     @Test
+    fun `notification open is ignored while account is suspended`() = runTest(dispatcher) {
+        val api = FakeRealsApi()
+        val viewModel = viewModel(api)
+        val suspended = RealsRootUiState.AccountSuspended(
+            AccountSuspension.Temporary("2026-09-02T01:30:00Z")
+        )
+        viewModel.setState(suspended)
+
+        viewModel.handleExternalNotificationOpened(TYPE_MATCH_FOUND)
+        viewModel.handleExternalNotificationOpened(TYPE_SECOND_CHAT_STARTED)
+        advanceUntilIdle()
+
+        assertEquals(suspended, viewModel.uiState.value)
+        assertTrue(api.calls.isEmpty())
+    }
+
+    @Test
     fun `second chat started in Checking follows mandatory Home first-chat authority after session load`() =
         runTest(dispatcher) {
             val api = FakeRealsApi().apply {

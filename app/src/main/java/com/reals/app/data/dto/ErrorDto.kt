@@ -7,4 +7,5 @@ data class ErrorResponseDto(
     val code: String,
     val error: String,
     val message: String? = null,
+    val expiresAt: String? = null,
 )

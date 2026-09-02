@@ -4,6 +4,7 @@ import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ApiResult
 import com.reals.app.core.network.BackendErrorCode
 import com.reals.app.core.network.backendErrorCode
+import com.reals.app.core.network.isAccountBanned
 import com.reals.app.core.network.isAccountDeleted
 import com.reals.app.core.network.isTerminalAuthFailure
 import com.reals.app.data.repository.AuthOperationResult
@@ -180,6 +181,27 @@ internal class SessionCoordinator(
         scope.launch {
             clearLocalSessionAndShowLogin(
                 error = "Tu sesión terminó. Volvé a iniciar sesión.",
+            )
+        }
+    }
+
+    fun invalidateAccountBannedSession(error: ApiError) {
+        uiState.value = error.accountSuspendedState() ?: return
+    }
+
+    fun retryAccountSuspension() {
+        val current = uiState.value as? RealsRootUiState.AccountSuspended ?: return
+        if (current.retrying || current.suspension !is AccountSuspension.Temporary) return
+        if (refreshSessionJob?.isActive == true) return
+        refreshSessionJob = scope.launch {
+            uiState.value = current.copy(retrying = true, retryError = null)
+            loadBackendSessionFromCurrentAuth(
+                showLoadingState = false,
+                onFailure = { error ->
+                    uiState.value = error.accountSuspendedState()
+                        ?: current.copy(retrying = false, retryError = error)
+                },
+                clearAssociationConflict = false,
             )
         }
     }
@@ -381,37 +403,55 @@ internal class SessionCoordinator(
 
     fun loadBackendSession(): Job {
         return scope.launch {
+            loadBackendSessionFromCurrentAuth(
+                showLoadingState = true,
+                onFailure = ::handleSessionLoadFailure,
+                clearAssociationConflict = true,
+            )
+        }
+    }
+
+    private suspend fun loadBackendSessionFromCurrentAuth(
+        showLoadingState: Boolean,
+        onFailure: suspend (ApiError) -> Unit,
+        clearAssociationConflict: Boolean,
+    ) {
+        if (showLoadingState) {
             uiState.value = RealsRootUiState.LoadingSession(authRepository.currentUserEmail())
-            when (val userResult = getMeUseCase()) {
-                is ApiResult.Success -> when (userResult.value.status) {
-                    BackendUserStatus.Active -> loadBackendSessionForActiveUser(userResult.value)
-                    BackendUserStatus.Deleted -> uiState.value =
-                        RealsRootUiState.AccountDeletionPending(
-                            user = userResult.value,
-                        )
-
-                    is BackendUserStatus.Unknown -> uiState.value = RealsRootUiState.Failure(
-                        ApiError.Unexpected("No pudimos leer el estado de tu cuenta.")
+        }
+        when (val userResult = getMeUseCase()) {
+            is ApiResult.Success -> when (userResult.value.status) {
+                BackendUserStatus.Active -> loadBackendSessionForActiveUser(userResult.value, onFailure)
+                BackendUserStatus.Deleted -> uiState.value =
+                    RealsRootUiState.AccountDeletionPending(
+                        user = userResult.value,
                     )
-                }
 
-                is ApiResult.Failure -> {
-                    val backend = userResult.error as? ApiError.Backend
-                    if (backend.shouldProvisionAfterGetMeFailure()) {
-                        provisionAndLoadBackendSession()
-                    } else {
-                        handleSessionLoadFailure(userResult.error)
-                    }
+                is BackendUserStatus.Unknown -> onFailure(
+                    ApiError.Unexpected("No pudimos leer el estado de tu cuenta.")
+                )
+            }
+
+            is ApiResult.Failure -> {
+                val backend = userResult.error as? ApiError.Backend
+                if (backend.shouldProvisionAfterGetMeFailure()) {
+                    provisionAndLoadBackendSession(onFailure, clearAssociationConflict)
+                } else {
+                    onFailure(userResult.error)
                 }
             }
         }
     }
 
-    suspend fun loadBackendSessionForActiveUser(user: BackendUser) {
-        loadProvisionedSessionForActiveUser(user)?.let { session ->
+    suspend fun loadBackendSessionForActiveUser(
+        user: BackendUser,
+        onFailure: suspend (ApiError) -> Unit = ::handleSessionLoadFailure,
+    ) {
+        loadProvisionedSessionForActiveUser(user, onFailure)?.let { session ->
             finalizeActiveSession(
                 session = session,
                 onLoaded = onActiveSessionLoaded,
+                onFailure = onFailure,
             )
         }
     }
@@ -429,7 +469,10 @@ internal class SessionCoordinator(
             }
 
             is ApiResult.Failure -> {
-                if (userResult.error.isTerminalAuthFailure()) {
+                if (userResult.error.isAccountBanned()) {
+                    uiState.value = userResult.error.accountSuspendedState()
+                        ?: RealsRootUiState.Failure(userResult.error)
+                } else if (userResult.error.isTerminalAuthFailure()) {
                     invalidateTerminalSession()
                 } else {
                     uiState.value = RealsRootUiState.Failure(userResult.error)
@@ -509,32 +552,39 @@ internal class SessionCoordinator(
         }
     }
 
-    private suspend fun provisionAndLoadBackendSession() {
+    private suspend fun provisionAndLoadBackendSession(
+        onFailure: suspend (ApiError) -> Unit = ::handleSessionLoadFailure,
+        clearAssociationConflict: Boolean = true,
+    ) {
         when (val result = provisionAndLoadProfile()) {
             is ApiResult.Success -> {
                 finalizeActiveSession(
                     session = result.value,
                     onLoaded = onActiveSessionLoaded,
+                    onFailure = onFailure,
                 )
             }
 
             is ApiResult.Failure -> {
-                if (result.error.isProvisioningAccountAssociationConflict()) {
+                if (clearAssociationConflict && result.error.isProvisioningAccountAssociationConflict()) {
                     clearLocalSessionAndShowLogin(
                         error = "Ya existe una cuenta asociada a ese email. Iniciá sesión con el método original.",
                     )
                 } else {
-                    handleSessionLoadFailure(result.error)
+                    onFailure(result.error)
                 }
             }
         }
     }
 
-    private suspend fun loadProvisionedSessionForActiveUser(user: BackendUser): ProvisionedSession? {
+    private suspend fun loadProvisionedSessionForActiveUser(
+        user: BackendUser,
+        onFailure: suspend (ApiError) -> Unit = ::handleSessionLoadFailure,
+    ): ProvisionedSession? {
         return when (val result = provisionAndLoadProfile.loadProfileFor(user)) {
             is ApiResult.Success -> result.value
             is ApiResult.Failure -> {
-                handleSessionLoadFailure(result.error)
+                onFailure(result.error)
                 null
             }
         }
@@ -543,6 +593,7 @@ internal class SessionCoordinator(
     private suspend fun finalizeActiveSession(
         session: ProvisionedSession,
         onLoaded: suspend (ProvisionedSession) -> Unit,
+        onFailure: suspend (ApiError) -> Unit = { error -> uiState.value = RealsRootUiState.Failure(error) },
     ) {
         when (val verification = localFirebaseEmailVerificationCoordinator.ensureVerifiedForLocalBootstrap()) {
             LocalFirebaseEmailVerificationResult.Verified -> {
@@ -554,12 +605,17 @@ internal class SessionCoordinator(
                 error = "Tu sesión terminó. Volvé a iniciar sesión.",
             )
             is LocalFirebaseEmailVerificationResult.Failure -> {
-                uiState.value = RealsRootUiState.Failure(verification.error)
+                onFailure(verification.error)
             }
         }
     }
 
     private suspend fun handleSessionLoadFailure(error: ApiError) {
+        if (error.isAccountBanned()) {
+            uiState.value = error.accountSuspendedState() ?: RealsRootUiState.Failure(error)
+            return
+        }
+
         if (error.isAuthenticationMethodNotAllowed()) {
             clearLocalSessionAndShowLogin(
                 error = "Ese método de inicio de sesión no está habilitado para esta cuenta.",

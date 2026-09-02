@@ -22,6 +22,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -260,10 +261,22 @@ internal fun PendingInteractionsScreen(
             .padding(24.dp),
         verticalArrangement = Arrangement.Top,
     ) {
-        RealsScreenHeader(
-            title = "Pendientes",
-            subtitle = "Tus revisiones, próximos pasos y segundos chats en un solo lugar.",
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top,
+        ) {
+            RealsScreenHeader(
+                title = "Pendientes",
+                subtitle = "Tus revisiones, próximos pasos y segundos chats en un solo lugar.",
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(
+                onClick = onBackHome,
+                enabled = !busy,
+            ) {
+                Text("Volver")
+            }
+        }
         Spacer(modifier = Modifier.height(24.dp))
         if (presentation.hubSections.isEmpty()) {
             Card(

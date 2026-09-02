@@ -4,11 +4,14 @@ import android.os.SystemClock
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -485,53 +488,66 @@ fun ChatScreen(
                 showDecisionSummary = showDecisionActions && !decisionOnlyPanelState.visible,
                 trailingContent = if (showExitActions) {
                     {
-                        ChatOverflowMenu(
-                            expanded = actionsMenuExpanded,
-                            enabled = canOpenOverflowActions,
-                            actionLoading = loadingChatAction,
-                            secondChatCompletion = secondChatCompletionOverflow,
-                            showMutualCompletionCoachmark = showingMutualCompletionCoachmark,
-                            canUseExistingChatActions = canUseExistingChatActions &&
-                                firstChatPolicy.canRequestOrdinaryExit,
-                            canUseSafetyActions = canUseSafetyActions,
-                            canDecide = canDecide,
-                            canManualBlock = canManualBlock,
-                            visibility = overflowVisibility,
-                            onExpandedChange = {
-                                if (it) showingMutualCompletionCoachmark = false
-                                actionsMenuExpanded = it
-                            },
-                            onMutualCompletionCoachmarkDismissed = {
-                                showingMutualCompletionCoachmark = false
-                            },
-                            onRequestMutualExit = {
-                                actionsMenuExpanded = false
-                                if (firstChatPolicy.canRequestOrdinaryExit) onRequestMutualExit()
-                            },
-                            onRequestSecondChatCompletion = {
-                                handleSecondChatCompletionOverflowClick(
-                                    action = secondChatCompletionOverflow,
-                                    actionLoading = loadingChatAction,
-                                    onCloseMenu = { actionsMenuExpanded = false },
-                                    onShowConfirmation = { showingSecondChatCompletionDialog = true },
-                                )
-                            },
-                            onRejectChat = {
-                                actionsMenuExpanded = false
-                                onReject()
-                            },
-                            onShowSafety = {
-                                actionsMenuExpanded = false
-                                audioSession.cleanupForSafetyAction()
-                                showingSafetyDialog = true
-                            },
-                            onShowManualBlock = {
-                                actionsMenuExpanded = false
-                                onClearManualBlockError()
-                                audioSession.cleanupForSafetyAction()
-                                showingManualBlockDialog = true
-                            },
-                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            onBackHome.takeIf { showBackHomeAction }?.let { backHome ->
+                                TextButton(
+                                    onClick = backHome,
+                                    enabled = canUseNavigationActions,
+                                ) {
+                                    Text("Volver")
+                                }
+                            }
+                            ChatOverflowMenu(
+                                expanded = actionsMenuExpanded,
+                                enabled = canOpenOverflowActions,
+                                actionLoading = loadingChatAction,
+                                secondChatCompletion = secondChatCompletionOverflow,
+                                showMutualCompletionCoachmark = showingMutualCompletionCoachmark,
+                                canUseExistingChatActions = canUseExistingChatActions &&
+                                    firstChatPolicy.canRequestOrdinaryExit,
+                                canUseSafetyActions = canUseSafetyActions,
+                                canDecide = canDecide,
+                                canManualBlock = canManualBlock,
+                                visibility = overflowVisibility,
+                                onExpandedChange = {
+                                    if (it) showingMutualCompletionCoachmark = false
+                                    actionsMenuExpanded = it
+                                },
+                                onMutualCompletionCoachmarkDismissed = {
+                                    showingMutualCompletionCoachmark = false
+                                },
+                                onRequestMutualExit = {
+                                    actionsMenuExpanded = false
+                                    if (firstChatPolicy.canRequestOrdinaryExit) onRequestMutualExit()
+                                },
+                                onRequestSecondChatCompletion = {
+                                    handleSecondChatCompletionOverflowClick(
+                                        action = secondChatCompletionOverflow,
+                                        actionLoading = loadingChatAction,
+                                        onCloseMenu = { actionsMenuExpanded = false },
+                                        onShowConfirmation = { showingSecondChatCompletionDialog = true },
+                                    )
+                                },
+                                onRejectChat = {
+                                    actionsMenuExpanded = false
+                                    onReject()
+                                },
+                                onShowSafety = {
+                                    actionsMenuExpanded = false
+                                    audioSession.cleanupForSafetyAction()
+                                    showingSafetyDialog = true
+                                },
+                                onShowManualBlock = {
+                                    actionsMenuExpanded = false
+                                    onClearManualBlockError()
+                                    audioSession.cleanupForSafetyAction()
+                                    showingManualBlockDialog = true
+                                },
+                            )
+                        }
                     }
                 } else {
                     null

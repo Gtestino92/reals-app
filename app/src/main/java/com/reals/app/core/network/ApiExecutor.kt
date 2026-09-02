@@ -83,6 +83,7 @@ class ApiExecutor(private val json: Json) {
             code = parsed?.code,
             error = parsed?.error,
             message = parsed?.message ?: rawBody ?: response.message().ifBlank { "HTTP ${response.code()}" },
+            expiresAt = parsed?.expiresAt,
         )
     }
 }

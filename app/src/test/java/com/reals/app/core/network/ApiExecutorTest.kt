@@ -32,6 +32,7 @@ class ApiExecutorTest {
         assertEquals(400, error.statusCode)
         assertEquals("VALIDATION_ERROR", error.code)
         assertEquals("bad input", error.message)
+        assertEquals(null, error.expiresAt)
     }
 
     @Test
@@ -50,6 +51,40 @@ class ApiExecutorTest {
         val error = (result as ApiResult.Failure).error as ApiError.Backend
         assertEquals(403, error.statusCode)
         assertEquals("ACCESS_DENIED", error.code)
+        assertEquals(null, error.expiresAt)
+    }
+
+    @Test
+    fun `403 temporary ban preserves expiry`() = runBlocking {
+        val result = executor.execute {
+            backendErrorResponse<PingResponseDto>(
+                403,
+                "ACCOUNT_TEMPORARILY_BANNED",
+                "forbidden",
+                expiresAt = "2026-09-02T01:30:00Z",
+            )
+        }
+
+        val error = (result as ApiResult.Failure).error as ApiError.Backend
+        assertEquals(403, error.statusCode)
+        assertEquals(BackendErrorCode.AccountTemporarilyBanned, error.backendErrorCode)
+        assertEquals("2026-09-02T01:30:00Z", error.expiresAt)
+    }
+
+    @Test
+    fun `403 permanent ban has no expiry`() = runBlocking {
+        val result = executor.execute {
+            backendErrorResponse<PingResponseDto>(
+                403,
+                "ACCOUNT_PERMANENTLY_BANNED",
+                "forbidden",
+            )
+        }
+
+        val error = (result as ApiResult.Failure).error as ApiError.Backend
+        assertEquals(403, error.statusCode)
+        assertEquals(BackendErrorCode.AccountPermanentlyBanned, error.backendErrorCode)
+        assertEquals(null, error.expiresAt)
     }
 
     @Test
@@ -121,5 +156,31 @@ class ApiExecutorTest {
             "Tu sesión necesita renovarse. Volvé a iniciar sesión.",
             ApiError.Auth(AuthFailureReason.TOKEN_MISSING, "missing").toUserMessage(),
         )
+    }
+
+    @Test
+    fun `auth helper messages cover account ban errors`() {
+        val temporaryBan = ApiError.Backend(
+            403,
+            "ACCOUNT_TEMPORARILY_BANNED",
+            "ACCOUNT_TEMPORARILY_BANNED",
+            "",
+        )
+        val permanentBan = ApiError.Backend(
+            403,
+            "ACCOUNT_PERMANENTLY_BANNED",
+            "ACCOUNT_PERMANENTLY_BANNED",
+            "",
+        )
+
+        assertEquals(BackendErrorCode.AccountTemporarilyBanned, temporaryBan.backendErrorCode)
+        assertTrue(temporaryBan.isAccountBanned())
+        assertEquals(
+            "Tu cuenta está suspendida temporalmente. Podrás volver a entrar cuando termine la suspensión.",
+            temporaryBan.toUserMessage(),
+        )
+        assertEquals(BackendErrorCode.AccountPermanentlyBanned, permanentBan.backendErrorCode)
+        assertTrue(permanentBan.isAccountBanned())
+        assertEquals("Tu cuenta fue suspendida permanentemente.", permanentBan.toUserMessage())
     }
 }

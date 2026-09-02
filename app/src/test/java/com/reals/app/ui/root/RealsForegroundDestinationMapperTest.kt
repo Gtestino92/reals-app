@@ -70,6 +70,12 @@ class RealsForegroundDestinationMapperTest {
             ForegroundDestination.ProfileManagement,
             RealsRootUiState.Ready(session = draftSession).foregroundDestination(),
         )
+        assertEquals(
+            ForegroundDestination.Other,
+            RealsRootUiState.AccountSuspended(
+                AccountSuspension.Temporary("2026-09-02T01:30:00Z")
+            ).foregroundDestination(),
+        )
         assertEquals(ForegroundDestination.Other, RealsRootUiState.Checking.foregroundDestination())
     }
 }

@@ -43,6 +43,7 @@ import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.VisualDecision
 import com.reals.app.foreground.ForegroundDestinationLifecyclePublisher
 import com.reals.app.ui.account.AccountDeletionRecoveryScreen
+import com.reals.app.ui.account.AccountSuspendedScreen
 import com.reals.app.ui.auth.GoogleCredentialClient
 import com.reals.app.ui.auth.LoginScreen
 import com.reals.app.ui.chat.ChatScreen
@@ -164,6 +165,14 @@ fun RealsApp(
                 onReactivate = viewModel::reactivateAccount,
                 onKeepDeletion = viewModel::signOut,
                 onFinalizeDeletion = viewModel::finalizeAccountDeletion,
+            )
+
+            is RealsRootUiState.AccountSuspended -> AccountSuspendedScreen(
+                suspension = current.suspension,
+                retrying = current.retrying,
+                retryError = current.retryError,
+                onRetry = viewModel::retryAccountSuspension,
+                onSignOut = viewModel::signOut,
             )
 
             is RealsRootUiState.LegalRequirements -> LegalRequirementsScreen(

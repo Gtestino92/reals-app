@@ -75,8 +75,10 @@ fun backendError(
     statusCode: Int,
     code: String,
     message: String = "backend error",
+    expiresAt: String? = null,
 ): Response<Unit> {
-    val body = """{"code":"$code","error":"$code","message":"$message"}"""
+    val expiresAtField = expiresAt?.let { ",\"expiresAt\":\"$it\"" }.orEmpty()
+    val body = """{"code":"$code","error":"$code","message":"$message"$expiresAtField}"""
         .toResponseBody("application/json".toMediaType())
     return Response.error(statusCode, body)
 }
@@ -85,8 +87,10 @@ fun <T> backendErrorResponse(
     statusCode: Int,
     code: String,
     message: String = "backend error",
+    expiresAt: String? = null,
 ): Response<T> {
-    val body = """{"code":"$code","error":"$code","message":"$message"}"""
+    val expiresAtField = expiresAt?.let { ",\"expiresAt\":\"$it\"" }.orEmpty()
+    val body = """{"code":"$code","error":"$code","message":"$message"$expiresAtField}"""
         .toResponseBody("application/json".toMediaType())
     return Response.error(statusCode, body)
 }
