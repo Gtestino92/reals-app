@@ -1,10 +1,13 @@
 package com.reals.app.ui.chat
 
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.AlertDialog
@@ -92,10 +95,14 @@ private fun SafetyReportDialog(
     val selectedOption = safetyReportReasonOptions.first { it.reason == selectedReason }
 
     AlertDialog(
+        modifier = Modifier.imePadding(),
         onDismissRequest = onDismiss,
         title = { Text("Reportar y cerrar chat") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
                 Text("Describí qué pasó. Este reporte cerrará el chat por seguridad y será revisado.")
                 Box(modifier = Modifier.fillMaxWidth()) {
                     OutlinedButton(
@@ -157,13 +164,17 @@ private fun SafetyReportDialog(
                             onValueChange = onBlockUserChange,
                         ),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.Top,
                 ) {
                     Checkbox(
                         checked = blockUser,
                         onCheckedChange = null,
                         enabled = !actionLoading,
                     )
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
                         Text("También bloquear a esta persona")
                         Text(
                             text = "Si la bloqueás, no volverán a ser emparejados. El bloqueo es definitivo.",
