@@ -7,6 +7,7 @@ import com.reals.app.core.network.BackendErrorCode
 import com.reals.app.core.network.backendErrorCode
 import com.reals.app.data.repository.AuthOperationResult
 import com.reals.app.data.repository.AuthRepository
+import com.reals.app.data.repository.BanAppealRepository
 import com.reals.app.data.repository.ChangePasswordResult
 import com.reals.app.data.repository.ChatRepository
 import com.reals.app.data.repository.CredentialStateRepository
@@ -57,6 +58,7 @@ import com.reals.app.domain.usecase.GetLegalStatusUseCase
 import com.reals.app.domain.usecase.GetMatchUseCase
 import com.reals.app.domain.usecase.GetMeUseCase
 import com.reals.app.domain.usecase.GetPartnerPersonalMessageUseCase
+import com.reals.app.domain.usecase.GetPermanentBanAppealUseCase
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
 import com.reals.app.domain.usecase.GetSchedulingAvailabilityUseCase
 import com.reals.app.domain.usecase.GetSchedulingNegotiationUseCase
@@ -80,6 +82,7 @@ import com.reals.app.domain.usecase.RecordLegalDocumentActionUseCase
 import com.reals.app.domain.usecase.SafetyCancelChatUseCase
 import com.reals.app.domain.usecase.SendChatMessageUseCase
 import com.reals.app.domain.usecase.SubmitChatDecisionUseCase
+import com.reals.app.domain.usecase.SubmitPermanentBanAppealUseCase
 import com.reals.app.domain.usecase.SubmitSchedulingProposalsUseCase
 import com.reals.app.domain.usecase.SubmitVisualDecisionUseCase
 import com.reals.app.domain.usecase.TimeoutChatExitRequestUseCase
@@ -782,7 +785,7 @@ class RealsRootViewModelPasswordResetTest {
     }
 
     @Test
-    fun `notification preferences save ban routes to account suspended without sign out`() = runTest(dispatcher) {
+    fun `notification preferences permanent ban routes to appeal without sign out`() = runTest(dispatcher) {
         val authRepository = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
         val viewModel = viewModel(authRepository)
         viewModel.setState(
@@ -796,8 +799,8 @@ class RealsRootViewModelPasswordResetTest {
 
         advanceUntilIdle()
 
-        val state = viewModel.uiState.value as RealsRootUiState.AccountSuspended
-        assertEquals(AccountSuspension.Permanent, state.suspension)
+        val state = viewModel.uiState.value as RealsRootUiState.PermanentBanAppeal
+        assertEquals(com.reals.app.domain.model.PermanentBanAppealStatus.Available, state.appeal?.status)
         assertEquals(0, authRepository.signOutCalls)
     }
 
@@ -822,7 +825,7 @@ class RealsRootViewModelPasswordResetTest {
     }
 
     @Test
-    fun `second chat audio upload ban routes to account suspended without sign out`() = runTest(dispatcher) {
+    fun `second chat audio upload permanent ban routes to appeal without sign out`() = runTest(dispatcher) {
         val authRepository = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
         val viewModel = viewModel(authRepository)
         viewModel.setState(
@@ -836,8 +839,8 @@ class RealsRootViewModelPasswordResetTest {
 
         advanceUntilIdle()
 
-        val state = viewModel.uiState.value as RealsRootUiState.AccountSuspended
-        assertEquals(AccountSuspension.Permanent, state.suspension)
+        val state = viewModel.uiState.value as RealsRootUiState.PermanentBanAppeal
+        assertEquals(com.reals.app.domain.model.PermanentBanAppealStatus.Available, state.appeal?.status)
         assertEquals(0, authRepository.signOutCalls)
     }
 
@@ -1058,7 +1061,7 @@ class RealsRootViewModelPasswordResetTest {
     }
 
     @Test
-    fun `permanently banned backend user enters account suspended without sign out`() = runTest(dispatcher) {
+    fun `permanently banned backend user enters appeal surface without sign out`() = runTest(dispatcher) {
         val api = FakeRealsApi().apply {
             getMeResponse = backendErrorResponse(403, "ACCOUNT_PERMANENTLY_BANNED", "forbidden")
         }
@@ -1071,10 +1074,12 @@ class RealsRootViewModelPasswordResetTest {
         viewModel.signIn("alex@example.com", "password")
         advanceUntilIdle()
 
-        val state = viewModel.uiState.value as RealsRootUiState.AccountSuspended
-        assertEquals(AccountSuspension.Permanent, state.suspension)
+        val state = viewModel.uiState.value as RealsRootUiState.PermanentBanAppeal
+        assertEquals(com.reals.app.domain.model.PermanentBanAppealStatus.Available, state.appeal?.status)
         assertEquals(0, authRepository.signOutCalls)
-        assertEquals(listOf("getMe"), api.calls.filter { it == "getMe" || it == "provisionMe" })
+        assertEquals(listOf("getMe", "getMyBanAppeal"), api.calls.filter {
+            it == "getMe" || it == "provisionMe" || it == "getMyBanAppeal"
+        })
     }
 
     @Test
@@ -1294,6 +1299,7 @@ class RealsRootViewModelPasswordResetTest {
         val apiExecutor = testApiExecutor()
         val backendAuthRepository = AuthRepository(api, apiExecutor)
         val meRepository = MeRepository(api, tokenProvider, apiExecutor)
+        val banAppealRepository = BanAppealRepository(api, tokenProvider, apiExecutor)
         val profileRepository = ProfileRepository(context, api, tokenProvider, apiExecutor)
         val matchmakingRepository = MatchmakingRepository(api, tokenProvider, apiExecutor)
         val matchRepository = MatchRepository(api, { 0L }, tokenProvider, apiExecutor)
@@ -1318,6 +1324,8 @@ class RealsRootViewModelPasswordResetTest {
                 ),
                 provisionAndLoadProfile = ProvisionAndLoadProfileUseCase(meRepository, profileRepository),
                 getMe = GetMeUseCase(meRepository),
+                getPermanentBanAppeal = GetPermanentBanAppealUseCase(banAppealRepository),
+                submitPermanentBanAppeal = SubmitPermanentBanAppealUseCase(banAppealRepository),
                 pushTokenRegistrationService = PushTokenRegistrationService(context, registerPushTokenUseCase),
             ),
             account = AccountFeatureDependencies(

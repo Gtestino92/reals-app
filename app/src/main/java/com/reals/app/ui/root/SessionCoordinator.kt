@@ -16,6 +16,8 @@ import com.reals.app.di.AccountFeatureDependencies
 import com.reals.app.di.SessionFeatureDependencies
 import com.reals.app.domain.model.BackendUser
 import com.reals.app.domain.model.BackendUserStatus
+import com.reals.app.domain.model.PermanentBanAppealState
+import com.reals.app.domain.model.PermanentBanAppealStatus
 import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.ui.auth.GoogleCredentialResult
 import kotlinx.coroutines.CoroutineScope
@@ -41,6 +43,8 @@ internal class SessionCoordinator(
     private val authRepository = dependencies.authRepository
     private val provisionAndLoadProfile = dependencies.provisionAndLoadProfile
     private val getMeUseCase = dependencies.getMe
+    private val getPermanentBanAppealUseCase = dependencies.getPermanentBanAppeal
+    private val submitPermanentBanAppealUseCase = dependencies.submitPermanentBanAppeal
     private val pushTokenRegistrationService = dependencies.pushTokenRegistrationService
     private val localFirebaseEmailVerificationCoordinator =
         dependencies.localFirebaseEmailVerificationCoordinator
@@ -50,6 +54,8 @@ internal class SessionCoordinator(
     private val deleteAccountUseCase = accountDependencies.deleteAccount
     private val finalizeAccountDeletionUseCase = accountDependencies.finalizeAccountDeletion
     private var refreshSessionJob: Job? = null
+    private var appealJob: Job? = null
+    private var appealRequestSequence = 0L
     private var googleAttemptSequence = 0L
     private var passwordResetAttemptSequence = 0L
 
@@ -186,7 +192,9 @@ internal class SessionCoordinator(
     }
 
     fun invalidateAccountBannedSession(error: ApiError) {
-        uiState.value = error.accountSuspendedState() ?: return
+        scope.launch {
+            handleAccountBannedError(error)
+        }
     }
 
     fun retryAccountSuspension() {
@@ -203,6 +211,63 @@ internal class SessionCoordinator(
                 },
                 clearAssociationConflict = false,
             )
+        }
+    }
+
+    fun refreshPermanentBanAppeal() {
+        val current = uiState.value as? RealsRootUiState.PermanentBanAppeal ?: return
+        if (current.loading || current.submitting) return
+        if (appealJob?.isActive == true) return
+        appealJob = scope.launch {
+            loadPermanentBanAppealFromBackend(current.copy(loading = true, error = null, normalBootstrapError = null))
+        }
+    }
+
+    fun retryApprovedAppealBootstrap() {
+        val current = uiState.value as? RealsRootUiState.PermanentBanAppeal ?: return
+        if (current.loading || current.submitting) return
+        if (current.appeal?.isApprovedInactive() != true) return
+        if (refreshSessionJob?.isActive == true) return
+        refreshSessionJob = scope.launch {
+            uiState.value = current.copy(loading = true, error = null, normalBootstrapError = null)
+            bootstrapAfterApprovedAppeal(current.appeal)
+        }
+    }
+
+    fun submitPermanentBanAppeal(statement: String) {
+        val current = uiState.value as? RealsRootUiState.PermanentBanAppeal ?: return
+        val appeal = current.appeal ?: return
+        if (current.loading || current.submitting || appealJob?.isActive == true) return
+        if (appeal.status != PermanentBanAppealStatus.Available || !appeal.banActive) return
+        val trimmedStatement = statement.trim()
+        if (trimmedStatement.isBlank() || trimmedStatement.length > PERMANENT_BAN_APPEAL_MAX_LENGTH) return
+
+        val requestId = ++appealRequestSequence
+        appealJob = scope.launch {
+            val pending = current.copy(
+                submitting = true,
+                error = null,
+                normalBootstrapError = null,
+                requestId = requestId,
+            )
+            uiState.value = pending
+            when (val result = submitPermanentBanAppealUseCase(trimmedStatement)) {
+                is ApiResult.Success -> reconcilePermanentBanAppealAfterSubmit(requestId)
+                is ApiResult.Failure -> {
+                    val backend = result.error as? ApiError.Backend
+                    when {
+                        result.error.isAccountTemporarilyBanned() -> handleAccountBannedError(result.error)
+                        backend?.backendErrorCode == BackendErrorCode.PenaltyAppealAlreadySubmitted -> {
+                            reconcilePermanentBanAppealAfterSubmit(requestId)
+                        }
+                        else -> {
+                            uiState.value.permanentBanAppealStateFor(requestId)?.let { latest ->
+                                uiState.value = latest.copy(submitting = false, error = result.error)
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -470,8 +535,7 @@ internal class SessionCoordinator(
 
             is ApiResult.Failure -> {
                 if (userResult.error.isAccountBanned()) {
-                    uiState.value = userResult.error.accountSuspendedState()
-                        ?: RealsRootUiState.Failure(userResult.error)
+                    handleAccountBannedError(userResult.error)
                 } else if (userResult.error.isTerminalAuthFailure()) {
                     invalidateTerminalSession()
                 } else {
@@ -612,7 +676,7 @@ internal class SessionCoordinator(
 
     private suspend fun handleSessionLoadFailure(error: ApiError) {
         if (error.isAccountBanned()) {
-            uiState.value = error.accountSuspendedState() ?: RealsRootUiState.Failure(error)
+            handleAccountBannedError(error)
             return
         }
 
@@ -649,6 +713,127 @@ internal class SessionCoordinator(
         uiState.value = RealsRootUiState.Login(error = error)
     }
 
+    private suspend fun handleAccountBannedError(error: ApiError) {
+        val backend = error as? ApiError.Backend
+        when (backend?.backendErrorCode) {
+            BackendErrorCode.AccountTemporarilyBanned -> {
+                uiState.value = RealsRootUiState.AccountSuspended(
+                    suspension = AccountSuspension.Temporary(backend.expiresAt),
+                )
+            }
+
+            BackendErrorCode.AccountPermanentlyBanned -> {
+                if (appealJob?.isActive == true) return
+                appealJob = scope.launch {
+                    loadPermanentBanAppealFromBackend(
+                        RealsRootUiState.PermanentBanAppeal(loading = true),
+                    )
+                }
+                appealJob?.join()
+            }
+
+            else -> uiState.value = RealsRootUiState.Failure(error)
+        }
+    }
+
+    private suspend fun loadPermanentBanAppealFromBackend(
+        loadingState: RealsRootUiState.PermanentBanAppeal,
+    ) {
+        val requestId = ++appealRequestSequence
+        uiState.value = loadingState.copy(loading = true, submitting = false, requestId = requestId)
+        when (val result = getPermanentBanAppealUseCase()) {
+            is ApiResult.Success -> installPermanentBanAppealResult(requestId, result.value)
+            is ApiResult.Failure -> {
+                if (result.error.isAccountTemporarilyBanned()) {
+                    handleAccountBannedError(result.error)
+                } else if (result.error.isTerminalAuthFailure()) {
+                    clearLocalSessionAndShowLogin(
+                        error = "Tu sesión terminó. Volvé a iniciar sesión.",
+                    )
+                } else {
+                    uiState.value.permanentBanAppealStateFor(requestId)?.let { latest ->
+                        uiState.value = latest.copy(loading = false, submitting = false, error = result.error)
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun reconcilePermanentBanAppealAfterSubmit(requestId: Long) {
+        when (val result = getPermanentBanAppealUseCase()) {
+            is ApiResult.Success -> installPermanentBanAppealResult(requestId, result.value)
+            is ApiResult.Failure -> {
+                if (result.error.isAccountTemporarilyBanned()) {
+                    handleAccountBannedError(result.error)
+                } else if (result.error.isTerminalAuthFailure()) {
+                    clearLocalSessionAndShowLogin(
+                        error = "Tu sesión terminó. Volvé a iniciar sesión.",
+                    )
+                } else {
+                    uiState.value.permanentBanAppealStateFor(requestId)?.let { latest ->
+                        uiState.value = latest.copy(submitting = false, error = result.error)
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun installPermanentBanAppealResult(
+        requestId: Long,
+        appeal: PermanentBanAppealState,
+    ) {
+        val latest = uiState.value.permanentBanAppealStateFor(requestId) ?: return
+        if (!appeal.hasExpectedBanActivity()) {
+            uiState.value = latest.copy(
+                appeal = null,
+                loading = false,
+                submitting = false,
+                error = ApiError.Unexpected("No pudimos confirmar el estado de tu suspensión."),
+            )
+            return
+        }
+        if (appeal.isApprovedInactive()) {
+            uiState.value = latest.copy(
+                appeal = appeal,
+                loading = true,
+                submitting = false,
+                error = null,
+                normalBootstrapError = null,
+            )
+            bootstrapAfterApprovedAppeal(appeal)
+            return
+        }
+        uiState.value = latest.copy(
+            appeal = appeal,
+            loading = false,
+            submitting = false,
+            error = null,
+            normalBootstrapError = null,
+        )
+    }
+
+    private suspend fun bootstrapAfterApprovedAppeal(appeal: PermanentBanAppealState) {
+        loadBackendSessionFromCurrentAuth(
+            showLoadingState = false,
+            onFailure = { error ->
+                if (error.isTerminalAuthFailure()) {
+                    clearLocalSessionAndShowLogin(
+                        error = "Tu sesión terminó. Volvé a iniciar sesión.",
+                    )
+                } else if (error.isAccountBanned()) {
+                    handleAccountBannedError(error)
+                } else {
+                    uiState.value = RealsRootUiState.PermanentBanAppeal(
+                        appeal = appeal,
+                        loading = false,
+                        normalBootstrapError = error,
+                    )
+                }
+            },
+            clearAssociationConflict = false,
+        )
+    }
+
     private fun registerPushTokenBestEffort() {
         scope.launch {
             pushTokenRegistrationService.registerCurrentTokenIfPossible()
@@ -657,6 +842,7 @@ internal class SessionCoordinator(
 
     private companion object {
         const val PASSWORD_RESET_COOLDOWN_MILLIS = 60_000L
+        const val PERMANENT_BAN_APPEAL_MAX_LENGTH = 1000
         const val invalidPasswordResetEmailMessage = "Ingresá un email válido."
         const val genericPasswordResetMessage =
             "Si el email está registrado, te enviamos instrucciones para recuperar el acceso."
@@ -675,8 +861,29 @@ private fun RealsRootUiState.passwordResetStateFor(attemptId: Long): RealsRootUi
     return login.takeIf { it.passwordResetLoading && it.passwordResetAttemptId == attemptId }
 }
 
+private fun RealsRootUiState.permanentBanAppealStateFor(requestId: Long): RealsRootUiState.PermanentBanAppeal? {
+    val appeal = this as? RealsRootUiState.PermanentBanAppeal ?: return null
+    return appeal.takeIf { it.requestId == requestId }
+}
+
+private fun PermanentBanAppealState.hasExpectedBanActivity(): Boolean = when (status) {
+    PermanentBanAppealStatus.Available,
+    PermanentBanAppealStatus.Pending,
+    PermanentBanAppealStatus.Rejected -> banActive
+
+    PermanentBanAppealStatus.Approved -> !banActive
+    is PermanentBanAppealStatus.Unknown -> false
+}
+
+private fun PermanentBanAppealState.isApprovedInactive(): Boolean =
+    status == PermanentBanAppealStatus.Approved && !banActive
+
 private fun ApiError.isAuthenticationMethodNotAllowed(): Boolean {
     return this is ApiError.Backend && backendErrorCode == BackendErrorCode.AuthMethodNotAllowed
+}
+
+private fun ApiError.isAccountTemporarilyBanned(): Boolean {
+    return this is ApiError.Backend && backendErrorCode == BackendErrorCode.AccountTemporarilyBanned
 }
 
 private fun ApiError.isProvisioningAccountAssociationConflict(): Boolean {

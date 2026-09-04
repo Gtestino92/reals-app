@@ -39,6 +39,7 @@ import com.reals.app.domain.usecase.GetMyAffinityAnswersUseCase
 import com.reals.app.domain.usecase.GetNotificationPreferences
 import com.reals.app.domain.usecase.GetMyProfileQuestionAnswersUseCase
 import com.reals.app.domain.usecase.GetPartnerPersonalMessageUseCase
+import com.reals.app.domain.usecase.GetPermanentBanAppeal
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
 import com.reals.app.domain.usecase.GetProfileQuestionCatalogUseCase
 import com.reals.app.domain.usecase.GetSchedulingAvailabilityUseCase
@@ -69,6 +70,7 @@ import com.reals.app.domain.usecase.SafetyCancelChatUseCase
 import com.reals.app.domain.usecase.SendChatAudioMessageUseCase
 import com.reals.app.domain.usecase.SendChatMessageUseCase
 import com.reals.app.domain.usecase.SubmitChatDecisionUseCase
+import com.reals.app.domain.usecase.SubmitPermanentBanAppeal
 import com.reals.app.domain.usecase.SubmitSchedulingProposalsUseCase
 import com.reals.app.domain.usecase.SubmitVisualDecisionUseCase
 import com.reals.app.domain.usecase.TimeoutChatExitRequestUseCase
@@ -104,6 +106,10 @@ data class SessionFeatureDependencies(
     val clearLocalSession: ClearLocalSessionUseCase,
     val provisionAndLoadProfile: ProvisionAndLoadProfileUseCase,
     val getMe: GetMeUseCase,
+    val getPermanentBanAppeal: GetPermanentBanAppeal =
+        GetPermanentBanAppeal { ApiResult.Failure(ApiError.Unexpected("Permanent ban appeal unavailable.")) },
+    val submitPermanentBanAppeal: SubmitPermanentBanAppeal =
+        SubmitPermanentBanAppeal { ApiResult.Failure(ApiError.Unexpected("Permanent ban appeal unavailable.")) },
     val pushTokenRegistrationService: PushTokenRegistrationService,
     val markLocalFirebaseEmailVerified: MarkLocalFirebaseEmailVerified =
         MarkLocalFirebaseEmailVerified { com.reals.app.core.network.ApiResult.Success(Unit) },

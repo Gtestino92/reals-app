@@ -18,6 +18,7 @@ import com.reals.app.domain.model.LegalDocumentAction
 import com.reals.app.domain.model.LegalDocumentType
 import com.reals.app.domain.model.Match
 import com.reals.app.domain.model.NotificationPreferences
+import com.reals.app.domain.model.PermanentBanAppealState
 import com.reals.app.domain.model.ProfileActivationResult
 import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.ProfileQuestionAnswer
@@ -65,6 +66,15 @@ sealed interface RealsRootUiState {
         val suspension: AccountSuspension,
         val retrying: Boolean = false,
         val retryError: ApiError? = null,
+    ) : RealsRootUiState
+
+    data class PermanentBanAppeal(
+        val appeal: PermanentBanAppealState? = null,
+        val loading: Boolean = false,
+        val submitting: Boolean = false,
+        val error: ApiError? = null,
+        val normalBootstrapError: ApiError? = null,
+        val requestId: Long = 0L,
     ) : RealsRootUiState
 
     data class LegalRequirements(
@@ -751,6 +761,7 @@ fun RealsRootUiState.canHandleSystemBack(): Boolean = when (this) {
     is RealsRootUiState.AccountDeletionScheduled,
     is RealsRootUiState.AccountDeletionPending,
     is RealsRootUiState.AccountSuspended,
+    is RealsRootUiState.PermanentBanAppeal,
     is RealsRootUiState.LegalRequirements,
     is RealsRootUiState.Failure -> false
 }

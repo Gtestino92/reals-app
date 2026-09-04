@@ -5,6 +5,7 @@ import com.reals.app.data.api.RealsApi
 import com.reals.app.data.dto.AddProposalRequestDto
 import com.reals.app.data.dto.AffinityAnswersResponseDto
 import com.reals.app.data.dto.AffinityQuestionCatalogResponseDto
+import com.reals.app.data.dto.BanAppealResponseDto
 import com.reals.app.data.dto.ChatDecisionRequestDto
 import com.reals.app.data.dto.ChatExitOutcomeResponseDto
 import com.reals.app.data.dto.ChatExitRequestCreateRequestDto
@@ -49,6 +50,7 @@ import com.reals.app.data.dto.SchedulingAvailabilityResponseDto
 import com.reals.app.data.dto.SecondChatAttendanceResponseDto
 import com.reals.app.data.dto.SecondChatCompletionDecisionRequestDto
 import com.reals.app.data.dto.SendMessageRequestDto
+import com.reals.app.data.dto.SubmitBanAppealRequestDto
 import com.reals.app.data.dto.UpdateMatchFiltersRequestDto
 import com.reals.app.data.dto.UpdateProfileRequestDto
 import com.reals.app.data.dto.UpsertProfileQuestionAnswerRequestDto
@@ -161,6 +163,8 @@ class FakeRealsApi : RealsApi {
         private set
     var replaceProfileQuestionSelectionsBody: ReplaceProfileQuestionSelectionsRequestDto? = null
         private set
+    var banAppealBody: SubmitBanAppealRequestDto? = null
+        private set
     var blockMatchIds: List<String> = emptyList()
         private set
 
@@ -199,10 +203,15 @@ class FakeRealsApi : RealsApi {
     var beforeUpsertMyProfileQuestionAnswerResponse: suspend () -> Unit = {}
     var beforeDeleteMyProfileQuestionAnswerResponse: suspend () -> Unit = {}
     var beforeReplaceMyProfileQuestionSelectionsResponse: suspend () -> Unit = {}
+    var beforeGetMyBanAppealResponse: suspend () -> Unit = {}
+    var beforeSubmitMyBanAppealResponse: suspend () -> Unit = {}
 
     var pingResponse: Response<PingResponseDto> = Response.success(PingResponseDto("ok"))
     var userResponse: Response<UserResponseDto> = Response.success(TestDtos.user())
     var getMeResponse: Response<UserResponseDto>? = null
+    var banAppealResponse: Response<BanAppealResponseDto> =
+        Response.success(BanAppealResponseDto(status = "AVAILABLE", banActive = true))
+    var submitBanAppealResponse: Response<Unit> = Response.success(Unit)
     var provisionMeResponse: Response<UserResponseDto>? = null
     var deleteMeResponse: Response<Unit> = Response.success(Unit)
     var passwordResetResponse: Response<Unit> = Response.success(Unit)
@@ -282,6 +291,20 @@ class FakeRealsApi : RealsApi {
 
     override suspend fun getMe(authorization: String): Response<UserResponseDto> =
         record("getMe", authorization) { getMeResponse ?: userResponse }
+
+    override suspend fun getMyBanAppeal(authorization: String): Response<BanAppealResponseDto> =
+        record("getMyBanAppeal", authorization, beforeResponse = beforeGetMyBanAppealResponse) {
+            banAppealResponse
+        }
+
+    override suspend fun submitMyBanAppeal(
+        authorization: String,
+        body: SubmitBanAppealRequestDto,
+    ): Response<Unit> =
+        record("submitMyBanAppeal", authorization, beforeResponse = beforeSubmitMyBanAppealResponse) {
+            banAppealBody = body
+            submitBanAppealResponse
+        }
 
     override suspend fun requestPasswordReset(body: PasswordResetRequestDto): Response<Unit> =
         record("requestPasswordReset", null, beforeResponse = beforePasswordResetResponse) {

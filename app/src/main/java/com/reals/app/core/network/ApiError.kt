@@ -81,6 +81,9 @@ enum class BackendErrorCode(val raw: String) {
     AccountDeletionFinalized("ACCOUNT_DELETION_FINALIZED"),
     AccountTemporarilyBanned("ACCOUNT_TEMPORARILY_BANNED"),
     AccountPermanentlyBanned("ACCOUNT_PERMANENTLY_BANNED"),
+    PenaltyAppealNotAvailable("PENALTY_APPEAL_NOT_AVAILABLE"),
+    PenaltyAppealAlreadySubmitted("PENALTY_APPEAL_ALREADY_SUBMITTED"),
+    PenaltyAppealNotPending("PENALTY_APPEAL_NOT_PENDING"),
     LegalActionRequired("LEGAL_ACTION_REQUIRED"),
     LegalDocumentActionInvalid("LEGAL_DOCUMENT_ACTION_INVALID"),
     LegalDocumentNotFound("LEGAL_DOCUMENT_NOT_FOUND"),
@@ -318,6 +321,11 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.AccountTemporarilyBanned ->
         "Tu cuenta está suspendida temporalmente. Podrás volver a entrar cuando termine la suspensión."
     BackendErrorCode.AccountPermanentlyBanned -> "Tu cuenta fue suspendida permanentemente."
+    BackendErrorCode.PenaltyAppealNotAvailable ->
+        "No hay una solicitud de revisión disponible para esta suspensión."
+    BackendErrorCode.PenaltyAppealAlreadySubmitted ->
+        "No pudimos confirmar el estado de tu solicitud. Intentá actualizarlo."
+    BackendErrorCode.PenaltyAppealNotPending -> "Esta solicitud de revisión no está disponible."
     BackendErrorCode.LegalActionRequired -> "Necesitás completar los documentos vigentes antes de continuar."
     BackendErrorCode.LegalDocumentVersionNotCurrent,
     BackendErrorCode.LegalDocumentNotFound -> "Los documentos vigentes cambiaron. Actualizá la información e intentá nuevamente."
