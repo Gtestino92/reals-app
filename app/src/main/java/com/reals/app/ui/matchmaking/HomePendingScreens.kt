@@ -187,7 +187,7 @@ private fun HomePriorityRow(
     val actionLabel = when (item) {
         is HomePriorityItem.VisualReview -> "Descubrir ahora"
         is HomePriorityItem.SecondChatOpen -> "Entrar al chat"
-        is HomePriorityItem.SecondChatStartingSoon -> "Ver en Actividad
+        is HomePriorityItem.SecondChatStartingSoon -> "Ver en Actividad"
     }
     val body = item.homePriorityBody(nowMillis)
 
