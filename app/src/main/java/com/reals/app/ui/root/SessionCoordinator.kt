@@ -255,11 +255,15 @@ internal class SessionCoordinator(
                 is ApiResult.Success -> reconcilePermanentBanAppealAfterSubmit(requestId)
                 is ApiResult.Failure -> {
                     val backend = result.error as? ApiError.Backend
-                    if (backend?.backendErrorCode == BackendErrorCode.PenaltyAppealAlreadySubmitted) {
-                        reconcilePermanentBanAppealAfterSubmit(requestId)
-                    } else {
-                        uiState.value.permanentBanAppealStateFor(requestId)?.let { latest ->
-                            uiState.value = latest.copy(submitting = false, error = result.error)
+                    when {
+                        result.error.isAccountTemporarilyBanned() -> handleAccountBannedError(result.error)
+                        backend?.backendErrorCode == BackendErrorCode.PenaltyAppealAlreadySubmitted -> {
+                            reconcilePermanentBanAppealAfterSubmit(requestId)
+                        }
+                        else -> {
+                            uiState.value.permanentBanAppealStateFor(requestId)?.let { latest ->
+                                uiState.value = latest.copy(submitting = false, error = result.error)
+                            }
                         }
                     }
                 }
@@ -740,7 +744,9 @@ internal class SessionCoordinator(
         when (val result = getPermanentBanAppealUseCase()) {
             is ApiResult.Success -> installPermanentBanAppealResult(requestId, result.value)
             is ApiResult.Failure -> {
-                if (result.error.isTerminalAuthFailure()) {
+                if (result.error.isAccountTemporarilyBanned()) {
+                    handleAccountBannedError(result.error)
+                } else if (result.error.isTerminalAuthFailure()) {
                     clearLocalSessionAndShowLogin(
                         error = "Tu sesión terminó. Volvé a iniciar sesión.",
                     )
@@ -757,7 +763,9 @@ internal class SessionCoordinator(
         when (val result = getPermanentBanAppealUseCase()) {
             is ApiResult.Success -> installPermanentBanAppealResult(requestId, result.value)
             is ApiResult.Failure -> {
-                if (result.error.isTerminalAuthFailure()) {
+                if (result.error.isAccountTemporarilyBanned()) {
+                    handleAccountBannedError(result.error)
+                } else if (result.error.isTerminalAuthFailure()) {
                     clearLocalSessionAndShowLogin(
                         error = "Tu sesión terminó. Volvé a iniciar sesión.",
                     )
@@ -777,7 +785,7 @@ internal class SessionCoordinator(
         val latest = uiState.value.permanentBanAppealStateFor(requestId) ?: return
         if (!appeal.hasExpectedBanActivity()) {
             uiState.value = latest.copy(
-                appeal = appeal,
+                appeal = null,
                 loading = false,
                 submitting = false,
                 error = ApiError.Unexpected("No pudimos confirmar el estado de tu suspensión."),
@@ -872,6 +880,10 @@ private fun PermanentBanAppealState.isApprovedInactive(): Boolean =
 
 private fun ApiError.isAuthenticationMethodNotAllowed(): Boolean {
     return this is ApiError.Backend && backendErrorCode == BackendErrorCode.AuthMethodNotAllowed
+}
+
+private fun ApiError.isAccountTemporarilyBanned(): Boolean {
+    return this is ApiError.Backend && backendErrorCode == BackendErrorCode.AccountTemporarilyBanned
 }
 
 private fun ApiError.isProvisioningAccountAssociationConflict(): Boolean {

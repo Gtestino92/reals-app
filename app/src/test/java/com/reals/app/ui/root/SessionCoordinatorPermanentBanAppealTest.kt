@@ -138,6 +138,70 @@ class SessionCoordinatorPermanentBanAppealTest {
     }
 
     @Test
+    fun `pending appeal manual refresh temporary ban routes to existing suspension surface`() = runTest {
+        val expiresAt = "2026-09-02T01:30:00Z"
+        val harness = harness()
+        harness.state.value = RealsRootUiState.PermanentBanAppeal(
+            appeal = appeal("PENDING", banActive = true).toDomain(),
+        )
+        harness.api.banAppealResponse = backendErrorResponse(
+            403,
+            "ACCOUNT_TEMPORARILY_BANNED",
+            expiresAt = expiresAt,
+        )
+
+        harness.coordinator.refreshPermanentBanAppeal()
+        advanceUntilIdle()
+
+        val state = harness.state.value as RealsRootUiState.AccountSuspended
+        assertEquals(AccountSuspension.Temporary(expiresAt), state.suspension)
+        assertEquals(listOf("getMyBanAppeal"), harness.api.calls)
+    }
+
+    @Test
+    fun `submit success reconciliation temporary ban routes to existing suspension surface`() = runTest {
+        val expiresAt = "2026-09-02T01:30:00Z"
+        val harness = harness()
+        harness.state.value = RealsRootUiState.PermanentBanAppeal(
+            appeal = appeal("AVAILABLE", banActive = true).toDomain(),
+        )
+        harness.api.submitBanAppealResponse = Response.success(201, Unit)
+        harness.api.banAppealResponse = backendErrorResponse(
+            403,
+            "ACCOUNT_TEMPORARILY_BANNED",
+            expiresAt = expiresAt,
+        )
+
+        harness.coordinator.submitPermanentBanAppeal("Revisen mi caso")
+        advanceUntilIdle()
+
+        val state = harness.state.value as RealsRootUiState.AccountSuspended
+        assertEquals(AccountSuspension.Temporary(expiresAt), state.suspension)
+        assertEquals(listOf("submitMyBanAppeal", "getMyBanAppeal"), harness.api.calls)
+    }
+
+    @Test
+    fun `direct submit temporary ban failure routes to existing suspension surface`() = runTest {
+        val expiresAt = "2026-09-02T01:30:00Z"
+        val harness = harness()
+        harness.state.value = RealsRootUiState.PermanentBanAppeal(
+            appeal = appeal("AVAILABLE", banActive = true).toDomain(),
+        )
+        harness.api.submitBanAppealResponse = backendErrorResponse(
+            403,
+            "ACCOUNT_TEMPORARILY_BANNED",
+            expiresAt = expiresAt,
+        )
+
+        harness.coordinator.submitPermanentBanAppeal("Revisen mi caso")
+        advanceUntilIdle()
+
+        val state = harness.state.value as RealsRootUiState.AccountSuspended
+        assertEquals(AccountSuspension.Temporary(expiresAt), state.suspension)
+        assertEquals(listOf("submitMyBanAppeal"), harness.api.calls)
+    }
+
+    @Test
     fun `approved appeal restarts normal bootstrap through get me and profile load`() = runTest {
         val harness = harness()
         harness.api.getMeResponse = backendErrorResponse(403, "ACCOUNT_PERMANENTLY_BANNED")
@@ -202,7 +266,7 @@ class SessionCoordinatorPermanentBanAppealTest {
         advanceUntilIdle()
 
         val state = harness.state.value as RealsRootUiState.PermanentBanAppeal
-        assertEquals(PermanentBanAppealStatus.Approved, state.appeal?.status)
+        assertEquals(null, state.appeal)
         assertNotNull(state.error)
         assertEquals(0, harness.readySessions.size)
     }

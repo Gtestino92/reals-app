@@ -1,5 +1,6 @@
 package com.reals.app.ui.account
 
+import com.reals.app.core.network.ApiError
 import com.reals.app.domain.model.PermanentBanAppealState
 import com.reals.app.domain.model.PermanentBanAppealStatus
 import org.junit.Assert.assertEquals
@@ -55,6 +56,23 @@ class PermanentBanAppealScreenTest {
         assertTrue(
             permanentBanAppealBody(appeal(PermanentBanAppealStatus.Available, true), false, null)
                 .contains("solicitar una revisión")
+        )
+    }
+
+    @Test
+    fun `null appeal failure state stays recoverable through update copy`() {
+        assertFalse(canSubmitPermanentBanAppeal(null, "Solicito revisión", loading = false, submitting = false))
+        assertEquals(
+            "Cuenta suspendida",
+            permanentBanAppealTitle(null, loading = false, normalBootstrapError = null),
+        )
+        assertEquals(
+            "No pudimos confirmar el estado de tu suspensión. Intentá actualizarlo.",
+            permanentBanAppealBody(
+                appeal = null,
+                loading = false,
+                normalBootstrapError = ApiError.Unexpected("backend inconsistency"),
+            ),
         )
     }
 
