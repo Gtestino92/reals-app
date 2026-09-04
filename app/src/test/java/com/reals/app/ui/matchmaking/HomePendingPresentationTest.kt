@@ -10,7 +10,7 @@ class HomePendingPresentationTest {
     private val nowMillis = Instant.parse("2026-07-15T12:00:00Z").toEpochMilli()
 
     @Test
-    fun `first chat stays off Pendientes and remains directly exposed`() {
+    fun `first chat stays off Interacciones and remains directly exposed`() {
         val firstChat = HomeActionItem.FirstChat("match-first", "chat-first", "Alex")
         val presentation = presentation(actions = listOf(firstChat))
 
