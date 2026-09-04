@@ -96,7 +96,7 @@ internal fun firstChatDecisionOnlyPanelState(
     return FirstChatDecisionOnlyPanelState(
         visible = visible,
         approvalCopy = if (visible) "$partnerLabel aprobó el chat." else null,
-        prompt = "¿Querés aprobar también?",
+        prompt = "El chat está pausado mientras decidís. ¿Querés aprobar también?",
     )
 }
 

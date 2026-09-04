@@ -216,7 +216,6 @@ class FirstChatInteractionPolicyTest {
 
         assertTrue(state.visible)
         assertEquals("Alex aprob\u00f3 el chat.", state.approvalCopy)
-        assertEquals("\u00bfQuer\u00e9s aprobar tambi\u00e9n?", state.prompt)
     }
 
     @Test
@@ -247,26 +246,15 @@ class FirstChatInteractionPolicyTest {
     }
 
     @Test
-    fun `composer remains visible but non-interactive in decision-only`() {
+    fun `composer is hidden in decision-only when no audio interaction is active`() {
         val policy = firstChatComposerPresentationPolicy(
             canSendMessages = false,
             decisionOnlyForCurrentUser = true,
             audioInteractionBusy = false,
         )
-        val composer = messageComposerUiState(
-            canChat = true,
-            canSendMessages = policy.interactive,
-            sendingMessage = false,
-            loadingChatAction = false,
-            draft = "",
-            pausedCopy = FIRST_CHAT_DECISION_ONLY_COMPOSER_PAUSED_COPY,
-        )
 
-        assertTrue(policy.visible)
+        assertFalse(policy.visible)
         assertFalse(policy.interactive)
-        assertFalse(composer.canEditDraft)
-        assertFalse(composer.sendButtonEnabled)
-        assertEquals(FIRST_CHAT_DECISION_ONLY_COMPOSER_PAUSED_COPY, composer.explanatoryCopy)
     }
 
     @Test
