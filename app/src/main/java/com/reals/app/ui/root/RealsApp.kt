@@ -44,6 +44,7 @@ import com.reals.app.domain.model.VisualDecision
 import com.reals.app.foreground.ForegroundDestinationLifecyclePublisher
 import com.reals.app.ui.account.AccountDeletionRecoveryScreen
 import com.reals.app.ui.account.AccountSuspendedScreen
+import com.reals.app.ui.account.PermanentBanAppealScreen
 import com.reals.app.ui.auth.GoogleCredentialClient
 import com.reals.app.ui.auth.LoginScreen
 import com.reals.app.ui.chat.ChatScreen
@@ -172,6 +173,18 @@ fun RealsApp(
                 retrying = current.retrying,
                 retryError = current.retryError,
                 onRetry = viewModel::retryAccountSuspension,
+                onSignOut = viewModel::signOut,
+            )
+
+            is RealsRootUiState.PermanentBanAppeal -> PermanentBanAppealScreen(
+                appeal = current.appeal,
+                loading = current.loading,
+                submitting = current.submitting,
+                error = current.error,
+                normalBootstrapError = current.normalBootstrapError,
+                onSubmit = viewModel::submitPermanentBanAppeal,
+                onRefresh = viewModel::refreshPermanentBanAppeal,
+                onRetryApprovedBootstrap = viewModel::retryApprovedAppealBootstrap,
                 onSignOut = viewModel::signOut,
             )
 

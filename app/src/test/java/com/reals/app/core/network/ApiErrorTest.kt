@@ -151,6 +151,38 @@ class ApiErrorTest {
     }
 
     @Test
+    fun `fromRaw parses penalty appeal backend codes`() {
+        assertEquals(
+            BackendErrorCode.PenaltyAppealNotAvailable,
+            BackendErrorCode.fromRaw("PENALTY_APPEAL_NOT_AVAILABLE"),
+        )
+        assertEquals(
+            BackendErrorCode.PenaltyAppealAlreadySubmitted,
+            BackendErrorCode.fromRaw("PENALTY_APPEAL_ALREADY_SUBMITTED"),
+        )
+        assertEquals(
+            BackendErrorCode.PenaltyAppealNotPending,
+            BackendErrorCode.fromRaw("PENALTY_APPEAL_NOT_PENDING"),
+        )
+    }
+
+    @Test
+    fun `penalty appeal messages do not expose raw moderation details`() {
+        assertEquals(
+            "No hay una solicitud de revisión disponible para esta suspensión.",
+            backendError("PENALTY_APPEAL_NOT_AVAILABLE", message = "internal penalty reason").toUserMessage(),
+        )
+        assertEquals(
+            "No pudimos confirmar el estado de tu solicitud. Intentá actualizarlo.",
+            backendError("PENALTY_APPEAL_ALREADY_SUBMITTED", message = "reviewer notes").toUserMessage(),
+        )
+        assertEquals(
+            "Esta solicitud de revisión no está disponible.",
+            backendError("PENALTY_APPEAL_NOT_PENDING", message = "admin workflow detail").toUserMessage(),
+        )
+    }
+
+    @Test
     fun `fromRaw parses chat backend codes`() {
         mapOf(
             "CHAT_NOT_FOUND" to BackendErrorCode.ChatNotFound,

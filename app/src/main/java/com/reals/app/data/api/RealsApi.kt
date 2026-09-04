@@ -3,6 +3,7 @@
 import com.reals.app.data.dto.AddProposalRequestDto
 import com.reals.app.data.dto.AffinityAnswersResponseDto
 import com.reals.app.data.dto.AffinityQuestionCatalogResponseDto
+import com.reals.app.data.dto.BanAppealResponseDto
 import com.reals.app.data.dto.ChatDecisionRequestDto
 import com.reals.app.data.dto.ChatExitOutcomeResponseDto
 import com.reals.app.data.dto.ChatExitRequestCreateRequestDto
@@ -51,6 +52,7 @@ import com.reals.app.data.dto.SecondChatCompletionDecisionRequestDto
 import com.reals.app.data.dto.UpdateMatchFiltersRequestDto
 import com.reals.app.data.dto.UpdateProfileRequestDto
 import com.reals.app.data.dto.UpsertProfileQuestionAnswerRequestDto
+import com.reals.app.data.dto.SubmitBanAppealRequestDto
 import com.reals.app.data.dto.UserResponseDto
 import com.reals.app.data.dto.UserBlockResponseDto
 import com.reals.app.data.dto.VisualDecisionRequestDto
@@ -84,6 +86,17 @@ interface RealsApi {
     suspend fun getMe(
         @Header("Authorization") authorization: String,
     ): Response<UserResponseDto>
+
+    @GET("api/me/ban/appeal")
+    suspend fun getMyBanAppeal(
+        @Header("Authorization") authorization: String,
+    ): Response<BanAppealResponseDto>
+
+    @POST("api/me/ban/appeal")
+    suspend fun submitMyBanAppeal(
+        @Header("Authorization") authorization: String,
+        @Body body: SubmitBanAppealRequestDto,
+    ): Response<Unit>
 
     @POST("api/auth/password-reset")
     suspend fun requestPasswordReset(

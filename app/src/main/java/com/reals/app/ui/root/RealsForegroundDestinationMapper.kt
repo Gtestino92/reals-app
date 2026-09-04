@@ -38,6 +38,7 @@ fun RealsRootUiState.foregroundDestination(): ForegroundDestination = when (this
     is RealsRootUiState.AccountDeletionScheduled,
     is RealsRootUiState.AccountDeletionPending,
     is RealsRootUiState.AccountSuspended,
+    is RealsRootUiState.PermanentBanAppeal,
     is RealsRootUiState.LegalRequirements,
     is RealsRootUiState.PendingEngagement,
     is RealsRootUiState.ActivationComplete,

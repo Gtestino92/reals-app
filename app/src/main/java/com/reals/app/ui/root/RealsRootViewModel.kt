@@ -236,6 +236,12 @@ class RealsRootViewModel(
 
     fun retryAccountSuspension() = sessionCoordinator.retryAccountSuspension()
 
+    fun refreshPermanentBanAppeal() = sessionCoordinator.refreshPermanentBanAppeal()
+
+    fun retryApprovedAppealBootstrap() = sessionCoordinator.retryApprovedAppealBootstrap()
+
+    fun submitPermanentBanAppeal(statement: String) = sessionCoordinator.submitPermanentBanAppeal(statement)
+
     fun onSystemBack() {
         val current = _uiState.value
         if (!current.canHandleSystemBack()) return
@@ -268,6 +274,7 @@ class RealsRootViewModel(
             is RealsRootUiState.AccountDeletionPending,
             is RealsRootUiState.AccountDeletionScheduled,
             is RealsRootUiState.AccountSuspended,
+            is RealsRootUiState.PermanentBanAppeal,
             RealsRootUiState.Checking,
             is RealsRootUiState.Failure,
             is RealsRootUiState.LegalRequirements,
@@ -319,6 +326,7 @@ class RealsRootViewModel(
             is RealsRootUiState.AccountDeletionPending,
             is RealsRootUiState.AccountDeletionScheduled,
             is RealsRootUiState.AccountSuspended,
+            is RealsRootUiState.PermanentBanAppeal,
             is RealsRootUiState.Failure,
             is RealsRootUiState.Login,
             is RealsRootUiState.MissingFirebase -> Unit
@@ -370,6 +378,7 @@ class RealsRootViewModel(
             is RealsRootUiState.AccountDeletionPending,
             is RealsRootUiState.AccountDeletionScheduled,
             is RealsRootUiState.AccountSuspended,
+            is RealsRootUiState.PermanentBanAppeal,
             is RealsRootUiState.Failure,
             is RealsRootUiState.Login,
             is RealsRootUiState.MissingFirebase -> {
@@ -2473,6 +2482,8 @@ private fun RealsRootUiState.hasLegalActionRequiredError(): Boolean = when (this
 internal fun RealsRootUiState.hasTerminalAuthFailure(): Boolean = when (this) {
     is RealsRootUiState.Failure -> error.isTerminalAuthFailure()
     is RealsRootUiState.AccountDeletionPending -> error.isTerminalAuthFailure()
+    is RealsRootUiState.PermanentBanAppeal ->
+        error.isTerminalAuthFailure() || normalBootstrapError.isTerminalAuthFailure()
     is RealsRootUiState.LegalRequirements ->
         error.isTerminalAuthFailure() || accountDeleteError.isTerminalAuthFailure()
 
@@ -2531,6 +2542,7 @@ private fun ApiError?.isTerminalAuthFailure(): Boolean =
 private fun RealsRootUiState.accountBannedError(): ApiError? = when (this) {
     is RealsRootUiState.Failure -> error.takeIfAccountBanned()
     is RealsRootUiState.AccountDeletionPending -> error.takeIfAccountBanned()
+    is RealsRootUiState.PermanentBanAppeal -> firstAccountBannedError(error, normalBootstrapError)
     is RealsRootUiState.LegalRequirements -> firstAccountBannedError(error, accountDeleteError)
     is RealsRootUiState.Ready -> firstAccountBannedError(
         profileCreateError,
@@ -2591,6 +2603,7 @@ private fun RealsRootUiState.clearsPendingSecondChatStartedHomeOpen(): Boolean =
     is RealsRootUiState.AccountDeletionPending,
     is RealsRootUiState.AccountDeletionScheduled,
     is RealsRootUiState.AccountSuspended,
+    is RealsRootUiState.PermanentBanAppeal,
     is RealsRootUiState.Failure,
     is RealsRootUiState.Login,
     is RealsRootUiState.MissingFirebase -> true

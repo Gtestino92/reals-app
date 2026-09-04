@@ -11,6 +11,7 @@ import com.reals.app.data.api.RealsApiClient
 import com.reals.app.data.repository.AffinityQuestionRepository
 import com.reals.app.data.repository.AuthRepository
 import com.reals.app.data.repository.CredentialStateRepository
+import com.reals.app.data.repository.BanAppealRepository
 import com.reals.app.data.repository.FirebaseAuthRepository
 import com.reals.app.data.repository.ChatRepository
 import com.reals.app.data.repository.LegalRepository
@@ -56,6 +57,7 @@ import com.reals.app.domain.usecase.GetNotificationPreferencesUseCase
 import com.reals.app.domain.usecase.GetMyAffinityAnswersUseCase
 import com.reals.app.domain.usecase.GetMyProfileQuestionAnswersUseCase
 import com.reals.app.domain.usecase.GetPartnerPersonalMessageUseCase
+import com.reals.app.domain.usecase.GetPermanentBanAppealUseCase
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
 import com.reals.app.domain.usecase.GetProfileQuestionCatalogUseCase
 import com.reals.app.domain.usecase.GetQueueStatusUseCase
@@ -87,6 +89,7 @@ import com.reals.app.domain.usecase.SafetyCancelChatUseCase
 import com.reals.app.domain.usecase.SendChatAudioMessageUseCase
 import com.reals.app.domain.usecase.SendChatMessageUseCase
 import com.reals.app.domain.usecase.SubmitChatDecisionUseCase
+import com.reals.app.domain.usecase.SubmitPermanentBanAppealUseCase
 import com.reals.app.domain.usecase.SubmitSchedulingProposalsUseCase
 import com.reals.app.domain.usecase.SubmitVisualDecisionUseCase
 import com.reals.app.domain.usecase.TimeoutChatExitRequestUseCase
@@ -121,6 +124,7 @@ class AppContainer(context: Context) {
     private val credentialStateRepository = CredentialStateRepository(appContext)
     private val clearLocalSessionUseCase = ClearLocalSessionUseCase(authRepository, credentialStateRepository)
     private val backendAuthRepository = AuthRepository(api, apiExecutor)
+    private val banAppealRepository = BanAppealRepository(api, tokenProvider, apiExecutor)
     val foregroundDestinationTracker = AtomicForegroundDestinationTracker()
     val notificationPresentationPolicy = NotificationPresentationPolicy()
     val homeRefreshSignal = HomeRefreshSignal()
@@ -169,6 +173,8 @@ class AppContainer(context: Context) {
     val deleteAccountUseCase = DeleteAccountUseCase(meRepository)
     val finalizeAccountDeletionUseCase = FinalizeAccountDeletionUseCase(meRepository)
     val requestPasswordResetUseCase = RequestPasswordResetUseCase(backendAuthRepository)
+    val getPermanentBanAppealUseCase = GetPermanentBanAppealUseCase(banAppealRepository)
+    val submitPermanentBanAppealUseCase = SubmitPermanentBanAppealUseCase(banAppealRepository)
     val getCurrentLegalDocumentsUseCase = GetCurrentLegalDocumentsUseCase(legalRepository)
     val getLegalStatusUseCase = GetLegalStatusUseCase(legalRepository)
     val recordLegalDocumentActionUseCase = RecordLegalDocumentActionUseCase(legalRepository)
@@ -228,6 +234,8 @@ class AppContainer(context: Context) {
             clearLocalSession = clearLocalSessionUseCase,
             provisionAndLoadProfile = provisionAndLoadProfileUseCase,
             getMe = getMeUseCase,
+            getPermanentBanAppeal = getPermanentBanAppealUseCase,
+            submitPermanentBanAppeal = submitPermanentBanAppealUseCase,
             pushTokenRegistrationService = pushTokenRegistrationService,
             markLocalFirebaseEmailVerified = markLocalFirebaseEmailVerifiedUseCase,
             localFirebaseEmailAutoVerificationEnabled =
