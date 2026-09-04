@@ -88,7 +88,7 @@ object NotificationHelper {
 
         val notification = NotificationCompat.Builder(context, GENERAL_UPDATES_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_name)
-            .setContentTitle("Revisión visual pendiente")
+            .setContentTitle("Descubrimiento pendiente")
             .setContentText("Entrá a Reals para completarla antes de que venza.")
             .setStyle(
                 NotificationCompat.BigTextStyle()

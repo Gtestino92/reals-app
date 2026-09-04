@@ -28,7 +28,6 @@ class HomeUiMapper {
         val displayedSummary = home?.activeInteractionsSummary?.copy(
             activeInitialCount = pendingActionItems.size,
             activeConnectionCount = activeNextStepCount,
-            actionableConnectionCount = activeNextStepCount,
         )
 
         return HomeScreenModel(
@@ -95,6 +94,7 @@ class HomeUiMapper {
                     connectionId = nextStep.connectionId,
                     matchId = nextStep.matchId,
                     partnerDisplayName = nextStep.partner?.displayName?.takeIf { it.isNotBlank() },
+                    requiresAction = nextStep.requiresAction,
                     createdAt = nextStep.createdAt,
                     schedulingExpiresAt = nextStep.schedulingExpiresAt,
                 )
@@ -114,6 +114,7 @@ class HomeUiMapper {
                             expiresAt = nextStep.secondChat?.expiresAt,
                             durationMinutes = nextStep.secondChat?.durationMinutes,
                             myAttendanceStatus = nextStep.secondChat?.myAttendanceStatus?.rawValue,
+                            requiresAction = nextStep.requiresAction,
                         )
                     }
 
@@ -132,6 +133,7 @@ class HomeUiMapper {
                             expiresAt = nextStep.secondChat?.expiresAt,
                             durationMinutes = nextStep.secondChat?.durationMinutes,
                             myAttendanceStatus = nextStep.secondChat?.myAttendanceStatus?.rawValue,
+                            requiresAction = nextStep.requiresAction,
                         )
                     }
 
@@ -150,6 +152,7 @@ class HomeUiMapper {
                             expiresAt = nextStep.secondChat?.expiresAt,
                             durationMinutes = nextStep.secondChat?.durationMinutes,
                             myAttendanceStatus = nextStep.secondChat?.myAttendanceStatus?.rawValue,
+                            requiresAction = nextStep.requiresAction,
                         )
                     }
 
@@ -169,6 +172,7 @@ class HomeUiMapper {
                             readOnlyUntil = nextStep.secondChat?.readOnlyUntil,
                             durationMinutes = nextStep.secondChat?.durationMinutes,
                             myAttendanceStatus = nextStep.secondChat?.myAttendanceStatus?.rawValue,
+                            requiresAction = nextStep.requiresAction,
                         )
                     }
 
@@ -177,6 +181,7 @@ class HomeUiMapper {
                     matchId = nextStep.matchId,
                     rawState = nextStep.rawType,
                     partnerDisplayName = nextStep.partner?.displayName?.takeIf { it.isNotBlank() },
+                    requiresAction = nextStep.requiresAction,
                 )
             }
         }
@@ -234,6 +239,16 @@ class HomeUiMapper {
         this == ChatStatus.Cancelled ||
             this == ChatStatus.Closed
 }
+
+internal fun HomeNextStepItem.requiresAction(): Boolean =
+    when (this) {
+        is HomeNextStepItem.Scheduling -> requiresAction
+        is HomeNextStepItem.SecondChatScheduled -> requiresAction
+        is HomeNextStepItem.SecondChatAvailable -> requiresAction
+        is HomeNextStepItem.SecondChatExpired -> requiresAction
+        is HomeNextStepItem.SecondChatReadOnly -> requiresAction
+        is HomeNextStepItem.Unknown -> requiresAction
+    }
 
 fun HomeMatchmakingBlockedReason.toUiState(): HomeMatchmakingBlockedReasonUiState =
     HomeMatchmakingBlockedReasonUiState(

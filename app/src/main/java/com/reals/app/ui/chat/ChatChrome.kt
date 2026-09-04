@@ -2084,7 +2084,7 @@ internal fun chatDecisionSummary(
             "$partnerLabel aprobó el chat. Ahora te toca decidir."
 
         myDecision == ChatDecisionState.Approved && partnerDecision == ChatDecisionState.Approved ->
-            "Ambas personas aprobaron. Pasando a revisión visual."
+            "Ambas personas aprobaron. Pasando a descubrimiento."
 
         myDecision == ChatDecisionState.Rejected || partnerDecision == ChatDecisionState.Rejected ->
             "El chat fue rechazado."

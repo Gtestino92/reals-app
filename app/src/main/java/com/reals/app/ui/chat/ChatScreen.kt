@@ -231,11 +231,7 @@ fun ChatScreen(
             canSendMessages = canSendMessages,
             sendingMessage = sendingMessage,
             messageComposerLoading = loadingChatAction,
-            messageComposerPausedCopy = if (decisionOnlyForCurrentUser) {
-                FIRST_CHAT_DECISION_ONLY_COMPOSER_PAUSED_COPY
-            } else {
-                null
-            },
+            messageComposerPausedCopy = null,
             audioActionLoading = loadingChatAction || guidanceActionLoading,
             textDraft = draft,
             uploadState = audioUpload,
@@ -376,7 +372,6 @@ fun ChatScreen(
     val density = LocalDensity.current
     val composerPresentationPolicy = firstChatComposerPresentationPolicy(
         canSendMessages = canSendMessages,
-        decisionOnlyForCurrentUser = decisionOnlyForCurrentUser,
         audioInteractionBusy = audioSession.interactionBusy,
     )
     val showMessageComposer = composerPresentationPolicy.visible

@@ -333,7 +333,7 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.UserPairBlocked -> "Esta interacción ya no está disponible."
     BackendErrorCode.DomainConflict -> when (context) {
         ErrorContext.Chat -> "La conversación no cumple una regla del flujo todavía. Revisá el estado e intentá nuevamente."
-        ErrorContext.VisualReview -> "La revisión visual no cumple una regla del flujo todavía. Revisá el mensaje personal o actualiza el estado."
+        ErrorContext.VisualReview -> "El descubrimiento no cumple una regla del flujo todavía. Revisá el mensaje personal o actualiza el estado."
         else -> "Esta acción no está disponible con el estado actual."
     }
     BackendErrorCode.PartnerPersonalMessageNotRead,
@@ -425,7 +425,7 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
         ErrorContext.PhotoReplace -> "Probá con otra foto o intentá nuevamente en unos segundos."
         ErrorContext.Matchmaking -> "No pudimos iniciar la búsqueda. Revisá tu perfil e intentá nuevamente."
         ErrorContext.Chat -> "La conversación cambió de estado. Actualizá e intentá nuevamente."
-        ErrorContext.VisualReview -> "La revisión visual cambió de estado. Actualizá e intentá nuevamente."
+        ErrorContext.VisualReview -> "El descubrimiento cambió de estado. Actualizá e intentá nuevamente."
         ErrorContext.Scheduling -> "La coordinación de horarios cambió de estado. Actualizá e intentá nuevamente."
         ErrorContext.AffinityQuestions -> "No pudimos actualizar las preguntas de afinidad. Intentá nuevamente."
         ErrorContext.ProfileQuestions -> "No pudimos actualizar las preguntas del perfil. Intentá nuevamente."

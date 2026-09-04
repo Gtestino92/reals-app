@@ -22,10 +22,10 @@ class UiLabelsTest {
     @Test
     fun `labels cover match and chat states`() {
         assertEquals("Chat en curso", MatchState.ChatActive.userLabel())
-        assertEquals("Revisión visual", MatchState.VisualPhase.userLabel())
-        assertEquals("Revisión aprobada", MatchState.VisualApproved.userLabel())
+        assertEquals("Descubrimiento", MatchState.VisualPhase.userLabel())
+        assertEquals("Descubrimiento aprobado", MatchState.VisualApproved.userLabel())
         assertEquals("Chat cerrado", MatchState.ChatRejected.userLabel())
-        assertEquals("Revisión cerrada", MatchState.VisualRejected.userLabel())
+        assertEquals("Descubrimiento cerrado", MatchState.VisualRejected.userLabel())
         assertEquals("Expirado", MatchState.Expired.userLabel())
         assertEquals("Estado no disponible", MatchState.Unknown("NEW").userLabel())
 

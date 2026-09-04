@@ -116,6 +116,7 @@ fun HomeNextStepResponseDto.toDomain(): HomeNextStep = when (type.uppercase()) {
         connectionId = connectionId,
         matchId = matchId,
         partner = partner?.toDomain(),
+        requiresAction = requiresAction,
         createdAt = createdAt,
         schedulingExpiresAt = schedulingExpiresAt,
     )
@@ -125,6 +126,7 @@ fun HomeNextStepResponseDto.toDomain(): HomeNextStep = when (type.uppercase()) {
         matchId = matchId,
         partner = partner?.toDomain(),
         secondChat = secondChat?.toDomain(),
+        requiresAction = requiresAction,
     )
 
     "SECOND_CHAT_AVAILABLE" -> HomeNextStep.SecondChatAvailable(
@@ -132,6 +134,7 @@ fun HomeNextStepResponseDto.toDomain(): HomeNextStep = when (type.uppercase()) {
         matchId = matchId,
         partner = partner?.toDomain(),
         secondChat = secondChat?.toDomain(),
+        requiresAction = requiresAction,
     )
 
     "SECOND_CHAT_EXPIRED" -> HomeNextStep.SecondChatExpired(
@@ -139,6 +142,7 @@ fun HomeNextStepResponseDto.toDomain(): HomeNextStep = when (type.uppercase()) {
         matchId = matchId,
         partner = partner?.toDomain(),
         secondChat = secondChat?.toDomain(),
+        requiresAction = requiresAction,
     )
 
     "SECOND_CHAT_READ_ONLY" -> HomeNextStep.SecondChatReadOnly(
@@ -146,6 +150,7 @@ fun HomeNextStepResponseDto.toDomain(): HomeNextStep = when (type.uppercase()) {
         matchId = matchId,
         partner = partner?.toDomain(),
         secondChat = secondChat?.toDomain(),
+        requiresAction = requiresAction,
     )
 
     else -> HomeNextStep.Unknown(
@@ -153,6 +158,7 @@ fun HomeNextStepResponseDto.toDomain(): HomeNextStep = when (type.uppercase()) {
         connectionId = connectionId,
         matchId = matchId,
         partner = partner?.toDomain(),
+        requiresAction = requiresAction,
     )
 }
 
@@ -161,6 +167,7 @@ fun HomeNextStepLiteResponseDto.toDomain(): HomeNextStep = when (type.uppercase(
         connectionId = connectionId,
         matchId = matchId,
         partner = null,
+        requiresAction = requiresAction,
         createdAt = createdAt,
         schedulingExpiresAt = schedulingExpiresAt,
     )
@@ -170,6 +177,7 @@ fun HomeNextStepLiteResponseDto.toDomain(): HomeNextStep = when (type.uppercase(
         matchId = matchId,
         partner = null,
         secondChat = secondChat?.toDomain(),
+        requiresAction = requiresAction,
     )
 
     "SECOND_CHAT_AVAILABLE" -> HomeNextStep.SecondChatAvailable(
@@ -177,6 +185,7 @@ fun HomeNextStepLiteResponseDto.toDomain(): HomeNextStep = when (type.uppercase(
         matchId = matchId,
         partner = null,
         secondChat = secondChat?.toDomain(),
+        requiresAction = requiresAction,
     )
 
     "SECOND_CHAT_EXPIRED" -> HomeNextStep.SecondChatExpired(
@@ -184,6 +193,7 @@ fun HomeNextStepLiteResponseDto.toDomain(): HomeNextStep = when (type.uppercase(
         matchId = matchId,
         partner = null,
         secondChat = secondChat?.toDomain(),
+        requiresAction = requiresAction,
     )
 
     "SECOND_CHAT_READ_ONLY" -> HomeNextStep.SecondChatReadOnly(
@@ -191,6 +201,7 @@ fun HomeNextStepLiteResponseDto.toDomain(): HomeNextStep = when (type.uppercase(
         matchId = matchId,
         partner = null,
         secondChat = secondChat?.toDomain(),
+        requiresAction = requiresAction,
     )
 
     else -> HomeNextStep.Unknown(
@@ -198,6 +209,7 @@ fun HomeNextStepLiteResponseDto.toDomain(): HomeNextStep = when (type.uppercase(
         connectionId = connectionId,
         matchId = matchId,
         partner = null,
+        requiresAction = requiresAction,
     )
 }
 

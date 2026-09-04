@@ -118,7 +118,7 @@ internal fun homePendingPresentation(
                 ),
             ),
         )
-        addAll(nextStepHubItems.filter { it.item is HomeNextStepItem.Scheduling })
+        addAll(nextStepHubItems.filter { it.item is HomeNextStepItem.Scheduling && it.item.requiresAction() })
     }
     val inProgress = nextStepHubItems
         .filter {
@@ -202,11 +202,7 @@ internal fun homePendingPresentation(
         firstChats = firstChats,
         hubSections = sections,
         summaryText = pendingSummaryText(
-            inProgress = inProgress.size,
             actionRequired = actionRequired.size,
-            upcoming = upcoming.size,
-            recent = recent.size,
-            other = other.size,
         ),
         priorityItems = priorityCandidates.take(MaxHomePriorityItems),
         priorityOverflowCount = (priorityCandidates.size - MaxHomePriorityItems).coerceAtLeast(0),
@@ -225,24 +221,13 @@ internal fun HomeActionItem.VisualReview.isCriticalFutureVisualReview(nowMillis:
 }
 
 private fun pendingSummaryText(
-    inProgress: Int,
     actionRequired: Int,
-    upcoming: Int,
-    recent: Int,
-    other: Int,
-): String? {
-    val clauses = buildList {
-        if (inProgress > 0) add("$inProgress en curso")
-        if (actionRequired > 0) {
-            add(if (actionRequired == 1) "1 requiere tu acción" else "$actionRequired requieren tu acción")
-        }
-        if (upcoming > 0) add(if (upcoming == 1) "1 próximo" else "$upcoming próximos")
-        if (recent > 0) add(if (recent == 1) "1 reciente" else "$recent recientes")
+): String? =
+    when {
+        actionRequired <= 0 -> null
+        actionRequired == 1 -> "1 requiere tu acción"
+        else -> "$actionRequired requieren tu acción"
     }
-    if (clauses.isNotEmpty()) return clauses.joinToString(" · ")
-    if (other > 0) return if (other == 1) "1 pendiente" else "$other pendientes"
-    return null
-}
 
 private fun HomePendingHubItem.NextStep.isStartingSoonSecondChat(nowMillis: Long): Boolean {
     if (secondChatPresentation?.state != SecondChatHomeState.Waiting) return false
@@ -319,7 +304,7 @@ internal fun HomePriorityItem.homePriorityTitle(): String =
                 ?.takeIf { it.isNotBlank() }
                 ?.let(TextSafety::safeDisplay)
                 ?.let { "El perfil de $it está por vencer" }
-                ?: "Revisión visual por vencer"
+                ?: "Descubrimiento por vencer"
 
         is HomePriorityItem.SecondChatOpen ->
             item.partnerDisplayName()
@@ -343,7 +328,7 @@ internal fun HomeNextStepItem.pendingNextStepTitle(): String =
                 ?.takeIf { it.isNotBlank() }
                 ?.let(TextSafety::safeDisplay)
                 ?.let { "Con $it" }
-                ?: "Elegí horarios"
+                ?: "Coordinación"
         is HomeNextStepItem.SecondChatScheduled,
         is HomeNextStepItem.SecondChatAvailable,
         is HomeNextStepItem.SecondChatExpired,
@@ -358,7 +343,8 @@ internal fun HomeNextStepItem.pendingNextStepTitle(): String =
 
 internal fun HomeNextStepItem.pendingNextStepBody(nowMillis: Long): String =
     when (this) {
-        is HomeNextStepItem.Scheduling -> "Proponé opciones para el segundo chat."
+        is HomeNextStepItem.Scheduling ->
+            if (requiresAction) "Proponé opciones para el segundo chat." else "Esperando respuesta."
         else -> homeNextStepBody(nowMillis)
     }
 

@@ -82,14 +82,12 @@ internal fun HomePendingSummaryCard(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Text("Pendientes", style = MaterialTheme.typography.titleLarge)
-                presentation.summaryText?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                Text("Actividad", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    text = presentation.summaryText ?: "Sin acciones requeridas",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             HomeTrailingChevron()
         }
@@ -140,7 +138,7 @@ internal fun HomePriorityBlock(
                     enabled = !busy,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Ver ${presentation.priorityOverflowCount} más en Pendientes")
+                    Text("Ver ${presentation.priorityOverflowCount} más en Actividad")
                 }
             }
         }
@@ -187,9 +185,9 @@ private fun HomePriorityRow(
     }
     val title = item.homePriorityTitle()
     val actionLabel = when (item) {
-        is HomePriorityItem.VisualReview -> "Revisar ahora"
+        is HomePriorityItem.VisualReview -> "Descubrir ahora"
         is HomePriorityItem.SecondChatOpen -> "Entrar al chat"
-        is HomePriorityItem.SecondChatStartingSoon -> "Ver en Pendientes"
+        is HomePriorityItem.SecondChatStartingSoon -> "Ver en Actividad"
     }
     val body = item.homePriorityBody(nowMillis)
 
@@ -266,8 +264,8 @@ internal fun PendingInteractionsScreen(
             verticalAlignment = Alignment.Top,
         ) {
             RealsScreenHeader(
-                title = "Pendientes",
-                subtitle = "Tus revisiones, próximos pasos y segundos chats en un solo lugar.",
+                title = "Actividad",
+                subtitle = "Descubrimientos, próximos pasos y segundos chats en un solo lugar.",
                 modifier = Modifier.weight(1f),
             )
             TextButton(
@@ -355,7 +353,7 @@ private fun PendingHubSection(
                         item = item.item,
                         busy = busy,
                         nowMillis = nowMillis,
-                        dismissContentDescription = "Quitar de Pendientes",
+                        dismissContentDescription = "Quitar de Actividad",
                         titleOverride = item.item.pendingNextStepTitle(),
                         bodyOverride = item.item.pendingNextStepBodyOverride(nowMillis),
                         usePendingRowOutline = true,

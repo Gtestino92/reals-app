@@ -627,6 +627,7 @@ object TestDtos {
                 type = "SCHEDULING",
                 connectionId = "connection-1",
                 matchId = "match-3",
+                requiresAction = true,
                 partner = partner("Scheduling"),
             ),
             HomeNextStepResponseDto(
@@ -683,6 +684,7 @@ object TestDtos {
                 type = "SCHEDULING",
                 connectionId = "connection-1",
                 matchId = "match-3",
+                requiresAction = true,
             ),
             HomeNextStepLiteResponseDto(
                 type = "SECOND_CHAT_AVAILABLE",

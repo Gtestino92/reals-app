@@ -31,10 +31,10 @@ fun photoValidationLabel(value: String): String = when (value.uppercase()) {
 
 fun MatchState.userLabel(): String = when (this) {
     MatchState.ChatActive -> "Chat en curso"
-    MatchState.VisualPhase -> "Revisión visual"
-    MatchState.VisualApproved -> "Revisión aprobada"
+    MatchState.VisualPhase -> "Descubrimiento"
+    MatchState.VisualApproved -> "Descubrimiento aprobado"
     MatchState.ChatRejected -> "Chat cerrado"
-    MatchState.VisualRejected -> "Revisión cerrada"
+    MatchState.VisualRejected -> "Descubrimiento cerrado"
     MatchState.Expired -> "Expirado"
     is MatchState.Unknown -> "Estado no disponible"
 }

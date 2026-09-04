@@ -60,6 +60,7 @@ import com.reals.app.ui.theme.RealsRadii
 import kotlinx.coroutines.delay
 import java.time.ZoneId
 import java.util.Locale
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 internal fun PendingActionsCard(
@@ -515,7 +516,7 @@ internal fun VisualApprovalItem(
                 ) {
                     Text(
                         text = titleOverride
-                            ?: (partnerName?.let { "Con $it" } ?: "Revisión pendiente"),
+                            ?: (partnerName?.let { "Con $it" } ?: "Descubrimiento pendiente"),
                         style = MaterialTheme.typography.titleMedium,
                     )
                     deadlineText?.let {
@@ -630,7 +631,7 @@ private fun rememberVisualReviewNowMillis(enabled: Boolean): Long {
             val now = System.currentTimeMillis()
             nowMillis = now
             val nextMinuteDelay = (60_000L - (now % 60_000L)).coerceIn(1_000L, 60_000L)
-            delay(nextMinuteDelay)
+            delay(nextMinuteDelay.milliseconds)
         }
     }
 
@@ -698,7 +699,7 @@ internal fun NextStepItem(
             else -> false
         }
     val primaryLabel = when {
-        item is HomeNextStepItem.Scheduling -> "Elegir horarios"
+        item is HomeNextStepItem.Scheduling -> if (item.requiresAction) "Elegir horarios" else "Ver coordinación"
         secondChatPresentation?.canOpenChat == true -> secondChatPresentation.primaryCtaLabel
         else -> secondChatPresentation?.primaryCtaLabel
     }
@@ -836,7 +837,7 @@ internal fun HomeNextStepItem.homeNextStepRowBody(
     zoneId: ZoneId = ZoneId.systemDefault(),
     locale: Locale = Locale.forLanguageTag("es-AR"),
 ): String? = when (this) {
-    is HomeNextStepItem.Scheduling -> null
+    is HomeNextStepItem.Scheduling -> if (requiresAction) null else "Esperando respuesta."
     else -> homeNextStepBody(nowMillis, zoneId, locale)
 }
 
@@ -893,7 +894,8 @@ internal fun HomeNextStepItem.homeNextStepBody(
         SecondChatHomeState.Expired -> "La ventana para entrar terminó."
         else ->
         when (this) {
-            is HomeNextStepItem.Scheduling -> "Proponé opciones para el segundo chat."
+            is HomeNextStepItem.Scheduling ->
+                if (requiresAction) "Proponé opciones para el segundo chat." else "Esperando respuesta."
             is HomeNextStepItem.SecondChatScheduled ->
                 "Programado para ${
                     formatBackendContextualDateTime(
