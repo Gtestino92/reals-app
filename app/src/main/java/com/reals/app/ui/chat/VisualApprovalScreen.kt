@@ -228,7 +228,7 @@ fun VisualApprovalScreen(
                 verticalAlignment = Alignment.Top,
             ) {
                 Text(
-                    text = "Revisión visual",
+                    text = "Descubrimiento",
                     modifier = Modifier.weight(1f),
                     style = RealsType.ScreenTitle,
                     color = MaterialTheme.colorScheme.primary,
@@ -248,7 +248,7 @@ fun VisualApprovalScreen(
                 )
             }
             Text(
-                text = "Revisá el perfil visual antes de decidir si querés continuar.",
+                text = "Conocé su perfil antes de decidir si querés continuar.",
                 modifier = Modifier.padding(top = 8.dp),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -288,14 +288,14 @@ fun VisualApprovalScreen(
         if (lifecycle.expired) {
             FeedbackCard(
                 title = "Estado",
-                message = "La revisi\u00f3n visual venci\u00f3. Actualizando estado...",
+                message = "El descubrimiento venci\u00f3. Actualizando estado...",
                 tone = FeedbackTone.Warning,
             )
             Spacer(modifier = Modifier.height(16.dp))
         } else if (lifecycle.showWarning) {
             FeedbackCard(
-                title = "Revisi\u00f3n por vencer",
-                message = "La revisi\u00f3n visual vence pronto. Complet\u00e1 tu decisi\u00f3n para no perder esta oportunidad.",
+                title = "Descubrimiento por vencer",
+                message = "El descubrimiento vence pronto. Complet\u00e1 tu decisi\u00f3n para no perder esta oportunidad.",
                 tone = FeedbackTone.Warning,
             )
             Spacer(modifier = Modifier.height(16.dp))
@@ -309,9 +309,9 @@ fun VisualApprovalScreen(
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
             ) {
                 Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Perfil visual", style = MaterialTheme.typography.titleLarge)
+                    Text("Perfil", style = MaterialTheme.typography.titleLarge)
                     Text(
-                        text = if (loading) "Cargando perfil..." else "No pudimos cargar el perfil visual todavía.",
+                        text = if (loading) "Cargando perfil..." else "No pudimos cargar el perfil todavía.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     if (presentationState.showProfileRetry) {
@@ -386,7 +386,7 @@ fun VisualApprovalScreen(
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Decisión visual", style = MaterialTheme.typography.titleMedium)
+                Text("Tu decisión", style = MaterialTheme.typography.titleMedium)
                 Text(
                     text = "Si aprobás y la otra persona también aprueba, se crea la conexión para la siguiente etapa.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -547,9 +547,9 @@ private fun VisualApprovalInitialLoadingCard() {
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Cargando revisión visual", style = MaterialTheme.typography.titleLarge)
+            Text("Cargando descubrimiento", style = MaterialTheme.typography.titleLarge)
             Text(
-                text = "Estamos cargando el perfil y el estado de la revisión.",
+                text = "Estamos cargando el perfil y el estado del descubrimiento.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -571,7 +571,7 @@ private fun VisualApprovalInitialFailureCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("No pudimos cargar la revisión visual", style = MaterialTheme.typography.titleLarge)
+            Text("No pudimos cargar el descubrimiento", style = MaterialTheme.typography.titleLarge)
             error?.let { ApiErrorFeedbackCard(it, ErrorContext.VisualReview) }
             OutlinedButton(onClick = onRefresh, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
                 Text(if (refreshing) "Actualizando..." else "Reintentar")

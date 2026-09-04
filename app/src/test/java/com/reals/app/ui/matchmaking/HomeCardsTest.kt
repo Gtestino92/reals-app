@@ -194,9 +194,23 @@ class HomeCardsTest {
             connectionId = "connection-1",
             matchId = "match-1",
             partnerDisplayName = "Alex",
+            requiresAction = true,
         )
 
         assertEquals(null, item.homeNextStepRowBody(nowMillis))
+    }
+
+    @Test
+    fun `non actionable scheduling row shows waiting state`() {
+        val item = HomeNextStepItem.Scheduling(
+            connectionId = "connection-1",
+            matchId = "match-1",
+            partnerDisplayName = "Alex",
+            requiresAction = false,
+        )
+
+        assertEquals("Esperando respuesta.", item.homeNextStepRowBody(nowMillis))
+        assertEquals("Esperando respuesta.", item.homeNextStepBody(nowMillis, buenosAires, locale))
     }
 
     @Test

@@ -94,6 +94,7 @@ class HomeMappersTest {
                     type = "SCHEDULING",
                     connectionId = "connection-scheduling",
                     matchId = "match-scheduling",
+                    requiresAction = true,
                     createdAt = "2026-06-19T18:00:00Z",
                     schedulingExpiresAt = "2026-06-20T18:00:00Z",
                     partner = partnerDto("scheduling-partner"),
@@ -102,6 +103,7 @@ class HomeMappersTest {
                     type = "SECOND_CHAT_AVAILABLE",
                     connectionId = "connection-second",
                     matchId = "match-second",
+                    requiresAction = false,
                     secondChat = HomeChatResponseDto(
                         chatId = "chat-second",
                         chatType = "SECOND_CHAT",
@@ -134,10 +136,12 @@ class HomeMappersTest {
         val scheduling = home.nextSteps[0] as HomeNextStep.Scheduling
         assertEquals("connection-scheduling", scheduling.connectionId)
         assertEquals("match-scheduling", scheduling.matchId)
+        assertEquals(true, scheduling.requiresAction)
         assertEquals("2026-06-19T18:00:00Z", scheduling.createdAt)
         assertEquals("2026-06-20T18:00:00Z", scheduling.schedulingExpiresAt)
 
         val secondChat = home.nextSteps[1] as HomeNextStep.SecondChatAvailable
+        assertEquals(false, secondChat.requiresAction)
         assertEquals(ChatType.SecondChat, secondChat.secondChat?.chatType)
         assertEquals(ChatStatus.Available, secondChat.secondChat?.chatStatus)
         assertEquals("2026-06-20T18:00:00-03:00", secondChat.secondChat?.availableAt)
@@ -334,6 +338,7 @@ class HomeMappersTest {
                     type = "SCHEDULING",
                     connectionId = "connection-scheduling",
                     matchId = "match-scheduling",
+                    requiresAction = true,
                     createdAt = "2026-06-19T18:00:00Z",
                     schedulingExpiresAt = "2026-06-20T18:00:00Z",
                 ),
@@ -341,6 +346,7 @@ class HomeMappersTest {
                     type = "SECOND_CHAT_SCHEDULED",
                     connectionId = "connection-scheduled",
                     matchId = "match-scheduled",
+                    requiresAction = false,
                     secondChat = HomePendingSecondChatLiteResponseDto(
                         availableAt = "2026-06-20T18:00:00-03:00",
                         expiresAt = "2026-06-20T20:00:00-03:00",
@@ -404,11 +410,13 @@ class HomeMappersTest {
 
         val scheduling = pending.nextSteps[0] as HomeNextStep.Scheduling
         assertEquals("connection-scheduling", scheduling.connectionId)
+        assertEquals(true, scheduling.requiresAction)
         assertEquals(null, scheduling.partner)
         assertEquals("2026-06-19T18:00:00Z", scheduling.createdAt)
         assertEquals("2026-06-20T18:00:00Z", scheduling.schedulingExpiresAt)
 
         val scheduled = pending.nextSteps[1] as HomeNextStep.SecondChatScheduled
+        assertEquals(false, scheduled.requiresAction)
         assertEquals(120L, scheduled.secondChat?.durationMinutes)
         assertEquals(null, scheduled.partner)
 

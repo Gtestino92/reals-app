@@ -121,7 +121,7 @@ fun PartnerProfileScreen(
                         text = if (loading) {
                             "Cargando perfil..."
                         } else {
-                            "No pudimos cargar el perfil visual todavía."
+                            "No pudimos cargar el perfil todavía."
                         },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

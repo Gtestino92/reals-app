@@ -188,6 +188,18 @@ class HomePendingPresentationTest {
     }
 
     @Test
+    fun `non actionable scheduling stays visible as waiting and does not count action required`() {
+        val waitingScheduling = scheduling("connection-waiting", requiresAction = false)
+
+        val presentation = presentation(nextSteps = listOf(waitingScheduling))
+
+        assertSection(presentation, HomePendingSectionType.Other, listOf("next:connection-waiting"))
+        assertEquals("1 pendiente", presentation.summaryText)
+        assertEquals("Esperando respuesta", waitingScheduling.pendingNextStepTitle())
+        assertEquals("Esperando respuesta.", waitingScheduling.pendingNextStepBodyOverride(nowMillis))
+    }
+
+    @Test
     fun `summary copy uses singular plural and priority order`() {
         assertEquals(
             "1 requiere tu acción",
@@ -318,7 +330,7 @@ class HomePendingPresentationTest {
             eventMillis = nowMillis,
         )
 
-        assertEquals("Revisión visual por vencer", visualMissing.homePriorityTitle())
+        assertEquals("Descubrimiento por vencer", visualMissing.homePriorityTitle())
         assertEquals("Tu segundo chat ya empezó", openBlank.homePriorityTitle())
         assertEquals("Tu segundo chat empieza pronto", soonMissing.homePriorityTitle())
     }
@@ -415,11 +427,13 @@ class HomePendingPresentationTest {
     private fun scheduling(
         connectionId: String,
         partnerDisplayName: String? = "Alex",
+        requiresAction: Boolean = true,
     ): HomeNextStepItem.Scheduling =
         HomeNextStepItem.Scheduling(
             connectionId = connectionId,
             matchId = "match-$connectionId",
             partnerDisplayName = partnerDisplayName,
+            requiresAction = requiresAction,
             createdAt = "2026-07-15T10:00:00Z",
             schedulingExpiresAt = "2026-07-15T14:00:00Z",
         )

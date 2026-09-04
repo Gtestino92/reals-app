@@ -66,7 +66,7 @@ internal class VisualApprovalCoordinator(
             match.state !is MatchState.Unknown
         ) {
             return VisualApprovalLoadResult.RouteHome(
-                message = "La revisión visual cambió de estado. Actualizamos tu Home.",
+                message = "El descubrimiento cambió de estado. Actualizamos tu Home.",
             )
         }
 

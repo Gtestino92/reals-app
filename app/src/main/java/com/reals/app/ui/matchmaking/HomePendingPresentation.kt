@@ -118,7 +118,7 @@ internal fun homePendingPresentation(
                 ),
             ),
         )
-        addAll(nextStepHubItems.filter { it.item is HomeNextStepItem.Scheduling })
+        addAll(nextStepHubItems.filter { it.item is HomeNextStepItem.Scheduling && it.item.requiresAction() })
     }
     val inProgress = nextStepHubItems
         .filter {
@@ -319,7 +319,7 @@ internal fun HomePriorityItem.homePriorityTitle(): String =
                 ?.takeIf { it.isNotBlank() }
                 ?.let(TextSafety::safeDisplay)
                 ?.let { "El perfil de $it está por vencer" }
-                ?: "Revisión visual por vencer"
+                ?: "Descubrimiento por vencer"
 
         is HomePriorityItem.SecondChatOpen ->
             item.partnerDisplayName()
@@ -339,11 +339,15 @@ internal fun HomePriorityItem.homePriorityTitle(): String =
 internal fun HomeNextStepItem.pendingNextStepTitle(): String =
     when (this) {
         is HomeNextStepItem.Scheduling ->
-            partnerDisplayName
-                ?.takeIf { it.isNotBlank() }
-                ?.let(TextSafety::safeDisplay)
-                ?.let { "Con $it" }
-                ?: "Elegí horarios"
+            if (requiresAction) {
+                partnerDisplayName
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let(TextSafety::safeDisplay)
+                    ?.let { "Con $it" }
+                    ?: "Elegí horarios"
+            } else {
+                "Esperando respuesta"
+            }
         is HomeNextStepItem.SecondChatScheduled,
         is HomeNextStepItem.SecondChatAvailable,
         is HomeNextStepItem.SecondChatExpired,
@@ -358,13 +362,14 @@ internal fun HomeNextStepItem.pendingNextStepTitle(): String =
 
 internal fun HomeNextStepItem.pendingNextStepBody(nowMillis: Long): String =
     when (this) {
-        is HomeNextStepItem.Scheduling -> "Proponé opciones para el segundo chat."
+        is HomeNextStepItem.Scheduling ->
+            if (requiresAction) "Proponé opciones para el segundo chat." else "Esperando respuesta."
         else -> homeNextStepBody(nowMillis)
     }
 
 internal fun HomeNextStepItem.pendingNextStepBodyOverride(nowMillis: Long): String? =
     when (this) {
-        is HomeNextStepItem.Scheduling -> null
+        is HomeNextStepItem.Scheduling -> if (requiresAction) null else pendingNextStepBody(nowMillis)
         else -> pendingNextStepBody(nowMillis)
     }
 

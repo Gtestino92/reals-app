@@ -281,7 +281,7 @@ class HomeUiMapperTest {
 
         assertTrue(model.nextSteps.isEmpty())
         assertEquals(0, model.activeInteractionsSummary?.activeConnectionCount)
-        assertEquals(0, model.activeInteractionsSummary?.actionableConnectionCount)
+        assertEquals(1, model.activeInteractionsSummary?.actionableConnectionCount)
         assertEquals(true, model.activeInteractionsSummary?.hasPendingSchedulingConnection)
     }
 
@@ -313,7 +313,7 @@ class HomeUiMapperTest {
     }
 
     @Test
-    fun `active counts include active next step and exclude expired recent item`() {
+    fun `active counts include active next step while actionable count stays backend authoritative`() {
         val model = mapper.toScreenModel(
             home = homeState(
                 activeInteractionsSummary = summary(
@@ -342,6 +342,34 @@ class HomeUiMapperTest {
 
         assertEquals(2, model.nextSteps.size)
         assertEquals(1, model.activeInteractionsSummary?.activeConnectionCount)
+        assertEquals(2, model.activeInteractionsSummary?.actionableConnectionCount)
+    }
+
+    @Test
+    fun `scheduling requiresAction is preserved in UI item`() {
+        val model = mapper.toScreenModel(
+            home = homeState(
+                activeInteractionsSummary = summary(actionableConnectionCount = 1),
+                nextSteps = listOf(
+                    HomeNextStep.Scheduling(
+                        connectionId = "connection-action",
+                        matchId = "match-action",
+                        partner = partner("Sam"),
+                        requiresAction = true,
+                    ),
+                    HomeNextStep.Scheduling(
+                        connectionId = "connection-waiting",
+                        matchId = "match-waiting",
+                        partner = partner("Taylor"),
+                        requiresAction = false,
+                    ),
+                ),
+            ),
+            localHidden = noHiddenInteractions(),
+            localMatchmakingBlockedReason = null,
+        )
+
+        assertEquals(listOf(true, false), model.nextSteps.map { it.requiresAction() })
         assertEquals(1, model.activeInteractionsSummary?.actionableConnectionCount)
     }
 

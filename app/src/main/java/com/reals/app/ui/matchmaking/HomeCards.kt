@@ -515,7 +515,7 @@ internal fun VisualApprovalItem(
                 ) {
                     Text(
                         text = titleOverride
-                            ?: (partnerName?.let { "Con $it" } ?: "Revisión pendiente"),
+                            ?: (partnerName?.let { "Con $it" } ?: "Descubrimiento pendiente"),
                         style = MaterialTheme.typography.titleMedium,
                     )
                     deadlineText?.let {
@@ -665,7 +665,7 @@ internal fun NextStepItem(
             null
         }
     val primaryAction: (() -> Unit)? = when {
-        item is HomeNextStepItem.Scheduling -> {
+        item is HomeNextStepItem.Scheduling && item.requiresAction -> {
             {
                 onOpenScheduling(
                     item.connectionId,
@@ -690,7 +690,7 @@ internal fun NextStepItem(
     val primaryEnabled = !busy &&
         when {
             item is HomeNextStepItem.Scheduling ->
-                item.connectionId.isNotBlank() && item.matchId.isNotBlank()
+                item.requiresAction && item.connectionId.isNotBlank() && item.matchId.isNotBlank()
 
             secondChatPresentation?.canOpenChat == true ->
                 item.connectionIdForSecondChat().isNotBlank() && item.matchIdForProfile().isNotBlank()
@@ -698,7 +698,8 @@ internal fun NextStepItem(
             else -> false
         }
     val primaryLabel = when {
-        item is HomeNextStepItem.Scheduling -> "Elegir horarios"
+        item is HomeNextStepItem.Scheduling && item.requiresAction -> "Elegir horarios"
+        item is HomeNextStepItem.Scheduling -> "Esperando respuesta"
         secondChatPresentation?.canOpenChat == true -> secondChatPresentation.primaryCtaLabel
         else -> secondChatPresentation?.primaryCtaLabel
     }
@@ -836,7 +837,7 @@ internal fun HomeNextStepItem.homeNextStepRowBody(
     zoneId: ZoneId = ZoneId.systemDefault(),
     locale: Locale = Locale.forLanguageTag("es-AR"),
 ): String? = when (this) {
-    is HomeNextStepItem.Scheduling -> null
+    is HomeNextStepItem.Scheduling -> if (requiresAction) null else "Esperando respuesta."
     else -> homeNextStepBody(nowMillis, zoneId, locale)
 }
 
@@ -893,7 +894,8 @@ internal fun HomeNextStepItem.homeNextStepBody(
         SecondChatHomeState.Expired -> "La ventana para entrar terminó."
         else ->
         when (this) {
-            is HomeNextStepItem.Scheduling -> "Proponé opciones para el segundo chat."
+            is HomeNextStepItem.Scheduling ->
+                if (requiresAction) "Proponé opciones para el segundo chat." else "Esperando respuesta."
             is HomeNextStepItem.SecondChatScheduled ->
                 "Programado para ${
                     formatBackendContextualDateTime(
