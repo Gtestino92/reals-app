@@ -82,7 +82,7 @@ internal fun HomePendingSummaryCard(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Text("Tus Interacciones", style = MaterialTheme.typography.titleLarge)
+                Text("Actividad", style = MaterialTheme.typography.titleLarge)
                 Text(
                     text = presentation.summaryText ?: "Sin acciones requeridas",
                     style = MaterialTheme.typography.bodyMedium,
@@ -138,7 +138,7 @@ internal fun HomePriorityBlock(
                     enabled = !busy,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Ver ${presentation.priorityOverflowCount} más en Tus Interacciones")
+                    Text("Ver ${presentation.priorityOverflowCount} más en Actividad")
                 }
             }
         }
@@ -187,7 +187,7 @@ private fun HomePriorityRow(
     val actionLabel = when (item) {
         is HomePriorityItem.VisualReview -> "Descubrir ahora"
         is HomePriorityItem.SecondChatOpen -> "Entrar al chat"
-        is HomePriorityItem.SecondChatStartingSoon -> "Ver en Tus Interacciones"
+        is HomePriorityItem.SecondChatStartingSoon -> "Ver en Actividad
     }
     val body = item.homePriorityBody(nowMillis)
 
@@ -264,7 +264,7 @@ internal fun PendingInteractionsScreen(
             verticalAlignment = Alignment.Top,
         ) {
             RealsScreenHeader(
-                title = "Tus Interacciones",
+                title = "Actividad",
                 subtitle = "Descubrimientos, próximos pasos y segundos chats en un solo lugar.",
                 modifier = Modifier.weight(1f),
             )
@@ -353,7 +353,7 @@ private fun PendingHubSection(
                         item = item.item,
                         busy = busy,
                         nowMillis = nowMillis,
-                        dismissContentDescription = "Quitar de Tus Interacciones",
+                        dismissContentDescription = "Quitar de Actividad",
                         titleOverride = item.item.pendingNextStepTitle(),
                         bodyOverride = item.item.pendingNextStepBodyOverride(nowMillis),
                         usePendingRowOutline = true,
