@@ -60,6 +60,7 @@ import com.reals.app.ui.theme.RealsRadii
 import kotlinx.coroutines.delay
 import java.time.ZoneId
 import java.util.Locale
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 internal fun PendingActionsCard(
@@ -630,7 +631,7 @@ private fun rememberVisualReviewNowMillis(enabled: Boolean): Long {
             val now = System.currentTimeMillis()
             nowMillis = now
             val nextMinuteDelay = (60_000L - (now % 60_000L)).coerceIn(1_000L, 60_000L)
-            delay(nextMinuteDelay)
+            delay(nextMinuteDelay.milliseconds)
         }
     }
 
@@ -665,7 +666,7 @@ internal fun NextStepItem(
             null
         }
     val primaryAction: (() -> Unit)? = when {
-        item is HomeNextStepItem.Scheduling && item.requiresAction -> {
+        item is HomeNextStepItem.Scheduling -> {
             {
                 onOpenScheduling(
                     item.connectionId,
@@ -690,7 +691,7 @@ internal fun NextStepItem(
     val primaryEnabled = !busy &&
         when {
             item is HomeNextStepItem.Scheduling ->
-                item.requiresAction && item.connectionId.isNotBlank() && item.matchId.isNotBlank()
+                item.connectionId.isNotBlank() && item.matchId.isNotBlank()
 
             secondChatPresentation?.canOpenChat == true ->
                 item.connectionIdForSecondChat().isNotBlank() && item.matchIdForProfile().isNotBlank()
@@ -698,8 +699,7 @@ internal fun NextStepItem(
             else -> false
         }
     val primaryLabel = when {
-        item is HomeNextStepItem.Scheduling && item.requiresAction -> "Elegir horarios"
-        item is HomeNextStepItem.Scheduling -> "Esperando respuesta"
+        item is HomeNextStepItem.Scheduling -> if (item.requiresAction) "Elegir horarios" else "Ver coordinación"
         secondChatPresentation?.canOpenChat == true -> secondChatPresentation.primaryCtaLabel
         else -> secondChatPresentation?.primaryCtaLabel
     }

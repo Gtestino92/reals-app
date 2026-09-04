@@ -372,7 +372,6 @@ fun ChatScreen(
     val density = LocalDensity.current
     val composerPresentationPolicy = firstChatComposerPresentationPolicy(
         canSendMessages = canSendMessages,
-        decisionOnlyForCurrentUser = decisionOnlyForCurrentUser,
         audioInteractionBusy = audioSession.interactionBusy,
     )
     val showMessageComposer = composerPresentationPolicy.visible

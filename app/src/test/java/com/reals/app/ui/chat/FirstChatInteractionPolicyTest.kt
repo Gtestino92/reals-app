@@ -249,7 +249,6 @@ class FirstChatInteractionPolicyTest {
     fun `composer is hidden in decision-only when no audio interaction is active`() {
         val policy = firstChatComposerPresentationPolicy(
             canSendMessages = false,
-            decisionOnlyForCurrentUser = true,
             audioInteractionBusy = false,
         )
 
@@ -261,7 +260,6 @@ class FirstChatInteractionPolicyTest {
     fun `normal active first chat composer remains visible and interactive`() {
         val policy = firstChatComposerPresentationPolicy(
             canSendMessages = true,
-            decisionOnlyForCurrentUser = false,
             audioInteractionBusy = false,
         )
 

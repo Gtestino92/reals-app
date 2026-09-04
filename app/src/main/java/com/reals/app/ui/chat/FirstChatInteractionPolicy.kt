@@ -35,7 +35,7 @@ internal fun firstChatInteractionPolicy(
     val canDecide = showDecisionActions &&
         matchIsChatActive &&
         chatActive &&
-        chat?.myDecision == ChatDecisionState.Pending &&
+        chat.myDecision == ChatDecisionState.Pending &&
         !exitFlowLocked &&
         !firstChatLocallyExpired &&
         !audioInteractionBusy
@@ -107,10 +107,9 @@ internal data class FirstChatComposerPresentationPolicy(
 
 internal fun firstChatComposerPresentationPolicy(
     canSendMessages: Boolean,
-    decisionOnlyForCurrentUser: Boolean,
     audioInteractionBusy: Boolean,
 ): FirstChatComposerPresentationPolicy =
     FirstChatComposerPresentationPolicy(
-        visible = canSendMessages || decisionOnlyForCurrentUser || audioInteractionBusy,
+        visible = canSendMessages || audioInteractionBusy,
         interactive = canSendMessages,
     )
