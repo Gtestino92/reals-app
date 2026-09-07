@@ -15,6 +15,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   android-build:
     name: Build Android APK
@@ -29,7 +33,9 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-          cache: gradle
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -65,14 +71,11 @@ jobs:
             printf '%s' "$GOOGLE_SERVICES_PROD_JSON_BASE64" | base64 --decode > app/src/prod/google-services.json
           fi
 
-      - name: Validate environment isolation
-        run: ./gradlew :app:validateEnvironmentIsolation :app:verifyAppCheckDependencyIsolation --no-daemon --console=plain
+      - name: Validate environment and release configuration
+        run: ./gradlew --daemon --console=plain :app:validateEnvironmentIsolation :app:verifyAppCheckDependencyIsolation :app:verifyReleaseBuildHardening :app:validateReleaseSigningConfiguration
 
-      - name: Validate release hardening configuration
-        run: ./gradlew :app:verifyReleaseBuildHardening :app:validateReleaseSigningConfiguration --no-daemon --console=plain
-
-      - name: Run local unit tests
-        run: ./gradlew :app:testLocalDebugUnitTest --no-daemon --console=plain
+      - name: Run local verification and build
+        run: ./gradlew --daemon --console=plain :app:testLocalDebugUnitTest :app:lintLocalDebug :app:assembleLocalDebug :app:lintLocalRelease :app:verifyLocalReleaseArtifacts
 
       - name: Upload unit test reports
         if: always()
@@ -81,9 +84,6 @@ jobs:
           name: reals-app-unit-test-reports
           path: app/build/reports/tests/testLocalDebugUnitTest
           if-no-files-found: ignore
-
-      - name: Run Android lint
-        run: ./gradlew :app:lintLocalDebug --no-daemon --console=plain
 
       - name: List lint reports
         if: always()
@@ -105,24 +105,6 @@ jobs:
             app/build/reports/lint/**
           if-no-files-found: ignore
 
-      - name: Validate Kotlin compilation
-        run: ./gradlew :app:compileLocalDebugKotlin --no-daemon --console=plain
-
-      - name: Build local debug APK
-        run: ./gradlew :app:assembleLocalDebug --no-daemon --console=plain
-
-      - name: Compile local release Kotlin
-        run: ./gradlew :app:compileLocalReleaseKotlin --no-daemon --console=plain
-
-      - name: Run local release lint
-        run: ./gradlew :app:lintLocalRelease --no-daemon --console=plain
-
-      - name: Build optimized local release APK
-        run: ./gradlew :app:assembleLocalRelease --no-daemon --console=plain
-
-      - name: Verify optimized local release outputs
-        run: ./gradlew :app:verifyLocalReleaseArtifacts --no-daemon --console=plain
-
       - name: Classify local release APK signing
         id: local_release_apk
         shell: bash
@@ -142,19 +124,8 @@ jobs:
           echo "signing=$signing" >> "$GITHUB_OUTPUT"
           echo "localRelease APK: $apk ($signing)"
 
-      - name: Build dev debug APK when configured
-        shell: bash
-        env:
-          REALS_DEV_BASE_URL: ${{ secrets.REALS_DEV_BASE_URL }}
-        run: |
-          set -euo pipefail
-          if [ -f app/src/dev/google-services.json ] && [ -n "${REALS_DEV_BASE_URL:-}" ]; then
-            ./gradlew :app:compileDevDebugKotlin :app:assembleDevDebug --no-daemon --console=plain
-          else
-            echo "Skipping devDebug build: requires GOOGLE_SERVICES_DEV_JSON_BASE64 and REALS_DEV_BASE_URL secrets."
-          fi
-
-      - name: Build dev release APK when configured and signed
+      - name: Build dev APKs on development pushes when configured
+        if: github.event_name == 'push' && github.ref_name == 'development'
         shell: bash
         env:
           REALS_DEV_BASE_URL: ${{ secrets.REALS_DEV_BASE_URL }}
@@ -174,13 +145,20 @@ jobs:
             echo "Incomplete release signing secrets: configure all four REALS_RELEASE_* signing secrets or none."
             exit 1
           fi
-          if [ -f app/src/dev/google-services.json ] && [ -n "${REALS_DEV_BASE_URL:-}" ] && [ "$signing_count" -eq 4 ]; then
-            ./gradlew :app:compileDevReleaseKotlin :app:assembleDevRelease --no-daemon --console=plain
+          if [ -f app/src/dev/google-services.json ] && [ -n "${REALS_DEV_BASE_URL:-}" ]; then
+            tasks=(":app:assembleDevDebug")
+            if [ "$signing_count" -eq 4 ]; then
+              tasks+=(":app:assembleDevRelease")
+            else
+              echo "Skipping devRelease build: requires complete release signing secrets."
+            fi
+            ./gradlew --daemon --console=plain "${tasks[@]}"
           else
-            echo "Skipping devRelease build: requires GOOGLE_SERVICES_DEV_JSON_BASE64, REALS_DEV_BASE_URL, and complete release signing secrets."
+            echo "Skipping dev builds: requires GOOGLE_SERVICES_DEV_JSON_BASE64 and REALS_DEV_BASE_URL secrets."
           fi
 
-      - name: Build prod release APK when configured
+      - name: Build prod release APK for release refs when configured
+        if: github.ref_name == 'master' || github.ref_name == 'main' || github.base_ref == 'master' || github.base_ref == 'main'
         shell: bash
         env:
           REALS_PROD_BASE_URL: ${{ secrets.REALS_PROD_BASE_URL }}
@@ -201,7 +179,7 @@ jobs:
             exit 1
           fi
           if [ -f app/src/prod/google-services.json ] && [ -n "${REALS_PROD_BASE_URL:-}" ] && [ "$signing_count" -eq 4 ]; then
-            ./gradlew :app:compileProdReleaseKotlin :app:assembleProdRelease --no-daemon --console=plain
+            ./gradlew --daemon --console=plain :app:assembleProdRelease
           else
             echo "Skipping prodRelease build: requires GOOGLE_SERVICES_PROD_JSON_BASE64, REALS_PROD_BASE_URL, and complete production release signing secrets."
           fi
@@ -245,19 +223,69 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect Docker validation scope
+        id: docker_scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          else
+            base="${{ github.event.before }}"
+            if [ -z "$base" ] || [[ "$base" =~ ^0+$ ]]; then
+              base="$(git rev-parse HEAD^)"
+            fi
+          fi
+
+          if [ "${{ github.ref_name }}" = "main" ] || [ "${{ github.ref_name }}" = "master" ] || [ "${{ github.base_ref }}" = "main" ] || [ "${{ github.base_ref }}" = "master" ]; then
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+            echo "reason=release ref" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed_files="$(git diff --name-only "$base" "$GITHUB_SHA")"
+          {
+            echo "Changed files considered for Docker validation:"
+            printf '%s\n' "$changed_files"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if printf '%s\n' "$changed_files" | grep -E -q '^Dockerfile$|^\.dockerignore$|^gradle/|^gradlew$|^gradlew\.bat$|^gradle\.properties$|^settings\.gradle\.kts$|^build\.gradle\.kts$|^app/build\.gradle\.kts$|^\.github/workflows/'; then
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+            echo "reason=Docker or build infrastructure changed" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            echo "reason=no Docker or build infrastructure changes" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip Docker build when not relevant
+        if: steps.docker_scope.outputs.should_build != 'true'
+        run: |
+          echo "Validate Docker build fast-path: ${{ steps.docker_scope.outputs.reason }}."
+
+      - name: Set up Docker Buildx
+        if: steps.docker_scope.outputs.should_build == 'true'
+        uses: docker/setup-buildx-action@v3
 
       - name: Build Android builder image
-        run: |
-          docker build \
-            --build-arg IMAGE_REPOSITORY="reals-app" \
-            --build-arg IMAGE_TAG="ci" \
-            --build-arg IMAGE_REVISION="${GITHUB_SHA}" \
-            -t reals-app:ci \
-            .
+        if: steps.docker_scope.outputs.should_build == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: reals-app:ci
+          build-args: |
+            IMAGE_REPOSITORY=reals-app
+            IMAGE_TAG=ci
+            IMAGE_REVISION=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Scan Android builder image for critical vulnerabilities
         id: trivy_dev
-        if: github.ref_name != 'master' && github.ref_name != 'main' && github.base_ref != 'master' && github.base_ref != 'main'
+        if: steps.docker_scope.outputs.should_build == 'true' && github.ref_name != 'master' && github.ref_name != 'main' && github.base_ref != 'master' && github.base_ref != 'main'
         uses: aquasecurity/trivy-action@v0.36.0
         continue-on-error: true
         with:
@@ -272,7 +300,7 @@ jobs:
 
       - name: Scan Android builder image for high and critical vulnerabilities
         id: trivy_prod
-        if: github.ref_name == 'master' || github.ref_name == 'main' || github.base_ref == 'master' || github.base_ref == 'main'
+        if: steps.docker_scope.outputs.should_build == 'true' && (github.ref_name == 'master' || github.ref_name == 'main' || github.base_ref == 'master' || github.base_ref == 'main')
         uses: aquasecurity/trivy-action@v0.36.0
         continue-on-error: true
         with:
@@ -305,20 +333,11 @@ jobs:
           echo "Trivy image scan failed. See the job summary for the vulnerability table."
           exit 1
 
-      - name: Extract APK from image
+      - name: Verify Docker-built APK exists
+        if: steps.docker_scope.outputs.should_build == 'true'
         run: |
-          id="$(docker create reals-app:ci)"
-          mkdir -p docker-artifacts
-          docker cp "$id:/workspace/app/build/outputs/apk/local/debug/." docker-artifacts/
-          docker rm "$id"
-          ls -la docker-artifacts
-
-      - name: Upload Docker-built APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: reals-app-local-debug-apk-docker
-          path: docker-artifacts/*.apk
-          if-no-files-found: error
+          docker run --rm --entrypoint /bin/sh reals-app:ci -c \
+            'find /workspace/app/build/outputs/apk/local/debug -maxdepth 1 -type f -name "*.apk" -size +0c -print -quit | grep .'
 
   dependency-review:
     name: Dependency review
