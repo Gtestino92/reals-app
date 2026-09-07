@@ -3,6 +3,7 @@ package com.reals.app.ui.root
 import android.content.Context
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
+import coil3.size.Scale
 import com.reals.app.core.network.ApiResult
 import com.reals.app.domain.model.HomePendingAction
 import com.reals.app.domain.model.ProfilePhoto
@@ -271,6 +272,7 @@ internal class AndroidPendingVisualReviewPhotoPrefetcher(
                 variant = ProfilePhotoImageVariant.Full,
                 widthPx = prefetchSize.widthPx,
                 heightPx = prefetchSize.heightPx,
+                scale = Scale.FILL,
             )
         )
     }
