@@ -106,7 +106,7 @@ import com.reals.app.ui.root.LocalFirebaseEmailVerificationCoordinator
 import kotlinx.serialization.json.Json
 
 class AppContainer(context: Context) {
-    private val appContext = context.applicationContext
+    val appContext: Context = context.applicationContext
     private val json = Json {
         ignoreUnknownKeys = true
         coerceInputValues = true

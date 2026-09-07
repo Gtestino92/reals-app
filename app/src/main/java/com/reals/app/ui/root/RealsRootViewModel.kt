@@ -39,6 +39,9 @@ import com.reals.app.notifications.PushNotificationOpenContract
 import com.reals.app.ui.auth.GoogleCredentialResult
 import com.reals.app.ui.auth.PasswordCredentialResult
 import com.reals.app.ui.chat.firstChatUnansweredPeriodReference
+import com.reals.app.ui.profile.AndroidProfilePhotoPrefetcher
+import com.reals.app.ui.profile.NoOpProfilePhotoPrefetcher
+import com.reals.app.ui.profile.ProfilePhotoPrefetcher
 import java.io.File
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,6 +53,9 @@ import kotlinx.coroutines.launch
 class RealsRootViewModel(
     private val dependencies: RealsRootDependencies,
     autoRefreshSession: Boolean = true,
+    profilePhotoPrefetcher: ProfilePhotoPrefetcher = NoOpProfilePhotoPrefetcher,
+    pendingVisualReviewPhotoPrefetcher: PendingVisualReviewPhotoPrefetcher =
+        NoOpPendingVisualReviewPhotoPrefetcher,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<RealsRootUiState>(RealsRootUiState.Checking)
     private val authRepository = dependencies.session.authRepository
@@ -61,6 +67,7 @@ class RealsRootViewModel(
         localFirebaseEmailVerificationCoordinator =
             dependencies.session.localFirebaseEmailVerificationCoordinator,
         getProfilePhotosUseCase = getProfilePhotosUseCase,
+        profilePhotoPrefetcher = profilePhotoPrefetcher,
         scope = viewModelScope,
         onTerminalAuthFailure = { sessionCoordinator.invalidateTerminalSession() },
     )
@@ -117,6 +124,8 @@ class RealsRootViewModel(
             openSecondChat(session, connectionId, matchId, partnerName, joinIfAllowed = false)
         },
         onReloadActiveSession = { user -> sessionCoordinator.loadBackendSessionForActiveUser(user) },
+        pendingVisualReviewPhotoPrefetcher = pendingVisualReviewPhotoPrefetcher,
+        getVisualProfile = dependencies.visualApproval.getVisualProfile::invoke,
     )
     val uiState: StateFlow<RealsRootUiState> = _uiState.asStateFlow()
 
@@ -136,6 +145,7 @@ class RealsRootViewModel(
         observeLegalActionRequired()
         observeUserPairBlocked()
         observePendingSecondChatStartedHomeOpenInvalidation()
+        observePendingVisualReviewPhotoPrefetchInvalidation()
         if (autoRefreshSession) {
             refreshSession()
         }
@@ -169,6 +179,7 @@ class RealsRootViewModel(
 
     fun signOut() {
         pendingSecondChatStartedHomeOpen = false
+        homeCoordinator.cancelPendingVisualReviewPhotoPrefetch()
         sessionCoordinator.signOut()
     }
 
@@ -438,7 +449,7 @@ class RealsRootViewModel(
             editingActiveProfile = true,
             profileManagementDestination = ProfileManagementDestination.Profile,
         )
-        loadProfilePhotos()
+        profileHandler.loadProfilePhotos(prefetchAfterSuccess = true)
     }
 
     fun openSearchManagement() {
@@ -516,6 +527,7 @@ class RealsRootViewModel(
     private fun closeProfileManagement(current: RealsRootUiState.Ready) {
         if (current.session.profileSnapshot !is ProfileSnapshot.Found) return
 
+        profileHandler.cancelProfilePhotoPrefetch()
         homeCoordinator.closeProfileManagementWithHomeReload(current)
     }
 
@@ -540,6 +552,7 @@ class RealsRootViewModel(
     ) {
         val cleanMatchId = matchId.trim()
         if (cleanMatchId.isBlank()) return
+        homeCoordinator.cancelPendingVisualReviewPhotoPrefetch()
 
         viewModelScope.launch {
             _uiState.value = RealsRootUiState.FirstChat(
@@ -594,6 +607,7 @@ class RealsRootViewModel(
         partnerName: String? = null,
         joinIfAllowed: Boolean,
     ) {
+        homeCoordinator.cancelPendingVisualReviewPhotoPrefetch()
         pendingSecondChatLocalExpiryKey = null
         completedSecondChatLocalExpiryKey = null
         viewModelScope.launch {
@@ -983,15 +997,18 @@ class RealsRootViewModel(
             is RealsRootUiState.VisualApproval -> current.returnHomeSurface
             else -> HomeSurface.Overview
         }
+        val cleanMatchId = matchId.trim()
+        if (cleanMatchId.isBlank()) return
         val originState = current
-        val instanceKey = VisualApprovalInstanceKey(matchId.trim())
+        val instanceKey = VisualApprovalInstanceKey(cleanMatchId)
+        homeCoordinator.cancelPendingVisualReviewPhotoPrefetch()
 
         viewModelScope.launch {
             val result = visualApprovalCoordinator.open(
                 session = session,
-                matchId = matchId,
+                matchId = cleanMatchId,
                 returnHomeSurface = returnHomeSurface,
-                locallyHidden = matchId.trim() in homeCoordinator.localHiddenSnapshot().hiddenVisualMatchIds,
+                locallyHidden = cleanMatchId in homeCoordinator.localHiddenSnapshot().hiddenVisualMatchIds,
                 onPending = { pending ->
                     setVisualApprovalPendingIfCurrent(
                         pending = pending,
@@ -1071,6 +1088,7 @@ class RealsRootViewModel(
         returnHomeSurface: HomeSurface,
     ) {
         if (schedulingOpenJob?.isActive == true) return
+        homeCoordinator.cancelPendingVisualReviewPhotoPrefetch()
 
         val pending = RealsRootUiState.Scheduling(
             session = session,
@@ -1251,6 +1269,7 @@ class RealsRootViewModel(
         if (cleanMatchId.isBlank()) return
         val originState = current
         val instanceKey = PartnerProfileInstanceKey(cleanMatchId)
+        homeCoordinator.cancelPendingVisualReviewPhotoPrefetch()
 
         viewModelScope.launch {
             val result = partnerProfileCoordinator.load(
@@ -1890,6 +1909,12 @@ class RealsRootViewModel(
         profileHandler.loadProfilePhotos()
     }
 
+    override fun onCleared() {
+        profileHandler.cancelProfilePhotoPrefetch()
+        homeCoordinator.cancelPendingVisualReviewPhotoPrefetch()
+        super.onCleared()
+    }
+
     fun addProfilePhotoFile(position: Int, fileUri: Uri) {
         profileHandler.addProfilePhotoFile(position, fileUri)
     }
@@ -2344,6 +2369,19 @@ class RealsRootViewModel(
             uiState.collect { current ->
                 if (current.clearsPendingSecondChatStartedHomeOpen()) {
                     pendingSecondChatStartedHomeOpen = false
+                }
+            }
+        }
+    }
+
+    private fun observePendingVisualReviewPhotoPrefetchInvalidation() {
+        viewModelScope.launch {
+            uiState.collect { current ->
+                val ready = current as? RealsRootUiState.Ready
+                val pendingHomeActive = ready?.home?.surface == HomeSurface.Pending &&
+                    ready.home.homeState != null
+                if (!pendingHomeActive) {
+                    homeCoordinator.cancelPendingVisualReviewPhotoPrefetch()
                 }
             }
         }
@@ -2811,6 +2849,9 @@ class RealsRootViewModelFactory(
         if (modelClass.isAssignableFrom(RealsRootViewModel::class.java)) {
             return RealsRootViewModel(
                 dependencies = appContainer.rootDependencies,
+                profilePhotoPrefetcher = AndroidProfilePhotoPrefetcher(appContainer.appContext),
+                pendingVisualReviewPhotoPrefetcher =
+                    AndroidPendingVisualReviewPhotoPrefetcher(appContainer.appContext),
             ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class ${modelClass.name}")

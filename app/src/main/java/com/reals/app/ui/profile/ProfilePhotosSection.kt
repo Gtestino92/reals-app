@@ -68,6 +68,7 @@ import coil3.compose.AsyncImage
 import coil3.memory.MemoryCache
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
+import coil3.request.SuccessResult
 import com.reals.app.core.media.ProfilePhotoPipelineTiming
 import com.reals.app.core.media.ProfilePhotoTimingFields
 import com.reals.app.core.media.deleteOwnedProfilePhotoCropFile
@@ -1176,17 +1177,19 @@ internal fun ProfilePhotoImage(
 ) {
     val displayUrl = photo.url.toEmulatorReachableUrl()
     val context = LocalContext.current
-    val imageRequest = remember(context, displayUrl, remoteHandoffGeneration) {
-        ImageRequest.Builder(context)
-            .data(displayUrl)
-            .memoryCacheKey(displayUrl.stableProfilePhotoCacheKey())
-            .diskCacheKey(displayUrl.stableProfilePhotoCacheKey())
-            .listener(
-                onSuccess = { _, _ ->
+    val imageRequest = remember(context, photo.id, displayUrl, remoteHandoffGeneration) {
+        profilePhotoImageRequest(
+            context = context,
+            photo = photo,
+            variant = ProfilePhotoImageVariant.Thumbnail,
+            widthPx = ProfilePhotoGridThumbnailDecodeSizePx,
+            heightPx = ProfilePhotoGridThumbnailDecodeSizePx,
+            listener = object : ImageRequest.Listener {
+                override fun onSuccess(request: ImageRequest, result: SuccessResult) {
                     remoteHandoffGeneration?.let { onRemoteHandoffSuccess(photo.id, it) }
-                },
-            )
-            .build()
+                }
+            },
+        )
     }
     when {
         displayUrl.isRenderableImageUrl() -> {

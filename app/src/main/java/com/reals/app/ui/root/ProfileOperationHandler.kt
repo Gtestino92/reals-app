@@ -21,6 +21,8 @@ import com.reals.app.domain.model.UpdateMatchFiltersInput
 import com.reals.app.domain.model.isPendingModerationReview
 import com.reals.app.domain.model.isRejectedByModeration
 import com.reals.app.domain.usecase.GetProfilePhotosUseCase
+import com.reals.app.ui.profile.NoOpProfilePhotoPrefetcher
+import com.reals.app.ui.profile.ProfilePhotoPrefetcher
 import com.reals.app.ui.profile.movePhotoLocally
 import com.reals.app.ui.profile.photosWithPendingOrder
 import kotlinx.coroutines.CoroutineScope
@@ -46,6 +48,7 @@ class ProfileOperationHandler(
     private val localFirebaseEmailVerificationCoordinator: LocalFirebaseEmailVerificationCoordinator =
         LocalFirebaseEmailVerificationCoordinator.disabled(authRepository),
     private val getProfilePhotosUseCase: GetProfilePhotosUseCase,
+    private val profilePhotoPrefetcher: ProfilePhotoPrefetcher = NoOpProfilePhotoPrefetcher,
     private val scope: CoroutineScope,
     private val onTerminalAuthFailure: () -> Unit,
 ) {
@@ -202,10 +205,11 @@ class ProfileOperationHandler(
 
     // ── Photos ──
 
-    fun loadProfilePhotos() {
+    fun loadProfilePhotos(prefetchAfterSuccess: Boolean = false) {
         val current = requireReady() ?: return
-        if (current.session.profileSnapshot !is ProfileSnapshot.Found) return
+        val profile = (current.session.profileSnapshot as? ProfileSnapshot.Found)?.profile ?: return
         if (current.reorderingPhotos) return
+        val requestedProfileId = profile.id
         scope.launch {
             val cleared = current.clearProfileFeedback()
             val pending = cleared.copy(photos = cleared.photos.copy(loadingPhotos = true))
@@ -213,17 +217,31 @@ class ProfileOperationHandler(
             when (val result = getProfilePhotosUseCase()) {
                 is ApiResult.Success -> {
                     val latest = requireReady() ?: return@launch
+                    val latestProfile = (latest.session.profileSnapshot as? ProfileSnapshot.Found)?.profile
+                        ?: return@launch
+                    if (latestProfile.id != requestedProfileId) return@launch
+                    val orderedPhotos = result.value.sortedBy { it.position }
                     uiState.value = latest.copy(
                         photos = latest.photos.copy(
                             loadingPhotos = false,
-                            profilePhotos = result.value.sortedBy { it.position },
+                            profilePhotos = orderedPhotos,
                             profilePhotosError = null,
                         ),
                     )
+                    if (prefetchAfterSuccess && orderedPhotos.isNotEmpty()) {
+                        profilePhotoPrefetcher.prefetchOwnProfilePhotos(
+                            scope = scope,
+                            profileId = latestProfile.id,
+                            photos = orderedPhotos,
+                        )
+                    }
                 }
 
                 is ApiResult.Failure -> {
                     val latest = requireReady() ?: return@launch
+                    val latestProfile = (latest.session.profileSnapshot as? ProfileSnapshot.Found)?.profile
+                        ?: return@launch
+                    if (latestProfile.id != requestedProfileId) return@launch
                     uiState.value = latest.copy(
                         photos = latest.photos.copy(
                             loadingPhotos = false,
@@ -233,6 +251,10 @@ class ProfileOperationHandler(
                 }
             }
         }
+    }
+
+    fun cancelProfilePhotoPrefetch() {
+        profilePhotoPrefetcher.cancel()
     }
 
     fun moveProfilePhoto(

@@ -98,7 +98,13 @@ class ProfilePhotoInteractionStateTest {
         )
         val uploading = state.previewState as ProfilePhotoPreviewState.Uploading
         assertEquals("photo-2", uploading.preview.action.photoId)
-        assertEquals("https://static.reals.local/photo-2.jpg".stableProfilePhotoCacheKey(), uploading.preview.oldCanonicalCacheKey)
+        assertEquals(
+            stableProfilePhotoCacheKey(
+                photoId = "photo-2",
+                displayUrl = "https://static.reals.local/photo-2.jpg",
+            ),
+            uploading.preview.oldCanonicalCacheKey,
+        )
     }
 
     @Test

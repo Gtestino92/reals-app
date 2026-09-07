@@ -233,12 +233,6 @@ fun VisualApprovalScreen(
                     style = RealsType.ScreenTitle,
                     color = MaterialTheme.colorScheme.primary,
                 )
-                TextButton(
-                    onClick = onBackHome,
-                    enabled = !busy,
-                ) {
-                    Text("Volver")
-                }
                 ManualBlockOverflowMenu(
                     enabled = !busy,
                     onRequestBlock = {

@@ -329,7 +329,6 @@ private fun ProfilePhotoSelectionTarget.oldCanonicalCacheKey(
         is ProfilePhotoSelectionTarget.Add -> null
         is ProfilePhotoSelectionTarget.Replace -> photos
             .firstOrNull { it.id == photoId || it.position == position }
-            ?.url
             ?.stableProfilePhotoCacheKey()
     }
 
