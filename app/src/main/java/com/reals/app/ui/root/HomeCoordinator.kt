@@ -11,8 +11,10 @@ import com.reals.app.domain.model.HomePendingAction
 import com.reals.app.domain.model.HomeState
 import com.reals.app.domain.model.HomeStatus
 import com.reals.app.domain.model.ProfileStatus
+import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.SearchLocationInput
+import com.reals.app.domain.model.VisualProfile
 import com.reals.app.ui.matchmaking.HomeRoute
 import com.reals.app.ui.matchmaking.HomeRouter
 import com.reals.app.ui.matchmaking.HomeUiMapper
@@ -47,6 +49,9 @@ internal class HomeCoordinator(
         partnerName: String?,
     ) -> Unit,
     private val onReloadActiveSession: suspend (user: BackendUser) -> Unit,
+    private val pendingVisualReviewPhotoPrefetcher: PendingVisualReviewPhotoPrefetcher =
+        NoOpPendingVisualReviewPhotoPrefetcher,
+    private val getVisualProfile: (suspend (String) -> ApiResult<VisualProfile>)? = null,
 ) {
     private val homeUiMapper = HomeUiMapper()
     private val homeRouter = HomeRouter()
@@ -101,9 +106,15 @@ internal class HomeCoordinator(
     fun showHomeSurface(surface: HomeSurface) {
         val current = uiState.value as? RealsRootUiState.Ready ?: return
         if (current.home.surface == surface) return
-        uiState.value = current.copy(
+        val updated = current.copy(
             home = current.home.copy(surface = surface),
         )
+        uiState.value = updated
+        syncPendingVisualReviewPhotoPrefetch(updated)
+    }
+
+    fun cancelPendingVisualReviewPhotoPrefetch() {
+        pendingVisualReviewPhotoPrefetcher.cancel()
     }
 
     fun pollHomeStateSilently() {
@@ -635,10 +646,12 @@ internal class HomeCoordinator(
     ) {
         val home = ready.homeState ?: run {
             uiState.value = ready
+            syncPendingVisualReviewPhotoPrefetch(ready)
             return
         }
 
         if (!home.canRemainInHomeForProfileStatus() && !ready.home.allowDraftHomeWithoutInteractions) {
+            cancelPendingVisualReviewPhotoPrefetch()
             onReloadActiveSession(ready.session.user)
             return
         }
@@ -652,19 +665,48 @@ internal class HomeCoordinator(
                 autoNavigate = autoNavigateEngagements,
             )
         ) {
-            HomeRoute.StayHome -> uiState.value = ready
-            is HomeRoute.OpenFirstChat -> onOpenFirstChat(
-                ready.session,
-                route.matchId,
-                route.chatId,
-            )
-            is HomeRoute.OpenSecondChat -> onOpenSecondChat(
-                ready.session,
-                route.connectionId,
-                route.matchId,
-                route.partnerName,
-            )
+            HomeRoute.StayHome -> {
+                uiState.value = ready
+                syncPendingVisualReviewPhotoPrefetch(ready)
+            }
+            is HomeRoute.OpenFirstChat -> {
+                cancelPendingVisualReviewPhotoPrefetch()
+                onOpenFirstChat(
+                    ready.session,
+                    route.matchId,
+                    route.chatId,
+                )
+            }
+            is HomeRoute.OpenSecondChat -> {
+                cancelPendingVisualReviewPhotoPrefetch()
+                onOpenSecondChat(
+                    ready.session,
+                    route.connectionId,
+                    route.matchId,
+                    route.partnerName,
+                )
+            }
         }
+    }
+
+    private fun syncPendingVisualReviewPhotoPrefetch(ready: RealsRootUiState.Ready) {
+        val getProfile = getVisualProfile
+        val home = ready.home.homeState
+        if (ready.home.surface != HomeSurface.Pending || home == null || getProfile == null) {
+            cancelPendingVisualReviewPhotoPrefetch()
+            return
+        }
+        val visiblePendingActions = home.pendingActions.filterNot { action ->
+            action is HomePendingAction.VisualReview &&
+                action.matchId in locallyHiddenVisualMatchIds
+        }
+
+        pendingVisualReviewPhotoPrefetcher.prefetchPendingVisualReviews(
+            scope = scope,
+            sessionScopeKey = ready.session.pendingVisualReviewPrefetchSessionScopeKey(),
+            pendingActions = visiblePendingActions,
+            getVisualProfile = getProfile,
+        )
     }
 
     private fun pruneLocalHiddenInteractions(home: HomeState) {
@@ -702,17 +744,17 @@ internal class HomeCoordinator(
 
 private fun ProvisionedSession.withProfileStatusFrom(home: HomeState): ProvisionedSession {
     val status = home.profileStatus ?: return this
-    val snapshot = profileSnapshot as? com.reals.app.domain.model.ProfileSnapshot.Found ?: return this
+    val snapshot = profileSnapshot as? ProfileSnapshot.Found ?: return this
     if (snapshot.profile.status == status) return this
     return copy(
-        profileSnapshot = com.reals.app.domain.model.ProfileSnapshot.Found(
+        profileSnapshot = ProfileSnapshot.Found(
             snapshot.profile.copy(status = status),
         ),
     )
 }
 
 private fun RealsRootUiState.Ready.withoutStaleHomeForKnownDraftProfile(): RealsRootUiState.Ready {
-    val snapshot = session.profileSnapshot as? com.reals.app.domain.model.ProfileSnapshot.Found ?: return this
+    val snapshot = session.profileSnapshot as? ProfileSnapshot.Found ?: return this
     if (snapshot.profile.status != ProfileStatus.Draft) return this
     if (home.homeState?.profileStatus != ProfileStatus.Active && home.screenModel?.matchmaking?.canSearch != true) {
         return this
@@ -732,4 +774,9 @@ internal fun HomeStatus.isHomeWakeUpDue(): Boolean {
     val nextRefreshAtInstant = backendInstantOrNull(nextRefreshAt) ?: return false
     val serverTimeInstant = backendInstantOrNull(serverTime) ?: return false
     return !serverTimeInstant.isBefore(nextRefreshAtInstant)
+}
+
+private fun ProvisionedSession.pendingVisualReviewPrefetchSessionScopeKey(): String {
+    val profileId = (profileSnapshot as? ProfileSnapshot.Found)?.profile?.id.orEmpty()
+    return "${user.id}:$profileId"
 }
