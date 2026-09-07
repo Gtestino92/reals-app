@@ -228,8 +228,11 @@ class RealsRootViewModel(
         }
     }
 
-    fun changePassword(currentPassword: String, newPassword: String) =
-        sessionCoordinator.changePassword(currentPassword, newPassword)
+    fun changePassword(
+        currentPassword: String,
+        newPassword: String,
+        onPasswordChanged: suspend (email: String, newPassword: String) -> Unit = { _, _ -> },
+    ) = sessionCoordinator.changePassword(currentPassword, newPassword, onPasswordChanged)
 
     fun openNotificationPreferences() {
         val current = _uiState.value as? RealsRootUiState.Ready ?: return

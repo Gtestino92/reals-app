@@ -58,7 +58,7 @@ fun LoginScreen(
     onSignIn: (email: String, password: String) -> Unit,
     onSignUp: (email: String, password: String) -> Unit,
     onPasswordReset: (email: String) -> Unit,
-    onSavedCredentialSignIn: (email: String) -> Unit,
+    onSavedCredentialSignIn: () -> Unit,
     onGoogleSignIn: () -> Unit,
 ) {
     var email by rememberSaveable { mutableStateOf("") }
@@ -192,7 +192,7 @@ fun LoginScreen(
                 )
             }
             OutlinedButton(
-                onClick = { onSavedCredentialSignIn(email) },
+                onClick = onSavedCredentialSignIn,
                 enabled = !authBusy,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(RealsRadii.Button),

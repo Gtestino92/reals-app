@@ -37,17 +37,6 @@ class PasswordCredentialClientTest {
     }
 
     @Test
-    fun `valid prefilled email narrows allowed credential ids`() {
-        assertEquals(setOf("alex@example.com"), allowedPasswordCredentialUserIds(" alex@example.com "))
-    }
-
-    @Test
-    fun `blank or invalid prefilled email keeps all credentials eligible`() {
-        assertEquals(emptySet<String>(), allowedPasswordCredentialUserIds(""))
-        assertEquals(emptySet<String>(), allowedPasswordCredentialUserIds("not-an-email"))
-    }
-
-    @Test
     fun `only manual email password origin offers password save`() {
         assertTrue(shouldOfferPasswordCredentialSave(LoginCredentialOrigin.ManualEmailPassword))
         assertFalse(shouldOfferPasswordCredentialSave(LoginCredentialOrigin.SavedPasswordCredential))

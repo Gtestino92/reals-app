@@ -14,7 +14,6 @@ import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
 import androidx.credentials.exceptions.GetCredentialUnsupportedException
 import androidx.credentials.exceptions.NoCredentialException
-import com.reals.app.data.repository.isLocallyValidEmail
 import kotlinx.coroutines.CancellationException
 
 sealed interface PasswordCredentialResult {
@@ -56,15 +55,10 @@ class PasswordCredentialClient(context: Context) {
 
     suspend fun getPasswordCredential(
         activity: Activity?,
-        email: String,
     ): PasswordCredentialResult {
         val credentialActivity = activity ?: return PasswordCredentialResult.Failure
         val request = GetCredentialRequest.Builder()
-            .addCredentialOption(
-                GetPasswordOption(
-                    allowedUserIds = allowedPasswordCredentialUserIds(email),
-                )
-            )
+            .addCredentialOption(GetPasswordOption())
             .build()
 
         return try {
@@ -141,11 +135,6 @@ internal fun passwordCredentialResult(
         email = cleanEmail,
         password = password,
     )
-}
-
-internal fun allowedPasswordCredentialUserIds(email: String): Set<String> {
-    val cleanEmail = email.trim()
-    return if (isLocallyValidEmail(cleanEmail)) setOf(cleanEmail) else emptySet()
 }
 
 internal fun shouldOfferPasswordCredentialSave(origin: LoginCredentialOrigin): Boolean =

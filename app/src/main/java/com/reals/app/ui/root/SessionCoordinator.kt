@@ -460,7 +460,11 @@ internal class SessionCoordinator(
         }
     }
 
-    fun changePassword(currentPassword: String, newPassword: String) {
+    fun changePassword(
+        currentPassword: String,
+        newPassword: String,
+        onPasswordChanged: suspend (email: String, newPassword: String) -> Unit = { _, _ -> },
+    ) {
         val current = uiState.value as? RealsRootUiState.Ready ?: return
         if (current.changingPassword || current.deletingAccount) return
         if (!current.session.user.passwordManagementAllowed) {
@@ -494,6 +498,13 @@ internal class SessionCoordinator(
                 )
                 return@launch
             }
+            if (result == ChangePasswordResult.Success) {
+                notifyPasswordChangedBestEffort(
+                    email = authRepository.currentUserEmail(),
+                    newPassword = newPassword,
+                    onPasswordChanged = onPasswordChanged,
+                )
+            }
             uiState.value = pending.copy(
                 account = pending.account.copy(
                     changingPassword = false,
@@ -505,6 +516,20 @@ internal class SessionCoordinator(
                     changePasswordError = result.toChangePasswordMessageOrNull(),
                 ),
             )
+        }
+    }
+
+    private suspend fun notifyPasswordChangedBestEffort(
+        email: String?,
+        newPassword: String,
+        onPasswordChanged: suspend (email: String, newPassword: String) -> Unit,
+    ) {
+        val cleanEmail = email?.trim()?.takeIf { it.isNotBlank() } ?: return
+        try {
+            onPasswordChanged(cleanEmail, newPassword)
+        } catch (exception: kotlinx.coroutines.CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
         }
     }
 

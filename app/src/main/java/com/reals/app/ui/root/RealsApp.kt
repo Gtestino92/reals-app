@@ -151,14 +151,13 @@ fun RealsApp(
                     }
                 },
                 onPasswordReset = viewModel::requestPasswordReset,
-                onSavedCredentialSignIn = { email ->
+                onSavedCredentialSignIn = {
                     val attemptId = viewModel.beginPasswordCredentialSignIn() ?: return@LoginScreen
                     coroutineScope.launch {
                         viewModel.completePasswordCredentialSignIn(
                             attemptId = attemptId,
                             result = passwordCredentialClient.getPasswordCredential(
                                 activity = context.findActivity(),
-                                email = email,
                             ),
                         )
                     }
@@ -387,7 +386,15 @@ fun RealsApp(
                             onCloseNotifications = viewModel::closeNotificationPreferences,
                             onNotificationPreferenceChange = viewModel::updateNotificationPreference,
                             onSignOut = viewModel::signOut,
-                            onChangePassword = viewModel::changePassword,
+                            onChangePassword = { currentPassword, newPassword ->
+                                viewModel.changePassword(currentPassword, newPassword) { email, changedPassword ->
+                                    passwordCredentialClient.savePasswordCredential(
+                                        activity = context.findActivity(),
+                                        email = email,
+                                        password = changedPassword,
+                                    )
+                                }
+                            },
                             onDeleteAccount = viewModel::deleteAccount,
                             onSupportReals = { openCafecitoSupport(context) },
                         )
