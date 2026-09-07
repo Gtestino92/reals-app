@@ -23,9 +23,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.AutofillManager
 import androidx.compose.ui.draw.paint
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalAutofillManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.core.content.ContextCompat
@@ -47,7 +49,6 @@ import com.reals.app.ui.account.AccountSuspendedScreen
 import com.reals.app.ui.account.PermanentBanAppealScreen
 import com.reals.app.ui.auth.GoogleCredentialClient
 import com.reals.app.ui.auth.LoginScreen
-import com.reals.app.ui.auth.PasswordCredentialClient
 import com.reals.app.ui.chat.ChatScreen
 import com.reals.app.ui.chat.PartnerProfileScreen
 import com.reals.app.ui.chat.VisualApprovalScreen
@@ -77,9 +78,9 @@ fun RealsApp(
     )
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val autofillManager = LocalAutofillManager.current
     val coroutineScope = rememberCoroutineScope()
     val googleCredentialClient = remember(context) { GoogleCredentialClient(context) }
-    val passwordCredentialClient = remember(context) { PasswordCredentialClient(context) }
     PublishForegroundDestination(
         appContainer = appContainer,
         state = state,
@@ -131,21 +132,13 @@ fun RealsApp(
                 passwordResetAvailableAtMillis = current.passwordResetAvailableAtMillis,
                 googleLoading = current.googleLoading,
                 onSignIn = { email, password, rememberCredentials ->
-                    viewModel.signIn(email, password, rememberCredentials) { cleanEmail, cleanPassword ->
-                        passwordCredentialClient.savePasswordCredential(
-                            activity = context.findActivity(),
-                            email = cleanEmail,
-                            password = cleanPassword,
-                        )
+                    viewModel.signIn(email, password, rememberCredentials) { shouldCommitAutofill ->
+                        completeLoginAutofillContext(autofillManager, shouldCommitAutofill)
                     }
                 },
                 onSignUp = { email, password, rememberCredentials ->
-                    viewModel.signUp(email, password, rememberCredentials) { cleanEmail, cleanPassword ->
-                        passwordCredentialClient.savePasswordCredential(
-                            activity = context.findActivity(),
-                            email = cleanEmail,
-                            password = cleanPassword,
-                        )
+                    viewModel.signUp(email, password, rememberCredentials) { shouldCommitAutofill ->
+                        completeLoginAutofillContext(autofillManager, shouldCommitAutofill)
                     }
                 },
                 onPasswordReset = viewModel::requestPasswordReset,
@@ -703,4 +696,26 @@ private tailrec fun Context.findActivity(): Activity? =
         is Activity -> this
         is ContextWrapper -> baseContext.findActivity()
         else -> null
+    }
+
+internal fun completeLoginAutofillContext(
+    autofillManager: AutofillManager?,
+    rememberCredentials: Boolean,
+) = when (loginAutofillCompletionAction(rememberCredentials)) {
+    LoginAutofillCompletionAction.Commit -> autofillManager?.commit()
+    LoginAutofillCompletionAction.Cancel -> autofillManager?.cancel()
+}
+
+internal enum class LoginAutofillCompletionAction {
+    Commit,
+    Cancel,
+}
+
+internal fun loginAutofillCompletionAction(
+    rememberCredentials: Boolean,
+): LoginAutofillCompletionAction =
+    if (rememberCredentials) {
+        LoginAutofillCompletionAction.Commit
+    } else {
+        LoginAutofillCompletionAction.Cancel
     }

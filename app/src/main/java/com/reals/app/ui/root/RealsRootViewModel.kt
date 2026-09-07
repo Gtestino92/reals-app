@@ -156,15 +156,15 @@ class RealsRootViewModel(
         email: String,
         password: String,
         rememberCredentials: Boolean = false,
-        onRememberCredentialsRequested: suspend (email: String, password: String) -> Unit = { _, _ -> },
-    ) = sessionCoordinator.signIn(email, password, rememberCredentials, onRememberCredentialsRequested)
+        onAuthenticationSucceeded: suspend (rememberCredentials: Boolean) -> Unit = {},
+    ) = sessionCoordinator.signIn(email, password, rememberCredentials, onAuthenticationSucceeded)
 
     fun signUp(
         email: String,
         password: String,
         rememberCredentials: Boolean = false,
-        onRememberCredentialsRequested: suspend (email: String, password: String) -> Unit = { _, _ -> },
-    ) = sessionCoordinator.signUp(email, password, rememberCredentials, onRememberCredentialsRequested)
+        onAuthenticationSucceeded: suspend (rememberCredentials: Boolean) -> Unit = {},
+    ) = sessionCoordinator.signUp(email, password, rememberCredentials, onAuthenticationSucceeded)
 
     fun requestPasswordReset(email: String) = sessionCoordinator.requestPasswordReset(email)
 

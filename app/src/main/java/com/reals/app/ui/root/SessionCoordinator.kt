@@ -78,13 +78,13 @@ internal class SessionCoordinator(
         email: String,
         password: String,
         rememberCredentials: Boolean = false,
-        onRememberCredentialsRequested: suspend (email: String, password: String) -> Unit = { _, _ -> },
+        onAuthenticationSucceeded: suspend (rememberCredentials: Boolean) -> Unit = {},
     ) {
         authenticate(
             email = email,
             password = password,
             rememberCredentials = rememberCredentials,
-            onRememberCredentialsRequested = onRememberCredentialsRequested,
+            onAuthenticationSucceeded = onAuthenticationSucceeded,
         ) { cleanEmail, cleanPassword ->
             authRepository.signIn(cleanEmail, cleanPassword)
         }
@@ -94,7 +94,7 @@ internal class SessionCoordinator(
         email: String,
         password: String,
         rememberCredentials: Boolean = false,
-        onRememberCredentialsRequested: suspend (email: String, password: String) -> Unit = { _, _ -> },
+        onAuthenticationSucceeded: suspend (rememberCredentials: Boolean) -> Unit = {},
     ) {
         val cleanEmail = email.trim()
         val loginState = uiState.value as? RealsRootUiState.Login ?: return
@@ -122,11 +122,9 @@ internal class SessionCoordinator(
                     if (!dependencies.localFirebaseEmailAutoVerificationEnabled) {
                         authRepository.sendEmailVerificationEmail()
                     }
-                    requestRememberCredentialsBestEffort(
+                    notifyAuthenticationSucceededBestEffort(
                         rememberCredentials = rememberCredentials,
-                        email = cleanEmail,
-                        password = password,
-                        onRememberCredentialsRequested = onRememberCredentialsRequested,
+                        onAuthenticationSucceeded = onAuthenticationSucceeded,
                     )
                     loadBackendSession().join()
                 }
@@ -574,7 +572,7 @@ internal class SessionCoordinator(
         email: String,
         password: String,
         rememberCredentials: Boolean,
-        onRememberCredentialsRequested: suspend (email: String, password: String) -> Unit,
+        onAuthenticationSucceeded: suspend (rememberCredentials: Boolean) -> Unit,
         action: suspend (email: String, password: String) -> AuthOperationResult,
     ) {
         val cleanEmail = email.trim()
@@ -600,11 +598,9 @@ internal class SessionCoordinator(
             )
             when (val result = action(cleanEmail, password)) {
                 AuthOperationResult.Success -> {
-                    requestRememberCredentialsBestEffort(
+                    notifyAuthenticationSucceededBestEffort(
                         rememberCredentials = rememberCredentials,
-                        email = cleanEmail,
-                        password = password,
-                        onRememberCredentialsRequested = onRememberCredentialsRequested,
+                        onAuthenticationSucceeded = onAuthenticationSucceeded,
                     )
                     loadBackendSession().join()
                 }
@@ -620,20 +616,15 @@ internal class SessionCoordinator(
         }
     }
 
-    private fun requestRememberCredentialsBestEffort(
+    private suspend fun notifyAuthenticationSucceededBestEffort(
         rememberCredentials: Boolean,
-        email: String,
-        password: String,
-        onRememberCredentialsRequested: suspend (email: String, password: String) -> Unit,
+        onAuthenticationSucceeded: suspend (rememberCredentials: Boolean) -> Unit,
     ) {
-        if (!rememberCredentials) return
-        scope.launch {
-            try {
-                onRememberCredentialsRequested(email, password)
-            } catch (exception: CancellationException) {
-                throw exception
-            } catch (exception: Exception) {
-            }
+        try {
+            onAuthenticationSucceeded(rememberCredentials)
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
         }
     }
 

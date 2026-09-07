@@ -25,6 +25,7 @@ import com.reals.app.notifications.registration.PushTokenRegistrationService
 import com.reals.app.testutil.FakeAuthTokenProvider
 import com.reals.app.testutil.FakeRealsApi
 import com.reals.app.testutil.testApiExecutor
+import com.reals.app.ui.auth.GoogleCredentialResult
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
@@ -35,59 +36,59 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class SessionCoordinatorPasswordCredentialTest {
+class SessionCoordinatorLoginAutofillTest {
     @Test
-    fun `manual successful sign in with remember false does not request password save`() = runTest {
+    fun `manual successful sign in with remember false requests autofill cancel`() = runTest {
         val harness = harness()
-        val saveRequests = mutableListOf<Pair<String, String>>()
+        val autofillDecisions = mutableListOf<Boolean>()
 
-        harness.coordinator.signIn(" alex@example.com ", "secret-password", rememberCredentials = false) { email, password ->
-            saveRequests += email to password
+        harness.coordinator.signIn(" alex@example.com ", "secret-password", rememberCredentials = false) { rememberCredentials ->
+            autofillDecisions += rememberCredentials
         }
         advanceUntilIdle()
 
         assertEquals(listOf("alex@example.com"), harness.auth.signInRequests)
-        assertEquals(emptyList<Pair<String, String>>(), saveRequests)
+        assertEquals(listOf(false), autofillDecisions)
         assertEquals(1, harness.readySessions.size)
     }
 
     @Test
-    fun `manual successful sign in with remember true requests password save`() = runTest {
+    fun `manual successful sign in with remember true requests autofill commit`() = runTest {
         val harness = harness()
-        val saveRequests = mutableListOf<Pair<String, String>>()
+        val autofillDecisions = mutableListOf<Boolean>()
 
-        harness.coordinator.signIn(" alex@example.com ", "secret-password", rememberCredentials = true) { email, password ->
-            saveRequests += email to password
+        harness.coordinator.signIn(" alex@example.com ", "secret-password", rememberCredentials = true) { rememberCredentials ->
+            autofillDecisions += rememberCredentials
         }
         advanceUntilIdle()
 
         assertEquals(listOf("alex@example.com"), harness.auth.signInRequests)
-        assertEquals(listOf("alex@example.com" to "secret-password"), saveRequests)
+        assertEquals(listOf(true), autofillDecisions)
         assertEquals(1, harness.readySessions.size)
     }
 
     @Test
-    fun `manual failed sign in with remember true does not request password save`() = runTest {
+    fun `manual failed sign in with remember true does not complete autofill context`() = runTest {
         val harness = harness(signInResult = AuthOperationResult.Failure("Credenciales inválidas."))
-        val saveRequests = mutableListOf<Pair<String, String>>()
+        val autofillDecisions = mutableListOf<Boolean>()
 
-        harness.coordinator.signIn("alex@example.com", "bad-password", rememberCredentials = true) { email, password ->
-            saveRequests += email to password
+        harness.coordinator.signIn("alex@example.com", "bad-password", rememberCredentials = true) { rememberCredentials ->
+            autofillDecisions += rememberCredentials
         }
         advanceUntilIdle()
 
         val state = harness.state.value as RealsRootUiState.Login
         assertEquals("Credenciales inválidas.", state.error)
-        assertEquals(emptyList<Pair<String, String>>(), saveRequests)
+        assertEquals(emptyList<Boolean>(), autofillDecisions)
         assertEquals(0, harness.readySessions.size)
     }
 
     @Test
-    fun `password save failure after successful sign in does not block session load`() = runTest {
+    fun `autofill completion failure after successful sign in does not block session load`() = runTest {
         val harness = harness()
 
-        harness.coordinator.signIn("alex@example.com", "secret-password", rememberCredentials = true) { _, _ ->
-            error("Credential Manager rejected the save request.")
+        harness.coordinator.signIn("alex@example.com", "secret-password", rememberCredentials = true) {
+            error("Autofill completion failed.")
         }
         advanceUntilIdle()
 
@@ -96,17 +97,32 @@ class SessionCoordinatorPasswordCredentialTest {
     }
 
     @Test
-    fun `manual successful sign up with remember true requests password save`() = runTest {
+    fun `manual successful sign up with remember true requests autofill commit`() = runTest {
         val harness = harness()
-        val saveRequests = mutableListOf<Pair<String, String>>()
+        val autofillDecisions = mutableListOf<Boolean>()
 
-        harness.coordinator.signUp(" alex@example.com ", "secret-password", rememberCredentials = true) { email, password ->
-            saveRequests += email to password
+        harness.coordinator.signUp(" alex@example.com ", "secret-password", rememberCredentials = true) { rememberCredentials ->
+            autofillDecisions += rememberCredentials
         }
         advanceUntilIdle()
 
         assertEquals(listOf("alex@example.com"), harness.auth.signUpRequests)
-        assertEquals(listOf("alex@example.com" to "secret-password"), saveRequests)
+        assertEquals(listOf(true), autofillDecisions)
+        assertEquals(1, harness.readySessions.size)
+    }
+
+    @Test
+    fun `google sign in does not require login autofill completion`() = runTest {
+        val harness = harness()
+        val attemptId = harness.coordinator.beginGoogleSignIn()
+
+        harness.coordinator.completeGoogleSignIn(
+            attemptId = attemptId!!,
+            result = GoogleCredentialResult.Success("google-id-token"),
+        )
+        advanceUntilIdle()
+
+        assertEquals(listOf("google-id-token"), harness.auth.googleIdTokenRequests)
         assertEquals(1, harness.readySessions.size)
     }
 
@@ -176,6 +192,7 @@ class SessionCoordinatorPasswordCredentialTest {
     ) : FirebaseAuthRepository(ContextWrapper(null)) {
         val signInRequests = mutableListOf<String>()
         val signUpRequests = mutableListOf<String>()
+        val googleIdTokenRequests = mutableListOf<String>()
         var signOutCalls = 0
             private set
 
@@ -193,6 +210,11 @@ class SessionCoordinatorPasswordCredentialTest {
         override suspend fun signUp(email: String, password: String): AuthOperationResult {
             signUpRequests += email
             return signUpResult
+        }
+
+        override suspend fun signInWithGoogleIdToken(idToken: String): AuthOperationResult {
+            googleIdTokenRequests += idToken
+            return AuthOperationResult.Success
         }
 
         override suspend fun sendEmailVerificationEmail(): EmailVerificationSendResult =
