@@ -5,9 +5,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -35,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.autofill.contentType
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
@@ -72,6 +75,7 @@ fun LoginScreen(
         nowMillis = nowMillis,
     )
     val authBusy = loading || googleLoading || passwordResetLoading
+    val compactForIme = WindowInsets.ime.getBottom(LocalDensity.current) > 0
 
     LaunchedEffect(passwordResetAvailableAtMillis) {
         while (passwordResetCooldownRemainingSeconds(passwordResetAvailableAtMillis, System.currentTimeMillis()) > 0) {
@@ -88,33 +92,35 @@ fun LoginScreen(
             .imePadding()
             .verticalScroll(rememberScrollState())
             .padding(24.dp),
-        verticalArrangement = Arrangement.Center,
+        verticalArrangement = if (compactForIme) Arrangement.Top else Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        RealsBrandSeal(modifier = Modifier.size(54.dp))
-        Spacer(modifier = Modifier.height(14.dp))
-        Text(
-            text = "Reals",
-            style = RealsType.Identity,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.fillMaxWidth(),
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-        )
-        RealsBrandDivider(
-            modifier = Modifier
-                .padding(top = 16.dp)
-                .fillMaxWidth(),
-        )
-        Text(
-            text = "Ingresá o creá tu cuenta para empezar.",
-            modifier = Modifier
-                .padding(top = 22.dp)
-                .fillMaxWidth(),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-        )
-        Spacer(modifier = Modifier.height(26.dp))
+        if (loginHeaderVisible(compactForIme)) {
+            RealsBrandSeal(modifier = Modifier.size(54.dp))
+            Spacer(modifier = Modifier.height(14.dp))
+            Text(
+                text = "Reals",
+                style = RealsType.Identity,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+            RealsBrandDivider(
+                modifier = Modifier
+                    .padding(top = 16.dp)
+                    .fillMaxWidth(),
+            )
+            Text(
+                text = "Ingresá o creá tu cuenta para empezar.",
+                modifier = Modifier
+                    .padding(top = 22.dp)
+                    .fillMaxWidth(),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+            Spacer(modifier = Modifier.height(26.dp))
+        }
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -278,6 +284,8 @@ internal fun passwordResetButtonEnabled(
 
 internal fun googleSignInButtonText(googleLoading: Boolean): String =
     if (googleLoading) "Conectando con Google..." else "Continuar con Google"
+
+internal fun loginHeaderVisible(compactForIme: Boolean): Boolean = !compactForIme
 
 internal const val rememberCredentialsLabel = "Recordar credenciales"
 

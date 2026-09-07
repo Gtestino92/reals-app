@@ -34,6 +34,12 @@ class LoginScreenPasswordResetTest {
     }
 
     @Test
+    fun `login header is hidden in compact keyboard layout`() {
+        assertTrue(loginHeaderVisible(compactForIme = false))
+        assertFalse(loginHeaderVisible(compactForIme = true))
+    }
+
+    @Test
     fun `login autofill content types are configured`() {
         assertEquals(loginEmailContentType(), loginEmailContentType())
         assertEquals(loginPasswordContentType(), loginPasswordContentType())
