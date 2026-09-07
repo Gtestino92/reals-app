@@ -191,6 +191,40 @@ class VisualProfileCardPresentationTest {
     }
 
     @Test
+    fun `progressive loading starts with only the first profile photo`() {
+        assertEquals(0, initialVisualProfileLoadedPhotoCount(0))
+        assertEquals(1, initialVisualProfileLoadedPhotoCount(1))
+        assertEquals(1, initialVisualProfileLoadedPhotoCount(9))
+    }
+
+    @Test
+    fun `progressive loading unlocks secondary photos in small batches`() {
+        assertEquals(3, nextVisualProfileLoadedPhotoCount(currentCount = 1, totalPhotos = 9))
+        assertEquals(5, nextVisualProfileLoadedPhotoCount(currentCount = 3, totalPhotos = 9))
+        assertEquals(9, nextVisualProfileLoadedPhotoCount(currentCount = 8, totalPhotos = 9))
+    }
+
+    @Test
+    fun `prefetch candidates are limited to photos after the selected one`() {
+        val candidates = visualProfilePrefetchCandidates(
+            photos = photos(5),
+            selectedPhotoId = "photo-2",
+        )
+
+        assertEquals(listOf("photo-3", "photo-4"), candidates.map { it.id })
+    }
+
+    @Test
+    fun `prefetch candidates fall back to first photo when selection is missing`() {
+        val candidates = visualProfilePrefetchCandidates(
+            photos = photos(4),
+            selectedPhotoId = "missing",
+        )
+
+        assertEquals(listOf("photo-2", "photo-3"), candidates.map { it.id })
+    }
+
+    @Test
     fun `public profile questions filter empty rows and preserve display order`() {
         val questions = publicProfileQuestionsForDisplay(
             listOf(

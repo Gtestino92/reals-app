@@ -20,18 +20,25 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
+import coil3.ImageLoader
+import coil3.SingletonImageLoader
 import coil3.compose.AsyncImage
 import com.reals.app.core.security.TextSafety
 import com.reals.app.domain.model.ProfilePhoto
@@ -40,9 +47,13 @@ import com.reals.app.domain.model.VisualProfile
 import com.reals.app.domain.model.isApprovedForExternalDisplay
 import com.reals.app.ui.common.RealsSectionLabel
 import com.reals.app.ui.common.RealsThinDivider
+import com.reals.app.ui.profile.ProfilePhotoImageVariant
 import com.reals.app.ui.profile.ProfilePhotoPresentationAspectRatio
+import com.reals.app.ui.profile.profilePhotoImageRequest
+import com.reals.app.ui.profile.stableProfilePhotoCacheKey
 import com.reals.app.ui.theme.RealsRadii
 import com.reals.app.ui.theme.RealsType
+import kotlinx.coroutines.delay
 
 @Composable
 fun VisualProfileCard(
@@ -50,6 +61,34 @@ fun VisualProfileCard(
     showHeader: Boolean = true,
     presentationMode: ProfilePresentationMode = ProfilePresentationMode.Review,
 ) {
+    val photos = remember(profile.photos) { visualProfilePhotosForDisplay(profile.photos) }
+    val photoCacheIdentity = remember(photos) {
+        photos.joinToString(separator = "|") { it.stableProfilePhotoCacheKey() }
+    }
+    val context = LocalContext.current
+    val imageLoader = remember(context) { SingletonImageLoader.get(context) }
+    var loadedPhotoCount by rememberSaveable(profile.profileId, presentationMode.name, photoCacheIdentity) {
+        mutableIntStateOf(initialVisualProfileLoadedPhotoCount(photos.size))
+    }
+
+    LaunchedEffect(profile.profileId, presentationMode, photoCacheIdentity) {
+        loadedPhotoCount = initialVisualProfileLoadedPhotoCount(photos.size)
+        while (loadedPhotoCount < photos.size) {
+            delay(VisualProfileProgressivePhotoDelayMillis)
+            loadedPhotoCount = nextVisualProfileLoadedPhotoCount(
+                currentCount = loadedPhotoCount,
+                totalPhotos = photos.size,
+            )
+        }
+    }
+
+    VisualProfilePhotoPrefetcher(
+        photos = photos,
+        selectedPhotoId = photos.firstOrNull()?.id,
+        imageLoader = imageLoader,
+        enabled = presentationMode == ProfilePresentationMode.Review && photos.isNotEmpty(),
+    )
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(RealsRadii.Card),
@@ -59,8 +98,19 @@ fun VisualProfileCard(
     ) {
         Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             when (presentationMode) {
-                ProfilePresentationMode.Review -> ReviewProfileContent(profile, showHeader)
-                ProfilePresentationMode.Browse -> BrowseProfileContent(profile, showHeader)
+                ProfilePresentationMode.Review -> ReviewProfileContent(
+                    profile = profile,
+                    showHeader = showHeader,
+                    loadedPhotoCount = loadedPhotoCount,
+                    imageLoader = imageLoader,
+                )
+
+                ProfilePresentationMode.Browse -> BrowseProfileContent(
+                    profile = profile,
+                    showHeader = showHeader,
+                    loadedPhotoCount = loadedPhotoCount,
+                    imageLoader = imageLoader,
+                )
             }
         }
     }
@@ -177,6 +227,8 @@ internal fun visualProfileThumbnailContentDescription(
 private fun ReviewProfileContent(
     profile: VisualProfile,
     showHeader: Boolean,
+    loadedPhotoCount: Int,
+    imageLoader: ImageLoader,
 ) {
     visualProfileContentBlocks(profile, ProfilePresentationMode.Review).forEach { block ->
         when (block) {
@@ -192,6 +244,8 @@ private fun ReviewProfileContent(
                 photo = block.photo,
                 photoIndex = block.index,
                 totalPhotos = block.total,
+                loadImage = block.index < loadedPhotoCount,
+                imageLoader = imageLoader,
             )
 
             VisualProfileContentBlock.Questions -> VisualProfileQuestionsSection(profile.profileQuestions)
@@ -203,6 +257,8 @@ private fun ReviewProfileContent(
 private fun BrowseProfileContent(
     profile: VisualProfile,
     showHeader: Boolean,
+    loadedPhotoCount: Int,
+    imageLoader: ImageLoader,
 ) {
     visualProfileContentBlocks(profile, ProfilePresentationMode.Browse).forEach { block ->
         when (block) {
@@ -211,7 +267,11 @@ private fun BrowseProfileContent(
             )
 
             VisualProfileContentBlock.Bio -> VisualProfileBioSection(profile)
-            VisualProfileContentBlock.CompactPhotos -> CompactProfilePhotos(profile)
+            VisualProfileContentBlock.CompactPhotos -> CompactProfilePhotos(
+                profile = profile,
+                loadedPhotoCount = loadedPhotoCount,
+                imageLoader = imageLoader,
+            )
             VisualProfileContentBlock.Identity -> if (showHeader) VisualProfileIdentity(profile)
             is VisualProfileContentBlock.Photo -> Unit
             VisualProfileContentBlock.Questions -> VisualProfileQuestionsSection(profile.profileQuestions)
@@ -253,12 +313,27 @@ private fun VisualProfilePhotoFrame(
     photo: ProfilePhoto,
     photoIndex: Int,
     totalPhotos: Int,
+    loadImage: Boolean,
+    imageLoader: ImageLoader,
 ) {
+    val context = LocalContext.current
+    val imageRequest = remember(context, photo.id, photo.url, loadImage) {
+        if (loadImage) {
+            profilePhotoImageRequest(
+                context = context,
+                photo = photo,
+                variant = ProfilePhotoImageVariant.Full,
+            )
+        } else {
+            null
+        }
+    }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Box {
             AsyncImage(
-                model = photo.url,
+                model = imageRequest,
                 contentDescription = visualProfilePhotoContentDescription(profile, photoIndex, totalPhotos),
+                imageLoader = imageLoader,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -277,12 +352,23 @@ private fun VisualProfilePhotoFrame(
 }
 
 @Composable
-private fun CompactProfilePhotos(profile: VisualProfile) {
+private fun CompactProfilePhotos(
+    profile: VisualProfile,
+    loadedPhotoCount: Int,
+    imageLoader: ImageLoader,
+) {
+    val context = LocalContext.current
     var selectedPhotoId by rememberSaveable(profile.profileId) { mutableStateOf<String?>(null) }
     val selection = browseProfilePhotoSelection(
         photos = profile.photos,
         selectedPhotoId = selectedPhotoId,
     ) ?: return
+    VisualProfilePhotoPrefetcher(
+        photos = selection.photos,
+        selectedPhotoId = selection.selectedPhoto.id,
+        imageLoader = imageLoader,
+        enabled = true,
+    )
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         VisualProfilePhotoFrame(
@@ -290,6 +376,8 @@ private fun CompactProfilePhotos(profile: VisualProfile) {
             photo = selection.selectedPhoto,
             photoIndex = selection.selectedIndex,
             totalPhotos = selection.photos.size,
+            loadImage = true,
+            imageLoader = imageLoader,
         )
         if (selection.photos.size > 1) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -325,17 +413,46 @@ private fun CompactProfilePhotos(profile: VisualProfile) {
                     ) {
                         Box(
                             modifier = Modifier
-                                .width(108.dp)
+                                .width(VisualProfileThumbnailWidth)
                                 .height(136.dp)
                                 .padding(4.dp),
                         ) {
+                            val density = LocalDensity.current
+                            val thumbnailWidthPx = remember(density) {
+                                with(density) { VisualProfileThumbnailWidth.roundToPx() }
+                            }
+                            val thumbnailHeightPx = remember(density) {
+                                with(density) { VisualProfileThumbnailHeight.roundToPx() }
+                            }
+                            val loadThumbnail = selected || photoIndex < loadedPhotoCount
+                            val thumbnailRequest = remember(
+                                context,
+                                photo.id,
+                                photo.url,
+                                loadThumbnail,
+                                thumbnailWidthPx,
+                                thumbnailHeightPx,
+                            ) {
+                                if (loadThumbnail) {
+                                    profilePhotoImageRequest(
+                                        context = context,
+                                        photo = photo,
+                                        variant = ProfilePhotoImageVariant.Thumbnail,
+                                        widthPx = thumbnailWidthPx,
+                                        heightPx = thumbnailHeightPx,
+                                    )
+                                } else {
+                                    null
+                                }
+                            }
                             AsyncImage(
-                                model = photo.url,
+                                model = thumbnailRequest,
                                 contentDescription = null,
+                                imageLoader = imageLoader,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(128.dp)
+                                    .height(VisualProfileThumbnailHeight)
                                     .clip(RoundedCornerShape(RealsRadii.Row))
                                     .background(MaterialTheme.colorScheme.surfaceVariant),
                             )
@@ -349,6 +466,40 @@ private fun CompactProfilePhotos(profile: VisualProfile) {
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun VisualProfilePhotoPrefetcher(
+    photos: List<ProfilePhoto>,
+    selectedPhotoId: String?,
+    imageLoader: ImageLoader,
+    enabled: Boolean,
+) {
+    val context = LocalContext.current
+    val candidates = remember(photos, selectedPhotoId, enabled) {
+        if (enabled) {
+            visualProfilePrefetchCandidates(photos, selectedPhotoId)
+        } else {
+            emptyList()
+        }
+    }
+    val prefetchIdentity = remember(candidates) {
+        candidates.joinToString(separator = "|") { it.stableProfilePhotoCacheKey() }
+    }
+
+    LaunchedEffect(imageLoader, prefetchIdentity) {
+        if (candidates.isEmpty()) return@LaunchedEffect
+        delay(VisualProfilePrefetchStartDelayMillis)
+        candidates.forEach { photo ->
+            imageLoader.execute(
+                profilePhotoImageRequest(
+                    context = context,
+                    photo = photo,
+                    variant = ProfilePhotoImageVariant.Full,
+                )
+            )
         }
     }
 }
@@ -416,3 +567,6 @@ private fun VisualProfileQuestionsSection(
         }
     }
 }
+
+private val VisualProfileThumbnailWidth = 108.dp
+private val VisualProfileThumbnailHeight = 128.dp

@@ -1,6 +1,8 @@
 package com.reals.app.ui.profile
 
+import com.reals.app.domain.model.ProfilePhoto
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -30,6 +32,34 @@ class ProfilePhotoCacheKeysTest {
     }
 
     @Test
+    fun partnerPhotoStableCacheKeyIgnoresSignatureChanges() {
+        assertEquals(
+            photo(
+                id = "photo-1",
+                url = "https://cdn.reals.local/photos/photo.jpg?X-Amz-Signature=a",
+            ).stableProfilePhotoCacheKey(),
+            photo(
+                id = "photo-1",
+                url = "https://cdn.reals.local/photos/photo.jpg?X-Amz-Signature=b",
+            ).stableProfilePhotoCacheKey(),
+        )
+    }
+
+    @Test
+    fun partnerPhotoStableCacheKeyChangesWhenPhotoIdChangesForSamePath() {
+        assertNotEquals(
+            photo(
+                id = "photo-1",
+                url = "https://cdn.reals.local/photos/photo.jpg?X-Amz-Signature=a",
+            ).stableProfilePhotoCacheKey(),
+            photo(
+                id = "photo-2",
+                url = "https://cdn.reals.local/photos/photo.jpg?X-Amz-Signature=b",
+            ).stableProfilePhotoCacheKey(),
+        )
+    }
+
+    @Test
     fun replacementWithSameCanonicalKeyRequiresCacheEviction() {
         val decision = profilePhotoReplacementCacheRefreshDecision(
             action = ProfilePhotoActionPresentation(ProfilePhotoActionKind.Replace, position = 2, photoId = "photo-2"),
@@ -53,4 +83,17 @@ class ProfilePhotoCacheKeysTest {
 
         assertEquals(ProfilePhotoCacheRefreshDecision.None, decision)
     }
+
+    private fun photo(
+        id: String,
+        url: String,
+    ) = ProfilePhoto(
+        id = id,
+        url = url,
+        position = 1,
+        isPersonPhoto = true,
+        isFullBody = false,
+        validationStatus = "VALIDATED",
+        moderationStatus = "APPROVED",
+    )
 }
