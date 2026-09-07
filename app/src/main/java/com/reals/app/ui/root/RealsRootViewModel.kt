@@ -39,6 +39,9 @@ import com.reals.app.notifications.PushNotificationOpenContract
 import com.reals.app.ui.auth.GoogleCredentialResult
 import com.reals.app.ui.auth.PasswordCredentialResult
 import com.reals.app.ui.chat.firstChatUnansweredPeriodReference
+import com.reals.app.ui.profile.AndroidProfilePhotoPrefetcher
+import com.reals.app.ui.profile.NoOpProfilePhotoPrefetcher
+import com.reals.app.ui.profile.ProfilePhotoPrefetcher
 import java.io.File
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,6 +53,7 @@ import kotlinx.coroutines.launch
 class RealsRootViewModel(
     private val dependencies: RealsRootDependencies,
     autoRefreshSession: Boolean = true,
+    profilePhotoPrefetcher: ProfilePhotoPrefetcher = NoOpProfilePhotoPrefetcher,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<RealsRootUiState>(RealsRootUiState.Checking)
     private val authRepository = dependencies.session.authRepository
@@ -61,6 +65,7 @@ class RealsRootViewModel(
         localFirebaseEmailVerificationCoordinator =
             dependencies.session.localFirebaseEmailVerificationCoordinator,
         getProfilePhotosUseCase = getProfilePhotosUseCase,
+        profilePhotoPrefetcher = profilePhotoPrefetcher,
         scope = viewModelScope,
         onTerminalAuthFailure = { sessionCoordinator.invalidateTerminalSession() },
     )
@@ -438,7 +443,7 @@ class RealsRootViewModel(
             editingActiveProfile = true,
             profileManagementDestination = ProfileManagementDestination.Profile,
         )
-        loadProfilePhotos()
+        profileHandler.loadProfilePhotos(prefetchAfterSuccess = true)
     }
 
     fun openSearchManagement() {
@@ -516,6 +521,7 @@ class RealsRootViewModel(
     private fun closeProfileManagement(current: RealsRootUiState.Ready) {
         if (current.session.profileSnapshot !is ProfileSnapshot.Found) return
 
+        profileHandler.cancelProfilePhotoPrefetch()
         homeCoordinator.closeProfileManagementWithHomeReload(current)
     }
 
@@ -1890,6 +1896,11 @@ class RealsRootViewModel(
         profileHandler.loadProfilePhotos()
     }
 
+    override fun onCleared() {
+        profileHandler.cancelProfilePhotoPrefetch()
+        super.onCleared()
+    }
+
     fun addProfilePhotoFile(position: Int, fileUri: Uri) {
         profileHandler.addProfilePhotoFile(position, fileUri)
     }
@@ -2811,6 +2822,7 @@ class RealsRootViewModelFactory(
         if (modelClass.isAssignableFrom(RealsRootViewModel::class.java)) {
             return RealsRootViewModel(
                 dependencies = appContainer.rootDependencies,
+                profilePhotoPrefetcher = AndroidProfilePhotoPrefetcher(appContainer.appContext),
             ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class ${modelClass.name}")

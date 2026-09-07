@@ -60,15 +60,37 @@ class ProfilePhotoCacheKeysTest {
     }
 
     @Test
+    fun partnerPhotoStableCacheKeyChangesWhenObjectPathChangesForSamePhotoId() {
+        assertNotEquals(
+            photo(
+                id = "photo-1",
+                url = "https://cdn.reals.local/photos/photo-a.jpg?X-Amz-Signature=a",
+            ).stableProfilePhotoCacheKey(),
+            photo(
+                id = "photo-1",
+                url = "https://cdn.reals.local/photos/photo-b.jpg?X-Amz-Signature=b",
+            ).stableProfilePhotoCacheKey(),
+        )
+    }
+
+    @Test
     fun replacementWithSameCanonicalKeyRequiresCacheEviction() {
         val decision = profilePhotoReplacementCacheRefreshDecision(
             action = ProfilePhotoActionPresentation(ProfilePhotoActionKind.Replace, position = 2, photoId = "photo-2"),
-            oldCanonicalCacheKey = "https://cdn.reals.local/photos/photo-2.jpg",
+            oldCanonicalCacheKey = stableProfilePhotoCacheKey(
+                photoId = "photo-2",
+                displayUrl = "https://cdn.reals.local/photos/photo-2.jpg",
+            ),
             newUrl = "https://cdn.reals.local/photos/photo-2.jpg?X-Amz-Signature=new",
         )
 
         assertEquals(
-            ProfilePhotoCacheRefreshDecision.Evict("https://cdn.reals.local/photos/photo-2.jpg"),
+            ProfilePhotoCacheRefreshDecision.Evict(
+                stableProfilePhotoCacheKey(
+                    photoId = "photo-2",
+                    displayUrl = "https://cdn.reals.local/photos/photo-2.jpg",
+                )
+            ),
             decision,
         )
     }

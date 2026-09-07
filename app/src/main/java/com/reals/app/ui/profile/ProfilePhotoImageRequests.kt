@@ -5,6 +5,8 @@ import coil3.memory.MemoryCache
 import coil3.request.ImageRequest
 import com.reals.app.domain.model.ProfilePhoto
 
+internal const val ProfilePhotoGridThumbnailDecodeSizePx = 384
+
 internal enum class ProfilePhotoImageVariant {
     Full,
     Thumbnail,
@@ -16,22 +18,46 @@ internal fun profilePhotoImageRequest(
     variant: ProfilePhotoImageVariant = ProfilePhotoImageVariant.Full,
     widthPx: Int? = null,
     heightPx: Int? = null,
+    listener: ImageRequest.Listener? = null,
 ): ImageRequest {
     val displayUrl = photo.url.toEmulatorReachableUrl()
-    val cacheKey = photo.stableProfilePhotoCacheKey(displayUrl)
-    val memoryVariant = profilePhotoMemoryVariant(variant, widthPx, heightPx)
+    val diskCacheKey = photo.stableProfilePhotoCacheKey(displayUrl)
+    val memoryCacheKey = profilePhotoMemoryCacheKey(
+        photo = photo,
+        variant = variant,
+        widthPx = widthPx,
+        heightPx = heightPx,
+        displayUrl = displayUrl,
+    )
     return ImageRequest.Builder(context)
         .data(displayUrl)
-        .memoryCacheKey(cacheKey)
+        .memoryCacheKey(memoryCacheKey)
         .apply {
-            memoryVariant?.let { memoryCacheKeyExtra(ProfilePhotoMemoryVariantExtraKey, it) }
-            diskCacheKey(cacheKey)
-            placeholderMemoryCacheKey(MemoryCache.Key(cacheKey))
+            diskCacheKey(diskCacheKey)
+            placeholderMemoryCacheKey(memoryCacheKey)
             if (widthPx != null && heightPx != null) {
                 size(widthPx, heightPx)
             }
+            this.listener(listener)
         }
         .build()
+}
+
+internal fun profilePhotoMemoryCacheKey(
+    photo: ProfilePhoto,
+    variant: ProfilePhotoImageVariant = ProfilePhotoImageVariant.Full,
+    widthPx: Int? = null,
+    heightPx: Int? = null,
+    displayUrl: String = photo.url,
+): MemoryCache.Key {
+    val cacheKey = photo.stableProfilePhotoCacheKey(displayUrl)
+    val memoryVariant = profilePhotoMemoryVariant(variant, widthPx, heightPx)
+    return MemoryCache.Key(
+        key = cacheKey,
+        extras = memoryVariant
+            ?.let { mapOf(ProfilePhotoMemoryVariantExtraKey to it) }
+            .orEmpty(),
+    )
 }
 
 private fun profilePhotoMemoryVariant(
