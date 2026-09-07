@@ -37,6 +37,7 @@ import com.reals.app.domain.model.toReplyTargetOrNull
 import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_STARTED
 import com.reals.app.notifications.PushNotificationOpenContract
 import com.reals.app.ui.auth.GoogleCredentialResult
+import com.reals.app.ui.auth.PasswordCredentialResult
 import com.reals.app.ui.chat.firstChatUnansweredPeriodReference
 import java.io.File
 import kotlinx.coroutines.Job
@@ -142,9 +143,17 @@ class RealsRootViewModel(
 
     fun refreshSession() = sessionCoordinator.refreshSession()
 
-    fun signIn(email: String, password: String) = sessionCoordinator.signIn(email, password)
+    fun signIn(
+        email: String,
+        password: String,
+        onFirebaseAuthenticated: suspend (email: String, password: String) -> Unit = { _, _ -> },
+    ) = sessionCoordinator.signIn(email, password, onFirebaseAuthenticated)
 
-    fun signUp(email: String, password: String) = sessionCoordinator.signUp(email, password)
+    fun signUp(
+        email: String,
+        password: String,
+        onFirebaseAuthenticated: suspend (email: String, password: String) -> Unit = { _, _ -> },
+    ) = sessionCoordinator.signUp(email, password, onFirebaseAuthenticated)
 
     fun requestPasswordReset(email: String) = sessionCoordinator.requestPasswordReset(email)
 
@@ -152,6 +161,11 @@ class RealsRootViewModel(
 
     fun completeGoogleSignIn(attemptId: Long, result: GoogleCredentialResult) =
         sessionCoordinator.completeGoogleSignIn(attemptId, result)
+
+    fun beginPasswordCredentialSignIn(): Long? = sessionCoordinator.beginPasswordCredentialSignIn()
+
+    fun completePasswordCredentialSignIn(attemptId: Long, result: PasswordCredentialResult) =
+        sessionCoordinator.completePasswordCredentialSignIn(attemptId, result)
 
     fun signOut() {
         pendingSecondChatStartedHomeOpen = false
@@ -214,8 +228,11 @@ class RealsRootViewModel(
         }
     }
 
-    fun changePassword(currentPassword: String, newPassword: String) =
-        sessionCoordinator.changePassword(currentPassword, newPassword)
+    fun changePassword(
+        currentPassword: String,
+        newPassword: String,
+        onPasswordChanged: suspend (email: String, newPassword: String) -> Unit = { _, _ -> },
+    ) = sessionCoordinator.changePassword(currentPassword, newPassword, onPasswordChanged)
 
     fun openNotificationPreferences() {
         val current = _uiState.value as? RealsRootUiState.Ready ?: return

@@ -26,6 +26,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -48,23 +49,26 @@ import kotlinx.coroutines.delay
 fun LoginScreen(
     loading: Boolean,
     googleLoading: Boolean,
+    passwordCredentialLoading: Boolean,
     error: String?,
+    credentialMessage: String?,
     passwordResetLoading: Boolean,
     passwordResetMessage: String?,
     passwordResetAvailableAtMillis: Long?,
     onSignIn: (email: String, password: String) -> Unit,
     onSignUp: (email: String, password: String) -> Unit,
     onPasswordReset: (email: String) -> Unit,
+    onSavedCredentialSignIn: () -> Unit,
     onGoogleSignIn: () -> Unit,
 ) {
     var email by rememberSaveable { mutableStateOf("") }
-    var password by rememberSaveable { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
     var nowMillis by rememberSaveable { mutableLongStateOf(System.currentTimeMillis()) }
     val cooldownRemainingSeconds = passwordResetCooldownRemainingSeconds(
         availableAtMillis = passwordResetAvailableAtMillis,
         nowMillis = nowMillis,
     )
-    val authBusy = loading || googleLoading || passwordResetLoading
+    val authBusy = loading || googleLoading || passwordCredentialLoading || passwordResetLoading
 
     LaunchedEffect(passwordResetAvailableAtMillis) {
         while (passwordResetCooldownRemainingSeconds(passwordResetAvailableAtMillis, System.currentTimeMillis()) > 0) {
@@ -149,6 +153,13 @@ fun LoginScreen(
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
+            if (credentialMessage != null) {
+                Text(
+                    text = credentialMessage,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
             RealsPrimaryButton(
                 text = if (loading) "Ingresando..." else "Ingresar",
                 onClick = { onSignIn(email, password) },
@@ -166,6 +177,7 @@ fun LoginScreen(
                 enabled = passwordResetButtonEnabled(
                     loginLoading = loading,
                     googleLoading = googleLoading,
+                    passwordCredentialLoading = passwordCredentialLoading,
                     passwordResetLoading = passwordResetLoading,
                     cooldownRemainingSeconds = cooldownRemainingSeconds,
                 ),
@@ -178,6 +190,14 @@ fun LoginScreen(
                         cooldownRemainingSeconds = cooldownRemainingSeconds,
                     )
                 )
+            }
+            OutlinedButton(
+                onClick = onSavedCredentialSignIn,
+                enabled = !authBusy,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(RealsRadii.Button),
+            ) {
+                Text(savedCredentialButtonText(passwordCredentialLoading))
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -234,9 +254,18 @@ internal fun passwordResetButtonText(
 internal fun passwordResetButtonEnabled(
     loginLoading: Boolean,
     googleLoading: Boolean,
+    passwordCredentialLoading: Boolean,
     passwordResetLoading: Boolean,
     cooldownRemainingSeconds: Long,
-): Boolean = !loginLoading && !googleLoading && !passwordResetLoading && cooldownRemainingSeconds <= 0L
+): Boolean =
+    !loginLoading &&
+        !googleLoading &&
+        !passwordCredentialLoading &&
+        !passwordResetLoading &&
+        cooldownRemainingSeconds <= 0L
 
 internal fun googleSignInButtonText(googleLoading: Boolean): String =
     if (googleLoading) "Conectando con Google..." else "Continuar con Google"
+
+internal fun savedCredentialButtonText(passwordCredentialLoading: Boolean): String =
+    if (passwordCredentialLoading) "Buscando credenciales..." else "Usar credencial guardada"

@@ -28,11 +28,18 @@ class LoginScreenPasswordResetTest {
     }
 
     @Test
-    fun `password reset button is disabled only for login loading reset loading or cooldown`() {
+    fun `saved credential button text reflects loading state`() {
+        assertEquals("Usar credencial guardada", savedCredentialButtonText(passwordCredentialLoading = false))
+        assertEquals("Buscando credenciales...", savedCredentialButtonText(passwordCredentialLoading = true))
+    }
+
+    @Test
+    fun `password reset button is disabled only for auth loading reset loading or cooldown`() {
         assertTrue(
             passwordResetButtonEnabled(
                 loginLoading = false,
                 googleLoading = false,
+                passwordCredentialLoading = false,
                 passwordResetLoading = false,
                 cooldownRemainingSeconds = 0L,
             )
@@ -41,6 +48,7 @@ class LoginScreenPasswordResetTest {
             passwordResetButtonEnabled(
                 loginLoading = true,
                 googleLoading = false,
+                passwordCredentialLoading = false,
                 passwordResetLoading = false,
                 cooldownRemainingSeconds = 0L,
             )
@@ -49,6 +57,16 @@ class LoginScreenPasswordResetTest {
             passwordResetButtonEnabled(
                 loginLoading = false,
                 googleLoading = false,
+                passwordCredentialLoading = true,
+                passwordResetLoading = false,
+                cooldownRemainingSeconds = 0L,
+            )
+        )
+        assertFalse(
+            passwordResetButtonEnabled(
+                loginLoading = false,
+                googleLoading = false,
+                passwordCredentialLoading = false,
                 passwordResetLoading = true,
                 cooldownRemainingSeconds = 0L,
             )
@@ -57,6 +75,7 @@ class LoginScreenPasswordResetTest {
             passwordResetButtonEnabled(
                 loginLoading = false,
                 googleLoading = false,
+                passwordCredentialLoading = false,
                 passwordResetLoading = false,
                 cooldownRemainingSeconds = 60L,
             )
