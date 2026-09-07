@@ -11,6 +11,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -130,6 +131,42 @@ class PendingVisualReviewPhotoPrefetcherTest {
     }
 
     @Test
+    fun firstResolvedProfilePhotoStartsBeforeOtherProfileFetchesFinish() = runTest {
+        val blockedProfile = CompletableDeferred<Unit>()
+        val prefetched = mutableListOf<String>()
+        var blockedProfileCompleted = false
+        val prefetcher = CoroutinePendingVisualReviewPhotoPrefetcher(
+            imagePrefetcher = { photo -> prefetched += photo.id },
+        )
+
+        prefetcher.prefetchPendingVisualReviews(
+            scope = this,
+            sessionScopeKey = "user-1:profile-1",
+            pendingActions = listOf(
+                HomePendingAction.VisualReview("match-a", partner = null),
+                HomePendingAction.VisualReview("match-b", partner = null),
+            ),
+            getVisualProfile = { matchId ->
+                if (matchId == "match-b") {
+                    blockedProfile.await()
+                    blockedProfileCompleted = true
+                }
+                ApiResult.Success(visualProfile(matchId, listOf(photo("$matchId-1"))))
+            },
+        )
+
+        runCurrent()
+
+        assertEquals(listOf("match-a-1"), prefetched)
+        assertFalse(blockedProfileCompleted)
+
+        blockedProfile.complete(Unit)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(listOf("match-a-1", "match-b-1"), prefetched)
+    }
+
+    @Test
     fun imagePrefetchConcurrencyIsLimitedToTwoActiveRequests() = runTest {
         var active = 0
         var maxActive = 0
@@ -197,10 +234,11 @@ class PendingVisualReviewPhotoPrefetcherTest {
     }
 
     @Test
-    fun visualProfileFetchesAreCappedByUsefulPhotoBudget() = runTest {
+    fun profileFetchesContinuePastSixProfilesUntilImageBudgetIsUseful() = runTest {
         val fetchCalls = mutableListOf<String>()
+        val prefetched = mutableListOf<String>()
         val prefetcher = CoroutinePendingVisualReviewPhotoPrefetcher(
-            imagePrefetcher = {},
+            imagePrefetcher = { photo -> prefetched += photo.id },
         )
 
         prefetcher.prefetchPendingVisualReviews(
@@ -211,12 +249,66 @@ class PendingVisualReviewPhotoPrefetcherTest {
             },
             getVisualProfile = { matchId ->
                 fetchCalls += matchId
-                ApiResult.Success(visualProfile(matchId, listOf(photo("$matchId-1"))))
+                when (matchId) {
+                    "match-1" -> ApiResult.Failure(ApiError.Unexpected("boom"))
+                    "match-2" -> ApiResult.Success(visualProfile(matchId, emptyList()))
+                    else -> ApiResult.Success(visualProfile(matchId, listOf(photo("$matchId-1"))))
+                }
             },
         )
         testScheduler.advanceUntilIdle()
 
-        assertEquals((1..6).map { "match-$it" }, fetchCalls)
+        assertEquals((1..8).map { "match-$it" }, fetchCalls)
+        assertEquals((3..8).map { "match-$it-1" }, prefetched)
+    }
+
+    @Test
+    fun imagePrefetchesNeverExceedBudgetSix() = runTest {
+        val prefetched = mutableListOf<String>()
+        val prefetcher = CoroutinePendingVisualReviewPhotoPrefetcher(
+            imagePrefetcher = { photo -> prefetched += photo.id },
+        )
+
+        prefetcher.prefetchPendingVisualReviews(
+            scope = this,
+            sessionScopeKey = "user-1:profile-1",
+            pendingActions = (1..8).map { index ->
+                HomePendingAction.VisualReview("match-$index", partner = null)
+            },
+            getVisualProfile = { matchId ->
+                ApiResult.Success(
+                    visualProfile(
+                        matchId = matchId,
+                        photos = listOf(photo("$matchId-1"), photo("$matchId-2")),
+                    )
+                )
+            },
+        )
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(PendingVisualReviewPhotoPrefetchMaxPhotos, prefetched.size)
+    }
+
+    @Test
+    fun fullPrefetchSizeUsesAvailableWidthAndAspectRatio() {
+        val size = pendingVisualReviewFullPrefetchSize(
+            screenWidthPx = 1080,
+            density = 3f,
+        )
+
+        assertEquals(828, size.widthPx)
+        assertEquals(1035, size.heightPx)
+    }
+
+    @Test
+    fun fullPrefetchSizeCapsVeryLargeScreens() {
+        val size = pendingVisualReviewFullPrefetchSize(
+            screenWidthPx = 3000,
+            density = 2f,
+        )
+
+        assertEquals(PendingVisualReviewFullPrefetchMaxWidthPx, size.widthPx)
+        assertEquals(1800, size.heightPx)
     }
 
     @Test

@@ -8,17 +8,20 @@ import com.reals.app.domain.model.HomePendingAction
 import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.VisualProfile
 import com.reals.app.domain.model.isApprovedForExternalDisplay
+import com.reals.app.ui.profile.ProfilePhotoPresentationAspectRatio
 import com.reals.app.ui.profile.ProfilePhotoImageVariant
 import com.reals.app.ui.profile.isRenderableImageUrl
 import com.reals.app.ui.profile.profilePhotoImageRequest
 import com.reals.app.ui.profile.profilePhotoMemoryCacheKey
+import com.reals.app.ui.profile.stableProfilePhotoCacheKey
 import com.reals.app.ui.profile.toEmulatorReachableUrl
+import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -26,10 +29,17 @@ import kotlinx.coroutines.sync.withPermit
 internal const val PendingVisualReviewPhotoPrefetchMaxPhotos = 6
 internal const val PendingVisualReviewPhotoPrefetchMaxImageConcurrency = 2
 internal const val PendingVisualReviewProfileFetchMaxConcurrency = 2
+internal const val PendingVisualReviewFullPrefetchMaxWidthPx = 1440
+private const val PendingVisualReviewHorizontalChromeDp = 84
 
 internal data class PendingVisualReviewProfilePhotos(
     val matchId: String,
     val photos: List<ProfilePhoto>,
+)
+
+internal data class PendingVisualReviewFullPrefetchSize(
+    val widthPx: Int,
+    val heightPx: Int,
 )
 
 interface PendingVisualReviewPhotoPrefetcher {
@@ -75,7 +85,6 @@ internal class CoroutinePendingVisualReviewPhotoPrefetcher(
             return
         }
         val matchIds = pendingVisualReviewMatchIds(pendingActions)
-            .take(maxPhotos)
         if (matchIds.isEmpty()) {
             cancel()
             return
@@ -89,20 +98,13 @@ internal class CoroutinePendingVisualReviewPhotoPrefetcher(
         val planGeneration = generation
         activePlanKey = planKey
         val job = scope.launch {
-            val profiles = fetchVisualReviewProfilePhotos(
+            runVisualReviewPhotoPrefetchPipeline(
                 matchIds = matchIds,
                 maxConcurrency = maxProfileConcurrency,
-                getVisualProfile = getVisualProfile,
-            )
-            if (planGeneration != generation) return@launch
-            val candidates = pendingVisualReviewPhotoPrefetchCandidates(
-                profiles = profiles,
+                maxImageConcurrency = maxImageConcurrency,
                 maxPhotos = maxPhotos,
-            )
-            prefetchPhotos(
-                photos = candidates,
-                maxConcurrency = maxImageConcurrency,
                 planGeneration = planGeneration,
+                getVisualProfile = getVisualProfile,
             )
         }
         activeJob = job
@@ -120,16 +122,56 @@ internal class CoroutinePendingVisualReviewPhotoPrefetcher(
         activePlanKey = null
     }
 
-    private suspend fun fetchVisualReviewProfilePhotos(
+    private suspend fun runVisualReviewPhotoPrefetchPipeline(
         matchIds: List<String>,
         maxConcurrency: Int,
+        maxImageConcurrency: Int,
+        maxPhotos: Int,
+        planGeneration: Long,
         getVisualProfile: suspend (String) -> ApiResult<VisualProfile>,
-    ): List<PendingVisualReviewProfilePhotos> = coroutineScope {
-        val semaphore = Semaphore(maxConcurrency.coerceAtLeast(1))
-        matchIds.map { matchId ->
-            async {
-                semaphore.withPermit {
+    ) = coroutineScope {
+        val profileResults = Channel<PendingVisualReviewProfilePhotos?>(Channel.UNLIMITED)
+        val imageSemaphore = Semaphore(maxImageConcurrency.coerceAtLeast(1))
+        val profileJobs = mutableListOf<Job>()
+        val imageJobs = mutableListOf<Job>()
+        val discoveredProfiles = mutableListOf<PendingVisualReviewProfilePhotos>()
+        val scheduledPhotoKeys = linkedSetOf<String>()
+        var nextProfileIndex = 0
+        var activeProfileFetches = 0
+        var scheduledImageCount = 0
+
+        fun scheduleImagePrefetch(photo: ProfilePhoto): Boolean {
+            if (scheduledImageCount >= maxPhotos || planGeneration != generation) return false
+            val photoKey = photo.stableProfilePhotoCacheKey()
+            if (!scheduledPhotoKeys.add(photoKey)) return false
+            scheduledImageCount += 1
+            imageJobs += launch {
+                imageSemaphore.withPermit {
+                    if (planGeneration != generation) return@withPermit
                     try {
+                        imagePrefetcher(photo)
+                    } catch (exception: CancellationException) {
+                        throw exception
+                    } catch (_: Throwable) {
+                        Unit
+                    }
+                }
+            }
+            return true
+        }
+
+        fun launchNextProfileFetches() {
+            while (
+                activeProfileFetches < maxConcurrency.coerceAtLeast(1) &&
+                nextProfileIndex < matchIds.size &&
+                scheduledImageCount + activeProfileFetches < maxPhotos &&
+                planGeneration == generation
+            ) {
+                val matchId = matchIds[nextProfileIndex]
+                nextProfileIndex += 1
+                activeProfileFetches += 1
+                profileJobs += launch {
+                    val profilePhotos = try {
                         when (val result = getVisualProfile(matchId)) {
                             is ApiResult.Success -> PendingVisualReviewProfilePhotos(
                                 matchId = matchId,
@@ -143,31 +185,44 @@ internal class CoroutinePendingVisualReviewPhotoPrefetcher(
                     } catch (_: Throwable) {
                         null
                     }
-                }
-            }
-        }.awaitAll().filterNotNull()
-    }
-
-    private suspend fun prefetchPhotos(
-        photos: List<ProfilePhoto>,
-        maxConcurrency: Int,
-        planGeneration: Long,
-    ) = coroutineScope {
-        val semaphore = Semaphore(maxConcurrency.coerceAtLeast(1))
-        photos.map { photo ->
-            async {
-                semaphore.withPermit {
-                    if (planGeneration != generation) return@withPermit
                     try {
-                        imagePrefetcher(photo)
+                        profileResults.send(profilePhotos)
                     } catch (exception: CancellationException) {
                         throw exception
-                    } catch (_: Throwable) {
-                        Unit
                     }
                 }
             }
-        }.awaitAll()
+        }
+
+        launchNextProfileFetches()
+        while (activeProfileFetches > 0 && planGeneration == generation) {
+            val profilePhotos = profileResults.receive()
+            activeProfileFetches -= 1
+            if (profilePhotos != null) {
+                discoveredProfiles += profilePhotos
+                profilePhotos.photos.firstOrNull()?.let(::scheduleImagePrefetch)
+            }
+            launchNextProfileFetches()
+        }
+
+        if (
+            scheduledImageCount < maxPhotos &&
+            nextProfileIndex >= matchIds.size &&
+            planGeneration == generation
+        ) {
+            pendingVisualReviewPhotoPrefetchCandidates(
+                profiles = discoveredProfiles.sortedBy { matchIds.indexOf(it.matchId) },
+                maxPhotos = maxPhotos - scheduledImageCount,
+                startingPhotoIndex = 1,
+                excludedPhotoKeys = scheduledPhotoKeys,
+            ).forEach(::scheduleImagePrefetch)
+        }
+
+        profileResults.close()
+        if (scheduledImageCount >= maxPhotos) {
+            profileJobs.filter { it.isActive }.forEach { it.cancel() }
+        }
+        imageJobs.joinAll()
     }
 }
 
@@ -176,6 +231,10 @@ internal class AndroidPendingVisualReviewPhotoPrefetcher(
     imageLoader: ImageLoader = SingletonImageLoader.get(context),
 ) : PendingVisualReviewPhotoPrefetcher {
     private val appContext = context.applicationContext
+    private val prefetchSize = pendingVisualReviewFullPrefetchSize(
+        screenWidthPx = context.resources.displayMetrics.widthPixels,
+        density = context.resources.displayMetrics.density,
+    )
     private val delegate = CoroutinePendingVisualReviewPhotoPrefetcher(
         imagePrefetcher = { photo -> prefetchPhoto(imageLoader, photo) },
     )
@@ -200,6 +259,8 @@ internal class AndroidPendingVisualReviewPhotoPrefetcher(
         val memoryCacheKey = profilePhotoMemoryCacheKey(
             photo = photo,
             variant = ProfilePhotoImageVariant.Full,
+            widthPx = prefetchSize.widthPx,
+            heightPx = prefetchSize.heightPx,
             displayUrl = displayUrl,
         )
         if (imageLoader.memoryCache?.get(memoryCacheKey) != null) return
@@ -208,6 +269,8 @@ internal class AndroidPendingVisualReviewPhotoPrefetcher(
                 context = appContext,
                 photo = photo,
                 variant = ProfilePhotoImageVariant.Full,
+                widthPx = prefetchSize.widthPx,
+                heightPx = prefetchSize.heightPx,
             )
         )
     }
@@ -232,15 +295,22 @@ internal fun visualReviewProfilePhotosForPrefetch(profile: VisualProfile): List<
 internal fun pendingVisualReviewPhotoPrefetchCandidates(
     profiles: List<PendingVisualReviewProfilePhotos>,
     maxPhotos: Int = PendingVisualReviewPhotoPrefetchMaxPhotos,
+    startingPhotoIndex: Int = 0,
+    excludedPhotoKeys: Set<String> = emptySet(),
 ): List<ProfilePhoto> {
     if (maxPhotos <= 0) return emptyList()
     val candidates = mutableListOf<ProfilePhoto>()
-    var photoIndex = 0
+    val candidateKeys = excludedPhotoKeys.toMutableSet()
+    var photoIndex = startingPhotoIndex.coerceAtLeast(0)
     while (candidates.size < maxPhotos) {
         var addedAtThisIndex = false
         profiles.forEach { profile ->
             val photo = profile.photos.getOrNull(photoIndex)
-            if (photo != null && candidates.size < maxPhotos) {
+            if (
+                photo != null &&
+                candidateKeys.add(photo.stableProfilePhotoCacheKey()) &&
+                candidates.size < maxPhotos
+            ) {
                 candidates += photo
                 addedAtThisIndex = true
             }
@@ -260,3 +330,23 @@ internal fun pendingVisualReviewPrefetchPlanKey(
         append(':')
         append(matchIds.joinToString(separator = "|"))
     }
+
+/**
+ * Approximates the large visual-review photo viewport from device width minus
+ * the screen/card horizontal chrome, then caps width to avoid oversized decodes.
+ */
+internal fun pendingVisualReviewFullPrefetchSize(
+    screenWidthPx: Int,
+    density: Float,
+    maxWidthPx: Int = PendingVisualReviewFullPrefetchMaxWidthPx,
+): PendingVisualReviewFullPrefetchSize {
+    val horizontalChromePx = (PendingVisualReviewHorizontalChromeDp * density.coerceAtLeast(1f))
+        .roundToInt()
+    val widthPx = (screenWidthPx - horizontalChromePx)
+        .coerceAtLeast(1)
+        .coerceAtMost(maxWidthPx.coerceAtLeast(1))
+    val heightPx = (widthPx / ProfilePhotoPresentationAspectRatio)
+        .roundToInt()
+        .coerceAtLeast(1)
+    return PendingVisualReviewFullPrefetchSize(widthPx = widthPx, heightPx = heightPx)
+}

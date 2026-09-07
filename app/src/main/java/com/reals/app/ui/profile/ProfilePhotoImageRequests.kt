@@ -66,8 +66,17 @@ private fun profilePhotoMemoryVariant(
     heightPx: Int?,
 ): String? =
     when (variant) {
-        ProfilePhotoImageVariant.Full -> null
+        ProfilePhotoImageVariant.Full -> sizedMemoryVariant("full", widthPx, heightPx)
         ProfilePhotoImageVariant.Thumbnail -> "thumbnail:${widthPx ?: 0}x${heightPx ?: 0}"
     }
+
+private fun sizedMemoryVariant(
+    name: String,
+    widthPx: Int?,
+    heightPx: Int?,
+): String? {
+    if (widthPx == null || heightPx == null) return null
+    return "$name:${widthPx}x$heightPx"
+}
 
 private const val ProfilePhotoMemoryVariantExtraKey = "profilePhotoVariant"

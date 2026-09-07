@@ -106,6 +106,24 @@ class ProfilePhotoCacheKeysTest {
         assertEquals(ProfilePhotoCacheRefreshDecision.None, decision)
     }
 
+    @Test
+    fun sizedFullMemoryCacheKeyDoesNotReplaceOriginalFullDecode() {
+        val photo = photo(
+            id = "photo-1",
+            url = "https://cdn.reals.local/photos/photo.jpg?X-Amz-Signature=a",
+        )
+
+        assertNotEquals(
+            profilePhotoMemoryCacheKey(photo = photo, variant = ProfilePhotoImageVariant.Full),
+            profilePhotoMemoryCacheKey(
+                photo = photo,
+                variant = ProfilePhotoImageVariant.Full,
+                widthPx = 828,
+                heightPx = 1035,
+            ),
+        )
+    }
+
     private fun photo(
         id: String,
         url: String,
