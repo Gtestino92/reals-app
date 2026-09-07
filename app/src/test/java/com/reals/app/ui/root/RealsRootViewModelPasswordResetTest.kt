@@ -634,69 +634,6 @@ class RealsRootViewModelPasswordResetTest {
     }
 
     @Test
-    fun `change password success notifies authenticated email and new password`() = runTest(dispatcher) {
-        val authRepository = FakeFirebaseAuthRepository(
-            passwordResetResult = PasswordResetResult.SentOrHandledGenerically,
-            changePasswordResult = ChangePasswordResult.Success,
-            currentUserEmail = " alex@example.com ",
-        )
-        val viewModel = viewModel(authRepository)
-        val savedCredentials = mutableListOf<Pair<String, String>>()
-        viewModel.setState(RealsRootUiState.Ready(session = TestDomain.session()))
-
-        viewModel.changePassword("current-password", "new-password") { email, newPassword ->
-            savedCredentials += email to newPassword
-        }
-        advanceUntilIdle()
-
-        val state = viewModel.uiState.value as RealsRootUiState.Ready
-        assertEquals(listOf("alex@example.com" to "new-password"), savedCredentials)
-        assertEquals("Contraseña actualizada.", state.changePasswordMessage)
-        assertNull(state.changePasswordError)
-    }
-
-    @Test
-    fun `change password failure does not notify credential save`() = runTest(dispatcher) {
-        val authRepository = FakeFirebaseAuthRepository(
-            passwordResetResult = PasswordResetResult.SentOrHandledGenerically,
-            changePasswordResult = ChangePasswordResult.WrongCurrentPassword,
-        )
-        val viewModel = viewModel(authRepository)
-        var saveCredentialCalls = 0
-        viewModel.setState(RealsRootUiState.Ready(session = TestDomain.session()))
-
-        viewModel.changePassword("bad-current", "new-password") { _, _ ->
-            saveCredentialCalls++
-        }
-        advanceUntilIdle()
-
-        val state = viewModel.uiState.value as RealsRootUiState.Ready
-        assertEquals(0, saveCredentialCalls)
-        assertNull(state.changePasswordMessage)
-        assertEquals("La contraseña actual no es correcta.", state.changePasswordError)
-    }
-
-    @Test
-    fun `change password credential save failure remains successful`() = runTest(dispatcher) {
-        val authRepository = FakeFirebaseAuthRepository(
-            passwordResetResult = PasswordResetResult.SentOrHandledGenerically,
-            changePasswordResult = ChangePasswordResult.Success,
-        )
-        val viewModel = viewModel(authRepository)
-        viewModel.setState(RealsRootUiState.Ready(session = TestDomain.session()))
-
-        viewModel.changePassword("current-password", "new-password") { _, _ ->
-            error("credential provider unavailable")
-        }
-        advanceUntilIdle()
-
-        val state = viewModel.uiState.value as RealsRootUiState.Ready
-        assertFalse(state.changingPassword)
-        assertEquals("Contraseña actualizada.", state.changePasswordMessage)
-        assertNull(state.changePasswordError)
-    }
-
-    @Test
     fun `change password wrong current password shows safe account error`() = runTest(dispatcher) {
         val authRepository = FakeFirebaseAuthRepository(
             passwordResetResult = PasswordResetResult.SentOrHandledGenerically,

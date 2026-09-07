@@ -37,7 +37,6 @@ import com.reals.app.domain.model.toReplyTargetOrNull
 import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_STARTED
 import com.reals.app.notifications.PushNotificationOpenContract
 import com.reals.app.ui.auth.GoogleCredentialResult
-import com.reals.app.ui.auth.PasswordCredentialResult
 import com.reals.app.ui.chat.firstChatUnansweredPeriodReference
 import com.reals.app.ui.profile.AndroidProfilePhotoPrefetcher
 import com.reals.app.ui.profile.NoOpProfilePhotoPrefetcher
@@ -156,14 +155,16 @@ class RealsRootViewModel(
     fun signIn(
         email: String,
         password: String,
-        onFirebaseAuthenticated: suspend (email: String, password: String) -> Unit = { _, _ -> },
-    ) = sessionCoordinator.signIn(email, password, onFirebaseAuthenticated)
+        rememberCredentials: Boolean = false,
+        onAuthenticationSucceeded: suspend (rememberCredentials: Boolean) -> Unit = {},
+    ) = sessionCoordinator.signIn(email, password, rememberCredentials, onAuthenticationSucceeded)
 
     fun signUp(
         email: String,
         password: String,
-        onFirebaseAuthenticated: suspend (email: String, password: String) -> Unit = { _, _ -> },
-    ) = sessionCoordinator.signUp(email, password, onFirebaseAuthenticated)
+        rememberCredentials: Boolean = false,
+        onAuthenticationSucceeded: suspend (rememberCredentials: Boolean) -> Unit = {},
+    ) = sessionCoordinator.signUp(email, password, rememberCredentials, onAuthenticationSucceeded)
 
     fun requestPasswordReset(email: String) = sessionCoordinator.requestPasswordReset(email)
 
@@ -171,11 +172,6 @@ class RealsRootViewModel(
 
     fun completeGoogleSignIn(attemptId: Long, result: GoogleCredentialResult) =
         sessionCoordinator.completeGoogleSignIn(attemptId, result)
-
-    fun beginPasswordCredentialSignIn(): Long? = sessionCoordinator.beginPasswordCredentialSignIn()
-
-    fun completePasswordCredentialSignIn(attemptId: Long, result: PasswordCredentialResult) =
-        sessionCoordinator.completePasswordCredentialSignIn(attemptId, result)
 
     fun signOut() {
         pendingSecondChatStartedHomeOpen = false
@@ -242,8 +238,7 @@ class RealsRootViewModel(
     fun changePassword(
         currentPassword: String,
         newPassword: String,
-        onPasswordChanged: suspend (email: String, newPassword: String) -> Unit = { _, _ -> },
-    ) = sessionCoordinator.changePassword(currentPassword, newPassword, onPasswordChanged)
+    ) = sessionCoordinator.changePassword(currentPassword, newPassword)
 
     fun openNotificationPreferences() {
         val current = _uiState.value as? RealsRootUiState.Ready ?: return

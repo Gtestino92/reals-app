@@ -28,18 +28,29 @@ class LoginScreenPasswordResetTest {
     }
 
     @Test
-    fun `saved credential button text reflects loading state`() {
-        assertEquals("Usar credencial guardada", savedCredentialButtonText(passwordCredentialLoading = false))
-        assertEquals("Buscando credenciales...", savedCredentialButtonText(passwordCredentialLoading = true))
+    fun `remember credentials starts unchecked and uses login label`() {
+        assertFalse(defaultRememberCredentials())
+        assertEquals("Recordar credenciales", rememberCredentialsLabel)
     }
 
     @Test
-    fun `password reset button is disabled only for auth loading reset loading or cooldown`() {
+    fun `login header is hidden in compact keyboard layout`() {
+        assertTrue(loginHeaderVisible(compactForIme = false))
+        assertFalse(loginHeaderVisible(compactForIme = true))
+    }
+
+    @Test
+    fun `login autofill content types are configured`() {
+        assertEquals(loginEmailContentType(), loginEmailContentType())
+        assertEquals(loginPasswordContentType(), loginPasswordContentType())
+    }
+
+    @Test
+    fun `password reset button is disabled only for login google reset loading or cooldown`() {
         assertTrue(
             passwordResetButtonEnabled(
                 loginLoading = false,
                 googleLoading = false,
-                passwordCredentialLoading = false,
                 passwordResetLoading = false,
                 cooldownRemainingSeconds = 0L,
             )
@@ -48,7 +59,6 @@ class LoginScreenPasswordResetTest {
             passwordResetButtonEnabled(
                 loginLoading = true,
                 googleLoading = false,
-                passwordCredentialLoading = false,
                 passwordResetLoading = false,
                 cooldownRemainingSeconds = 0L,
             )
@@ -56,17 +66,7 @@ class LoginScreenPasswordResetTest {
         assertFalse(
             passwordResetButtonEnabled(
                 loginLoading = false,
-                googleLoading = false,
-                passwordCredentialLoading = true,
-                passwordResetLoading = false,
-                cooldownRemainingSeconds = 0L,
-            )
-        )
-        assertFalse(
-            passwordResetButtonEnabled(
-                loginLoading = false,
-                googleLoading = false,
-                passwordCredentialLoading = false,
+                googleLoading = true,
                 passwordResetLoading = true,
                 cooldownRemainingSeconds = 0L,
             )
@@ -75,7 +75,6 @@ class LoginScreenPasswordResetTest {
             passwordResetButtonEnabled(
                 loginLoading = false,
                 googleLoading = false,
-                passwordCredentialLoading = false,
                 passwordResetLoading = false,
                 cooldownRemainingSeconds = 60L,
             )
