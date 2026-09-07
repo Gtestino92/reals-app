@@ -47,6 +47,7 @@ import com.reals.app.ui.account.AccountSuspendedScreen
 import com.reals.app.ui.account.PermanentBanAppealScreen
 import com.reals.app.ui.auth.GoogleCredentialClient
 import com.reals.app.ui.auth.LoginScreen
+import com.reals.app.ui.auth.PasswordCredentialClient
 import com.reals.app.ui.chat.ChatScreen
 import com.reals.app.ui.chat.PartnerProfileScreen
 import com.reals.app.ui.chat.VisualApprovalScreen
@@ -78,6 +79,7 @@ fun RealsApp(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val googleCredentialClient = remember(context) { GoogleCredentialClient(context) }
+    val passwordCredentialClient = remember(context) { PasswordCredentialClient(context) }
     PublishForegroundDestination(
         appContainer = appContainer,
         state = state,
@@ -128,9 +130,39 @@ fun RealsApp(
                 passwordResetMessage = current.passwordResetMessage,
                 passwordResetAvailableAtMillis = current.passwordResetAvailableAtMillis,
                 googleLoading = current.googleLoading,
-                onSignIn = viewModel::signIn,
-                onSignUp = viewModel::signUp,
+                passwordCredentialLoading = current.passwordCredentialLoading,
+                credentialMessage = current.credentialMessage,
+                onSignIn = { email, password ->
+                    viewModel.signIn(email, password) { cleanEmail, cleanPassword ->
+                        passwordCredentialClient.savePasswordCredential(
+                            activity = context.findActivity(),
+                            email = cleanEmail,
+                            password = cleanPassword,
+                        )
+                    }
+                },
+                onSignUp = { email, password ->
+                    viewModel.signUp(email, password) { cleanEmail, cleanPassword ->
+                        passwordCredentialClient.savePasswordCredential(
+                            activity = context.findActivity(),
+                            email = cleanEmail,
+                            password = cleanPassword,
+                        )
+                    }
+                },
                 onPasswordReset = viewModel::requestPasswordReset,
+                onSavedCredentialSignIn = { email ->
+                    val attemptId = viewModel.beginPasswordCredentialSignIn() ?: return@LoginScreen
+                    coroutineScope.launch {
+                        viewModel.completePasswordCredentialSignIn(
+                            attemptId = attemptId,
+                            result = passwordCredentialClient.getPasswordCredential(
+                                activity = context.findActivity(),
+                                email = email,
+                            ),
+                        )
+                    }
+                },
                 onGoogleSignIn = {
                     val attemptId = viewModel.beginGoogleSignIn() ?: return@LoginScreen
                     coroutineScope.launch {
