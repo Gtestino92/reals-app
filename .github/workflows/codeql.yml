@@ -62,7 +62,7 @@ jobs:
           build-mode: manual
 
       - name: Build for CodeQL
-        run: ./gradlew :app:compileLocalDebugKotlin --no-daemon --console=plain
+        run: ./gradlew :app:compileLocalDebugKotlin --no-daemon --no-build-cache --console=plain
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
