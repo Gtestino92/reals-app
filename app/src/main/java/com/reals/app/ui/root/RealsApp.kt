@@ -130,10 +130,8 @@ fun RealsApp(
                 passwordResetMessage = current.passwordResetMessage,
                 passwordResetAvailableAtMillis = current.passwordResetAvailableAtMillis,
                 googleLoading = current.googleLoading,
-                passwordCredentialLoading = current.passwordCredentialLoading,
-                credentialMessage = current.credentialMessage,
-                onSignIn = { email, password ->
-                    viewModel.signIn(email, password) { cleanEmail, cleanPassword ->
+                onSignIn = { email, password, rememberCredentials ->
+                    viewModel.signIn(email, password, rememberCredentials) { cleanEmail, cleanPassword ->
                         passwordCredentialClient.savePasswordCredential(
                             activity = context.findActivity(),
                             email = cleanEmail,
@@ -141,8 +139,8 @@ fun RealsApp(
                         )
                     }
                 },
-                onSignUp = { email, password ->
-                    viewModel.signUp(email, password) { cleanEmail, cleanPassword ->
+                onSignUp = { email, password, rememberCredentials ->
+                    viewModel.signUp(email, password, rememberCredentials) { cleanEmail, cleanPassword ->
                         passwordCredentialClient.savePasswordCredential(
                             activity = context.findActivity(),
                             email = cleanEmail,
@@ -151,17 +149,6 @@ fun RealsApp(
                     }
                 },
                 onPasswordReset = viewModel::requestPasswordReset,
-                onSavedCredentialSignIn = {
-                    val attemptId = viewModel.beginPasswordCredentialSignIn() ?: return@LoginScreen
-                    coroutineScope.launch {
-                        viewModel.completePasswordCredentialSignIn(
-                            attemptId = attemptId,
-                            result = passwordCredentialClient.getPasswordCredential(
-                                activity = context.findActivity(),
-                            ),
-                        )
-                    }
-                },
                 onGoogleSignIn = {
                     val attemptId = viewModel.beginGoogleSignIn() ?: return@LoginScreen
                     coroutineScope.launch {
@@ -386,15 +373,7 @@ fun RealsApp(
                             onCloseNotifications = viewModel::closeNotificationPreferences,
                             onNotificationPreferenceChange = viewModel::updateNotificationPreference,
                             onSignOut = viewModel::signOut,
-                            onChangePassword = { currentPassword, newPassword ->
-                                viewModel.changePassword(currentPassword, newPassword) { email, changedPassword ->
-                                    passwordCredentialClient.savePasswordCredential(
-                                        activity = context.findActivity(),
-                                        email = email,
-                                        password = changedPassword,
-                                    )
-                                }
-                            },
+                            onChangePassword = viewModel::changePassword,
                             onDeleteAccount = viewModel::deleteAccount,
                             onSupportReals = { openCafecitoSupport(context) },
                         )

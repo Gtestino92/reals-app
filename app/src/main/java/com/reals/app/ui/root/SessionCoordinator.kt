@@ -20,9 +20,7 @@ import com.reals.app.domain.model.PermanentBanAppealState
 import com.reals.app.domain.model.PermanentBanAppealStatus
 import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.ui.auth.GoogleCredentialResult
-import com.reals.app.ui.auth.LoginCredentialOrigin
-import com.reals.app.ui.auth.PasswordCredentialResult
-import com.reals.app.ui.auth.shouldOfferPasswordCredentialSave
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -60,7 +58,6 @@ internal class SessionCoordinator(
     private var appealJob: Job? = null
     private var appealRequestSequence = 0L
     private var googleAttemptSequence = 0L
-    private var passwordCredentialAttemptSequence = 0L
     private var passwordResetAttemptSequence = 0L
 
     fun refreshSession() {
@@ -80,13 +77,14 @@ internal class SessionCoordinator(
     fun signIn(
         email: String,
         password: String,
-        onFirebaseAuthenticated: suspend (email: String, password: String) -> Unit = { _, _ -> },
+        rememberCredentials: Boolean = false,
+        onRememberCredentialsRequested: suspend (email: String, password: String) -> Unit = { _, _ -> },
     ) {
         authenticate(
             email = email,
             password = password,
-            origin = LoginCredentialOrigin.ManualEmailPassword,
-            onFirebaseAuthenticated = onFirebaseAuthenticated,
+            rememberCredentials = rememberCredentials,
+            onRememberCredentialsRequested = onRememberCredentialsRequested,
         ) { cleanEmail, cleanPassword ->
             authRepository.signIn(cleanEmail, cleanPassword)
         }
@@ -95,7 +93,8 @@ internal class SessionCoordinator(
     fun signUp(
         email: String,
         password: String,
-        onFirebaseAuthenticated: suspend (email: String, password: String) -> Unit = { _, _ -> },
+        rememberCredentials: Boolean = false,
+        onRememberCredentialsRequested: suspend (email: String, password: String) -> Unit = { _, _ -> },
     ) {
         val cleanEmail = email.trim()
         val loginState = uiState.value as? RealsRootUiState.Login ?: return
@@ -105,9 +104,6 @@ internal class SessionCoordinator(
                 loading = false,
                 googleLoading = false,
                 googleAttemptId = null,
-                passwordCredentialLoading = false,
-                passwordCredentialAttemptId = null,
-                credentialMessage = null,
                 error = "Email y password son requeridos.",
                 passwordResetMessage = null,
             )
@@ -118,9 +114,6 @@ internal class SessionCoordinator(
                 loading = true,
                 googleLoading = false,
                 googleAttemptId = null,
-                passwordCredentialLoading = false,
-                passwordCredentialAttemptId = null,
-                credentialMessage = null,
                 error = null,
                 passwordResetMessage = null,
             )
@@ -129,7 +122,12 @@ internal class SessionCoordinator(
                     if (!dependencies.localFirebaseEmailAutoVerificationEnabled) {
                         authRepository.sendEmailVerificationEmail()
                     }
-                    onFirebaseAuthenticated(cleanEmail, password)
+                    requestRememberCredentialsBestEffort(
+                        rememberCredentials = rememberCredentials,
+                        email = cleanEmail,
+                        password = password,
+                        onRememberCredentialsRequested = onRememberCredentialsRequested,
+                    )
                     loadBackendSession().join()
                 }
 
@@ -138,9 +136,6 @@ internal class SessionCoordinator(
                         loading = false,
                         googleLoading = false,
                         googleAttemptId = null,
-                        passwordCredentialLoading = false,
-                        passwordCredentialAttemptId = null,
-                        credentialMessage = null,
                         error = result.message,
                         passwordResetMessage = null,
                     )
@@ -158,7 +153,6 @@ internal class SessionCoordinator(
         if (!isLocallyValidEmail(cleanEmail)) {
             uiState.value = current.copy(
                 error = invalidPasswordResetEmailMessage,
-                credentialMessage = null,
                 passwordResetLoading = false,
                 passwordResetMessage = null,
             )
@@ -168,7 +162,6 @@ internal class SessionCoordinator(
         val attemptId = ++passwordResetAttemptSequence
         uiState.value = current.copy(
             error = null,
-            credentialMessage = null,
             passwordResetLoading = true,
             passwordResetAttemptId = attemptId,
             passwordResetMessage = null,
@@ -182,7 +175,6 @@ internal class SessionCoordinator(
                             passwordResetLoading = false,
                             passwordResetAttemptId = null,
                             passwordResetMessage = genericPasswordResetMessage,
-                            credentialMessage = null,
                         )
                     }
 
@@ -190,7 +182,6 @@ internal class SessionCoordinator(
                     uiState.value.passwordResetStateFor(attemptId)?.let { latest ->
                         uiState.value = latest.copy(
                             error = invalidPasswordResetEmailMessage,
-                            credentialMessage = null,
                             passwordResetLoading = false,
                             passwordResetAttemptId = null,
                             passwordResetMessage = null,
@@ -202,7 +193,6 @@ internal class SessionCoordinator(
                         passwordResetLoading = false,
                         passwordResetAttemptId = null,
                         passwordResetMessage = null,
-                        credentialMessage = null,
                     )
                 }
             }
@@ -310,9 +300,6 @@ internal class SessionCoordinator(
         uiState.value = current.copy(
             googleLoading = true,
             googleAttemptId = attemptId,
-            passwordCredentialLoading = false,
-            passwordCredentialAttemptId = null,
-            credentialMessage = null,
             error = null,
             passwordResetMessage = null,
         )
@@ -340,55 +327,6 @@ internal class SessionCoordinator(
             )
 
             is GoogleCredentialResult.Success -> signInWithGoogleIdToken(attemptId, result.idToken)
-        }
-    }
-
-    fun beginPasswordCredentialSignIn(): Long? {
-        val current = uiState.value as? RealsRootUiState.Login ?: return null
-        if (current.authBusy()) return null
-        val attemptId = ++passwordCredentialAttemptSequence
-        uiState.value = current.copy(
-            passwordCredentialLoading = true,
-            passwordCredentialAttemptId = attemptId,
-            googleLoading = false,
-            googleAttemptId = null,
-            error = null,
-            credentialMessage = null,
-            passwordResetMessage = null,
-        )
-        return attemptId
-    }
-
-    fun completePasswordCredentialSignIn(attemptId: Long, result: PasswordCredentialResult) {
-        val current = uiState.value.passwordCredentialLoginStateFor(attemptId) ?: return
-        when (result) {
-            PasswordCredentialResult.Cancelled -> uiState.value = current.copy(
-                passwordCredentialLoading = false,
-                passwordCredentialAttemptId = null,
-            )
-
-            PasswordCredentialResult.NotFound -> uiState.value = current.copy(
-                passwordCredentialLoading = false,
-                passwordCredentialAttemptId = null,
-                credentialMessage = "No encontramos credenciales guardadas. Podés ingresar manualmente.",
-            )
-
-            PasswordCredentialResult.Unsupported -> uiState.value = current.copy(
-                passwordCredentialLoading = false,
-                passwordCredentialAttemptId = null,
-                credentialMessage = null,
-                error = "La credencial seleccionada no es compatible con email y password.",
-            )
-
-            PasswordCredentialResult.Failure -> uiState.value = current.copy(
-                passwordCredentialLoading = false,
-                passwordCredentialAttemptId = null,
-                credentialMessage = null,
-                error = "No pudimos usar la credencial guardada. Ingresá manualmente o intentá de nuevo.",
-            )
-
-            is PasswordCredentialResult.Success ->
-                signInWithSavedPasswordCredential(attemptId, result.email, result.password)
         }
     }
 
@@ -463,7 +401,6 @@ internal class SessionCoordinator(
     fun changePassword(
         currentPassword: String,
         newPassword: String,
-        onPasswordChanged: suspend (email: String, newPassword: String) -> Unit = { _, _ -> },
     ) {
         val current = uiState.value as? RealsRootUiState.Ready ?: return
         if (current.changingPassword || current.deletingAccount) return
@@ -498,13 +435,6 @@ internal class SessionCoordinator(
                 )
                 return@launch
             }
-            if (result == ChangePasswordResult.Success) {
-                notifyPasswordChangedBestEffort(
-                    email = authRepository.currentUserEmail(),
-                    newPassword = newPassword,
-                    onPasswordChanged = onPasswordChanged,
-                )
-            }
             uiState.value = pending.copy(
                 account = pending.account.copy(
                     changingPassword = false,
@@ -516,20 +446,6 @@ internal class SessionCoordinator(
                     changePasswordError = result.toChangePasswordMessageOrNull(),
                 ),
             )
-        }
-    }
-
-    private suspend fun notifyPasswordChangedBestEffort(
-        email: String?,
-        newPassword: String,
-        onPasswordChanged: suspend (email: String, newPassword: String) -> Unit,
-    ) {
-        val cleanEmail = email?.trim()?.takeIf { it.isNotBlank() } ?: return
-        try {
-            onPasswordChanged(cleanEmail, newPassword)
-        } catch (exception: kotlinx.coroutines.CancellationException) {
-            throw exception
-        } catch (exception: Exception) {
         }
     }
 
@@ -657,8 +573,8 @@ internal class SessionCoordinator(
     private fun authenticate(
         email: String,
         password: String,
-        origin: LoginCredentialOrigin,
-        onFirebaseAuthenticated: suspend (email: String, password: String) -> Unit,
+        rememberCredentials: Boolean,
+        onRememberCredentialsRequested: suspend (email: String, password: String) -> Unit,
         action: suspend (email: String, password: String) -> AuthOperationResult,
     ) {
         val cleanEmail = email.trim()
@@ -669,9 +585,6 @@ internal class SessionCoordinator(
                 loading = false,
                 googleLoading = false,
                 googleAttemptId = null,
-                passwordCredentialLoading = false,
-                passwordCredentialAttemptId = null,
-                credentialMessage = null,
                 error = "Email y password son requeridos.",
                 passwordResetMessage = null,
             )
@@ -682,17 +595,17 @@ internal class SessionCoordinator(
                 loading = true,
                 googleLoading = false,
                 googleAttemptId = null,
-                passwordCredentialLoading = false,
-                passwordCredentialAttemptId = null,
-                credentialMessage = null,
                 error = null,
                 passwordResetMessage = null,
             )
             when (val result = action(cleanEmail, password)) {
                 AuthOperationResult.Success -> {
-                    if (shouldOfferPasswordCredentialSave(origin)) {
-                        onFirebaseAuthenticated(cleanEmail, password)
-                    }
+                    requestRememberCredentialsBestEffort(
+                        rememberCredentials = rememberCredentials,
+                        email = cleanEmail,
+                        password = password,
+                        onRememberCredentialsRequested = onRememberCredentialsRequested,
+                    )
                     loadBackendSession().join()
                 }
                 is AuthOperationResult.Failure -> uiState.value =
@@ -700,12 +613,26 @@ internal class SessionCoordinator(
                         loading = false,
                         googleLoading = false,
                         googleAttemptId = null,
-                        passwordCredentialLoading = false,
-                        passwordCredentialAttemptId = null,
-                        credentialMessage = null,
                         error = result.message,
                         passwordResetMessage = null,
                     )
+            }
+        }
+    }
+
+    private fun requestRememberCredentialsBestEffort(
+        rememberCredentials: Boolean,
+        email: String,
+        password: String,
+        onRememberCredentialsRequested: suspend (email: String, password: String) -> Unit,
+    ) {
+        if (!rememberCredentials) return
+        scope.launch {
+            try {
+                onRememberCredentialsRequested(email, password)
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
             }
         }
     }
@@ -716,9 +643,6 @@ internal class SessionCoordinator(
             uiState.value = current.copy(
                 loading = true,
                 googleLoading = true,
-                passwordCredentialLoading = false,
-                passwordCredentialAttemptId = null,
-                credentialMessage = null,
                 error = null,
                 passwordResetMessage = null,
             )
@@ -735,50 +659,6 @@ internal class SessionCoordinator(
                             loading = false,
                             googleLoading = false,
                             googleAttemptId = null,
-                            passwordCredentialLoading = false,
-                            passwordCredentialAttemptId = null,
-                            credentialMessage = null,
-                            error = result.message,
-                            passwordResetMessage = null,
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    private fun signInWithSavedPasswordCredential(
-        attemptId: Long,
-        email: String,
-        password: String,
-    ) {
-        val current = uiState.value.passwordCredentialLoginStateFor(attemptId) ?: return
-        scope.launch {
-            uiState.value = current.copy(
-                loading = true,
-                passwordCredentialLoading = true,
-                googleLoading = false,
-                googleAttemptId = null,
-                credentialMessage = null,
-                error = null,
-                passwordResetMessage = null,
-            )
-            when (val result = authRepository.signIn(email.trim(), password)) {
-                AuthOperationResult.Success -> {
-                    if (uiState.value.passwordCredentialLoginStateFor(attemptId) != null) {
-                        loadBackendSession().join()
-                    }
-                }
-
-                is AuthOperationResult.Failure -> {
-                    if (uiState.value.passwordCredentialLoginStateFor(attemptId) != null) {
-                        uiState.value = current.copy(
-                            loading = false,
-                            passwordCredentialLoading = false,
-                            passwordCredentialAttemptId = null,
-                            googleLoading = false,
-                            googleAttemptId = null,
-                            credentialMessage = null,
                             error = result.message,
                             passwordResetMessage = null,
                         )
@@ -1028,18 +908,13 @@ private fun RealsRootUiState.googleLoginStateFor(attemptId: Long): RealsRootUiSt
     return login.takeIf { it.googleLoading && it.googleAttemptId == attemptId }
 }
 
-private fun RealsRootUiState.passwordCredentialLoginStateFor(attemptId: Long): RealsRootUiState.Login? {
-    val login = this as? RealsRootUiState.Login ?: return null
-    return login.takeIf { it.passwordCredentialLoading && it.passwordCredentialAttemptId == attemptId }
-}
-
 private fun RealsRootUiState.passwordResetStateFor(attemptId: Long): RealsRootUiState.Login? {
     val login = this as? RealsRootUiState.Login ?: return null
     return login.takeIf { it.passwordResetLoading && it.passwordResetAttemptId == attemptId }
 }
 
 private fun RealsRootUiState.Login.authBusy(): Boolean =
-    loading || googleLoading || passwordCredentialLoading || passwordResetLoading
+    loading || googleLoading || passwordResetLoading
 
 private fun RealsRootUiState.permanentBanAppealStateFor(requestId: Long): RealsRootUiState.PermanentBanAppeal? {
     val appeal = this as? RealsRootUiState.PermanentBanAppeal ?: return null
