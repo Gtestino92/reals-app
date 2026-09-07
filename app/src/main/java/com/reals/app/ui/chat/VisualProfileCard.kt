@@ -232,9 +232,7 @@ private fun ReviewProfileContent(
 ) {
     visualProfileContentBlocks(profile, ProfilePresentationMode.Review).forEach { block ->
         when (block) {
-            VisualProfileContentBlock.Affinities -> VisualAffinityIndicatorsContent(
-                indicators = affinityIndicatorsForDisplay(profile.affinityIndicators),
-            )
+            VisualProfileContentBlock.Affinities -> VisualProfileAffinitySection(profile)
 
             VisualProfileContentBlock.Bio -> VisualProfileBioSection(profile)
             VisualProfileContentBlock.CompactPhotos -> Unit
@@ -262,9 +260,7 @@ private fun BrowseProfileContent(
 ) {
     visualProfileContentBlocks(profile, ProfilePresentationMode.Browse).forEach { block ->
         when (block) {
-            VisualProfileContentBlock.Affinities -> VisualAffinityIndicatorsContent(
-                indicators = affinityIndicatorsForDisplay(profile.affinityIndicators),
-            )
+            VisualProfileContentBlock.Affinities -> VisualProfileAffinitySection(profile)
 
             VisualProfileContentBlock.Bio -> VisualProfileBioSection(profile)
             VisualProfileContentBlock.CompactPhotos -> CompactProfilePhotos(
@@ -298,12 +294,40 @@ private fun VisualProfileIdentity(profile: VisualProfile) {
 @Composable
 private fun VisualProfileBioSection(profile: VisualProfile) {
     val bio = profile.bio?.takeIf { it.isNotBlank() } ?: return
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        RealsSectionLabel("Bio")
-        Text(
-            text = TextSafety.safeDisplay(bio, maxLength = 1_000),
-            style = MaterialTheme.typography.bodyLarge,
-        )
+    VisualProfileInsertedSectionCard {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            RealsSectionLabel("Bio")
+            Text(
+                text = TextSafety.safeDisplay(bio, maxLength = 1_000),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+        }
+    }
+}
+
+@Composable
+private fun VisualProfileAffinitySection(profile: VisualProfile) {
+    val indicators = affinityIndicatorsForDisplay(profile.affinityIndicators)
+    if (indicators.isEmpty()) return
+    VisualProfileInsertedSectionCard {
+        VisualAffinityIndicatorsContent(indicators = indicators)
+    }
+}
+
+@Composable
+private fun VisualProfileInsertedSectionCard(
+    content: @Composable () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(RealsRadii.Row),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            content()
+        }
     }
 }
 
@@ -537,31 +561,33 @@ private fun VisualProfileQuestionsSection(
     val visibleQuestions = publicProfileQuestionsForDisplay(questions)
     if (visibleQuestions.isEmpty()) return
 
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        RealsSectionLabel("Preguntas del perfil")
-        RealsThinDivider()
-        visibleQuestions.forEach { question ->
-            Card(
-                shape = RoundedCornerShape(RealsRadii.Row),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+    VisualProfileInsertedSectionCard {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            RealsSectionLabel("Preguntas del perfil")
+            RealsThinDivider()
+            visibleQuestions.forEach { question ->
+                Card(
+                    shape = RoundedCornerShape(RealsRadii.Row),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 ) {
-                    Text(
-                        text = TextSafety.safeDisplay(question.prompt, maxLength = 180),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = TextSafety.safeDisplay(question.answer, maxLength = 160),
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = TextSafety.safeDisplay(question.prompt, maxLength = 180),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = TextSafety.safeDisplay(question.answer, maxLength = 160),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
                 }
             }
         }
