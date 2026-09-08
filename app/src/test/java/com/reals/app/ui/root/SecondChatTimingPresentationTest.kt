@@ -12,6 +12,7 @@ import com.reals.app.testutil.TestDomain
 import com.reals.app.testutil.TestDtos
 import com.reals.app.testutil.backendErrorResponse
 import java.time.Instant
+import java.util.TimeZone
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -109,23 +110,25 @@ class SecondChatTimingPresentationTest {
 
     @Test
     fun `pending unjoined second chat before scheduled time presents not available yet`() {
-        val presentation = status(
-            serverTime = "2026-06-18T20:59:00Z",
-            absoluteExpiresAt = "2026-06-18T23:00:00Z",
-            scheduledAt = "2026-06-18T21:00:00Z",
-            entryClosesAt = "2026-06-18T21:20:00Z",
-            canJoin = false,
-            myAttendanceStatus = "PENDING",
-            chatId = null,
-            chatStatus = null,
-        ).entryAvailabilityPresentation(
-            statusReceivedAtMillis = 1_000L,
-            nowMillis = 1_000L,
-        )
+        withDefaultTimeZone("UTC") {
+            val presentation = status(
+                serverTime = "2026-06-18T20:59:00Z",
+                absoluteExpiresAt = "2026-06-18T23:00:00Z",
+                scheduledAt = "2026-06-18T21:00:00Z",
+                entryClosesAt = "2026-06-18T21:20:00Z",
+                canJoin = false,
+                myAttendanceStatus = "PENDING",
+                chatId = null,
+                chatStatus = null,
+            ).entryAvailabilityPresentation(
+                statusReceivedAtMillis = 1_000L,
+                nowMillis = 1_000L,
+            )
 
-        assertEquals(SecondChatEntryAvailabilityState.BeforeStart, presentation?.state)
-        assertEquals("Todavía no está disponible", presentation?.title)
-        assertEquals("El segundo chat abre a las 21:00.", presentation?.message)
+            assertEquals(SecondChatEntryAvailabilityState.BeforeStart, presentation?.state)
+            assertEquals("Todavía no está disponible", presentation?.title)
+            assertEquals("El segundo chat abre a las 21:00.", presentation?.message)
+        }
     }
 
     @Test
@@ -1711,5 +1714,15 @@ class SecondChatTimingPresentationTest {
         @Suppress("UNCHECKED_CAST")
         val stateFlow = field.get(this) as MutableStateFlow<RealsRootUiState>
         stateFlow.value = state
+    }
+
+    private fun withDefaultTimeZone(id: String, block: () -> Unit) {
+        val originalTimeZone = TimeZone.getDefault()
+        TimeZone.setDefault(TimeZone.getTimeZone(id))
+        try {
+            block()
+        } finally {
+            TimeZone.setDefault(originalTimeZone)
+        }
     }
 }
