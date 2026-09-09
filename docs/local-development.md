@@ -63,7 +63,8 @@ prod. App Check installation and backend header injection are controlled separat
 - `localDebug` and `localRelease`: App Check disabled; no debug or Play Integrity provider is installed.
 - `devDebug`: debug provider for emulator and direct-device testing against the hosted AWS `dev` environment.
 - `devRelease`: Play Integrity.
-- `prodDebug` and `prodRelease`: Play Integrity.
+- `prodDebug`: debug provider for directly installed physical-device testing against the production environment.
+- `prodRelease`: Play Integrity.
 
 For `dev` and `prod`, requests made through the Reals Retrofit client include:
 
@@ -82,8 +83,9 @@ Local builds do not use the App Check debug provider and do not require capturin
 Firebase Console.
 
 Because `devDebug` installs as `com.reals.app.dev`, its Firebase App Check debug token must be registered manually under
-the Firebase Android App whose package is `com.reals.app.dev`. This is required for emulator and directly installed
-physical-device testing against the hosted AWS `dev` backend.
+the Firebase Android App whose package is `com.reals.app.dev`. Because `prodDebug` installs as `com.reals.app`, its
+Firebase App Check debug token must be registered manually under the production Firebase Android App. This is required
+for emulator and directly installed physical-device testing against the matching hosted AWS backend.
 
 The backend must still verify App Check JWTs normally. A registered debug secret allows Firebase to issue a normal App
 Check token; it is not a reason to disable JWT verification.
@@ -91,27 +93,27 @@ Check token; it is not a reason to disable JWT verification.
 If Firebase Console requires registering the Android app with a SHA-256 fingerprint for `devDebug` setup, use the
 debug signing certificate from the local Android debug keystore.
 
-Get the exact `localDebug` fingerprint with:
+Get the exact debug signing fingerprint with:
 
 ```powershell
 .\gradlew.bat :app:signingReport --no-daemon --console=plain
 ```
 
-Copy the `SHA-256` value for `Variant: devDebug` / `Config: debug`. The SHA-256 fingerprint is not a secret, but the
-App Check debug token printed by `DebugAppCheckProvider` is a secret and must not be committed.
+Copy the `SHA-256` value for the matching debug variant and `Config: debug`. The SHA-256 fingerprint is not a secret,
+but the App Check debug token printed by `DebugAppCheckProvider` is a secret and must not be committed.
 
 For App Check debug-token registration, match the Firebase Console app by Firebase App ID, not only by package name. The
-effective dev Firebase App ID is generated from the `google_app_id` value in the dev Google Services resources. Register
+effective Firebase App ID is generated from the `google_app_id` value in the matching Google Services resources. Register
 the debug token under that exact App Check Android app. Reinstalling the APK or clearing app data may generate a
 different debug token, so keep the same installation while verifying.
 
 ### Play Integrity providers
 
-For `devRelease`, `prodDebug` and `prodRelease`, register the corresponding Firebase Android app for App Check with Play
-Integrity. The Firebase project, `google-services.json`, package name and linked Play Integrity configuration must match
-the flavor's target environment. Register the required SHA-256 signing certificates for the app build that will be
-tested or distributed. Do not hardcode Firebase Console identifiers, project numbers or secrets in Android code. Play
-Integrity setup remains required before testing or distributing `devRelease`.
+For `devRelease` and `prodRelease`, register the corresponding Firebase Android app for App Check with Play Integrity.
+The Firebase project, `google-services.json`, package name and linked Play Integrity configuration must match the
+flavor's target environment. Register the required SHA-256 signing certificates for the app build that will be tested or
+distributed. Do not hardcode Firebase Console identifiers, project numbers or secrets in Android code. Play Integrity
+setup remains required before testing or distributing `devRelease` or `prodRelease`.
 
 App Check acquisition failures are recoverable and use the generic API error presentation:
 
