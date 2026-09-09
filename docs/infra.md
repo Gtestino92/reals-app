@@ -159,13 +159,14 @@ App Check provider by flavor:
 | `localDebug`, `localRelease` | Disabled | Do not register a debug secret; local backend requests omit `X-Firebase-AppCheck` while Firebase Auth and Messaging remain enabled. |
 | `devDebug` | Debug provider | Register each developer/device debug secret in Firebase Console for the dev Firebase Android app. Never commit the secret. |
 | `devRelease` | Play Integrity | Register the dev Firebase Android app for App Check and add the dev release signing SHA-256. |
-| `prodDebug`, `prodRelease` | Play Integrity | Register the production Firebase Android app for App Check and add the production signing SHA-256. |
+| `prodDebug` | Debug provider | Register each developer/device debug secret in Firebase Console for the production Firebase Android app. Never commit the secret. |
+| `prodRelease` | Play Integrity | Register the production Firebase Android app for App Check and add the production signing SHA-256. |
 
 Deployment checklist:
 
 1. Add the correct flavor-specific `google-services.json` outside source control.
 2. Register the Android app for App Check in the matching Firebase project for enabled environments.
-3. Register SHA-256 signing certificates for `devRelease` and prod.
+3. Register SHA-256 signing certificates for `devRelease` and `prodRelease`.
 4. Validate App Check-enabled Android builds against the backend while backend App Check mode is `MONITOR`.
 5. Distribute the App Check-enabled Android build to the target environment.
 6. Switch backend rollout from `DISABLED` to `MONITOR` to `ENFORCED` only after compatible clients are available.

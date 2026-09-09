@@ -50,7 +50,8 @@ Provider isolation is compile-time variant-specific:
 - `localDebug` and `localRelease` disable App Check and install no debug or Play Integrity provider.
 - `devDebug` uses `DebugAppCheckProviderFactory` and installs as `com.reals.app.dev`.
 - `devRelease` uses `PlayIntegrityAppCheckProviderFactory` and installs as `com.reals.app.dev`.
-- `prodDebug` and `prodRelease` use `PlayIntegrityAppCheckProviderFactory` and install as `com.reals.app`.
+- `prodDebug` uses `DebugAppCheckProviderFactory` and installs as `com.reals.app`.
+- `prodRelease` uses `PlayIntegrityAppCheckProviderFactory` and installs as `com.reals.app`.
 
 Backend allowlists for App Check-enabled environments must use Firebase App IDs from the matching Firebase Android App,
 not Android package names alone.
