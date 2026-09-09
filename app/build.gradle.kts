@@ -257,6 +257,8 @@ android {
 
 configurations.maybeCreate("devDebugImplementation")
 configurations.maybeCreate("devReleaseImplementation")
+configurations.maybeCreate("prodDebugImplementation")
+configurations.maybeCreate("prodReleaseImplementation")
 
 val androidSdkDirectoryProvider = androidComponents.sdkComponents.sdkDirectory.map { it.asFile }
 
@@ -482,10 +484,10 @@ tasks.register("verifyAppCheckDependencyIsolation") {
             ),
             AppCheckProviderExpectation(
                 configurationName = "prodDebugRuntimeClasspath",
-                requiredModule = playIntegrityModule,
-                forbiddenModule = debugModule,
-                requiredProviderName = "Play Integrity",
-                forbiddenProviderName = "debug",
+                requiredModule = debugModule,
+                forbiddenModule = playIntegrityModule,
+                requiredProviderName = "debug",
+                forbiddenProviderName = "Play Integrity",
             ),
             AppCheckProviderExpectation(
                 configurationName = "prodReleaseRuntimeClasspath",
@@ -656,7 +658,8 @@ dependencies {
     implementation(libs.googleid)
     add("devDebugImplementation", libs.firebase.appcheck.debug)
     add("devReleaseImplementation", libs.firebase.appcheck.playintegrity)
-    add("prodImplementation", libs.firebase.appcheck.playintegrity)
+    add("prodDebugImplementation", libs.firebase.appcheck.debug)
+    add("prodReleaseImplementation", libs.firebase.appcheck.playintegrity)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.kotlinx.serialization.json)
