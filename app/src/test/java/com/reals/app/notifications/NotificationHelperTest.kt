@@ -1,0 +1,162 @@
+package com.reals.app.notifications
+
+import android.app.NotificationManager
+import androidx.core.app.NotificationCompat
+import org.junit.Assert.assertEquals
+import org.junit.Test
+
+class NotificationHelperTest {
+    @Test
+    fun `general update channel uses high importance`() {
+        assertEquals(
+            NotificationManager.IMPORTANCE_HIGH,
+            NotificationHelper.GENERAL_UPDATES_CHANNEL_IMPORTANCE,
+        )
+    }
+
+    @Test
+    fun `general update notification uses high priority`() {
+        assertEquals(
+            NotificationCompat.PRIORITY_HIGH,
+            NotificationHelper.GENERAL_UPDATES_NOTIFICATION_PRIORITY,
+        )
+    }
+
+    @Test
+    fun `match found copy uses expected foreground text`() {
+        assertEquals(
+            "Encontramos un chat" to "Tu nuevo chat ya está disponible.",
+            NotificationHelper.matchFoundNotificationCopy(),
+        )
+    }
+
+    @Test
+    fun `match found tag matches backend replacement contract`() {
+        assertEquals("match-found-match-1", NotificationHelper.matchFoundNotificationTag("match-1"))
+        assertEquals("match-found-match-1", NotificationHelper.matchFoundNotificationTag(" match-1 "))
+    }
+
+    @Test
+    fun `match found identity recognition is scoped to match found notifications`() {
+        assertEquals(
+            NotificationDisplayIdentity(tag = "match-found-match-1", id = 0),
+            NotificationHelper.matchFoundNotificationDisplayIdentity("match-1"),
+        )
+        assertEquals(
+            NotificationDisplayIdentity(
+                tag = null,
+                id = PushNotificationContract.MATCH_FOUND_NOTIFICATION_ID_BASE,
+            ),
+            NotificationHelper.matchFoundNotificationDisplayIdentity(null),
+        )
+        assertEquals(true, NotificationHelper.isMatchFoundNotificationIdentity("match-found-match-1", 0))
+        assertEquals(true, NotificationHelper.isMatchFoundNotificationIdentity(null, 30_000))
+        assertEquals(false, NotificationHelper.isMatchFoundNotificationIdentity("second-chat-connection-1", 0))
+        assertEquals(false, NotificationHelper.isMatchFoundNotificationIdentity(null, 20_000))
+    }
+
+    @Test
+    fun `match found invalidated contract is control-only`() {
+        assertEquals("MATCH_FOUND_INVALIDATED", PushNotificationContract.TYPE_MATCH_FOUND_INVALIDATED)
+        assertEquals(
+            NotificationDisplayIdentity(tag = "match-found-match-1", id = 0),
+            NotificationHelper.matchFoundNotificationDisplayIdentity(" match-1 "),
+        )
+    }
+
+    @Test
+    fun `visual review reminder contract keeps historical type compatibility`() {
+        assertEquals("VISUAL_REVIEW_REMINDER", PushNotificationContract.TYPE_VISUAL_REVIEW_REMINDER)
+        assertEquals("VISUAL_REVIEW_AVAILABLE", PushNotificationContract.TYPE_VISUAL_REVIEW_AVAILABLE)
+        assertEquals("match_id", PushNotificationContract.EXTRA_MATCH_ID)
+        assertEquals(10_000, PushNotificationContract.VISUAL_REVIEW_NOTIFICATION_ID_BASE)
+    }
+
+    @Test
+    fun `second chat reminder contract refreshes home instead of deep linking`() {
+        assertEquals("SECOND_CHAT_REMINDER", PushNotificationContract.TYPE_SECOND_CHAT_REMINDER)
+        assertEquals("SECOND_CHAT_STARTED", PushNotificationContract.TYPE_SECOND_CHAT_STARTED)
+        assertEquals("connection_id", PushNotificationContract.EXTRA_CONNECTION_ID)
+        assertEquals("available_at", PushNotificationContract.EXTRA_AVAILABLE_AT)
+        assertEquals(20_000, PushNotificationContract.SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE)
+    }
+
+    @Test
+    fun `second chat started copy uses expected foreground text`() {
+        assertEquals(
+            "Tu segunda charla ya empezó" to "Entrá ahora a Reals para sumarte.",
+            NotificationHelper.secondChatStartedNotificationCopy(),
+        )
+    }
+
+    @Test
+    fun `second chat started and reminder share notification identity`() {
+        assertEquals(
+            NotificationDisplayIdentity(tag = "second-chat-connection-1", id = 0),
+            NotificationHelper.secondChatNotificationDisplayIdentity("connection-1"),
+        )
+        assertEquals(
+            NotificationHelper.secondChatNotificationDisplayIdentity("connection-1"),
+            NotificationHelper.secondChatNotificationDisplayIdentity(" connection-1 "),
+        )
+    }
+
+    @Test
+    fun `second chat tag matches backend replacement contract`() {
+        assertEquals("second-chat-connection-1", NotificationHelper.secondChatNotificationTag("connection-1"))
+        assertEquals("second-chat-connection-1", NotificationHelper.secondChatNotificationTag(" connection-1 "))
+    }
+
+    @Test
+    fun `missing second chat connection uses deterministic untagged fallback identity`() {
+        val fallback = NotificationDisplayIdentity(
+            tag = null,
+            id = PushNotificationContract.SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE,
+        )
+
+        assertEquals(null, NotificationHelper.secondChatNotificationTag(null))
+        assertEquals(null, NotificationHelper.secondChatNotificationTag(""))
+        assertEquals(null, NotificationHelper.secondChatNotificationTag("   "))
+        assertEquals(fallback, NotificationHelper.secondChatNotificationDisplayIdentity(null))
+        assertEquals(fallback, NotificationHelper.secondChatNotificationDisplayIdentity("   "))
+        assertEquals(
+            PushNotificationContract.SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE,
+            NotificationHelper.secondChatNotificationId("   "),
+        )
+    }
+
+    @Test
+    fun `scheduling available contract refreshes home instead of deep linking`() {
+        assertEquals("SCHEDULING_AVAILABLE", PushNotificationContract.TYPE_SCHEDULING_AVAILABLE)
+        assertEquals(
+            "SCHEDULING_PROPOSALS_RECEIVED",
+            PushNotificationContract.TYPE_SCHEDULING_PROPOSALS_RECEIVED,
+        )
+        assertEquals("SCHEDULING_CONFIRMED", PushNotificationContract.TYPE_SCHEDULING_CONFIRMED)
+        assertEquals("connection_id", PushNotificationContract.EXTRA_CONNECTION_ID)
+        assertEquals("match_id", PushNotificationContract.EXTRA_MATCH_ID)
+        assertEquals(15_000, PushNotificationContract.SCHEDULING_AVAILABLE_NOTIFICATION_ID_BASE)
+    }
+
+    @Test
+    fun `scheduling notification copy supports new scheduling push types`() {
+        assertEquals(
+            "Nuevos horarios propuestos" to "Entr\u00e1 a Reals para revisar las opciones.",
+            NotificationHelper.schedulingNotificationCopy(
+                PushNotificationContract.TYPE_SCHEDULING_PROPOSALS_RECEIVED
+            ),
+        )
+        assertEquals(
+            "Horario confirmado" to "Entr\u00e1 a Reals para ver la segunda charla.",
+            NotificationHelper.schedulingNotificationCopy(
+                PushNotificationContract.TYPE_SCHEDULING_CONFIRMED
+            ),
+        )
+        assertEquals(
+            "Coordinaci\u00f3n disponible" to "Ya pod\u00e9s coordinar horarios en Reals.",
+            NotificationHelper.schedulingNotificationCopy(
+                PushNotificationContract.TYPE_SCHEDULING_AVAILABLE
+            ),
+        )
+    }
+}

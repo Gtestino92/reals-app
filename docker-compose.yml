@@ -1,0 +1,12 @@
+services:
+  app-build:
+    build:
+      context: .
+      args:
+        IMAGE_REPOSITORY: reals-app
+        IMAGE_TAG: local
+        IMAGE_REVISION: local
+    image: reals-app:local
+    container_name: reals-app-build-local
+    profiles:
+      - build

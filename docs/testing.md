@@ -1,137 +1,97 @@
-# Testing
+# Android Testing
 
-Automated tests live under:
+## Test Locations
 
-```text
-src/test/kotlin/com/reals/backend/integration
+- JVM unit tests: `app/src/test/java`.
+- Instrumented Android tests: `app/src/androidTest/java`.
+- Known test gaps: `app/src/test/java/com/reals/app/TestGaps.md`.
+
+## Primary Commands
+
+```bash
+./gradlew :app:validateEnvironmentIsolation
+./gradlew :app:verifyAppCheckDependencyIsolation
+./gradlew :app:testLocalDebugUnitTest
+./gradlew :app:lintLocalDebug
+./gradlew :app:compileLocalDebugKotlin
+./gradlew :app:assembleLocalDebug
+./gradlew :app:verifyReleaseBuildHardening
+./gradlew :app:compileLocalReleaseKotlin
+./gradlew :app:lintLocalRelease
+./gradlew :app:assembleLocalRelease
+./gradlew :app:verifyLocalReleaseArtifacts
 ```
 
-The suite uses Spring Boot integration tests with the `test` profile and H2 in-memory.
-PostgreSQL-specific behavior that H2 cannot model, such as row claiming with
-`FOR UPDATE SKIP LOCKED`, is covered by focused Testcontainers tests under the
-same suite. Those tests require Docker and are skipped when Docker is not
-available.
+Run dev/prod validation only after the required Firebase client config and HTTPS backend URL are available:
 
-Structure:
-
-- `integration/support`: shared fixtures and base classes. `BaseIT` is the common service-level base; `ControllerIT` adds `MockMvc` and HTTP authentication helpers.
-- `integration/service`: service-level integration tests. These load the Spring context and execute real services, repositories, JPA mappings and transactions against H2, then assert persisted state.
-- `integration/controller`: HTTP/controller integration tests. These use `MockMvc` to validate routing, JSON request/response shape, status codes, exception mapping, security/current-user resolution and controller wiring without duplicating every business flow.
-
-## Why Integration Tests First
-
-Unit tests are still useful for pure logic, for example compatibility scoring or future trust-score calculations. They are less useful for the current end-to-end user flow because the highest-risk bugs have appeared at boundaries:
-
-- entity/schema mismatch
-- transaction and state transition coupling
-- lock creation/release
-- repository queries
-- service orchestration across match, chat, visual review, connection and scheduling
-
-For those cases, service-level integration tests catch more realistic regressions than mocks. Controller integration tests are intentionally smaller and focus on the HTTP contract.
-
-## Current Coverage
-
-`HappyPathIntegrationTest` covers:
-
-- happy path from profile creation to closed connection
-
-`UserFlowGuardrailIntegrationTest` covers:
-
-- profile activation photo requirements
-- draft profile queue rejection
-- duplicate chat decision rejection
-- visual approval requiring partner-message read receipt
-- non-participant chat message rejection
-- non-participant scheduling proposal rejection
-- own-proposal acceptance rejection
-- configured scheduling proposal-list maximum
-
-`UserFlowAlternateOutcomeIntegrationTest` covers:
-
-- chat rejection state and lock release
-- visual rejection without connection creation
-- incompatible queued users producing no match
-- matchmaking candidate-pair filtering, candidate limit behavior and FIFO tie-breaking
-- second-chat slot auto-confirmation across ordered proposal lists
-- scheduling preference tie-breaks and explicit round rejection
-- scheduling failure after max rounds
-
-`ChatExitIntegrationTest` covers:
-
-- mutual first-chat cancellation without penalties
-- safety cancellation and reported-user penalty
-- unilateral second-chat cancellation penalty behavior
-
-`SchedulerFlowIntegrationTest` covers:
-
-- matchmaking job processing from queue to first chat
-- inactive chat detection
-- first-chat timeout expiration
-- visual phase expiration
-- scheduling timeout
-- scheduled second-chat availability before activation
-- second-chat activation on user entry or first message
-
-Controller integration tests cover representative HTTP contract checks for:
-
-- `ProfileController` and `MeController`: authenticated current-user resolution and profile creation JSON.
-- `MatchController`: chat decision response, conflict mapping and personal-message write.
-- `ConnectionController`: proposal submission, negotiation confirmation and proposal validation errors.
-- `ChatController`: sending/listing messages, non-participant rejection and mutual cancellation over HTTP.
-
-Bruno also includes manual HTTP collections that are convenient to run against the local application:
-
-- `01 Happy Path`: successful user flow through second chat.
-- `02 Not Happy Paths`: technical negative checks and guardrails, mostly expected 4xx responses.
-- `03 Alternate Outcomes`: valid business outcomes that stop before a successful second chat, such as first-chat rejection, visual rejection, scheduling failure after max rounds and incompatible queued users.
-- `04 Timeout Outcomes`: local-only manual checks for deadline-driven jobs. These use `/api/local-dev/timeouts/...` to move deadlines into the past and `/api/local-dev/jobs/.../run` to trigger the real jobs deterministically.
-
-The `/api/local-dev/...` endpoints are only exposed for `local`, `local-nodb` and `local-postgres` profiles. They must not be enabled in cloud dev or production.
-
-## Running Tests
-
-From a shell with Java configured:
-
-```text
-.\mvnw.cmd test
+```bash
+./gradlew :app:compileDevDebugKotlin
+./gradlew :app:assembleDevDebug
+./gradlew :app:compileDevReleaseKotlin
+./gradlew :app:assembleDevRelease
+./gradlew :app:compileProdReleaseKotlin
+./gradlew :app:assembleProdRelease
 ```
 
-Use `.\mvnw test` on Unix-like shells.
-The PostgreSQL concurrency coverage uses Testcontainers, so Docker must be
-running if you want that test to execute locally.
+`devDebug` requires `app/src/dev/google-services.json` with `com.reals.app.dev`, `REALS_DEV_BASE_URL` or
+`realsDevBaseUrl`, and a registered Firebase App Check debug token for the Firebase Android app with package
+`com.reals.app.dev`. `devRelease` additionally requires Play Integrity setup and suitable complete release signing
+inputs. `prodRelease` requires `app/src/prod/google-services.json` with `com.reals.app`, `REALS_PROD_BASE_URL` or
+`realsProdBaseUrl`, and complete production release signing inputs. These builds must not use placeholder, localhost,
+loopback, or cleartext backend URLs.
 
-GitHub Actions also runs `./mvnw clean test` on pull requests and pushes to
-`master` or `development`.
+`localDebug` and `localRelease` keep Firebase Auth, Messaging and local Firebase email auto-verification enabled, but
+disable App Check completely. Local backend requests should not acquire an App Check token and should omit
+`X-Firebase-AppCheck`.
 
-## CI Gates
+`testLocalReleaseUnitTest` may be run when present for JVM regression coverage, but JVM tests do not prove R8 runtime
+compatibility. R8 compatibility requires building the optimized APK and running the manual smoke test described in
+`docs/local-development.md`.
 
-Pull requests to `development` or `master` run:
+## What To Test
 
-- Maven tests.
-- Docker Compose config validation.
-- Backend Docker image build validation without publishing.
-- Trivy image scan. Pull requests and pushes for `development` fail on fixed
-  `CRITICAL` vulnerabilities. Pull requests and pushes for `master` fail on
-  fixed `HIGH` or `CRITICAL` vulnerabilities. The scan table is also published
-  to the GitHub Actions job summary before the job is failed.
-- Dependency review for high-severity dependency changes.
-- CodeQL default setup from GitHub code scanning.
+Prefer focused JVM tests for:
 
-Pushes to `development` or `master` run the same validation and then publish
-the backend image to GHCR. The image publishing job does not run for pull
-requests.
+- DTO to domain mappers;
+- backend error code mapping;
+- pure time and lifecycle helpers;
+- Home routing and local hidden interactions;
+- coordinator action results;
+- repository behavior with `FakeRealsApi`;
+- Kotlin Serialization DTO contracts for normal responses, backend errors, unknown keys, defaults, nullable fields, and
+  request encoding;
+- notification contract handling.
 
-## Smoke Checks
+Use instrumented or Compose tests for behavior that requires Android runtime, UI rendering, permission APIs, Activity lifecycle or real Compose semantics.
 
-The `Smoke check` GitHub Actions workflow is manual and is intended for a
-deployed environment. Provide the backend base URL and it checks:
+## Contract Change Checklist
 
-- `GET /actuator/health/readiness`
-- `GET /actuator/info`
-- `GET /api/ping`
+When backend docs or OpenAPI change:
 
-It does not deploy anything and does not require application credentials.
-Optional inputs `expected_image_tag` and `expected_image_revision` validate the
-image metadata exposed by `/actuator/info`, so the same workflow can be wired
-into deploy automation later.
+1. Add/update DTO fields with correct nullability.
+2. Map fields into domain models when the app needs them.
+3. Add/update tests in `data/mapper`.
+4. Add error mapping tests for new backend error codes.
+5. Add coordinator/helper tests for lifecycle and navigation behavior.
+
+## Verification Notes
+
+If a Gradle daemon or Kotlin incremental cache fails after concurrent Gradle tasks, stop daemons and rerun sequentially:
+
+```bash
+./gradlew --stop
+./gradlew :app:compileLocalDebugKotlin
+./gradlew :app:testLocalDebugUnitTest
+```
+
+For release-like verification, inspect:
+
+- APK outputs under `app/build/outputs/apk/local/release/`.
+- R8 mapping under `app/build/outputs/mapping/localRelease/mapping.txt`.
+- APK inspection report under `app/build/reports/release/localRelease-apk-inspection.txt`.
+
+Retain the exact `mapping.txt` for each release artifact. Retrace an obfuscated stack trace with:
+
+```bash
+retrace app/build/outputs/mapping/localRelease/mapping.txt obfuscated-stacktrace.txt
+```

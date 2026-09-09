@@ -1,7 +1,10 @@
-﻿package com.reals.app.core.network
+package com.reals.app.core.network
 
+import android.util.Log
+import com.reals.app.core.appcheck.AppCheckTokenAcquisitionException
 import com.reals.app.data.dto.ErrorResponseDto
 import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import retrofit2.Response
@@ -20,6 +23,41 @@ class ApiExecutor(private val json: Json) {
             } else {
                 ApiResult.Failure(parseBackendError(response))
             }
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: AppCheckTokenAcquisitionException) {
+            ApiResult.Failure(
+                ApiError.AppCheck(
+                    reason = exception.reason,
+                    message = exception.message ?: "No se pudo obtener el token de Firebase App Check.",
+                ),
+            )
+        } catch (exception: IOException) {
+            ApiResult.Failure(ApiError.Network(exception.message ?: "Fallo de red."))
+        } catch (exception: SerializationException) {
+            ApiResult.Failure(ApiError.Unexpected(exception.message ?: "No se pudo parsear la respuesta."))
+        } catch (exception: Exception) {
+            ApiResult.Failure(ApiError.Unexpected(exception.message ?: exception::class.java.simpleName))
+        }
+    }
+
+    suspend fun executeUnit(call: suspend () -> Response<Unit>): ApiResult<Unit> {
+        return try {
+            val response = call()
+            if (response.isSuccessful) {
+                ApiResult.Success(Unit)
+            } else {
+                ApiResult.Failure(parseBackendError(response))
+            }
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: AppCheckTokenAcquisitionException) {
+            ApiResult.Failure(
+                ApiError.AppCheck(
+                    reason = exception.reason,
+                    message = exception.message ?: "No se pudo obtener el token de Firebase App Check.",
+                ),
+            )
         } catch (exception: IOException) {
             ApiResult.Failure(ApiError.Network(exception.message ?: "Fallo de red."))
         } catch (exception: SerializationException) {
@@ -34,11 +72,18 @@ class ApiExecutor(private val json: Json) {
         val parsed = rawBody?.let { body ->
             runCatching { json.decodeFromString<ErrorResponseDto>(body) }.getOrNull()
         }
+        runCatching {
+            Log.w(
+                "RealsApi",
+                "HTTP ${response.code()} code=${parsed?.code} error=${parsed?.error}",
+            )
+        }
         return ApiError.Backend(
             statusCode = response.code(),
             code = parsed?.code,
             error = parsed?.error,
             message = parsed?.message ?: rawBody ?: response.message().ifBlank { "HTTP ${response.code()}" },
+            expiresAt = parsed?.expiresAt,
         )
     }
 }

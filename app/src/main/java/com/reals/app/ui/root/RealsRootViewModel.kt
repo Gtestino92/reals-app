@@ -1,98 +1,2839 @@
-﻿package com.reals.app.ui.root
+package com.reals.app.ui.root
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ApiResult
-import com.reals.app.data.repository.AuthOperationResult
-import com.reals.app.data.repository.FirebaseAuthRepository
+import com.reals.app.core.network.BackendErrorCode
+import com.reals.app.core.network.backendErrorCode
+import com.reals.app.core.network.isAccountBanned
+import com.reals.app.core.network.isLegalActionRequired
+import com.reals.app.core.network.isTerminalAuthFailure
+import com.reals.app.core.network.isUserPairBlocked
+import com.reals.app.core.time.ServerClockSnapshot
 import com.reals.app.di.AppContainer
+import com.reals.app.di.RealsRootDependencies
+import com.reals.app.domain.model.ChatContinueDecision
+import com.reals.app.domain.model.Chat
+import com.reals.app.domain.model.ChatDecisionState
+import com.reals.app.domain.model.ChatExitReason
+import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.ChatReplyDraft
+import com.reals.app.domain.model.ChatStatus
+import com.reals.app.domain.model.CreateProfileInput
+import com.reals.app.domain.model.FirstChatGuidance
+import com.reals.app.domain.model.LegalDocumentAction
+import com.reals.app.domain.model.NotificationPreferenceGroup
+import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProvisionedSession
-import com.reals.app.domain.usecase.ProvisionAndLoadProfileUseCase
+import com.reals.app.domain.model.SearchLocationInput
+import com.reals.app.domain.model.SecondChatCompletionDecision
+import com.reals.app.domain.model.UpdateMatchFiltersInput
+import com.reals.app.domain.model.UpdateProfileInput
+import com.reals.app.domain.model.VisualDecision
+import com.reals.app.domain.model.toReplyTargetOrNull
+import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_STARTED
+import com.reals.app.notifications.PushNotificationOpenContract
+import com.reals.app.ui.auth.GoogleCredentialResult
+import com.reals.app.ui.chat.firstChatUnansweredPeriodReference
+import com.reals.app.ui.profile.AndroidProfilePhotoPrefetcher
+import com.reals.app.ui.profile.NoOpProfilePhotoPrefetcher
+import com.reals.app.ui.profile.ProfilePhotoPrefetcher
+import java.io.File
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
-sealed interface RealsRootUiState {
-    data object Checking : RealsRootUiState
-    data class MissingFirebase(val message: String) : RealsRootUiState
-    data class Login(val loading: Boolean = false, val error: String? = null) : RealsRootUiState
-    data class LoadingSession(val email: String?) : RealsRootUiState
-    data class Ready(val session: ProvisionedSession) : RealsRootUiState
-    data class Failure(val error: ApiError) : RealsRootUiState
-}
-
 class RealsRootViewModel(
-    private val authRepository: FirebaseAuthRepository,
-    private val provisionAndLoadProfile: ProvisionAndLoadProfileUseCase,
+    private val dependencies: RealsRootDependencies,
+    autoRefreshSession: Boolean = true,
+    profilePhotoPrefetcher: ProfilePhotoPrefetcher = NoOpProfilePhotoPrefetcher,
+    pendingVisualReviewPhotoPrefetcher: PendingVisualReviewPhotoPrefetcher =
+        NoOpPendingVisualReviewPhotoPrefetcher,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<RealsRootUiState>(RealsRootUiState.Checking)
+    private val authRepository = dependencies.session.authRepository
+    private val getProfilePhotosUseCase = dependencies.profile.getProfilePhotos
+    private val profileHandler = ProfileOperationHandler(
+        uiState = _uiState,
+        dependencies = dependencies.profile,
+        authRepository = authRepository,
+        localFirebaseEmailVerificationCoordinator =
+            dependencies.session.localFirebaseEmailVerificationCoordinator,
+        getProfilePhotosUseCase = getProfilePhotosUseCase,
+        profilePhotoPrefetcher = profilePhotoPrefetcher,
+        scope = viewModelScope,
+        onTerminalAuthFailure = { sessionCoordinator.invalidateTerminalSession() },
+    )
+    private val profileEntryCoordinator = ProfileEntryCoordinator(
+        getProfilePhotos = getProfilePhotosUseCase,
+        getHome = dependencies.home.getHome,
+    )
+    private val firstChatCoordinator = FirstChatCoordinator(dependencies.firstChat)
+    private val secondChatCoordinator = SecondChatCoordinator(dependencies.secondChat)
+    private val visualApprovalCoordinator = VisualApprovalCoordinator(dependencies.visualApproval)
+    private val partnerProfileCoordinator = PartnerProfileCoordinator(
+        dependencies.visualApproval.getVisualProfile,
+        dependencies.visualApproval.getPartnerPersonalMessage,
+    )
+    private val schedulingCoordinator = SchedulingCoordinator(dependencies.scheduling)
+    private val affinityQuestionnaireHandler = AffinityQuestionnaireOperationHandler(
+        uiState = _uiState,
+        dependencies = dependencies.affinity,
+        scope = viewModelScope,
+    )
+    private val profileQuestionHandler = ProfileQuestionOperationHandler(
+        uiState = _uiState,
+        dependencies = dependencies.profileQuestions,
+        scope = viewModelScope,
+    )
+    private val manualBlockCoordinator = ManualBlockCoordinator(
+        dependencies.manualBlock.blockMatchParticipant,
+    )
+    private val legalCoordinator = LegalCoordinator(dependencies.legal)
+    private val notificationPreferencesCoordinator = NotificationPreferencesCoordinator(
+        uiState = _uiState,
+        dependencies = dependencies.account,
+        scope = viewModelScope,
+    )
+    private lateinit var sessionCoordinator: SessionCoordinator
+    private var silentFirstChatRefreshJob: Job? = null
+    private var silentSecondChatRefreshJob: Job? = null
+    private var schedulingOpenJob: Job? = null
+    private var schedulingRefreshJob: Job? = null
+    private var silentSchedulingRefreshJob: Job? = null
+    private var legalRerouteJob: Job? = null
+    private var pairBlockedRerouteJob: Job? = null
+    private var sessionInvalidationJob: Job? = null
+    private var manualBlockJob: Job? = null
+    private var pendingSecondChatLocalExpiryKey: SecondChatExpiryKey? = null
+    private var completedSecondChatLocalExpiryKey: SecondChatExpiryKey? = null
+    private var pendingSecondChatStartedHomeOpen = false
+    private val homeCoordinator = HomeCoordinator(
+        uiState = _uiState,
+        dependencies = dependencies.home,
+        scope = viewModelScope,
+        onOpenFirstChat = { session, matchId, chatId -> openFirstChat(session, matchId, chatId) },
+        onOpenSecondChat = { session, connectionId, matchId, partnerName ->
+            openSecondChat(session, connectionId, matchId, partnerName, joinIfAllowed = false)
+        },
+        onReloadActiveSession = { user -> sessionCoordinator.loadBackendSessionForActiveUser(user) },
+        pendingVisualReviewPhotoPrefetcher = pendingVisualReviewPhotoPrefetcher,
+        getVisualProfile = dependencies.visualApproval.getVisualProfile::invoke,
+    )
     val uiState: StateFlow<RealsRootUiState> = _uiState.asStateFlow()
 
     init {
-        refreshSession()
-    }
-
-    fun refreshSession() {
-        if (!authRepository.isConfigured()) {
-            _uiState.value = RealsRootUiState.MissingFirebase(FirebaseAuthRepository.firebaseMissingMessage)
-            return
-        }
-        if (!authRepository.hasSignedInUser()) {
-            _uiState.value = RealsRootUiState.Login()
-            return
-        }
-        loadBackendSession()
-    }
-
-    fun signIn(email: String, password: String) {
-        authenticate(email, password) { cleanEmail, cleanPassword ->
-            authRepository.signIn(cleanEmail, cleanPassword)
-        }
-    }
-
-    fun signUp(email: String, password: String) {
-        authenticate(email, password) { cleanEmail, cleanPassword ->
-            authRepository.signUp(cleanEmail, cleanPassword)
+        sessionCoordinator = SessionCoordinator(
+            uiState = _uiState,
+            dependencies = dependencies.session,
+            accountDependencies = dependencies.account,
+            scope = viewModelScope,
+            onActiveSessionLoaded = { session -> showReadySession(session) },
+            onReactivatedSessionLoaded = { session ->
+                showReactivatedSession(session)
+            },
+        )
+        observeAccountBanned()
+        observeTerminalAuthFailure()
+        observeLegalActionRequired()
+        observeUserPairBlocked()
+        observePendingSecondChatStartedHomeOpenInvalidation()
+        observePendingVisualReviewPhotoPrefetchInvalidation()
+        if (autoRefreshSession) {
+            refreshSession()
         }
     }
 
-    fun signOut() {
-        authRepository.signOut()
-        _uiState.value = RealsRootUiState.Login()
-    }
+    fun refreshSession() = sessionCoordinator.refreshSession()
 
-    private fun authenticate(
+    fun signIn(
         email: String,
         password: String,
-        action: suspend (email: String, password: String) -> AuthOperationResult,
-    ) {
-        val cleanEmail = email.trim()
-        if (cleanEmail.isBlank() || password.isBlank()) {
-            _uiState.value = RealsRootUiState.Login(error = "Email y password son requeridos.")
-            return
-        }
+        rememberCredentials: Boolean = false,
+        onAuthenticationSucceeded: suspend (rememberCredentials: Boolean) -> Unit = {},
+    ) = sessionCoordinator.signIn(email, password, rememberCredentials, onAuthenticationSucceeded)
+
+    fun signUp(
+        email: String,
+        password: String,
+        rememberCredentials: Boolean = false,
+        onAuthenticationSucceeded: suspend (rememberCredentials: Boolean) -> Unit = {},
+    ) = sessionCoordinator.signUp(email, password, rememberCredentials, onAuthenticationSucceeded)
+
+    fun requestPasswordReset(email: String) = sessionCoordinator.requestPasswordReset(email)
+
+    fun beginGoogleSignIn(): Long? = sessionCoordinator.beginGoogleSignIn()
+
+    fun completeGoogleSignIn(attemptId: Long, result: GoogleCredentialResult) =
+        sessionCoordinator.completeGoogleSignIn(attemptId, result)
+
+    fun signOut() {
+        pendingSecondChatStartedHomeOpen = false
+        homeCoordinator.cancelPendingVisualReviewPhotoPrefetch()
+        sessionCoordinator.signOut()
+    }
+
+    fun deleteAccount() {
+        pendingSecondChatStartedHomeOpen = false
+        sessionCoordinator.deleteAccount()
+    }
+
+    fun retryLegalRequirements() {
+        val current = _uiState.value as? RealsRootUiState.LegalRequirements ?: return
+        if (current.loading || current.submittingDocumentType != null || current.deletingAccount) return
         viewModelScope.launch {
-            _uiState.value = RealsRootUiState.Login(loading = true)
-            when (val result = action(cleanEmail, password)) {
-                AuthOperationResult.Success -> loadBackendSession()
-                is AuthOperationResult.Failure -> _uiState.value = RealsRootUiState.Login(error = result.message)
+            _uiState.value = current.copy(loading = true, error = null)
+            applyLegalCoordinatorResult(
+                legalCoordinator.load(
+                    session = current.session,
+                    resumeContext = current.resumeContext,
+                )
+            )
+        }
+    }
+
+    fun recordLegalDocumentAction(documentKey: String) {
+        val current = _uiState.value as? RealsRootUiState.LegalRequirements ?: return
+        if (current.loading || current.submittingDocumentType != null || current.deletingAccount) return
+        val requirement = current.documents.firstOrNull { it.key == documentKey } ?: return
+        if (requirement.satisfied || requirement.requiredAction is LegalDocumentAction.Unknown) return
+
+        viewModelScope.launch {
+            val pending = current.copy(
+                submittingDocumentType = requirement.type,
+                error = null,
+            )
+            _uiState.value = pending
+            applyLegalCoordinatorResult(
+                legalCoordinator.recordRequiredAction(pending, requirement)
+            )
+        }
+    }
+
+    fun deferLegalRequirements() {
+        val current = _uiState.value as? RealsRootUiState.LegalRequirements ?: return
+        if (current.loading || current.submittingDocumentType != null || current.deletingAccount) return
+        viewModelScope.launch {
+            when (val resume = current.resumeContext) {
+                LegalResumeContext.PostSession,
+                LegalResumeContext.PostReactivation -> continueReadySession(current.session)
+
+                is LegalResumeContext.ExistingState -> {
+                    if (pendingSecondChatStartedHomeOpen) {
+                        loadHomeForPendingSecondChatStartedOpen(current.session)
+                    } else {
+                        _uiState.value = resume.state.clearLegalActionRequiredForResume()
+                    }
+                }
             }
         }
     }
 
-    private fun loadBackendSession() {
-        viewModelScope.launch {
-            _uiState.value = RealsRootUiState.LoadingSession(authRepository.currentUserEmail())
-            when (val result = provisionAndLoadProfile()) {
-                is ApiResult.Success -> _uiState.value = RealsRootUiState.Ready(result.value)
-                is ApiResult.Failure -> _uiState.value = RealsRootUiState.Failure(result.error)
+    fun changePassword(
+        currentPassword: String,
+        newPassword: String,
+    ) = sessionCoordinator.changePassword(currentPassword, newPassword)
+
+    fun openNotificationPreferences() {
+        val current = _uiState.value as? RealsRootUiState.Ready ?: return
+        if (current.session.profileSnapshot !is ProfileSnapshot.Found || !current.shouldRenderHomeSurface()) return
+        notificationPreferencesCoordinator.open()
+    }
+
+    fun closeNotificationPreferences() = notificationPreferencesCoordinator.close()
+
+    fun retryNotificationPreferences() = notificationPreferencesCoordinator.retryLoad()
+
+    fun updateNotificationPreference(group: NotificationPreferenceGroup, enabled: Boolean) =
+        notificationPreferencesCoordinator.update(group, enabled)
+
+    fun reactivateAccount() = sessionCoordinator.reactivateAccount()
+
+    fun finalizeAccountDeletion() = sessionCoordinator.finalizeAccountDeletion()
+
+    fun retryAccountSuspension() = sessionCoordinator.retryAccountSuspension()
+
+    fun refreshPermanentBanAppeal() = sessionCoordinator.refreshPermanentBanAppeal()
+
+    fun retryApprovedAppealBootstrap() = sessionCoordinator.retryApprovedAppealBootstrap()
+
+    fun submitPermanentBanAppeal(statement: String) = sessionCoordinator.submitPermanentBanAppeal(statement)
+
+    fun onSystemBack() {
+        val current = _uiState.value
+        if (!current.canHandleSystemBack()) return
+
+        when (current) {
+            is RealsRootUiState.Ready -> {
+                if (current.notificationPreferences.open) {
+                    closeNotificationPreferences()
+                } else if (current.affinityQuestionnaire.open) {
+                    navigateBackAffinityQuestionnaire()
+                } else if (current.profileQuestions.open) {
+                    navigateBackProfileQuestions()
+                } else if (current.editingActiveProfile) {
+                    closeProfileManagement()
+                } else if (current.isMatchmakingSearchSurfaceVisible()) {
+                    cancelMatchmakingSearch()
+                } else if (current.home.surface == HomeSurface.Pending) {
+                    showHomeSurface(HomeSurface.Overview)
+                }
+            }
+
+            is RealsRootUiState.SecondChat -> closeSecondChat()
+            is RealsRootUiState.FirstChat -> closeFirstChat()
+            is RealsRootUiState.VisualApproval -> closeVisualApprovalFromSystemBack(current)
+            is RealsRootUiState.Scheduling -> closeSchedulingFromSystemBack(current)
+            is RealsRootUiState.PartnerProfile -> closePartnerProfileFromSystemBack(current)
+            is RealsRootUiState.PendingEngagement -> returnToHomeFromPendingEngagement()
+            is RealsRootUiState.ActivationComplete -> refreshSession()
+
+            is RealsRootUiState.AccountDeletionPending,
+            is RealsRootUiState.AccountDeletionScheduled,
+            is RealsRootUiState.AccountSuspended,
+            is RealsRootUiState.PermanentBanAppeal,
+            RealsRootUiState.Checking,
+            is RealsRootUiState.Failure,
+            is RealsRootUiState.LegalRequirements,
+            is RealsRootUiState.LoadingSession,
+            is RealsRootUiState.Login,
+            is RealsRootUiState.MissingFirebase -> Unit
+        }
+    }
+
+    fun refreshHomeState() {
+        homeCoordinator.refreshHomeState()
+    }
+
+    fun pollHomeStateSilently() {
+        homeCoordinator.pollHomeStateSilently()
+    }
+
+    fun showHomeSurface(surface: HomeSurface) {
+        homeCoordinator.showHomeSurface(surface)
+    }
+
+    fun handleExternalNotificationOpened(type: String?) {
+        val normalizedType = type?.trim()
+        if (!PushNotificationOpenContract.shouldHandleExternalOpen(normalizedType)) return
+        if (_uiState.value.ownsForegroundForExternalNotificationOpen()) return
+        if (normalizedType == TYPE_SECOND_CHAT_STARTED) {
+            handleSecondChatStartedNotificationOpened()
+            return
+        }
+
+        when (val current = _uiState.value) {
+            is RealsRootUiState.Ready -> refreshHomeState()
+            is RealsRootUiState.FirstChat -> returnHomeFromExternalNotification(current.session)
+            is RealsRootUiState.SecondChat -> {
+                if (current.isJoinedActiveSecondChat()) {
+                    refreshSecondChat(silent = true)
+                } else {
+                    returnHomeFromExternalNotification(current.session)
+                }
+            }
+            is RealsRootUiState.VisualApproval -> returnHomeFromExternalNotification(current.session)
+            is RealsRootUiState.Scheduling -> returnHomeFromExternalNotification(current.session)
+            is RealsRootUiState.PartnerProfile -> returnHomeFromExternalNotification(current.session)
+            is RealsRootUiState.PendingEngagement -> returnHomeFromExternalNotification(current.session)
+            is RealsRootUiState.ActivationComplete -> returnHomeFromExternalNotification(current.session)
+            is RealsRootUiState.LegalRequirements -> Unit
+            is RealsRootUiState.LoadingSession,
+            RealsRootUiState.Checking -> refreshSession()
+            is RealsRootUiState.AccountDeletionPending,
+            is RealsRootUiState.AccountDeletionScheduled,
+            is RealsRootUiState.AccountSuspended,
+            is RealsRootUiState.PermanentBanAppeal,
+            is RealsRootUiState.Failure,
+            is RealsRootUiState.Login,
+            is RealsRootUiState.MissingFirebase -> Unit
+        }
+    }
+
+    private fun handleSecondChatStartedNotificationOpened() {
+        when (val current = _uiState.value) {
+            is RealsRootUiState.Ready -> {
+                pendingSecondChatStartedHomeOpen = false
+                returnHomeFromExternalNotification(current.session)
+            }
+            is RealsRootUiState.FirstChat -> {
+                pendingSecondChatStartedHomeOpen = false
+                returnHomeFromExternalNotification(current.session)
+            }
+            is RealsRootUiState.SecondChat -> {
+                pendingSecondChatStartedHomeOpen = false
+                returnHomeFromExternalNotification(current.session)
+            }
+            is RealsRootUiState.VisualApproval -> {
+                pendingSecondChatStartedHomeOpen = false
+                returnHomeFromExternalNotification(current.session)
+            }
+            is RealsRootUiState.Scheduling -> {
+                pendingSecondChatStartedHomeOpen = false
+                returnHomeFromExternalNotification(current.session)
+            }
+            is RealsRootUiState.PartnerProfile -> {
+                pendingSecondChatStartedHomeOpen = false
+                returnHomeFromExternalNotification(current.session)
+            }
+            is RealsRootUiState.PendingEngagement -> {
+                pendingSecondChatStartedHomeOpen = false
+                returnHomeFromExternalNotification(current.session)
+            }
+            is RealsRootUiState.ActivationComplete -> {
+                pendingSecondChatStartedHomeOpen = false
+                returnHomeFromExternalNotification(current.session)
+            }
+            is RealsRootUiState.LegalRequirements -> {
+                pendingSecondChatStartedHomeOpen = true
+            }
+            is RealsRootUiState.LoadingSession,
+            RealsRootUiState.Checking -> {
+                pendingSecondChatStartedHomeOpen = true
+                refreshSession()
+            }
+            is RealsRootUiState.AccountDeletionPending,
+            is RealsRootUiState.AccountDeletionScheduled,
+            is RealsRootUiState.AccountSuspended,
+            is RealsRootUiState.PermanentBanAppeal,
+            is RealsRootUiState.Failure,
+            is RealsRootUiState.Login,
+            is RealsRootUiState.MissingFirebase -> {
+                pendingSecondChatStartedHomeOpen = false
             }
         }
     }
+
+    fun enqueueMatchmaking(location: SearchLocationInput) {
+        homeCoordinator.enqueueMatchmaking(location)
+    }
+
+    fun enqueueMatchmakingFromResolvedDeviceLocation(location: SearchLocationInput) {
+        homeCoordinator.enqueueMatchmakingFromResolvedDeviceLocation(location)
+    }
+
+    fun cancelMatchmakingSearch() {
+        homeCoordinator.cancelMatchmakingSearch()
+    }
+
+    fun leaveMatchmakingQueue() {
+        homeCoordinator.leaveMatchmakingQueue()
+    }
+
+    fun dismissSecondChatFromHome(connectionId: String) {
+        homeCoordinator.dismissSecondChatFromHome(connectionId)
+    }
+
+    fun beginMatchmakingLocationResolution() {
+        homeCoordinator.beginMatchmakingLocationResolution()
+    }
+
+    fun failMatchmakingSearchPreparation() {
+        homeCoordinator.failMatchmakingSearchPreparation()
+    }
+
+    fun openProfileManagement() {
+        val current = _uiState.value as? RealsRootUiState.Ready ?: return
+        _uiState.value = current.copy(
+            editingActiveProfile = true,
+            profileManagementDestination = ProfileManagementDestination.Profile,
+        )
+        profileHandler.loadProfilePhotos(prefetchAfterSuccess = true)
+    }
+
+    fun openSearchManagement() {
+        val current = _uiState.value as? RealsRootUiState.Ready ?: return
+        _uiState.value = current.copy(
+            editingActiveProfile = true,
+            profileManagementDestination = ProfileManagementDestination.Search,
+        )
+    }
+
+    fun closeProfileManagement() {
+        val current = _uiState.value as? RealsRootUiState.Ready ?: return
+        closeProfileManagement(current)
+    }
+
+    fun openAffinityQuestionnaire() = affinityQuestionnaireHandler.open()
+
+    fun loadAffinityHomeSummaryIfNeeded() = affinityQuestionnaireHandler.loadHomeSummaryIfNeeded()
+
+    fun closeAffinityQuestionnaire() = affinityQuestionnaireHandler.close()
+
+    fun refreshAffinityQuestionnaire() = affinityQuestionnaireHandler.refresh()
+
+    fun startAffinityQuestionnaireContinue() = affinityQuestionnaireHandler.openContinue()
+
+    fun openAffinityQuestionnaireCategories() = affinityQuestionnaireHandler.openCategories()
+
+    fun openAffinityQuestionnaireReview() = affinityQuestionnaireHandler.openReview()
+
+    fun openAffinityQuestionnaireCategory(categoryId: String) =
+        affinityQuestionnaireHandler.openCategory(categoryId)
+
+    fun openAffinityQuestionnaireReviewedAnswer(questionId: String) =
+        affinityQuestionnaireHandler.openReviewedAnswer(questionId)
+
+    fun skipAffinityQuestion() = affinityQuestionnaireHandler.skipQuestion()
+
+    fun nextAffinityQuestion() = affinityQuestionnaireHandler.nextQuestion()
+
+    fun navigateBackAffinityQuestionnaire() = affinityQuestionnaireHandler.navigateBack()
+
+    fun selectAffinityAnswer(questionId: String, answerCode: String) =
+        affinityQuestionnaireHandler.selectAnswer(questionId, answerCode)
+
+    fun deleteAffinityAnswer(questionId: String) =
+        affinityQuestionnaireHandler.deleteAnswer(questionId)
+
+    fun openProfileQuestions() = profileQuestionHandler.open()
+
+    fun closeProfileQuestions() = profileQuestionHandler.close()
+
+    fun refreshProfileQuestions() = profileQuestionHandler.refresh()
+
+    fun navigateBackProfileQuestions() = profileQuestionHandler.navigateBack()
+
+    fun openProfileQuestionOverview() = profileQuestionHandler.openOverview()
+
+    fun openProfileQuestionList() = profileQuestionHandler.openQuestions()
+
+    fun openProfileQuestionEditor(questionId: String) = profileQuestionHandler.openEditor(questionId)
+
+    fun openProfileQuestionSelection() = profileQuestionHandler.openSelection()
+
+    fun updateProfileQuestionSelectionDraft(questionIds: List<String>) =
+        profileQuestionHandler.updateSelectionDraft(questionIds)
+
+    fun saveProfileQuestionAnswer(questionId: String, answer: String) =
+        profileQuestionHandler.saveAnswer(questionId, answer)
+
+    fun deleteProfileQuestionAnswer(questionId: String) =
+        profileQuestionHandler.deleteAnswer(questionId)
+
+    fun saveProfileQuestionSelection() = profileQuestionHandler.saveSelection()
+
+    private fun closeProfileManagement(current: RealsRootUiState.Ready) {
+        if (current.session.profileSnapshot !is ProfileSnapshot.Found) return
+
+        profileHandler.cancelProfilePhotoPrefetch()
+        homeCoordinator.closeProfileManagementWithHomeReload(current)
+    }
+
+    fun openFirstChat(matchId: String, chatId: String? = null) {
+        val session = when (val current = _uiState.value) {
+            is RealsRootUiState.Ready -> current.session
+            is RealsRootUiState.FirstChat -> current.session
+            else -> return
+        }
+
+        openFirstChat(
+            session = session,
+            matchId = matchId,
+            chatId = chatId,
+        )
+    }
+
+    private fun openFirstChat(
+        session: ProvisionedSession,
+        matchId: String,
+        chatId: String? = null,
+    ) {
+        val cleanMatchId = matchId.trim()
+        if (cleanMatchId.isBlank()) return
+        homeCoordinator.cancelPendingVisualReviewPhotoPrefetch()
+
+        viewModelScope.launch {
+            _uiState.value = RealsRootUiState.FirstChat(
+                session = session,
+                matchId = cleanMatchId,
+                chatId = chatId,
+                loading = true,
+            )
+
+            when (val result = firstChatCoordinator.load(session, cleanMatchId, chatId)) {
+                is FirstChatLoadResult.Show -> _uiState.value = result.state
+                is FirstChatLoadResult.RouteHome -> {
+                    homeCoordinator.hideFirstChatLocally(cleanMatchId)
+                    homeCoordinator.returnHome(
+                        session = session,
+                        message = result.message,
+                    )
+                }
+            }
+        }
+    }
+
+    fun closeFirstChat() {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        current.audioDraft?.deleteFile()
+        viewModelScope.launch {
+            homeCoordinator.returnHome(current.session)
+        }
+    }
+
+    fun openSecondChat(
+        connectionId: String,
+        matchId: String,
+        partnerName: String? = null,
+    ) {
+        val session = when (val current = _uiState.value) {
+            is RealsRootUiState.Ready -> current.session
+            is RealsRootUiState.SecondChat -> current.session
+            else -> return
+        }
+        val cleanConnectionId = connectionId.trim()
+        val cleanMatchId = matchId.trim()
+        if (cleanConnectionId.isBlank() || cleanMatchId.isBlank()) return
+
+        openSecondChat(session, cleanConnectionId, cleanMatchId, partnerName, joinIfAllowed = true)
+    }
+
+    private fun openSecondChat(
+        session: ProvisionedSession,
+        cleanConnectionId: String,
+        cleanMatchId: String,
+        partnerName: String? = null,
+        joinIfAllowed: Boolean,
+    ) {
+        homeCoordinator.cancelPendingVisualReviewPhotoPrefetch()
+        pendingSecondChatLocalExpiryKey = null
+        completedSecondChatLocalExpiryKey = null
+        viewModelScope.launch {
+            _uiState.value = RealsRootUiState.SecondChat(
+                session = session,
+                connectionId = cleanConnectionId,
+                matchId = cleanMatchId,
+                partnerName = partnerName,
+                loading = true,
+            )
+            applySecondChatLoadResult(
+                secondChatCoordinator.load(
+                    session = session,
+                    connectionId = cleanConnectionId,
+                    matchId = cleanMatchId,
+                    partnerName = partnerName,
+                    joinIfAllowed = joinIfAllowed,
+                )
+            )
+        }
+    }
+
+    fun refreshSecondChat(silent: Boolean = false) {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        if (
+            current.refreshing ||
+            current.sending ||
+            current.audioUpload.uploading ||
+            current.actionLoading ||
+            current.manualBlock.loading
+        ) return
+        if (silent && silentSecondChatRefreshJob?.isActive == true) return
+        if (current.chat == null) return openSecondChat(
+            connectionId = current.connectionId,
+            matchId = current.matchId,
+            partnerName = current.partnerName,
+        )
+
+        val job = viewModelScope.launch {
+            if (!silent) {
+                _uiState.value = current.copy(
+                    refreshing = true,
+                    error = null,
+                    message = null,
+                )
+            }
+            val result = secondChatCoordinator.refresh(
+                current = current,
+                silent = silent,
+                useReactionReconciliationAlternation = silent,
+            )
+            val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return@launch
+            if (latest.audioUpload != current.audioUpload) return@launch
+            if (latest.audioDraft != current.audioDraft) return@launch
+            if (silent && (
+                    latest.connectionId != current.connectionId ||
+                        latest.sending ||
+                        latest.actionLoading
+                    )
+            ) {
+                return@launch
+            }
+            applySecondChatLoadResult(result)
+        }
+        if (silent) {
+            silentSecondChatRefreshJob = job
+        }
+    }
+
+    fun sendSecondChatMessage(content: String, replyDraft: ChatReplyDraft? = null): Boolean {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return false
+        return when (val preparation = ChatMessageActionHandler.prepareSecondChatSend(current, content, replyDraft)) {
+            is ChatMessageSendPreparation.Accepted -> {
+                val instanceKey = preparation.pendingState.expiryKey()
+                _uiState.value = preparation.pendingState
+                viewModelScope.launch {
+                    val result = secondChatCoordinator.sendMessage(
+                        preparation.pendingState,
+                        preparation.cleanContent,
+                        preparation.localId,
+                        preparation.replyTo,
+                    )
+                    val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return@launch
+                    if (latest.matches(instanceKey)) {
+                        _uiState.value = result.reconcileAsyncSecondChatResult(latest) ?: return@launch
+                    }
+                }
+                true
+            }
+
+            is ChatMessageSendPreparation.Rejected -> {
+                _uiState.value = preparation.state
+                false
+            }
+
+            ChatMessageSendPreparation.Ignored -> false
+        }
+    }
+
+    fun sendSecondChatAudioMessage(filePath: String, clientMessageId: String,
+                                   replyDraft: ChatReplyDraft? = null,): Boolean {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return false
+        return when (val preparation = ChatMessageActionHandler.prepareSecondChatAudioSend(
+            current,
+            filePath,
+            clientMessageId,
+            replyDraft
+        )) {
+            is ChatAudioSendPreparation.Accepted -> {
+                val instanceKey = preparation.pendingState.expiryKey()
+                silentSecondChatRefreshJob?.cancel()
+                silentSecondChatRefreshJob = null
+                _uiState.value = preparation.pendingState
+                viewModelScope.launch {
+                    val result = secondChatCoordinator.sendAudioMessage(
+                        preparation.pendingState,
+                        preparation.file,
+                        preparation.clientMessageId,
+                        preparation.replyTo,
+                    )
+                    val latest = _uiState.value as? RealsRootUiState.SecondChat
+                    val latestDraft = latest?.audioDraft
+                    val canInstall =
+                        latest != null &&
+                        latest.matches(instanceKey) &&
+                        latest.audioUpload.uploading &&
+                        latestDraft != null &&
+                            latestDraft.clientMessageId == preparation.clientMessageId &&
+                            latestDraft.filePath == preparation.file.absolutePath
+                    if (canInstall) {
+                        _uiState.value = result.reconcileAsyncSecondChatResult(latest) ?: return@launch
+                        deleteCompletedSecondChatDraftIfMatching(
+                            chatId = preparation.chatId,
+                            clientMessageId = preparation.clientMessageId,
+                            filePath = preparation.file.absolutePath,
+                        )
+                    } else {
+                        runCatching { preparation.file.delete() }
+                    }
+                }
+                true
+            }
+
+            is ChatAudioSendPreparation.Rejected -> {
+                _uiState.value = preparation.state
+                false
+            }
+
+            ChatAudioSendPreparation.Ignored -> false
+        }
+    }
+
+    fun clearSecondChatAudioUploadState() {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        _uiState.value = current.copy(audioUpload = ChatAudioUploadUiState())
+    }
+
+    fun setSecondChatAudioDraft(draft: ChatAudioDraftUiState) {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        current.audioDraft
+            ?.takeIf { it.filePath != draft.filePath && !current.audioUpload.uploading }
+            ?.deleteFile()
+        _uiState.value = current.copy(
+            audioDraft = draft,
+            audioUpload = ChatAudioUploadUiState(),
+            error = null,
+        )
+    }
+
+    fun setAndSendSecondChatAudioDraft(draft: ChatAudioDraftUiState,
+                                       replyDraft: ChatReplyDraft? = null,): Boolean {
+        setSecondChatAudioDraft(draft)
+        return sendSecondChatAudioMessage(draft.filePath, draft.clientMessageId, replyDraft)
+    }
+
+    fun deleteSecondChatAudioDraft() {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        if (current.audioUpload.uploading) return
+        current.audioDraft?.deleteFile()
+        _uiState.value = current.copy(
+            audioDraft = null,
+            audioUpload = ChatAudioUploadUiState(),
+        )
+    }
+
+    suspend fun refreshSecondChatAudioUrl(messageId: String): String? {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return null
+        val instanceKey = current.expiryKey()
+        val messagesResult = secondChatCoordinator.loadFullMessagesForAudioPlayback(current)
+        val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return null
+        if (!latest.matches(instanceKey)) return null
+        val incoming = when (messagesResult) {
+            is ApiResult.Success -> messagesResult.value
+            is ApiResult.Failure -> return null
+        }
+        val merged = latest.messages.appendUnique(incoming)
+        _uiState.value = latest.copy(messages = merged)
+        return merged.firstOrNull { it.id == messageId }?.audio?.url
+    }
+
+    fun retrySecondChatMessage(localId: String) {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        val failedMessage = current.optimisticMessages.firstOrNull { it.localId == localId } ?: return
+        if (failedMessage.messageType != OptimisticOutgoingMessageType.Text) return
+        val retrying = current.copy(
+            optimisticMessages = current.optimisticMessages.markOptimisticMessageSending(localId),
+            sending = true,
+            error = null,
+            message = null,
+        )
+        val instanceKey = retrying.expiryKey()
+        _uiState.value = retrying
+        viewModelScope.launch {
+            val result = secondChatCoordinator.sendMessage(
+                retrying,
+                failedMessage.content,
+                failedMessage.localId,
+                failedMessage.replyTo?.toReplyTargetOrNull(),
+            )
+            val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return@launch
+            if (latest.matches(instanceKey)) {
+                _uiState.value = result.reconcileAsyncSecondChatResult(latest) ?: return@launch
+            }
+        }
+    }
+
+    fun reactToSecondChatMessage(messageId: String): Boolean {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return false
+        return when (val preparation = ChatMessageActionHandler.prepareSecondChatReaction(current, messageId)) {
+            is ChatReactionPreparation.Accepted -> {
+                val instanceKey = preparation.pendingState.expiryKey()
+                _uiState.value = preparation.pendingState
+                viewModelScope.launch {
+                    val result = secondChatCoordinator.putMessageReaction(
+                        chatId = preparation.chatId,
+                        messageId = preparation.messageId,
+                        reactionType = preparation.reactionType,
+                    )
+                    val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return@launch
+                    if (!latest.matches(instanceKey)) return@launch
+                    when (result) {
+                        is ApiResult.Success -> _uiState.value = latest.copy(
+                            messages = latest.messages.appendUnique(listOf(result.value)),
+                            reaction = latest.reaction.withoutPendingReaction(preparation.messageId),
+                        )
+                        is ApiResult.Failure -> applySecondChatReactionFailure(
+                            latest = latest,
+                            messageId = preparation.messageId,
+                            error = result.error,
+                            instanceKey = instanceKey,
+                        )
+                    }
+                }
+                true
+            }
+
+            ChatReactionPreparation.Ignored -> false
+        }
+    }
+
+    fun safetyCancelSecondChat(reason: ChatExitReason, details: String, blockUser: Boolean) {
+        val current = ((_uiState.value as? RealsRootUiState.SecondChat)
+            ?.withDiscardedAudioTransaction() as? RealsRootUiState.SecondChat) ?: return
+        _uiState.value = current
+        viewModelScope.launch {
+            applySecondChatActionResult(
+                secondChatCoordinator.safetyCancel(
+                    current = current,
+                    reason = reason,
+                    details = details,
+                    blockUser = blockUser,
+                    onPending = { _uiState.value = it },
+                )
+            )
+        }
+    }
+
+    fun closeSecondChat() {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        if (!current.canReturnHomeNow()) return
+        current.audioDraft?.deleteFile()
+        viewModelScope.launch {
+            homeCoordinator.returnHome(current.session)
+        }
+    }
+
+    fun handleSecondChatLocalAbsoluteExpiry() {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        if (!current.lifecycle.timingPresentation().locallyExpired) return
+        val expiryKey = current.expiryKey()
+        if (
+            completedSecondChatLocalExpiryKey == expiryKey ||
+            pendingSecondChatLocalExpiryKey == expiryKey
+        ) {
+            return
+        }
+        pendingSecondChatLocalExpiryKey = expiryKey
+        viewModelScope.launch {
+            val latest = _uiState.value as? RealsRootUiState.SecondChat
+            if (latest == null || !latest.matches(expiryKey)) {
+                clearPendingSecondChatLocalExpiry(expiryKey)
+                return@launch
+            }
+            val timing = latest.lifecycle.timingPresentation()
+            if (!timing.locallyExpired && !latest.hasTerminalSecondChatStatus()) {
+                clearPendingSecondChatLocalExpiry(expiryKey)
+                return@launch
+            }
+            completedSecondChatLocalExpiryKey = expiryKey
+            clearPendingSecondChatLocalExpiry(expiryKey)
+            homeCoordinator.returnHome(
+                session = latest.session,
+                message = "El segundo chat venció.",
+            )
+        }
+    }
+
+    private fun clearPendingSecondChatLocalExpiry(expiryKey: SecondChatExpiryKey) {
+        if (pendingSecondChatLocalExpiryKey == expiryKey) {
+            pendingSecondChatLocalExpiryKey = null
+        }
+    }
+
+    fun createSecondChatNoShowClaim() {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        viewModelScope.launch {
+            applySecondChatLoadResult(
+                secondChatCoordinator.createNoShowClaim(
+                    current = current,
+                    onPending = { _uiState.value = it },
+                )
+            )
+        }
+    }
+
+    fun requestSecondChatCompletion() {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        val instanceKey = current.expiryKey()
+        viewModelScope.launch {
+            val result = secondChatCoordinator.createCompletionRequest(
+                current = current,
+                onPending = { setSecondChatPendingIfCurrent(it, instanceKey) },
+            )
+            applySecondChatLoadResultIfCurrent(result, instanceKey)
+        }
+    }
+
+    fun decideSecondChatCompletion(
+        requestId: String,
+        decision: SecondChatCompletionDecision,
+    ) {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        val instanceKey = current.expiryKey()
+        viewModelScope.launch {
+            val result = secondChatCoordinator.decideCompletionRequest(
+                current = current,
+                requestId = requestId,
+                decision = decision,
+                onPending = { setSecondChatPendingIfCurrent(it, instanceKey) },
+            )
+            applySecondChatLoadResultIfCurrent(result, instanceKey)
+        }
+    }
+
+    fun claimSecondChatInactivity() {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        val instanceKey = current.expiryKey()
+        viewModelScope.launch {
+            val result = secondChatCoordinator.createInactivityClaim(
+                current = current,
+                onPending = { setSecondChatPendingIfCurrent(it, instanceKey) },
+            )
+            applySecondChatLoadResultIfCurrent(result, instanceKey)
+        }
+    }
+
+    fun openVisualApproval(matchId: String) {
+        val current = _uiState.value
+        val session = when (current) {
+            is RealsRootUiState.Ready -> current.session
+            is RealsRootUiState.FirstChat -> current.session
+            is RealsRootUiState.VisualApproval -> current.session
+            else -> return
+        }
+        val returnHomeSurface = when (current) {
+            is RealsRootUiState.Ready -> current.home.surface
+            is RealsRootUiState.VisualApproval -> current.returnHomeSurface
+            else -> HomeSurface.Overview
+        }
+        val cleanMatchId = matchId.trim()
+        if (cleanMatchId.isBlank()) return
+        val originState = current
+        val instanceKey = VisualApprovalInstanceKey(cleanMatchId)
+        homeCoordinator.cancelPendingVisualReviewPhotoPrefetch()
+
+        viewModelScope.launch {
+            val result = visualApprovalCoordinator.open(
+                session = session,
+                matchId = cleanMatchId,
+                returnHomeSurface = returnHomeSurface,
+                locallyHidden = cleanMatchId in homeCoordinator.localHiddenSnapshot().hiddenVisualMatchIds,
+                onPending = { pending ->
+                    setVisualApprovalPendingIfCurrent(
+                        pending = pending,
+                        instanceKey = instanceKey,
+                        originState = originState,
+                    )
+                },
+            )
+            applyVisualApprovalFlowResultIfCurrent(result, instanceKey)
+        }
+    }
+
+    fun closeVisualApproval() {
+        val current = _uiState.value as? RealsRootUiState.VisualApproval ?: return
+        viewModelScope.launch {
+            homeCoordinator.returnHome(current.session)
+        }
+    }
+
+    private fun closeVisualApprovalFromSystemBack(current: RealsRootUiState.VisualApproval) {
+        viewModelScope.launch {
+            homeCoordinator.returnHome(
+                session = current.session,
+                surface = current.returnHomeSurface,
+            )
+        }
+    }
+
+    fun refreshVisualApproval() {
+        val current = _uiState.value as? RealsRootUiState.VisualApproval ?: return
+        if (current.manualBlock.loading) return
+        val instanceKey = current.instanceKey()
+        viewModelScope.launch {
+            val result = visualApprovalCoordinator.refresh(
+                current = current,
+                locallyHidden = current.matchId in homeCoordinator.localHiddenSnapshot().hiddenVisualMatchIds,
+                onPending = { setVisualApprovalPendingIfCurrent(it, instanceKey) },
+            )
+            applyVisualApprovalFlowResultIfCurrent(result, instanceKey)
+        }
+    }
+
+    fun openScheduling(
+        connectionId: String,
+        matchId: String,
+        partnerName: String? = null,
+    ) {
+        val current = _uiState.value
+        val session = when (current) {
+            is RealsRootUiState.Ready -> current.session
+            is RealsRootUiState.Scheduling -> current.session
+            else -> return
+        }
+        val returnHomeSurface = when (current) {
+            is RealsRootUiState.Ready -> current.home.surface
+            is RealsRootUiState.Scheduling -> current.returnHomeSurface
+            else -> HomeSurface.Overview
+        }
+        val cleanConnectionId = connectionId.trim()
+        val cleanMatchId = matchId.trim()
+        if (cleanConnectionId.isBlank() || cleanMatchId.isBlank()) return
+
+        openScheduling(
+            session = session,
+            cleanConnectionId = cleanConnectionId,
+            cleanMatchId = cleanMatchId,
+            partnerName = partnerName,
+            returnHomeSurface = returnHomeSurface,
+        )
+    }
+
+    private fun openScheduling(
+        session: ProvisionedSession,
+        cleanConnectionId: String,
+        cleanMatchId: String,
+        partnerName: String?,
+        returnHomeSurface: HomeSurface,
+    ) {
+        if (schedulingOpenJob?.isActive == true) return
+        homeCoordinator.cancelPendingVisualReviewPhotoPrefetch()
+
+        val pending = RealsRootUiState.Scheduling(
+            session = session,
+            connectionId = cleanConnectionId,
+            matchId = cleanMatchId,
+            partnerName = partnerName,
+            returnHomeSurface = returnHomeSurface,
+            loading = true,
+        )
+        _uiState.value = pending
+
+        val job = viewModelScope.launch {
+            val result = schedulingCoordinator.refresh(pending, silent = false)
+            val latest = _uiState.value as? RealsRootUiState.Scheduling ?: return@launch
+            if (latest.connectionId != cleanConnectionId || latest.matchId != cleanMatchId) {
+                return@launch
+            }
+            _uiState.value = result
+        }
+        schedulingOpenJob = job
+        job.invokeOnCompletion {
+            if (schedulingOpenJob == job) {
+                schedulingOpenJob = null
+            }
+        }
+    }
+
+    fun refreshScheduling(silent: Boolean = false) {
+        val current = _uiState.value as? RealsRootUiState.Scheduling ?: return
+        if (current.refreshing || current.submitting || current.manualBlock.loading) return
+        if (schedulingRefreshJob?.isActive == true) return
+        if (silent && silentSchedulingRefreshJob?.isActive == true) return
+
+        val connectionId = current.connectionId
+        val matchId = current.matchId
+        val job = viewModelScope.launch {
+            val result = schedulingCoordinator.refresh(current, silent)
+            val latest = _uiState.value as? RealsRootUiState.Scheduling ?: return@launch
+            if (latest.connectionId != connectionId || latest.matchId != matchId) return@launch
+            if (latest.submitting || latest.manualBlock.loading) return@launch
+            _uiState.value = result
+        }
+        schedulingRefreshJob = job
+        job.invokeOnCompletion {
+            if (schedulingRefreshJob == job) {
+                schedulingRefreshJob = null
+            }
+        }
+        if (silent) {
+            silentSchedulingRefreshJob = job
+            job.invokeOnCompletion {
+                if (silentSchedulingRefreshJob == job) {
+                    silentSchedulingRefreshJob = null
+                }
+            }
+        }
+    }
+
+    fun submitSchedulingProposals(proposedDateTimes: List<String>) {
+        val current = _uiState.value as? RealsRootUiState.Scheduling ?: return
+        if (current.submitting) return
+
+        silentSchedulingRefreshJob?.cancel()
+        silentSchedulingRefreshJob = null
+        val connectionId = current.connectionId
+        viewModelScope.launch {
+            val result = schedulingCoordinator.submitProposals(
+                current.copy(submittingLabel = "Enviando horarios..."),
+                proposedDateTimes,
+                onPending = { pending ->
+                    val latest = _uiState.value as? RealsRootUiState.Scheduling
+                    if (latest?.connectionId == connectionId) {
+                        _uiState.value = pending
+                    }
+                },
+            )
+            val latest = _uiState.value as? RealsRootUiState.Scheduling ?: return@launch
+            if (latest.connectionId != connectionId) return@launch
+            _uiState.value = result
+        }
+    }
+
+    fun acceptSchedulingProposal(proposalId: String) {
+        val current = _uiState.value as? RealsRootUiState.Scheduling ?: return
+        val cleanProposalId = proposalId.trim()
+        if (current.submitting || cleanProposalId.isBlank()) return
+
+        silentSchedulingRefreshJob?.cancel()
+        silentSchedulingRefreshJob = null
+        val connectionId = current.connectionId
+        viewModelScope.launch {
+            val result = schedulingCoordinator.acceptProposal(
+                current.copy(submittingLabel = "Aceptando horario..."),
+                cleanProposalId,
+                onPending = { pending ->
+                    val latest = _uiState.value as? RealsRootUiState.Scheduling
+                    if (latest?.connectionId == connectionId) {
+                        _uiState.value = pending
+                    }
+                },
+            )
+            val latest = _uiState.value as? RealsRootUiState.Scheduling ?: return@launch
+            if (latest.connectionId != connectionId) return@launch
+            _uiState.value = result
+        }
+    }
+
+    fun rejectSchedulingPartnerProposals() {
+        val current = _uiState.value as? RealsRootUiState.Scheduling ?: return
+        if (current.submitting) return
+
+        silentSchedulingRefreshJob?.cancel()
+        silentSchedulingRefreshJob = null
+        val connectionId = current.connectionId
+        viewModelScope.launch {
+            val result = schedulingCoordinator.rejectPartnerProposals(
+                current.copy(submittingLabel = "Rechazando opciones..."),
+                onPending = { pending ->
+                    val latest = _uiState.value as? RealsRootUiState.Scheduling
+                    if (latest?.connectionId == connectionId) {
+                        _uiState.value = pending
+                    }
+                },
+            )
+            val latest = _uiState.value as? RealsRootUiState.Scheduling ?: return@launch
+            if (latest.connectionId != connectionId) return@launch
+            _uiState.value = result
+        }
+    }
+
+    fun closeScheduling() {
+        val current = _uiState.value as? RealsRootUiState.Scheduling ?: return
+        schedulingOpenJob?.cancel()
+        schedulingOpenJob = null
+        schedulingRefreshJob?.cancel()
+        schedulingRefreshJob = null
+        silentSchedulingRefreshJob = null
+        viewModelScope.launch {
+            homeCoordinator.returnHome(current.session)
+        }
+    }
+
+    private fun closeSchedulingFromSystemBack(current: RealsRootUiState.Scheduling) {
+        schedulingOpenJob?.cancel()
+        schedulingOpenJob = null
+        schedulingRefreshJob?.cancel()
+        schedulingRefreshJob = null
+        silentSchedulingRefreshJob = null
+        viewModelScope.launch {
+            homeCoordinator.returnHome(
+                session = current.session,
+                surface = current.returnHomeSurface,
+            )
+        }
+    }
+
+    fun openConnectionPartnerProfile(matchId: String) {
+        val current = _uiState.value
+        val session = when (current) {
+            is RealsRootUiState.Ready -> current.session
+            is RealsRootUiState.Scheduling -> current.session
+            else -> return
+        }
+        val fallbackHomeSurface = when (current) {
+            is RealsRootUiState.Ready -> current.home.surface
+            is RealsRootUiState.Scheduling -> current.returnHomeSurface
+            else -> HomeSurface.Overview
+        }
+        val schedulingReturnContext = (current as? RealsRootUiState.Scheduling)?.let { scheduling ->
+            SchedulingReturnContext(
+                connectionId = scheduling.connectionId,
+                matchId = scheduling.matchId,
+                partnerName = scheduling.partnerName,
+                homeSurface = scheduling.returnHomeSurface,
+            )
+        }
+        val cleanMatchId = matchId.trim()
+        if (cleanMatchId.isBlank()) return
+        val originState = current
+        val instanceKey = PartnerProfileInstanceKey(cleanMatchId)
+        homeCoordinator.cancelPendingVisualReviewPhotoPrefetch()
+
+        viewModelScope.launch {
+            val result = partnerProfileCoordinator.load(
+                session = session,
+                matchId = cleanMatchId,
+                fallbackHomeSurface = fallbackHomeSurface,
+                schedulingReturnContext = schedulingReturnContext,
+                onPending = { pending ->
+                    setPartnerProfilePendingIfCurrent(
+                        pending = pending,
+                        instanceKey = instanceKey,
+                        originState = originState,
+                    )
+                },
+            )
+            setPartnerProfileResultIfCurrent(result, instanceKey)
+        }
+    }
+
+    fun refreshPartnerProfile() {
+        val current = _uiState.value as? RealsRootUiState.PartnerProfile ?: return
+        if (current.manualBlock.loading) return
+        val instanceKey = current.instanceKey()
+        viewModelScope.launch {
+            val result = partnerProfileCoordinator.refresh(
+                current = current,
+                onPending = { setPartnerProfilePendingIfCurrent(it, instanceKey) },
+            )
+            setPartnerProfileResultIfCurrent(result, instanceKey)
+        }
+    }
+
+    fun retryPartnerProfileMessage() {
+        val current = _uiState.value as? RealsRootUiState.PartnerProfile ?: return
+        if (current.manualBlock.loading) return
+        val instanceKey = current.instanceKey()
+        viewModelScope.launch {
+            val result = partnerProfileCoordinator.retryPartnerMessage(
+                current = current,
+                onPending = { setPartnerProfilePendingIfCurrent(it, instanceKey) },
+            )
+            setPartnerProfileResultIfCurrent(result, instanceKey)
+        }
+    }
+
+    fun closePartnerProfile() {
+        val current = _uiState.value as? RealsRootUiState.PartnerProfile ?: return
+        viewModelScope.launch {
+            homeCoordinator.returnHome(current.session)
+        }
+    }
+
+    private fun closePartnerProfileFromSystemBack(current: RealsRootUiState.PartnerProfile) {
+        val schedulingContext = current.schedulingReturnContext
+        if (schedulingContext != null) {
+            openScheduling(
+                session = current.session,
+                cleanConnectionId = schedulingContext.connectionId,
+                cleanMatchId = schedulingContext.matchId,
+                partnerName = schedulingContext.partnerName,
+                returnHomeSurface = schedulingContext.homeSurface,
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            homeCoordinator.returnHome(
+                session = current.session,
+                surface = current.fallbackHomeSurface,
+            )
+        }
+    }
+
+    fun blockCurrentMatchParticipant() {
+        if (manualBlockJob?.isActive == true) return
+        manualBlockJob = viewModelScope.launch {
+            val current = _uiState.value.withDiscardedAudioTransaction()
+            if (current !== _uiState.value) {
+                _uiState.value = current
+            }
+            when (
+                val result = manualBlockCoordinator.block(
+                    current = current,
+                    onPending = {
+                        cancelSilentRefreshFor(current)
+                        _uiState.value = it
+                    },
+                )
+            ) {
+                ManualBlockResult.Ignore -> Unit
+                is ManualBlockResult.Show -> _uiState.value = result.state
+                is ManualBlockResult.ReturnHome -> homeCoordinator.returnHome(
+                    session = result.session,
+                    message = "Bloqueaste a ésta persona. Cerramos la interacción y no volverán a ser emparejados.",
+                )
+            }
+        }
+    }
+
+    fun clearManualBlockError() {
+        _uiState.value = _uiState.value.clearManualBlockError()
+    }
+
+    fun refreshFirstChat(silent: Boolean = false) {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        if (
+            current.refreshing || current.sending || current.actionLoading ||
+            current.audioUpload.uploading || current.guidanceActionLoading || current.manualBlock.loading
+        ) return
+        if (silent && silentFirstChatRefreshJob?.isActive == true) return
+        if (current.chat == null) return openFirstChat(current.matchId, current.chatId)
+
+        val job = viewModelScope.launch {
+            if (!silent) {
+                _uiState.value = current.copy(
+                    refreshing = true,
+                    error = null,
+                    message = null,
+                )
+            }
+            val result = firstChatCoordinator.refresh(
+                current = current,
+                silent = silent,
+                useReactionReconciliationAlternation = silent,
+            )
+            val latest = _uiState.value as? RealsRootUiState.FirstChat ?: return@launch
+            if (latest.audioUpload != current.audioUpload) return@launch
+            if (latest.audioDraft != current.audioDraft) return@launch
+            if (silent && (
+                    latest.matchId != current.matchId ||
+                        latest.sending ||
+                        latest.actionLoading ||
+                        latest.guidanceActionLoading
+                    )
+            ) {
+                return@launch
+            }
+            when (result) {
+                is FirstChatRefreshResult.Show -> {
+                    val reconciled = if (silent) {
+                        result.state.reconcileSilentFirstChatRefreshResult(latest)
+                    } else {
+                        result.state.reconcileAsyncFirstChatResult(latest)
+                    } ?: return@launch
+                    _uiState.value = reconciled
+                }
+                is FirstChatRefreshResult.Reopen -> openFirstChat(result.matchId, result.chatId)
+                is FirstChatRefreshResult.Closed -> {
+                    homeCoordinator.hideFirstChatLocally(current.matchId)
+                    homeCoordinator.returnHome(
+                        session = current.session,
+                        message = result.chatStatus?.firstChatClosedMessage()
+                            ?: firstChatExitMessage(result.matchState),
+                    )
+                }
+
+                is FirstChatRefreshResult.ExitResolved -> {
+                    homeCoordinator.hideFirstChatLocally(current.matchId)
+                    homeCoordinator.returnHome(
+                        session = current.session,
+                        message = result.message,
+                    )
+                }
+            }
+        }
+        if (silent) {
+            silentFirstChatRefreshJob = job
+        }
+    }
+
+    fun requestNextFirstChatGuidanceQuestion() {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        viewModelScope.launch {
+            applyFirstChatGuidanceActionResult(
+                result = firstChatCoordinator.requestNextGuidanceQuestion(
+                    current = current,
+                    onPending = { setFirstChatMutationPending(current, it) },
+                ),
+                original = current,
+            )
+        }
+    }
+
+    fun returnToHomeFromPendingEngagement() {
+        val current = _uiState.value as? RealsRootUiState.PendingEngagement ?: return
+        viewModelScope.launch {
+            homeCoordinator.returnHome(current.session)
+        }
+    }
+
+    fun sendFirstChatMessage(content: String, replyDraft: ChatReplyDraft? = null): Boolean {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return false
+        return when (val preparation = ChatMessageActionHandler.prepareFirstChatSend(current, content, replyDraft)) {
+            is ChatMessageSendPreparation.Accepted -> {
+                _uiState.value = preparation.pendingState
+                val expectedSessionUserId = preparation.pendingState.session.user.id
+                val expectedMatchId = preparation.pendingState.matchId
+                val expectedChatId = preparation.pendingState.chatId ?: preparation.pendingState.chat?.id
+                val preSendMessageIds = preparation.pendingState.messages.mapTo(HashSet()) { it.id }
+                viewModelScope.launch {
+                    applyFirstChatSendResult(
+                        result = firstChatCoordinator.sendMessage(
+                            preparation.pendingState,
+                            preparation.cleanContent,
+                            preparation.localId,
+                            preparation.replyTo,
+                            onPostAcknowledged = { sentMessage ->
+                                applyFirstChatPostAcknowledgement(
+                                    sentMessage = sentMessage,
+                                    localId = preparation.localId,
+                                    expectedSessionUserId = expectedSessionUserId,
+                                    expectedMatchId = expectedMatchId,
+                                    expectedChatId = expectedChatId,
+                                )
+                            },
+                        ),
+                        preSendMessageIds = preSendMessageIds,
+                    )
+                }
+                true
+            }
+
+            is ChatMessageSendPreparation.Rejected -> {
+                _uiState.value = preparation.state
+                false
+            }
+
+            ChatMessageSendPreparation.Ignored -> false
+        }
+    }
+
+    fun sendFirstChatAudioMessage(
+        filePath: String,
+        clientMessageId: String,
+        replyDraft: ChatReplyDraft? = null,
+    ): Boolean {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return false
+        return when (val preparation = ChatMessageActionHandler.prepareFirstChatAudioSend(
+            current,
+            filePath,
+            clientMessageId,
+            replyDraft,
+        )) {
+            is ChatAudioSendPreparation.Accepted -> {
+                val matchId = preparation.pendingState.matchId
+                val chatId = preparation.pendingState.chatId
+                silentFirstChatRefreshJob?.cancel()
+                silentFirstChatRefreshJob = null
+                _uiState.value = preparation.pendingState
+                val preSendMessageIds = preparation.pendingState.messages.mapTo(HashSet()) { it.id }
+                viewModelScope.launch {
+                    val result = firstChatCoordinator.sendAudioMessage(
+                        preparation.pendingState,
+                        preparation.file,
+                        preparation.clientMessageId,
+                        preparation.replyTo,
+                    )
+                    val latest = _uiState.value as? RealsRootUiState.FirstChat
+                    val latestDraft = latest?.audioDraft
+                    val canInstall =
+                        latest != null &&
+                        latest.matchId == matchId &&
+                        latest.chatId == chatId &&
+                        latest.audioUpload.uploading &&
+                        latestDraft != null &&
+                        latestDraft.clientMessageId == preparation.clientMessageId &&
+                        latestDraft.filePath == preparation.file.absolutePath
+                    if (canInstall) {
+                        applyFirstChatSendResult(
+                            result = result,
+                            preSendMessageIds = preSendMessageIds,
+                        )
+                        deleteCompletedFirstChatDraftIfMatching(
+                            chatId = preparation.chatId,
+                            clientMessageId = preparation.clientMessageId,
+                            filePath = preparation.file.absolutePath,
+                        )
+                    } else {
+                        runCatching { preparation.file.delete() }
+                    }
+                }
+                true
+            }
+
+            is ChatAudioSendPreparation.Rejected -> {
+                _uiState.value = preparation.state
+                false
+            }
+
+            ChatAudioSendPreparation.Ignored -> false
+        }
+    }
+
+    fun clearFirstChatAudioUploadState() {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        _uiState.value = current.copy(audioUpload = ChatAudioUploadUiState())
+    }
+
+    fun setFirstChatAudioDraft(draft: ChatAudioDraftUiState) {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        current.audioDraft
+            ?.takeIf { it.filePath != draft.filePath && !current.audioUpload.uploading }
+            ?.deleteFile()
+        _uiState.value = current.copy(
+            audioDraft = draft,
+            audioUpload = ChatAudioUploadUiState(),
+            error = null,
+        )
+    }
+
+    fun setAndSendFirstChatAudioDraft(
+        draft: ChatAudioDraftUiState,
+        replyDraft: ChatReplyDraft? = null,
+    ): Boolean {
+        setFirstChatAudioDraft(draft)
+        return sendFirstChatAudioMessage(
+            draft.filePath,
+            draft.clientMessageId,
+            replyDraft,
+        )
+    }
+
+    fun deleteFirstChatAudioDraft() {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        if (current.audioUpload.uploading) return
+        current.audioDraft?.deleteFile()
+        _uiState.value = current.copy(
+            audioDraft = null,
+            audioUpload = ChatAudioUploadUiState(),
+        )
+    }
+
+    suspend fun refreshFirstChatAudioUrl(messageId: String): String? {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return null
+        val matchId = current.matchId
+        val chatId = current.chatId
+        val messagesResult = firstChatCoordinator.loadFullMessagesForAudioPlayback(current)
+        val newest = _uiState.value as? RealsRootUiState.FirstChat ?: return null
+        if (newest.matchId != matchId || newest.chatId != chatId) return null
+        val incoming = when (messagesResult) {
+            is ApiResult.Success -> messagesResult.value
+            is ApiResult.Failure -> return null
+        }
+        val merged = newest.messages.appendUnique(incoming)
+        _uiState.value = newest.copy(messages = merged)
+        return merged.firstOrNull { it.id == messageId }?.audio?.url
+    }
+
+    fun retryFirstChatMessage(localId: String) {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        val failedMessage = current.optimisticMessages.firstOrNull { it.localId == localId } ?: return
+        if (failedMessage.messageType != OptimisticOutgoingMessageType.Text) return
+        val retrying = current.copy(
+            optimisticMessages = current.optimisticMessages.markOptimisticMessageSending(localId),
+            sending = true,
+            error = null,
+            message = null,
+        )
+        _uiState.value = retrying
+        val expectedSessionUserId = retrying.session.user.id
+        val expectedMatchId = retrying.matchId
+        val expectedChatId = retrying.chatId ?: retrying.chat?.id
+        val preSendMessageIds = retrying.messages.mapTo(HashSet()) { it.id }
+        viewModelScope.launch {
+            applyFirstChatSendResult(
+                result = firstChatCoordinator.sendMessage(
+                    retrying,
+                    failedMessage.content,
+                    failedMessage.localId,
+                    failedMessage.replyTo?.toReplyTargetOrNull(),
+                    onPostAcknowledged = { sentMessage ->
+                        applyFirstChatPostAcknowledgement(
+                            sentMessage = sentMessage,
+                            localId = failedMessage.localId,
+                            expectedSessionUserId = expectedSessionUserId,
+                            expectedMatchId = expectedMatchId,
+                            expectedChatId = expectedChatId,
+                        )
+                    },
+                ),
+                preSendMessageIds = preSendMessageIds,
+            )
+        }
+    }
+
+    fun reactToFirstChatMessage(messageId: String): Boolean {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return false
+        return when (val preparation = ChatMessageActionHandler.prepareFirstChatReaction(current, messageId)) {
+            is ChatReactionPreparation.Accepted -> {
+                _uiState.value = preparation.pendingState
+                val expectedSessionUserId = preparation.pendingState.session.user.id
+                val expectedMatchId = preparation.pendingState.matchId
+                val expectedChatId = preparation.pendingState.chatId ?: preparation.pendingState.chat?.id
+                viewModelScope.launch {
+                    val result = firstChatCoordinator.putMessageReaction(
+                        chatId = preparation.chatId,
+                        messageId = preparation.messageId,
+                        reactionType = preparation.reactionType,
+                    )
+                    val latest = _uiState.value as? RealsRootUiState.FirstChat ?: return@launch
+                    if (!latest.sameFirstChatInstance(expectedSessionUserId, expectedMatchId, expectedChatId)) {
+                        return@launch
+                    }
+                    when (result) {
+                        is ApiResult.Success -> _uiState.value = latest.copy(
+                            messages = latest.messages.appendUnique(listOf(result.value)),
+                            reaction = latest.reaction.withoutPendingReaction(preparation.messageId),
+                        )
+                        is ApiResult.Failure -> applyFirstChatReactionFailure(
+                            latest = latest,
+                            messageId = preparation.messageId,
+                            error = result.error,
+                            expectedSessionUserId = expectedSessionUserId,
+                            expectedMatchId = expectedMatchId,
+                            expectedChatId = expectedChatId,
+                        )
+                    }
+                }
+                true
+            }
+
+            ChatReactionPreparation.Ignored -> false
+        }
+    }
+
+    fun dismissFirstChatUnansweredSuggestion(periodReference: String) {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        val chat = current.chat ?: return
+        val currentPeriod = firstChatUnansweredPeriodReference(
+            chat = chat,
+            currentUserId = current.session.user.id,
+            confirmedMessages = current.messages,
+        ) ?: return
+        if (currentPeriod.reference != periodReference) return
+
+        val latestBeforePersist = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        val latestBeforePeriod = firstChatUnansweredPeriodReference(
+            chat = latestBeforePersist.chat,
+            currentUserId = latestBeforePersist.session.user.id,
+            confirmedMessages = latestBeforePersist.messages,
+        ) ?: return
+        if (latestBeforePeriod.reference != periodReference) return
+
+        dependencies.firstChat.unansweredSuggestionDismissalStore.dismissPeriod(
+            userId = current.session.user.id,
+            chatId = chat.id,
+            periodReference = periodReference,
+        )
+
+        val latest = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        if (latest.matchId != current.matchId || latest.chatId != current.chatId) return
+        val latestPeriod = firstChatUnansweredPeriodReference(
+            chat = latest.chat,
+            currentUserId = latest.session.user.id,
+            confirmedMessages = latest.messages,
+        ) ?: return
+        if (latestPeriod.reference == periodReference) {
+            _uiState.value = latest.copy(dismissedUnansweredPeriodReference = periodReference)
+        }
+    }
+
+    fun submitFirstChatDecision(decision: ChatContinueDecision) {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        viewModelScope.launch {
+            applyFirstChatActionResult(
+                firstChatCoordinator.submitDecision(
+                    current = current,
+                    decision = decision,
+                    onPending = { setFirstChatMutationPending(current, it) },
+                )
+            )
+        }
+    }
+
+    fun handleFirstChatLocalExpiry(inactivity: Boolean) {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        current.audioDraft?.deleteFile()
+        homeCoordinator.hideFirstChatLocally(current.matchId)
+        viewModelScope.launch {
+            homeCoordinator.returnHome(
+                session = current.session,
+                message = if (inactivity) {
+                    "La conversaci\u00f3n se cerr\u00f3 por inactividad."
+                } else {
+                    "El chat venci\u00f3."
+                },
+            )
+        }
+    }
+
+    fun handleSecondChatUnavailable() {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        current.audioDraft?.deleteFile()
+        viewModelScope.launch {
+            homeCoordinator.returnHome(
+                session = current.session,
+                message = "Este segundo chat ya no est\u00e1 disponible.",
+            )
+        }
+    }
+
+    fun requestMutualChatExit() {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        viewModelScope.launch {
+            applyFirstChatActionResult(
+                firstChatCoordinator.requestMutualExit(
+                    current = current,
+                    onPending = { setFirstChatMutationPending(current, it) },
+                )
+            )
+        }
+    }
+
+    fun cancelChatUnilaterally() {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        viewModelScope.launch {
+            applyFirstChatActionResult(
+                firstChatCoordinator.cancelUnilaterally(
+                    current = current,
+                    onPending = { setFirstChatMutationPending(current, it) },
+                )
+            )
+        }
+    }
+
+    fun safetyCancelChat(reason: ChatExitReason, details: String, blockUser: Boolean) {
+        val current = ((_uiState.value as? RealsRootUiState.FirstChat)
+            ?.withDiscardedAudioTransaction() as? RealsRootUiState.FirstChat) ?: return
+        _uiState.value = current
+        viewModelScope.launch {
+            applyFirstChatActionResult(
+                firstChatCoordinator.safetyCancel(
+                    current = current,
+                    reason = reason,
+                    details = details,
+                    blockUser = blockUser,
+                    onPending = { setFirstChatMutationPending(current, it) },
+                )
+            )
+        }
+    }
+
+    fun acceptChatExitRequest(exitRequestId: String) {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        viewModelScope.launch {
+            applyFirstChatActionResult(
+                firstChatCoordinator.acceptExitRequest(
+                    current = current,
+                    exitRequestId = exitRequestId,
+                    onPending = { setFirstChatMutationPending(current, it) },
+                )
+            )
+        }
+    }
+
+    fun rejectChatExitRequest(exitRequestId: String) {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        viewModelScope.launch {
+            applyFirstChatActionResult(
+                firstChatCoordinator.rejectExitRequest(
+                    current = current,
+                    exitRequestId = exitRequestId,
+                    onPending = { setFirstChatMutationPending(current, it) },
+                )
+            )
+        }
+    }
+
+    fun timeoutChatExitRequest(exitRequestId: String) {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        viewModelScope.launch {
+            applyFirstChatActionResult(
+                firstChatCoordinator.timeoutExitRequest(
+                    current = current,
+                    exitRequestId = exitRequestId,
+                    onPending = { setFirstChatMutationPending(current, it) },
+                )
+            )
+        }
+    }
+
+    fun saveMyVisualPersonalMessage(message: String) {
+        val current = _uiState.value as? RealsRootUiState.VisualApproval ?: return
+        val instanceKey = current.instanceKey()
+        viewModelScope.launch {
+            val result = visualApprovalCoordinator.savePersonalMessageAction(
+                current = current,
+                message = message,
+                onPending = { setVisualApprovalPendingIfCurrent(it, instanceKey) },
+            )
+            applyVisualApprovalFlowResultIfCurrent(result, instanceKey)
+        }
+    }
+
+    fun readPartnerPersonalMessage() {
+        val current = _uiState.value as? RealsRootUiState.VisualApproval ?: return
+        val instanceKey = current.instanceKey()
+        viewModelScope.launch {
+            val result = visualApprovalCoordinator.readPartnerPersonalMessageAction(
+                current = current,
+                onPending = { setVisualApprovalPendingIfCurrent(it, instanceKey) },
+            )
+            applyVisualApprovalFlowResultIfCurrent(result, instanceKey)
+        }
+    }
+
+    fun submitVisualDecision(decision: VisualDecision) {
+        val current = _uiState.value as? RealsRootUiState.VisualApproval ?: return
+        val instanceKey = current.instanceKey()
+        viewModelScope.launch {
+            val result = visualApprovalCoordinator.submitDecision(
+                current = current,
+                decision = decision,
+                onPending = { setVisualApprovalPendingIfCurrent(it, instanceKey) },
+            )
+            applyVisualApprovalFlowResultIfCurrent(result, instanceKey)
+        }
+    }
+
+    fun createProfile(input: CreateProfileInput) {
+        profileHandler.createProfile(input)
+    }
+
+    fun updateProfile(input: UpdateProfileInput) {
+        profileHandler.updateProfile(input)
+    }
+
+    fun loadCountriesIfNeeded() {
+        profileHandler.loadCountriesIfNeeded()
+    }
+
+    fun updateMatchFilters(input: UpdateMatchFiltersInput) {
+        profileHandler.updateMatchFilters(input)
+    }
+
+    fun loadProfilePhotos() {
+        profileHandler.loadProfilePhotos()
+    }
+
+    override fun onCleared() {
+        profileHandler.cancelProfilePhotoPrefetch()
+        homeCoordinator.cancelPendingVisualReviewPhotoPrefetch()
+        super.onCleared()
+    }
+
+    fun addProfilePhotoFile(position: Int, fileUri: Uri) {
+        profileHandler.addProfilePhotoFile(position, fileUri)
+    }
+
+    fun replaceProfilePhotoFile(photoId: String, position: Int, fileUri: Uri) {
+        profileHandler.replaceProfilePhotoFile(photoId, position, fileUri)
+    }
+
+    fun deleteProfilePhoto(photoId: String, position: Int) {
+        profileHandler.deleteProfilePhoto(photoId, position)
+    }
+
+    fun moveProfilePhoto(photoId: String, targetPosition: Int) {
+        profileHandler.moveProfilePhoto(photoId, targetPosition)
+    }
+
+    fun activateProfile() {
+        profileHandler.activateProfile()
+    }
+
+    fun resendEmailVerification() {
+        profileHandler.resendEmailVerification()
+    }
+
+    fun checkEmailVerification() {
+        profileHandler.checkEmailVerification()
+    }
+
+    private suspend fun applyVisualApprovalFlowResultIfCurrent(
+        result: VisualApprovalFlowResult,
+        instanceKey: VisualApprovalInstanceKey,
+    ) {
+        if (!isCurrentVisualApproval(instanceKey)) return
+        applyVisualApprovalFlowResult(result)
+    }
+
+    private fun setVisualApprovalPendingIfCurrent(
+        pending: RealsRootUiState.VisualApproval,
+        instanceKey: VisualApprovalInstanceKey,
+        originState: RealsRootUiState? = null,
+    ) {
+        val current = _uiState.value
+        if ((originState != null && current == originState) || isCurrentVisualApproval(instanceKey)) {
+            _uiState.value = pending
+        }
+    }
+
+    private fun isCurrentVisualApproval(instanceKey: VisualApprovalInstanceKey): Boolean =
+        (_uiState.value as? RealsRootUiState.VisualApproval)?.instanceKey() == instanceKey
+
+    private fun setPartnerProfileResultIfCurrent(
+        result: RealsRootUiState.PartnerProfile,
+        instanceKey: PartnerProfileInstanceKey,
+    ) {
+        if (isCurrentPartnerProfile(instanceKey)) {
+            _uiState.value = result
+        }
+    }
+
+    private fun setPartnerProfilePendingIfCurrent(
+        pending: RealsRootUiState.PartnerProfile,
+        instanceKey: PartnerProfileInstanceKey,
+        originState: RealsRootUiState? = null,
+    ) {
+        val current = _uiState.value
+        if ((originState != null && current == originState) || isCurrentPartnerProfile(instanceKey)) {
+            _uiState.value = pending
+        }
+    }
+
+    private fun isCurrentPartnerProfile(instanceKey: PartnerProfileInstanceKey): Boolean =
+        (_uiState.value as? RealsRootUiState.PartnerProfile)?.instanceKey() == instanceKey
+
+    private suspend fun applyVisualApprovalFlowResult(result: VisualApprovalFlowResult) {
+        when (result) {
+            VisualApprovalFlowResult.Ignore -> Unit
+            is VisualApprovalFlowResult.Show -> {
+                result.hideVisualMatchId?.let(homeCoordinator::hideVisualReviewLocally)
+                _uiState.value = result.state
+            }
+
+            is VisualApprovalFlowResult.ReturnHome -> {
+                result.hideVisualMatchId?.let(homeCoordinator::hideVisualReviewLocally)
+                homeCoordinator.returnHome(
+                    session = result.session,
+                    message = result.message,
+                )
+            }
+
+            is VisualApprovalFlowResult.ReloadHome -> {
+                result.hideVisualMatchId?.let(homeCoordinator::hideVisualReviewLocally)
+                homeCoordinator.loadHomeForReady(
+                    ready = RealsRootUiState.Ready(
+                        session = result.session,
+                        home = HomeUiState(
+                            homeLoading = true,
+                            homeMessage = result.message,
+                        ),
+                    ),
+                    autoNavigateEngagements = result.autoNavigateEngagements,
+                    allowDraftHomeWithoutInteractions = true,
+                )
+            }
+        }
+    }
+
+    private suspend fun applyFirstChatActionResult(result: FirstChatActionResult) {
+        when (result) {
+            FirstChatActionResult.Ignore -> Unit
+            is FirstChatActionResult.Show -> {
+                val latest = _uiState.value as? RealsRootUiState.FirstChat
+                _uiState.value = latest?.let {
+                    result.state.reconcileAsyncFirstChatResult(it) ?: return
+                } ?: result.state
+            }
+            is FirstChatActionResult.ReturnHome -> {
+                (_uiState.value as? RealsRootUiState.FirstChat)?.audioDraft?.deleteFile()
+                result.hideFirstChatMatchId?.let(homeCoordinator::hideFirstChatLocally)
+                homeCoordinator.returnHome(
+                    session = result.session,
+                    message = result.message,
+                )
+            }
+
+            is FirstChatActionResult.ReloadHome -> {
+                (_uiState.value as? RealsRootUiState.FirstChat)?.audioDraft?.deleteFile()
+                result.hideFirstChatMatchId?.let(homeCoordinator::hideFirstChatLocally)
+                homeCoordinator.loadHomeForReady(
+                    ready = RealsRootUiState.Ready(
+                        session = result.session,
+                        home = HomeUiState(
+                            homeLoading = true,
+                            homeMessage = result.message,
+                            matchmakingBlockedReason = null,
+                        ),
+                    ),
+                    publishLoadingState = true,
+                    autoNavigateEngagements = result.autoNavigateEngagements,
+                    allowDraftHomeWithoutInteractions = true,
+                )
+            }
+        }
+    }
+
+    private fun setFirstChatMutationPending(
+        current: RealsRootUiState.FirstChat,
+        pending: RealsRootUiState.FirstChat,
+    ) {
+        cancelSilentRefreshFor(current)
+        _uiState.value = pending
+    }
+
+    private suspend fun applyFirstChatGuidanceActionResult(
+        result: FirstChatActionResult,
+        original: RealsRootUiState.FirstChat,
+    ) {
+        if (result !is FirstChatActionResult.Show) {
+            applyFirstChatActionResult(result)
+            return
+        }
+
+        val latest = _uiState.value as? RealsRootUiState.FirstChat
+        if (latest == null || latest.matchId != original.matchId || latest.chatId != original.chatId) return
+
+        val returnedGuidance = result.state.chat?.guidance.takeIf { result.state.error == null }
+        _uiState.value = latest.copy(
+            chat = latest.chat?.let { chat ->
+                if (returnedGuidance != null) chat.copy(guidance = returnedGuidance) else chat
+            } ?: result.state.chat,
+            guidanceActionLoading = false,
+            error = result.state.error,
+            message = result.state.message,
+        )
+    }
+
+    private suspend fun applyFirstChatSendResult(
+        result: FirstChatSendResult,
+        preSendMessageIds: Set<String> = emptySet(),
+    ) {
+        when (result) {
+            is FirstChatSendResult.Show -> {
+                val latest = _uiState.value as? RealsRootUiState.FirstChat
+                _uiState.value = latest?.let {
+                    val reconciled = result.state.reconcileAsyncFirstChatResult(it) ?: return
+                    reconciled.copy(
+                        messages = it.messages.appendUnique(
+                            reconciled.messages.filterNot { message ->
+                                message.id in preSendMessageIds &&
+                                    it.messages.any { latestMessage -> latestMessage.id == message.id }
+                            }
+                        )
+                    )
+                } ?: result.state
+            }
+            is FirstChatSendResult.ReturnHome -> {
+                (_uiState.value as? RealsRootUiState.FirstChat)?.audioDraft?.deleteFile()
+                homeCoordinator.hideFirstChatLocally(result.hideFirstChatMatchId)
+                homeCoordinator.returnHome(
+                    session = result.session,
+                    message = result.message,
+                )
+            }
+        }
+    }
+
+    private fun applyFirstChatPostAcknowledgement(
+        sentMessage: ChatMessage,
+        localId: String,
+        expectedSessionUserId: String,
+        expectedMatchId: String,
+        expectedChatId: String?,
+    ) {
+        val latest = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        if (!latest.sameFirstChatInstance(expectedSessionUserId, expectedMatchId, expectedChatId)) return
+        _uiState.value = latest.copy(
+            messages = latest.messages.appendUnique(listOf(sentMessage)),
+            optimisticMessages = latest.optimisticMessages.withoutOptimisticMessage(localId),
+        )
+    }
+
+    private suspend fun applyFirstChatReactionFailure(
+        latest: RealsRootUiState.FirstChat,
+        messageId: String,
+        error: ApiError,
+        expectedSessionUserId: String,
+        expectedMatchId: String,
+        expectedChatId: String?,
+    ) {
+        val rolledBack = latest.copy(
+            reaction = latest.reaction.withoutPendingReaction(messageId),
+            error = if (error.isStructuralInteractionError()) error else latest.error,
+        )
+        _uiState.value = rolledBack
+        if ((error as? ApiError.Backend)?.backendErrorCode != BackendErrorCode.ChatMessageReactionNotAvailable) return
+
+        val messagesResult = firstChatCoordinator.reconcileMessagesForReactions(rolledBack)
+        val newest = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        if (!newest.sameFirstChatInstance(expectedSessionUserId, expectedMatchId, expectedChatId)) return
+        if (messagesResult is ApiResult.Success) {
+            _uiState.value = newest.copy(messages = newest.messages.appendUnique(messagesResult.value))
+        }
+    }
+
+    private suspend fun applySecondChatActionResult(result: SecondChatActionResult) {
+        when (result) {
+            SecondChatActionResult.Ignore -> Unit
+            is SecondChatActionResult.Show -> _uiState.value = result.state
+            is SecondChatActionResult.ReturnHome -> {
+                (_uiState.value as? RealsRootUiState.SecondChat)?.audioDraft?.deleteFile()
+                homeCoordinator.returnHome(
+                    session = result.session,
+                    message = result.message,
+                )
+            }
+        }
+    }
+
+    private suspend fun applySecondChatReactionFailure(
+        latest: RealsRootUiState.SecondChat,
+        messageId: String,
+        error: ApiError,
+        instanceKey: SecondChatExpiryKey,
+    ) {
+        val rolledBack = latest.copy(
+            reaction = latest.reaction.withoutPendingReaction(messageId),
+            error = if (error.isStructuralInteractionError()) error else latest.error,
+        )
+        _uiState.value = rolledBack
+        if ((error as? ApiError.Backend)?.backendErrorCode != BackendErrorCode.ChatMessageReactionNotAvailable) return
+
+        val messagesResult = secondChatCoordinator.reconcileMessagesForReactions(rolledBack)
+        val newest = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        if (!newest.matches(instanceKey)) return
+        if (messagesResult is ApiResult.Success) {
+            _uiState.value = newest.copy(messages = newest.messages.appendUnique(messagesResult.value))
+        }
+    }
+
+    private suspend fun applySecondChatLoadResult(result: SecondChatLoadResult) {
+        when (result) {
+            is SecondChatLoadResult.Show -> {
+                val latest = _uiState.value as? RealsRootUiState.SecondChat
+                _uiState.value = latest?.let {
+                    result.state.reconcileAsyncSecondChatResult(it) ?: return
+                } ?: result.state
+            }
+            is SecondChatLoadResult.ReturnHome -> {
+                (_uiState.value as? RealsRootUiState.SecondChat)?.audioDraft?.deleteFile()
+                homeCoordinator.returnHome(
+                    session = result.session,
+                    message = result.message,
+                )
+            }
+        }
+    }
+
+    private suspend fun applySecondChatLoadResultIfCurrent(
+        result: SecondChatLoadResult,
+        instanceKey: SecondChatExpiryKey,
+    ) {
+        val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        if (!latest.matches(instanceKey)) return
+        applySecondChatLoadResult(result)
+    }
+
+    private fun setSecondChatPendingIfCurrent(
+        pending: RealsRootUiState.SecondChat,
+        instanceKey: SecondChatExpiryKey,
+    ) {
+        val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        if (latest.matches(instanceKey)) {
+            _uiState.value = pending
+        }
+    }
+
+    private suspend fun showReadySession(session: ProvisionedSession) {
+        enterLegalRequirements(
+            session = session,
+            resumeContext = LegalResumeContext.PostSession,
+            publishLoadingState = false,
+        )
+    }
+
+    private suspend fun showReactivatedSession(session: ProvisionedSession) {
+        enterLegalRequirements(
+            session = session,
+            resumeContext = LegalResumeContext.PostReactivation,
+            publishLoadingState = false,
+        )
+    }
+
+    private suspend fun continueReadySession(session: ProvisionedSession) {
+        when (
+            val result = profileEntryCoordinator.enter(
+                session = session,
+                onPending = { _uiState.value = it.state },
+            )
+        ) {
+            is ProfileEntryResult.LoadHome -> {
+                val forceHomeOnly = consumePendingSecondChatStartedHomeOpen()
+                homeCoordinator.loadHomeForReady(
+                    ready = result.ready,
+                    publishLoadingState = result.publishLoadingState,
+                    autoNavigateEngagements = if (forceHomeOnly) false else result.autoNavigateEngagements,
+                    preloadedHome = result.preloadedHome,
+                )
+            }
+
+            is ProfileEntryResult.ShowReady -> {
+                pendingSecondChatStartedHomeOpen = false
+                _uiState.value = result.state
+            }
+
+            ProfileEntryResult.AccountDeletionPendingFromBackend -> {
+                pendingSecondChatStartedHomeOpen = false
+                sessionCoordinator.showAccountDeletionPendingFromBackend()
+            }
+        }
+    }
+
+    private suspend fun enterLegalRequirements(
+        session: ProvisionedSession,
+        resumeContext: LegalResumeContext,
+        publishLoadingState: Boolean = true,
+    ) {
+        if (publishLoadingState) {
+            _uiState.value = RealsRootUiState.LegalRequirements(
+                session = session,
+                resumeContext = resumeContext,
+                loading = true,
+            )
+        }
+        applyLegalCoordinatorResult(
+            legalCoordinator.load(
+                session = session,
+                resumeContext = resumeContext,
+            )
+        )
+    }
+
+    private suspend fun applyLegalCoordinatorResult(result: LegalCoordinatorResult) {
+        when (result) {
+            is LegalCoordinatorResult.Show -> _uiState.value = result.state
+            is LegalCoordinatorResult.Satisfied -> when (val resume = result.resumeContext) {
+                LegalResumeContext.PostSession -> continueReadySession(result.session)
+                LegalResumeContext.PostReactivation -> {
+                    if (pendingSecondChatStartedHomeOpen) {
+                        loadHomeForPendingSecondChatStartedOpen(result.session)
+                    } else {
+                        homeCoordinator.reenterMatchmakingOrLoadHome(result.session)
+                    }
+                }
+
+                is LegalResumeContext.ExistingState -> {
+                    if (pendingSecondChatStartedHomeOpen) {
+                        loadHomeForPendingSecondChatStartedOpen(result.session)
+                    } else {
+                        _uiState.value = resume.state.clearLegalActionRequiredForResume()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun observeLegalActionRequired() {
+        viewModelScope.launch {
+            uiState.collect { current ->
+                if (current is RealsRootUiState.LegalRequirements) return@collect
+                if (legalRerouteJob?.isActive == true) return@collect
+                if (!current.hasLegalActionRequiredError()) return@collect
+                val session = current.sessionForLegalResume() ?: return@collect
+                legalRerouteJob = launch {
+                    enterLegalRequirements(
+                        session = session,
+                        resumeContext = LegalResumeContext.ExistingState(current),
+                    )
+                }
+            }
+        }
+    }
+
+    private fun observeTerminalAuthFailure() {
+        viewModelScope.launch {
+            uiState.collect { current ->
+                if (sessionInvalidationJob?.isActive == true) return@collect
+                if (!current.hasTerminalAuthFailure()) return@collect
+                cancelSilentRefreshFor(current)
+                pendingSecondChatStartedHomeOpen = false
+                sessionInvalidationJob = launch {
+                    sessionCoordinator.invalidateTerminalSession()
+                }
+            }
+        }
+    }
+
+    private fun observeAccountBanned() {
+        viewModelScope.launch {
+            uiState.collect { current ->
+                if (sessionInvalidationJob?.isActive == true) return@collect
+                val error = current.accountBannedError() ?: return@collect
+                cancelSilentRefreshFor(current)
+                pendingSecondChatStartedHomeOpen = false
+                sessionInvalidationJob = launch {
+                    sessionCoordinator.invalidateAccountBannedSession(error)
+                }
+            }
+        }
+    }
+
+    private fun observePendingSecondChatStartedHomeOpenInvalidation() {
+        viewModelScope.launch {
+            uiState.collect { current ->
+                if (current.clearsPendingSecondChatStartedHomeOpen()) {
+                    pendingSecondChatStartedHomeOpen = false
+                }
+            }
+        }
+    }
+
+    private fun observePendingVisualReviewPhotoPrefetchInvalidation() {
+        viewModelScope.launch {
+            uiState.collect { current ->
+                val ready = current as? RealsRootUiState.Ready
+                val pendingHomeActive = ready?.home?.surface == HomeSurface.Pending &&
+                    ready.home.homeState != null
+                if (!pendingHomeActive) {
+                    homeCoordinator.cancelPendingVisualReviewPhotoPrefetch()
+                }
+            }
+        }
+    }
+
+    private fun observeUserPairBlocked() {
+        viewModelScope.launch {
+            uiState.collect { current ->
+                if (pairBlockedRerouteJob?.isActive == true) return@collect
+                if (!current.hasUserPairBlockedInteractionError()) return@collect
+                val session = current.blockedPairSession() ?: return@collect
+                cancelSilentRefreshFor(current)
+                pairBlockedRerouteJob = launch {
+                    homeCoordinator.returnHome(
+                        session = session,
+                        message = "Esta interacción ya no está disponible. Actualizamos tu Home.",
+                    )
+                }
+            }
+        }
+    }
+
+    private fun cancelSilentRefreshFor(current: RealsRootUiState) {
+        when (current) {
+            is RealsRootUiState.FirstChat -> silentFirstChatRefreshJob?.cancel()
+            is RealsRootUiState.SecondChat -> silentSecondChatRefreshJob?.cancel()
+            is RealsRootUiState.Scheduling -> silentSchedulingRefreshJob?.cancel()
+            else -> Unit
+        }
+    }
+
+    private fun deleteCompletedFirstChatDraftIfMatching(
+        chatId: String,
+        clientMessageId: String,
+        filePath: String,
+    ) {
+        val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
+        val draft = current.audioDraft ?: return
+        if (
+            current.chat?.id == chatId &&
+            current.audioUpload.completedClientMessageId == clientMessageId &&
+            draft.clientMessageId == clientMessageId &&
+            draft.filePath == filePath
+        ) {
+            draft.deleteFile()
+            _uiState.value = current.copy(
+                audioDraft = null,
+                audioUpload = ChatAudioUploadUiState(),
+            )
+        }
+    }
+
+    private fun deleteCompletedSecondChatDraftIfMatching(
+        chatId: String,
+        clientMessageId: String,
+        filePath: String,
+    ) {
+        val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
+        val draft = current.audioDraft ?: return
+        if (
+            current.chat?.id == chatId &&
+            current.audioUpload.completedClientMessageId == clientMessageId &&
+            draft.clientMessageId == clientMessageId &&
+            draft.filePath == filePath
+        ) {
+            draft.deleteFile()
+            _uiState.value = current.copy(
+                audioDraft = null,
+                audioUpload = ChatAudioUploadUiState(),
+            )
+        }
+    }
+
+    private fun returnHomeFromExternalNotification(session: ProvisionedSession) {
+        viewModelScope.launch {
+            homeCoordinator.returnHome(session)
+        }
+    }
+
+    private suspend fun loadHomeForPendingSecondChatStartedOpen(session: ProvisionedSession) {
+        if (!consumePendingSecondChatStartedHomeOpen()) return
+        homeCoordinator.loadHomeForReady(
+            ready = RealsRootUiState.Ready(
+                session = session,
+                home = HomeUiState(homeLoading = true),
+            ),
+            publishLoadingState = true,
+            autoNavigateEngagements = false,
+            allowDraftHomeWithoutInteractions = true,
+        )
+    }
+
+    private fun consumePendingSecondChatStartedHomeOpen(): Boolean {
+        val pending = pendingSecondChatStartedHomeOpen
+        pendingSecondChatStartedHomeOpen = false
+        return pending
+    }
+}
+
+private fun ChatAudioDraftUiState.deleteFile() {
+    runCatching { File(filePath).delete() }
+}
+
+private data class VisualApprovalInstanceKey(
+    val matchId: String,
+)
+
+private fun RealsRootUiState.VisualApproval.instanceKey(): VisualApprovalInstanceKey =
+    VisualApprovalInstanceKey(matchId = matchId)
+
+private data class PartnerProfileInstanceKey(
+    val matchId: String,
+)
+
+private fun RealsRootUiState.PartnerProfile.instanceKey(): PartnerProfileInstanceKey =
+    PartnerProfileInstanceKey(matchId = matchId)
+
+private fun RealsRootUiState.withDiscardedAudioTransaction(): RealsRootUiState = when (this) {
+    is RealsRootUiState.FirstChat -> {
+        if (!audioUpload.uploading) audioDraft?.deleteFile()
+        copy(audioDraft = null, audioUpload = ChatAudioUploadUiState())
+    }
+    is RealsRootUiState.SecondChat -> {
+        if (!audioUpload.uploading) audioDraft?.deleteFile()
+        copy(audioDraft = null, audioUpload = ChatAudioUploadUiState())
+    }
+    else -> this
+}
+
+private fun RealsRootUiState.hasLegalActionRequiredError(): Boolean = when (this) {
+    is RealsRootUiState.Ready ->
+        profileCreateError.isLegalActionRequiredError() ||
+            countriesError.isLegalActionRequiredError() ||
+            profileUpdateError.isLegalActionRequiredError() ||
+            matchFiltersError.isLegalActionRequiredError() ||
+            profileActivationError.isLegalActionRequiredError() ||
+            photoReorderError.isLegalActionRequiredError() ||
+            photoActionError.isLegalActionRequiredError() ||
+            homeError.isLegalActionRequiredError() ||
+            matchmakingBlockedReason.isLegalActionRequiredError() ||
+            affinityQuestionnaire.error.isLegalActionRequiredError() ||
+            affinityQuestionnaire.mutationError.isLegalActionRequiredError() ||
+            profileQuestions.error.isLegalActionRequiredError() ||
+            profileQuestions.mutationError.isLegalActionRequiredError()
+
+    is RealsRootUiState.FirstChat -> error.isLegalActionRequiredError()
+    is RealsRootUiState.SecondChat -> error.isLegalActionRequiredError()
+    is RealsRootUiState.VisualApproval -> error.isLegalActionRequiredError()
+    is RealsRootUiState.Scheduling -> error.isLegalActionRequiredError()
+    else -> false
+}
+
+internal fun RealsRootUiState.hasTerminalAuthFailure(): Boolean = when (this) {
+    is RealsRootUiState.Failure -> error.isTerminalAuthFailure()
+    is RealsRootUiState.AccountDeletionPending -> error.isTerminalAuthFailure()
+    is RealsRootUiState.PermanentBanAppeal ->
+        error.isTerminalAuthFailure() || normalBootstrapError.isTerminalAuthFailure()
+    is RealsRootUiState.LegalRequirements ->
+        error.isTerminalAuthFailure() || accountDeleteError.isTerminalAuthFailure()
+
+    is RealsRootUiState.Ready ->
+        profileCreateError.isTerminalAuthFailure() ||
+            countriesError.isTerminalAuthFailure() ||
+            profileUpdateError.isTerminalAuthFailure() ||
+            matchFiltersError.isTerminalAuthFailure() ||
+            profileActivationError.isTerminalAuthFailure() ||
+            profilePhotosError.isTerminalAuthFailure() ||
+            photoReorderError.isTerminalAuthFailure() ||
+            photoActionError.isTerminalAuthFailure() ||
+            homeError.isTerminalAuthFailure() ||
+            matchmakingBlockedReason.isTerminalAuthFailure() ||
+            accountDeleteError.isTerminalAuthFailure() ||
+            affinityQuestionnaire.error.isTerminalAuthFailure() ||
+            affinityQuestionnaire.mutationError.isTerminalAuthFailure() ||
+            profileQuestions.error.isTerminalAuthFailure() ||
+            profileQuestions.mutationError.isTerminalAuthFailure()
+
+    is RealsRootUiState.FirstChat ->
+        error.isTerminalAuthFailure() || manualBlock.error.isTerminalAuthFailure()
+
+    is RealsRootUiState.SecondChat ->
+        error.isTerminalAuthFailure() || manualBlock.error.isTerminalAuthFailure()
+
+    is RealsRootUiState.VisualApproval ->
+        error.isTerminalAuthFailure() ||
+            partnerMessageError.isTerminalAuthFailure() ||
+            manualBlock.error.isTerminalAuthFailure()
+
+    is RealsRootUiState.Scheduling ->
+        error.isTerminalAuthFailure() || manualBlock.error.isTerminalAuthFailure()
+
+    is RealsRootUiState.PartnerProfile ->
+        error.isTerminalAuthFailure() || manualBlock.error.isTerminalAuthFailure()
+
+    else -> false
+}
+
+private fun RealsRootUiState.sessionForLegalResume(): ProvisionedSession? = when (this) {
+    is RealsRootUiState.Ready -> session
+    is RealsRootUiState.FirstChat -> session
+    is RealsRootUiState.SecondChat -> session
+    is RealsRootUiState.VisualApproval -> session
+    is RealsRootUiState.Scheduling -> session
+    else -> null
+}
+
+private fun ApiError?.isLegalActionRequiredError(): Boolean =
+    this?.isLegalActionRequired() == true
+
+private fun ApiError?.isTerminalAuthFailure(): Boolean =
+    this?.isTerminalAuthFailure() == true
+
+private fun RealsRootUiState.accountBannedError(): ApiError? = when (this) {
+    is RealsRootUiState.Failure -> error.takeIfAccountBanned()
+    is RealsRootUiState.AccountDeletionPending -> error.takeIfAccountBanned()
+    is RealsRootUiState.PermanentBanAppeal -> firstAccountBannedError(error, normalBootstrapError)
+    is RealsRootUiState.LegalRequirements -> firstAccountBannedError(error, accountDeleteError)
+    is RealsRootUiState.Ready -> firstAccountBannedError(
+        profileCreateError,
+        countriesError,
+        profileUpdateError,
+        matchFiltersError,
+        profileActivationError,
+        profilePhotosError,
+        photoReorderError,
+        photoActionError,
+        homeError,
+        matchmakingBlockedReason,
+        accountDeleteError,
+        notificationPreferences.loadError,
+        notificationPreferences.saveError,
+        affinityQuestionnaire.error,
+        affinityQuestionnaire.mutationError,
+        profileQuestions.error,
+        profileQuestions.mutationError,
+    )
+
+    is RealsRootUiState.FirstChat -> firstAccountBannedError(error, manualBlock.error, audioUpload.error)
+    is RealsRootUiState.SecondChat -> firstAccountBannedError(error, manualBlock.error, audioUpload.error)
+    is RealsRootUiState.VisualApproval -> firstAccountBannedError(
+        error,
+        partnerMessageError,
+        manualBlock.error,
+    )
+
+    is RealsRootUiState.Scheduling -> firstAccountBannedError(error, manualBlock.error)
+    is RealsRootUiState.PartnerProfile -> firstAccountBannedError(error, manualBlock.error)
+    else -> null
+}
+
+private fun firstAccountBannedError(vararg errors: ApiError?): ApiError? =
+    errors.firstNotNullOfOrNull { it.takeIfAccountBanned() }
+
+private fun ApiError?.takeIfAccountBanned(): ApiError? =
+    this?.takeIf { it.isAccountBanned() }
+
+private fun RealsRootUiState.hasUserPairBlockedInteractionError(): Boolean = when (this) {
+    is RealsRootUiState.FirstChat -> error.isUserPairBlockedError()
+    is RealsRootUiState.SecondChat -> error.isUserPairBlockedError()
+    is RealsRootUiState.VisualApproval -> error.isUserPairBlockedError()
+    is RealsRootUiState.Scheduling -> error.isUserPairBlockedError()
+    else -> false
+}
+
+private fun RealsRootUiState.blockedPairSession(): ProvisionedSession? = when (this) {
+    is RealsRootUiState.FirstChat -> session
+    is RealsRootUiState.SecondChat -> session
+    is RealsRootUiState.VisualApproval -> session
+    is RealsRootUiState.Scheduling -> session
+    else -> null
+}
+
+private fun RealsRootUiState.clearsPendingSecondChatStartedHomeOpen(): Boolean = when (this) {
+    is RealsRootUiState.AccountDeletionPending,
+    is RealsRootUiState.AccountDeletionScheduled,
+    is RealsRootUiState.AccountSuspended,
+    is RealsRootUiState.PermanentBanAppeal,
+    is RealsRootUiState.Failure,
+    is RealsRootUiState.Login,
+    is RealsRootUiState.MissingFirebase -> true
+
+    RealsRootUiState.Checking,
+    is RealsRootUiState.LoadingSession,
+    is RealsRootUiState.LegalRequirements,
+    is RealsRootUiState.Ready,
+    is RealsRootUiState.FirstChat,
+    is RealsRootUiState.SecondChat,
+    is RealsRootUiState.VisualApproval,
+    is RealsRootUiState.Scheduling,
+    is RealsRootUiState.PartnerProfile,
+    is RealsRootUiState.PendingEngagement,
+    is RealsRootUiState.ActivationComplete -> false
+}
+
+private fun RealsRootUiState.ownsForegroundForExternalNotificationOpen(): Boolean = when (this) {
+    is RealsRootUiState.FirstChat ->
+        chat?.status == ChatStatus.Active &&
+            chat.myDecision == ChatDecisionState.Pending
+
+    is RealsRootUiState.SecondChat -> isJoinedActiveSecondChat()
+    else -> false
+}
+
+private fun ApiError?.isUserPairBlockedError(): Boolean =
+    this?.isUserPairBlocked() == true
+
+private fun ApiError.isStructuralInteractionError(): Boolean =
+    isTerminalAuthFailure() || isLegalActionRequired() || isUserPairBlocked()
+
+private fun RealsRootUiState.FirstChat.reconcileAsyncFirstChatResult(
+    displayed: RealsRootUiState.FirstChat,
+): RealsRootUiState.FirstChat? {
+    if (!sameFirstChatInstance(displayed)) return null
+
+    val atomicPair = freshestAtomicChatServerClockPair(displayed)
+    val reconciledChat = atomicPair.chat
+        .withFreshGuidanceFrom(displayed.chat)
+        .withFreshGuidanceFrom(chat)
+
+    return copy(
+        chat = reconciledChat,
+        chatId = atomicPair.chatId,
+        messages = displayed.messages.appendUnique(messages),
+        reaction = displayed.reaction,
+        serverClockSnapshot = atomicPair.serverClockSnapshot,
+        dismissedUnansweredPeriodReference = displayed.dismissedUnansweredPeriodReference,
+    )
+}
+
+private fun RealsRootUiState.FirstChat.reconcileSilentFirstChatRefreshResult(
+    displayed: RealsRootUiState.FirstChat,
+): RealsRootUiState.FirstChat? =
+    reconcileAsyncFirstChatResult(displayed)?.copy(
+        error = displayed.error,
+        message = displayed.message,
+    )
+
+private fun RealsRootUiState.SecondChat.reconcileAsyncSecondChatResult(
+    displayed: RealsRootUiState.SecondChat,
+): RealsRootUiState.SecondChat? {
+    if (!sameSecondChatInstance(displayed)) return null
+    return copy(
+        messages = displayed.messages.appendUnique(messages),
+        reaction = displayed.reaction,
+    )
+}
+
+private fun RealsRootUiState.SecondChat.sameSecondChatInstance(
+    displayed: RealsRootUiState.SecondChat,
+): Boolean {
+    if (session.user.id != displayed.session.user.id) return false
+    if (connectionId != displayed.connectionId) return false
+    if (matchId != displayed.matchId) return false
+    val resultChatId = chatId ?: chat?.id ?: lifecycle.status?.chatId
+    val displayedChatId = displayed.chatId ?: displayed.chat?.id ?: displayed.lifecycle.status?.chatId
+    return resultChatId == null || displayedChatId == null || resultChatId == displayedChatId
+}
+
+private data class FirstChatAtomicChatServerClockPair(
+    val chat: Chat?,
+    val chatId: String?,
+    val serverClockSnapshot: ServerClockSnapshot?,
+)
+
+private fun RealsRootUiState.FirstChat.freshestAtomicChatServerClockPair(
+    displayed: RealsRootUiState.FirstChat,
+): FirstChatAtomicChatServerClockPair {
+    val returnedSnapshot = serverClockSnapshot
+    val displayedSnapshot = displayed.serverClockSnapshot
+    val useDisplayed = when {
+        displayedSnapshot == null -> false
+        returnedSnapshot == null -> true
+        displayedSnapshot.serverTimeEpochMillis == returnedSnapshot.serverTimeEpochMillis &&
+            chat.isFirstChatDecisionProgressionFrom(displayed.chat) -> false
+        // Equal serverTime keeps the already displayed atomic pair to avoid stale-result churn.
+        displayedSnapshot.serverTimeEpochMillis >= returnedSnapshot.serverTimeEpochMillis -> true
+        else -> false
+    }
+    return if (useDisplayed) {
+        FirstChatAtomicChatServerClockPair(
+            chat = displayed.chat,
+            chatId = displayed.chatId ?: displayed.chat?.id,
+            serverClockSnapshot = displayedSnapshot,
+        )
+    } else {
+        FirstChatAtomicChatServerClockPair(
+            chat = chat,
+            chatId = chatId ?: chat?.id,
+            serverClockSnapshot = returnedSnapshot,
+        )
+    }
+}
+
+private fun Chat?.isFirstChatDecisionProgressionFrom(displayed: Chat?): Boolean {
+    if (this == null || displayed == null || id != displayed.id) return false
+    val displayedPendingPair =
+        displayed.myDecision == ChatDecisionState.Pending &&
+            displayed.partnerDecision == ChatDecisionState.Pending
+    if (!displayedPendingPair) return false
+    return (
+        myDecision == ChatDecisionState.Pending &&
+            partnerDecision == ChatDecisionState.Approved
+        ) ||
+        (
+            myDecision == ChatDecisionState.Approved &&
+                partnerDecision == ChatDecisionState.Pending
+            )
+}
+
+private fun RealsRootUiState.FirstChat.sameFirstChatInstance(
+    displayed: RealsRootUiState.FirstChat,
+): Boolean {
+    val resultChatId = chatId ?: chat?.id
+    return displayed.sameFirstChatInstance(
+        expectedSessionUserId = session.user.id,
+        expectedMatchId = matchId,
+        expectedChatId = resultChatId,
+    )
+}
+
+private fun RealsRootUiState.FirstChat.sameFirstChatInstance(
+    expectedSessionUserId: String,
+    expectedMatchId: String,
+    expectedChatId: String?,
+): Boolean {
+    if (session.user.id != expectedSessionUserId) return false
+    if (matchId != expectedMatchId) return false
+    val displayedChatId = chatId ?: chat?.id
+    return expectedChatId != null && expectedChatId == displayedChatId
+}
+
+private fun Chat?.withFreshGuidanceFrom(displayed: Chat?): Chat? {
+    if (this == null || displayed == null || id != displayed.id) return this
+    return copy(guidance = guidance.freshOrDisplayed(displayed.guidance))
+}
+
+private fun FirstChatGuidance?.freshOrDisplayed(
+    displayed: FirstChatGuidance?,
+): FirstChatGuidance? {
+    if (displayed == null) return this
+    if (this == null) return displayed
+    if (questionOrdinal < displayed.questionOrdinal) return displayed
+    if (questionOrdinal > displayed.questionOrdinal) return this
+
+    val sameQuestion = question.id == displayed.question.id
+    if (sameQuestion && displayed.completed && !completed) return displayed
+    if (
+        sameQuestion &&
+        displayed.myNextRequested &&
+        !myNextRequested &&
+        !displayed.completed &&
+        !completed
+    ) {
+        return displayed
+    }
+
+    return this
 }
 
 class RealsRootViewModelFactory(
@@ -102,10 +2843,34 @@ class RealsRootViewModelFactory(
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(RealsRootViewModel::class.java)) {
             return RealsRootViewModel(
-                authRepository = appContainer.authRepository,
-                provisionAndLoadProfile = appContainer.provisionAndLoadProfileUseCase,
+                dependencies = appContainer.rootDependencies,
+                profilePhotoPrefetcher = AndroidProfilePhotoPrefetcher(appContainer.appContext),
+                pendingVisualReviewPhotoPrefetcher =
+                    AndroidPendingVisualReviewPhotoPrefetcher(appContainer.appContext),
             ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class ${modelClass.name}")
     }
 }
+
+private data class SecondChatExpiryKey(
+    val connectionId: String,
+    val chatId: String?,
+)
+
+private fun RealsRootUiState.SecondChat.expiryKey(): SecondChatExpiryKey =
+    SecondChatExpiryKey(
+        connectionId = connectionId,
+        chatId = chatId ?: lifecycle.status?.chatId,
+    )
+
+private fun RealsRootUiState.SecondChat.matches(key: SecondChatExpiryKey): Boolean =
+    connectionId == key.connectionId &&
+        (key.chatId == null || expiryKey().chatId == key.chatId)
+
+private fun RealsRootUiState.SecondChat.hasTerminalSecondChatStatus(): Boolean =
+    lifecycle.status?.chatStatus in setOf(
+        ChatStatus.Expired,
+        ChatStatus.Finished,
+        ChatStatus.Abandoned,
+    )

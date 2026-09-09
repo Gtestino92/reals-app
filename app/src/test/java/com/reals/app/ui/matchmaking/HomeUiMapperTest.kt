@@ -1,0 +1,549 @@
+package com.reals.app.ui.matchmaking
+
+import com.reals.app.domain.model.ChatPartner
+import com.reals.app.domain.model.ChatStatus
+import com.reals.app.domain.model.ChatType
+import com.reals.app.domain.model.HomeActiveInteractionsSummary
+import com.reals.app.domain.model.HomeChat
+import com.reals.app.domain.model.HomeMatchmaking
+import com.reals.app.domain.model.HomeMatchmakingBlockedReason
+import com.reals.app.domain.model.HomeNextStep
+import com.reals.app.domain.model.HomePassiveNotice
+import com.reals.app.domain.model.HomePendingAction
+import com.reals.app.domain.model.HomeState
+import com.reals.app.domain.model.ProfileStatus
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class HomeUiMapperTest {
+    private val mapper = HomeUiMapper()
+
+    @Test
+    fun `first chat pending action generates actionable first chat item`() {
+        val model = mapper.toScreenModel(
+            home = homeState(
+                pendingActions = listOf(
+                    HomePendingAction.FirstChat(
+                        matchId = "match-1",
+                        chatId = "chat-1",
+                        partner = partner("Alex"),
+                    ),
+                ),
+            ),
+            localHidden = noHiddenInteractions(),
+            localMatchmakingBlockedReason = null,
+        )
+
+        val item = model.pendingActions.single() as HomeActionItem.FirstChat
+        assertEquals("match-1", item.matchId)
+        assertEquals("chat-1", item.chatId)
+        assertEquals("Alex", item.partnerDisplayName)
+    }
+
+    @Test
+    fun `visual review pending action generates actionable visual item`() {
+        val model = mapper.toScreenModel(
+            home = homeState(
+                pendingActions = listOf(
+                    HomePendingAction.VisualReview(
+                        matchId = "match-visual",
+                        partner = partner("Riley"),
+                        visualStartedAt = "2026-06-19T18:00:00Z",
+                        visualExpiresAt = "2026-06-20T18:00:00Z",
+                    ),
+                ),
+            ),
+            localHidden = noHiddenInteractions(),
+            localMatchmakingBlockedReason = null,
+        )
+
+        val item = model.pendingActions.single() as HomeActionItem.VisualReview
+        assertEquals("match-visual", item.matchId)
+        assertEquals("Riley", item.partnerDisplayName)
+        assertEquals("2026-06-19T18:00:00Z", item.visualStartedAt)
+        assertEquals("2026-06-20T18:00:00Z", item.visualExpiresAt)
+    }
+
+    @Test
+    fun `scheduling pending passive notice does not generate actionable button`() {
+        val model = mapper.toScreenModel(
+            home = homeState(
+                passiveNotices = listOf(HomePassiveNotice.SchedulingPreparing),
+            ),
+            localHidden = noHiddenInteractions(),
+            localMatchmakingBlockedReason = null,
+        )
+
+        assertTrue(model.pendingActions.isEmpty())
+        assertEquals(HomePassiveNoticeItem.SchedulingPreparing, model.passiveNotices.single())
+    }
+
+    @Test
+    fun `scheduling phase generates actionable next step`() {
+        val model = mapper.toScreenModel(
+            home = homeState(
+                nextSteps = listOf(
+                    HomeNextStep.Scheduling(
+                        connectionId = "connection-1",
+                        matchId = "match-1",
+                        partner = partner("Sam"),
+                        createdAt = "2026-06-19T18:00:00Z",
+                        schedulingExpiresAt = "2026-06-20T18:00:00Z",
+                    ),
+                ),
+            ),
+            localHidden = noHiddenInteractions(),
+            localMatchmakingBlockedReason = null,
+        )
+
+        val item = model.nextSteps.single() as HomeNextStepItem.Scheduling
+        assertEquals("connection-1", item.connectionId)
+        assertEquals("match-1", item.matchId)
+        assertEquals("Sam", item.partnerDisplayName)
+        assertEquals("2026-06-19T18:00:00Z", item.createdAt)
+        assertEquals("2026-06-20T18:00:00Z", item.schedulingExpiresAt)
+    }
+
+    @Test
+    fun `second chat scheduled and available generate next steps`() {
+        val model = mapper.toScreenModel(
+            home = homeState(
+                nextSteps = listOf(
+                    HomeNextStep.SecondChatScheduled(
+                        connectionId = "connection-scheduled",
+                        matchId = "match-scheduled",
+                        partner = null,
+                        secondChat = homeChat("scheduled-chat", ChatStatus.Active, "Taylor"),
+                    ),
+                    HomeNextStep.SecondChatAvailable(
+                        connectionId = "connection-available",
+                        matchId = "match-available",
+                        partner = null,
+                        secondChat = homeChat("available-chat", ChatStatus.Available, "Jordan"),
+                    ),
+                    HomeNextStep.SecondChatReadOnly(
+                        connectionId = "connection-read-only",
+                        matchId = "match-read-only",
+                        partner = null,
+                        secondChat = homeChat("read-only-chat", ChatStatus.Expired, "Riley"),
+                    ),
+                    HomeNextStep.SecondChatExpired(
+                        connectionId = "connection-expired",
+                        matchId = "match-expired",
+                        partner = partner("Expired"),
+                        secondChat = homeChat("expired-chat", ChatStatus.Available, "Expired"),
+                    ),
+                ),
+            ),
+            localHidden = noHiddenInteractions(),
+            localMatchmakingBlockedReason = null,
+        )
+
+        assertTrue(model.nextSteps[0] is HomeNextStepItem.SecondChatScheduled)
+        assertEquals("Taylor", (model.nextSteps[0] as HomeNextStepItem.SecondChatScheduled).partnerDisplayName)
+        assertTrue(model.nextSteps[1] is HomeNextStepItem.SecondChatAvailable)
+        assertEquals("Jordan", (model.nextSteps[1] as HomeNextStepItem.SecondChatAvailable).partnerDisplayName)
+        assertTrue(model.nextSteps[2] is HomeNextStepItem.SecondChatReadOnly)
+        assertEquals("Riley", (model.nextSteps[2] as HomeNextStepItem.SecondChatReadOnly).partnerDisplayName)
+        assertTrue(model.nextSteps[3] is HomeNextStepItem.SecondChatExpired)
+        assertEquals("Expired", (model.nextSteps[3] as HomeNextStepItem.SecondChatExpired).partnerDisplayName)
+    }
+
+    @Test
+    fun `pending actions and next steps preserve backend domain order after filtering`() {
+        val hiddenFirstChat = HomePendingAction.FirstChat(
+            matchId = "match-hidden",
+            chatId = "chat-hidden",
+            partner = partner("Hidden"),
+        )
+        val visual = HomePendingAction.VisualReview(
+            matchId = "match-visual",
+            partner = partner("Visual"),
+            visualExpiresAt = "2026-07-31T19:00:00Z",
+        )
+        val firstChat = HomePendingAction.FirstChat(
+            matchId = "match-first",
+            chatId = "chat-first",
+            partner = partner("First"),
+        )
+        val secondChat = HomeNextStep.SecondChatAvailable(
+            connectionId = "connection-second",
+            matchId = "match-second",
+            partner = null,
+            secondChat = homeChat("chat-second", ChatStatus.Available, "Second"),
+        )
+        val scheduling = HomeNextStep.Scheduling(
+            connectionId = "connection-scheduling",
+            matchId = "match-scheduling",
+            partner = partner("Scheduling"),
+        )
+
+        val model = mapper.toScreenModel(
+            home = homeState(
+                pendingActions = listOf(hiddenFirstChat, visual, firstChat),
+                nextSteps = listOf(secondChat, scheduling),
+            ),
+            localHidden = LocalHiddenInteractions(
+                hiddenFirstChatMatchIds = setOf("match-hidden"),
+                hiddenVisualMatchIds = emptySet(),
+            ),
+            localMatchmakingBlockedReason = null,
+        )
+
+        assertEquals(listOf("match-visual", "match-first"), model.pendingActions.map { it.matchIdForTest() })
+        assertEquals(
+            listOf("connection-second", "connection-scheduling"),
+            model.nextSteps.map { it.connectionIdForTest() },
+        )
+    }
+
+    @Test
+    fun `closed and cancelled interactions do not appear as action`() {
+        val model = mapper.toScreenModel(
+            home = homeState(
+                nextSteps = listOf(
+                    HomeNextStep.SecondChatScheduled(
+                        connectionId = "connection-closed",
+                        matchId = "match-closed",
+                        partner = null,
+                        secondChat = homeChat("closed-chat", ChatStatus.Closed, "Casey"),
+                    ),
+                    HomeNextStep.SecondChatAvailable(
+                        connectionId = "connection-cancelled",
+                        matchId = "match-cancelled",
+                        partner = null,
+                        secondChat = homeChat("cancelled-chat", ChatStatus.Cancelled, "Morgan"),
+                    ),
+                ),
+            ),
+            localHidden = noHiddenInteractions(),
+            localMatchmakingBlockedReason = null,
+        )
+
+        assertTrue(model.pendingActions.isEmpty())
+        assertTrue(model.nextSteps.isEmpty())
+    }
+
+    @Test
+    fun `displayed initial count follows locally hidden pending actions`() {
+        val model = mapper.toScreenModel(
+            home = homeState(
+                activeInteractionsSummary = summary(
+                    activeInitialCount = 1,
+                    activeConnectionCount = 0,
+                    hasPendingSchedulingConnection = true,
+                    actionableConnectionCount = 0,
+                ),
+                pendingActions = listOf(
+                    HomePendingAction.FirstChat(
+                        matchId = "match-hidden",
+                        chatId = "chat-hidden",
+                        partner = partner("Alex"),
+                    ),
+                ),
+            ),
+            localHidden = LocalHiddenInteractions(
+                hiddenFirstChatMatchIds = setOf("match-hidden"),
+                hiddenVisualMatchIds = emptySet(),
+            ),
+            localMatchmakingBlockedReason = null,
+        )
+
+        assertTrue(model.pendingActions.isEmpty())
+        assertEquals(0, model.activeInteractionsSummary?.activeInitialCount)
+        assertEquals(true, model.activeInteractionsSummary?.hasPendingSchedulingConnection)
+    }
+
+    @Test
+    fun `displayed connection counts follow filtered next steps`() {
+        val model = mapper.toScreenModel(
+            home = homeState(
+                activeInteractionsSummary = summary(
+                    activeInitialCount = 0,
+                    activeConnectionCount = 1,
+                    hasPendingSchedulingConnection = true,
+                    actionableConnectionCount = 1,
+                ),
+                nextSteps = listOf(
+                    HomeNextStep.SecondChatAvailable(
+                        connectionId = "connection-cancelled",
+                        matchId = "match-cancelled",
+                        partner = null,
+                        secondChat = homeChat("cancelled-chat", ChatStatus.Cancelled, "Morgan"),
+                    ),
+                ),
+            ),
+            localHidden = noHiddenInteractions(),
+            localMatchmakingBlockedReason = null,
+        )
+
+        assertTrue(model.nextSteps.isEmpty())
+        assertEquals(0, model.activeInteractionsSummary?.activeConnectionCount)
+        assertEquals(1, model.activeInteractionsSummary?.actionableConnectionCount)
+        assertEquals(true, model.activeInteractionsSummary?.hasPendingSchedulingConnection)
+    }
+
+    @Test
+    fun `expired second chat remains visible but does not count active or actionable`() {
+        val model = mapper.toScreenModel(
+            home = homeState(
+                activeInteractionsSummary = summary(
+                    activeInitialCount = 0,
+                    activeConnectionCount = 0,
+                    actionableConnectionCount = 0,
+                ),
+                nextSteps = listOf(
+                    HomeNextStep.SecondChatExpired(
+                        connectionId = "connection-expired",
+                        matchId = "match-expired",
+                        partner = partner("Expired"),
+                        secondChat = homeChat("expired-chat", ChatStatus.Available, "Expired"),
+                    ),
+                ),
+            ),
+            localHidden = noHiddenInteractions(),
+            localMatchmakingBlockedReason = null,
+        )
+
+        assertTrue(model.nextSteps.single() is HomeNextStepItem.SecondChatExpired)
+        assertEquals(0, model.activeInteractionsSummary?.activeConnectionCount)
+        assertEquals(0, model.activeInteractionsSummary?.actionableConnectionCount)
+    }
+
+    @Test
+    fun `active counts include active next step while actionable count stays backend authoritative`() {
+        val model = mapper.toScreenModel(
+            home = homeState(
+                activeInteractionsSummary = summary(
+                    activeInitialCount = 0,
+                    activeConnectionCount = 2,
+                    actionableConnectionCount = 2,
+                ),
+                nextSteps = listOf(
+                    HomeNextStep.SecondChatAvailable(
+                        connectionId = "connection-active",
+                        matchId = "match-active",
+                        partner = partner("Active"),
+                        secondChat = homeChat("active-chat", ChatStatus.Available, "Active"),
+                    ),
+                    HomeNextStep.SecondChatExpired(
+                        connectionId = "connection-expired",
+                        matchId = "match-expired",
+                        partner = partner("Expired"),
+                        secondChat = homeChat("expired-chat", ChatStatus.Available, "Expired"),
+                    ),
+                ),
+            ),
+            localHidden = noHiddenInteractions(),
+            localMatchmakingBlockedReason = null,
+        )
+
+        assertEquals(2, model.nextSteps.size)
+        assertEquals(1, model.activeInteractionsSummary?.activeConnectionCount)
+        assertEquals(2, model.activeInteractionsSummary?.actionableConnectionCount)
+    }
+
+    @Test
+    fun `scheduling requiresAction is preserved in UI item`() {
+        val model = mapper.toScreenModel(
+            home = homeState(
+                activeInteractionsSummary = summary(actionableConnectionCount = 1),
+                nextSteps = listOf(
+                    HomeNextStep.Scheduling(
+                        connectionId = "connection-action",
+                        matchId = "match-action",
+                        partner = partner("Sam"),
+                        requiresAction = true,
+                    ),
+                    HomeNextStep.Scheduling(
+                        connectionId = "connection-waiting",
+                        matchId = "match-waiting",
+                        partner = partner("Taylor"),
+                        requiresAction = false,
+                    ),
+                ),
+            ),
+            localHidden = noHiddenInteractions(),
+            localMatchmakingBlockedReason = null,
+        )
+
+        assertEquals(listOf(true, false), model.nextSteps.map { it.requiresAction() })
+        assertEquals(1, model.activeInteractionsSummary?.actionableConnectionCount)
+    }
+
+    @Test
+    fun `matchmaking remains disabled when backend reports canSearch false`() {
+        val model = mapper.toScreenModel(
+            home = homeState(
+                matchmaking = HomeMatchmaking(
+                    inQueue = false,
+                    canSearch = false,
+                    blockedReason = null,
+                ),
+            ),
+            localHidden = noHiddenInteractions(),
+            localMatchmakingBlockedReason = null,
+        )
+
+        assertFalse(model.matchmaking.canSearch)
+        assertEquals(null, model.matchmaking.blockedReason)
+    }
+
+    @Test
+    fun `matchmaking UI preserves structured visual advancement blocker`() {
+        val model = mapper.toScreenModel(
+            home = homeState(
+                matchmaking = HomeMatchmaking(
+                    inQueue = false,
+                    canSearch = false,
+                    blockedReason = HomeMatchmakingBlockedReason(
+                        code = "VISUAL_ADVANCEMENT_LIMIT_REACHED",
+                        message = "Wait",
+                        nextAvailableAt = "2026-08-21T15:20:00Z",
+                    ),
+                ),
+            ),
+            localHidden = noHiddenInteractions(),
+            localMatchmakingBlockedReason = null,
+        )
+
+        assertFalse(model.matchmaking.canSearch)
+        assertEquals("VISUAL_ADVANCEMENT_LIMIT_REACHED", model.matchmaking.blockedReason?.code)
+        assertEquals("Wait", model.matchmaking.blockedReason?.message)
+        assertEquals("2026-08-21T15:20:00Z", model.matchmaking.blockedReason?.nextAvailableAt)
+    }
+
+    @Test
+    fun `matchmaking UI preserves structured active match blocker without next availability`() {
+        val model = mapper.toScreenModel(
+            home = homeState(
+                matchmaking = HomeMatchmaking(
+                    inQueue = false,
+                    canSearch = false,
+                    blockedReason = HomeMatchmakingBlockedReason(
+                        code = "ACTIVE_MATCH_LIMIT_REACHED",
+                        message = "Active match cap",
+                        nextAvailableAt = null,
+                    ),
+                ),
+            ),
+            localHidden = noHiddenInteractions(),
+            localMatchmakingBlockedReason = null,
+        )
+
+        assertFalse(model.matchmaking.canSearch)
+        assertEquals("ACTIVE_MATCH_LIMIT_REACHED", model.matchmaking.blockedReason?.code)
+        assertEquals(null, model.matchmaking.blockedReason?.nextAvailableAt)
+    }
+
+    @Test
+    fun `active interaction counts do not disable matchmaking without backend blocker`() {
+        val model = mapper.toScreenModel(
+            home = homeState(
+                matchmaking = HomeMatchmaking(
+                    inQueue = false,
+                    canSearch = true,
+                    blockedReason = null,
+                ),
+                activeInteractionsSummary = summary(
+                    activeInitialCount = 5,
+                    activeConnectionCount = 2,
+                    actionableConnectionCount = 2,
+                ),
+            ),
+            localHidden = noHiddenInteractions(),
+            localMatchmakingBlockedReason = null,
+        )
+
+        assertTrue(model.matchmaking.canSearch)
+        assertEquals(null, model.matchmaking.blockedReason)
+    }
+
+    @Test
+    fun `draft warning presentation is derived from Home profile status`() {
+        val model = mapper.toScreenModel(
+            home = homeState(profileStatus = ProfileStatus.Draft),
+            localHidden = noHiddenInteractions(),
+            localMatchmakingBlockedReason = null,
+        )
+
+        val warning = model.draftProfileWarning
+        assertEquals("Tu perfil está en borrador", warning?.title)
+        assertEquals(
+            "Podés continuar tus interacciones actuales. " +
+                "Completá y reactivá tu perfil para buscar nuevas personas.",
+            warning?.message,
+        )
+        assertEquals("Completar perfil", warning?.actionLabel)
+    }
+
+    private fun homeState(
+        profileStatus: ProfileStatus? = null,
+        matchmaking: HomeMatchmaking = HomeMatchmaking(
+            inQueue = false,
+            canSearch = true,
+            blockedReason = null,
+        ),
+        activeInteractionsSummary: HomeActiveInteractionsSummary = summary(),
+        pendingActions: List<HomePendingAction> = emptyList(),
+        nextSteps: List<HomeNextStep> = emptyList(),
+        passiveNotices: List<HomePassiveNotice> = emptyList(),
+    ): HomeState = HomeState(
+        profileStatus = profileStatus,
+        matchmaking = matchmaking,
+        activeInteractionsSummary = activeInteractionsSummary,
+        pendingActions = pendingActions,
+        nextSteps = nextSteps,
+        passiveNotices = passiveNotices,
+    )
+
+    private fun summary(
+        activeInitialCount: Int = 0,
+        activeConnectionCount: Int = 0,
+        hasPendingSchedulingConnection: Boolean = false,
+        actionableConnectionCount: Int = 0,
+    ): HomeActiveInteractionsSummary = HomeActiveInteractionsSummary(
+        activeInitialCount = activeInitialCount,
+        activeConnectionCount = activeConnectionCount,
+        hasPendingSchedulingConnection = hasPendingSchedulingConnection,
+        actionableConnectionCount = actionableConnectionCount,
+    )
+
+    private fun noHiddenInteractions(): LocalHiddenInteractions = LocalHiddenInteractions(
+        hiddenFirstChatMatchIds = emptySet(),
+        hiddenVisualMatchIds = emptySet(),
+    )
+
+    private fun homeChat(chatId: String, status: ChatStatus, partnerName: String): HomeChat = HomeChat(
+        chatId = chatId,
+        chatType = ChatType.SecondChat,
+        chatStatus = status,
+        availableAt = "2026-06-20T18:00:00-03:00",
+        expiresAt = "2026-06-20T20:00:00-03:00",
+        readOnlyUntil = "2026-06-21T20:00:00-03:00",
+        durationMinutes = 120,
+        partner = partner(partnerName),
+    )
+
+    private fun partner(displayName: String): ChatPartner = ChatPartner(
+        userId = "user-$displayName",
+        profileId = "profile-$displayName",
+        displayName = displayName,
+    )
+
+    private fun HomeActionItem.matchIdForTest(): String = when (this) {
+        is HomeActionItem.FirstChat -> matchId
+        is HomeActionItem.VisualReview -> matchId
+    }
+
+    private fun HomeNextStepItem.connectionIdForTest(): String = when (this) {
+        is HomeNextStepItem.Scheduling -> connectionId
+        is HomeNextStepItem.SecondChatScheduled -> connectionId
+        is HomeNextStepItem.SecondChatAvailable -> connectionId
+        is HomeNextStepItem.SecondChatExpired -> connectionId
+        is HomeNextStepItem.SecondChatReadOnly -> connectionId
+        is HomeNextStepItem.Unknown -> connectionId
+    }
+}

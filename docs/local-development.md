@@ -1,267 +1,250 @@
 # Local Development
 
-## Spring Profile
+## Prerequisites
 
-The default active profile is:
+- Android Studio or IntelliJ IDEA with Android support.
+- JDK compatible with the Gradle Android plugin used by the project.
+- Android SDK for compile/target SDK configured in `app/build.gradle.kts`.
+- Firebase configuration if testing Firebase Auth or FCM.
 
-```text
-local-firebase
-```
+## Flavors
 
-This profile uses real Firebase ID tokens and an H2 file database:
+The app has one environment flavor dimension:
 
-```text
-./data/realsdb
-```
+| Flavor | Application ID | Visible app name | Backend URL rule | Cleartext |
+| --- | --- | --- | --- | --- |
+| `local` | `com.reals.app.local` | `Reals Local` | Defaults to `http://127.0.0.1:8080/` for ADB reverse. | Allowed only for local hosts by Network Security Config. |
+| `dev` | `com.reals.app.dev` | `Reals Dev` | Must set `realsDevBaseUrl` or `REALS_DEV_BASE_URL` to a real HTTPS host. | Prohibited. |
+| `prod` | `com.reals.app` | `Reals` | Must set `realsProdBaseUrl` or `REALS_PROD_BASE_URL` to a real HTTPS host. | Prohibited. |
 
-## Run Locally
+The Kotlin/Android namespace remains `com.reals.app`. The installable application ID is flavor-specific, so `local`,
+`dev`, and `prod` can coexist on one device with separate app data, Firebase Auth state, FCM registration, and App
+Check behavior.
 
-The project is set up to run from IntelliJ IDEA. Maven CLI may not be installed on the target machine, so do not assume `mvn` is available unless confirmed.
+The local base URL can be overridden with Gradle property `realsLocalBaseUrl` or environment variable `REALS_LOCAL_BASE_URL`.
 
-The app starts on:
+The `local` flavor enables `ENABLE_LOCAL_FIREBASE_EMAIL_AUTO_VERIFICATION`.
+`dev` and `prod` keep it disabled and continue to require the normal Firebase
+email-link verification flow.
 
-```text
-http://localhost:8080
-```
+## Firebase
 
-Sanity check:
+Use flavor-specific Google Services files:
+
+- `app/src/local/google-services.json`
+- `app/src/dev/google-services.json`
+- `app/src/prod/google-services.json`
+
+These files are ignored and must be supplied locally or by CI secrets. Do not commit Firebase project IDs, app IDs, API
+keys, certificates, service accounts, App Check debug secrets, or tokens.
+
+Each file must contain a Firebase Android App client matching the final application ID:
+
+| Flavor | Required Android client package |
+| --- | --- |
+| `local` | `com.reals.app.local` |
+| `dev` | `com.reals.app.dev` |
+| `prod` | `com.reals.app` |
+
+`local` and `dev` may initially be separate Firebase Android Apps in the same non-production Firebase project. `prod`
+must be capable of using a separate production Firebase project. Backend App Check allowlists for enabled environments
+use Firebase App IDs from the Google Services resources, not Android package names alone.
+
+The legacy ignored `app/google-services.json` location is treated as production-only compatibility for isolated builds.
+Move real production config to `app/src/prod/google-services.json` when enabling full variant validation.
+
+Firebase Auth is required for real sign-in/provisioning flows. Push notification testing requires FCM configuration and Android notification permission on Android 13+.
+
+## Firebase App Check
+
+Firebase is still initialized for every flavor because Firebase Authentication and Messaging are used in local, dev and
+prod. App Check installation and backend header injection are controlled separately by flavor:
+
+- `localDebug` and `localRelease`: App Check disabled; no debug or Play Integrity provider is installed.
+- `devDebug`: debug provider for emulator and direct-device testing against the hosted AWS `dev` environment.
+- `devRelease`: Play Integrity.
+- `prodDebug` and `prodRelease`: Play Integrity.
+
+For `dev` and `prod`, requests made through the Reals Retrofit client include:
 
 ```http
-GET http://localhost:8080/api/ping
+X-Firebase-AppCheck: <token>
 ```
 
-Expected response:
+The token is not added to URLs, query parameters, cookies or request bodies. The OkHttp logger redacts the header.
+For `local`, the App Check interceptor is not installed, no App Check token is requested, and local backend requests omit
+`X-Firebase-AppCheck`. The backend `local-firebase` profile accepts these requests with App Check disabled while Firebase
+Auth, Messaging and the local Firebase email auto-verification helper remain enabled.
 
-```json
-{"status":"ok"}
-```
+### Debug providers
 
-## H2 Console
+Local builds do not use the App Check debug provider and do not require capturing or registering a debug secret in
+Firebase Console.
 
-URL:
+Because `devDebug` installs as `com.reals.app.dev`, its Firebase App Check debug token must be registered manually under
+the Firebase Android App whose package is `com.reals.app.dev`. This is required for emulator and directly installed
+physical-device testing against the hosted AWS `dev` backend.
 
-```text
-http://localhost:8080/h2-console
-```
+The backend must still verify App Check JWTs normally. A registered debug secret allows Firebase to issue a normal App
+Check token; it is not a reason to disable JWT verification.
 
-The H2 console is enabled through `spring.h2.console.*` in the local H2 profiles.
+If Firebase Console requires registering the Android app with a SHA-256 fingerprint for `devDebug` setup, use the
+debug signing certificate from the local Android debug keystore.
 
-Connection:
-
-```text
-JDBC URL: jdbc:h2:file:./data/realsdb
-Username: sa
-Password: empty
-```
-
-The local H2 datasource URL includes PostgreSQL compatibility mode:
-
-```text
-jdbc:h2:file:./data/realsdb;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=false
-```
-
-## Local Firebase Auth
-
-The default `local-firebase` profile verifies real Firebase ID tokens locally.
-It uses the same H2 file database style as `local-nodb`, but disables dev
-auto-auth and enables Firebase token verification.
-
-The local Firebase service-account JSON is expected at:
-
-```text
-./secrets/reals-backend-firebase-credentials-dev.json
-```
-
-The `secrets/` directory is ignored by Git and must never be committed.
-
-## Local Auto-Auth
-
-With `local-nodb`, no authorization header is needed. `DevAutoAuthFilter` injects:
-
-```text
-userId: 00000000-0000-0000-0000-000000000001
-role: ROLE_USER
-```
-
-This filter is scoped to the local profile.
-
-## Local PostgreSQL
-
-Use `local-postgres` when you want to test the production-style database path
-locally. This profile uses PostgreSQL, enables Flyway and validates the JPA
-model against the migrated schema.
-
-Start PostgreSQL:
+Get the exact `localDebug` fingerprint with:
 
 ```powershell
-docker compose up -d postgres
+.\gradlew.bat :app:signingReport --no-daemon --console=plain
 ```
 
-Run the app with:
+Copy the `SHA-256` value for `Variant: devDebug` / `Config: debug`. The SHA-256 fingerprint is not a secret, but the
+App Check debug token printed by `DebugAppCheckProvider` is a secret and must not be committed.
+
+For App Check debug-token registration, match the Firebase Console app by Firebase App ID, not only by package name. The
+effective dev Firebase App ID is generated from the `google_app_id` value in the dev Google Services resources. Register
+the debug token under that exact App Check Android app. Reinstalling the APK or clearing app data may generate a
+different debug token, so keep the same installation while verifying.
+
+### Play Integrity providers
+
+For `devRelease`, `prodDebug` and `prodRelease`, register the corresponding Firebase Android app for App Check with Play
+Integrity. The Firebase project, `google-services.json`, package name and linked Play Integrity configuration must match
+the flavor's target environment. Register the required SHA-256 signing certificates for the app build that will be
+tested or distributed. Do not hardcode Firebase Console identifiers, project numbers or secrets in Android code. Play
+Integrity setup remains required before testing or distributing `devRelease`.
+
+App Check acquisition failures are recoverable and use the generic API error presentation:
 
 ```text
-SPRING_PROFILES_ACTIVE=local-postgres
+No pudimos verificar ésta instalación. Revisá tu conexión e intentá nuevamente.
 ```
 
-Default connection:
+## Local Firebase Email Verification
 
-```text
-JDBC URL: jdbc:postgresql://localhost:5432/reals
-Username: reals
-Password: reals
-```
-
-This profile uses the same dev auto-auth behavior as `local-nodb`, so existing
-Bruno local flows can run without Firebase tokens. It disables automatic
-schedulers; use the dev job endpoints for deterministic manual testing.
-
-Useful database commands:
-
-```powershell
-docker compose logs -f postgres
-docker compose down
-docker compose down -v
-```
-
-Use `docker compose down -v` only when you want to delete the local PostgreSQL
-data volume and force Flyway to recreate the schema from scratch.
-
-## Local Docker App
-
-Build and run the backend plus PostgreSQL with Docker Compose:
-
-```powershell
-docker compose up -d --build backend
-```
-
-The `backend` service runs with:
-
-```text
-SPRING_PROFILES_ACTIVE=local-postgres
-SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/reals
-```
-
-Inside Docker, the database host is `postgres`, not `localhost`, because
-`localhost` would point to the backend container itself.
-
-Check the backend:
-
-```powershell
-curl http://localhost:8080/api/ping
-```
-
-View logs:
-
-```powershell
-docker compose logs -f backend
-```
-
-Stop only the backend:
-
-```powershell
-docker compose stop backend
-```
-
-Stop backend and database without deleting the database volume:
-
-```powershell
-docker compose down
-```
-
-### Local Docker App With Firebase
-
-Use this mode when you want Docker to run the backend plus PostgreSQL, but
-authenticate requests with real Firebase ID tokens instead of local auto-auth.
-
-The Firebase service-account JSON must exist locally at:
-
-```text
-./secrets/reals-backend-firebase-credentials-dev.json
-```
-
-The `secrets/` directory is ignored by Git and must never be committed.
-
-Build and run the Firebase-backed Docker app:
-
-```powershell
-docker compose -f docker-compose.yml -f docker-compose.firebase.yml up -d --build backend
-```
-
-This override runs the backend with:
-
-```text
-SPRING_PROFILES_ACTIVE=dev
-DATABASE_URL=jdbc:postgresql://postgres:5432/reals
-FIREBASE_SERVICE_ACCOUNT_PATH=/run/secrets/firebase-service-account.json
-```
-
-The service-account file is mounted read-only inside the backend container.
-Automatic schedulers are disabled through `SCHEDULER_ENABLED=false` so local
-manual testing stays deterministic.
-
-Check the backend:
-
-```powershell
-curl http://localhost:8080/api/ping
-curl http://localhost:8080/actuator/health/readiness
-```
-
-Stop backend and database without deleting the database volume:
-
-```powershell
-docker compose -f docker-compose.yml -f docker-compose.firebase.yml down
-```
-
-## Local Jobs
-
-Local profiles disable automatic scheduled execution:
-
-```yaml
-scheduler.enabled: false
-```
-
-Use the dev endpoints for deterministic manual testing:
+For fictitious local-development accounts, Android can administratively verify
+the currently signed-in Firebase user through the backend helper:
 
 ```http
-POST /api/local-dev/jobs/{job}/run
+POST /api/me/local-dev/email-verification
+Authorization: Bearer <current Firebase ID token>
 ```
 
-For example:
+The backend endpoint must be available only under the backend
+`local-firebase` profile, must be property-gated, and must require a
+provisioned active backend user with `ROLE_USER`. Android calls it only after
+normal backend provisioning or active-user loading succeeds. It does not send a
+UID, email, request body, local-only header, or multipart flag.
 
-```http
-POST /api/local-dev/jobs/scheduled-second-chat-start/run
+After the helper returns `204 No Content`, Android reloads the Firebase user and
+forces a new ID token. Profile-photo upload and profile activation still use the
+normal backend endpoints and still rely on the real `email_verified` claim in
+that refreshed token. Android does not update PostgreSQL, does not activate the
+profile locally, and does not bypass legacy email-linking protections.
+
+When auto-verification is enabled, local signup does not send a useless
+Firebase verification email. The existing `Ya verifiqué` action remains the
+manual fallback: in `local` it can call the helper and refresh the token; in
+`dev` and `prod` it only reloads Firebase state and checks the real email-link
+verification.
+
+If the local helper, Firebase reload, or forced token refresh fails, Android
+blocks local session bootstrap with a retryable safe message instead of
+continuing to a confusing later photo-upload failure. Manual database profile
+activation is no longer the recommended local workflow.
+
+## Useful Commands
+
+```bash
+./gradlew :app:validateEnvironmentIsolation
+./gradlew :app:verifyAppCheckDependencyIsolation
+./gradlew :app:compileLocalDebugKotlin
+./gradlew :app:testLocalDebugUnitTest
+./gradlew :app:assembleLocalDebug
+./gradlew :app:compileLocalReleaseKotlin
+./gradlew :app:lintLocalRelease
+./gradlew :app:assembleLocalRelease
+./gradlew :app:verifyLocalReleaseArtifacts
 ```
 
-## Local Profile Photo Rules
+Use the `localDebug` variant for emulator or physical-device testing against a backend running on the host machine. See `local-android-networking.md` for the ADB reverse workflow.
 
-Local H2 profile overrides:
+## Optimized Local Release Smoke Test
 
-- max photos: `9`
-- required photos: `4`
-- min person photos: `1`
-- min full-body photos: `1`
+Do not mark this smoke test as passed unless it was executed on an installed, optimized `localRelease` APK.
 
-Default application rules are stricter:
+Recorded result:
 
-- max photos: `9`
-- required photos: `9`
-- min person photos: `3`
-- min full-body photos: `1`
+- July 21, 2026: a manually installed, signed and optimized `localRelease` APK passed the exercised MVP runtime smoke
+  paths on a physical Android device.
+- The smoke verified startup, Firebase initialization, Firebase Authentication login, authenticated backend
+  connectivity through the intended local setup, session bootstrap, Home loading,
+  basic navigation, chat loading/interaction, representative profile-photo/image flows, first-chat decision flow,
+  visual-review decision flow, representative FCM visual-review reminder delivery, and notification open recovery
+  through Home.
+- No R8, serialization, reflection, resource-shrinking, or release-only runtime blocker was observed in the exercised
+  flows.
+- The exact R8 `mapping.txt` remains build-specific and must be retained with the corresponding release artifact.
+- This local smoke does not prove `devRelease`, `prodRelease`, Play Integrity, Google Play distribution, remote HTTPS
+  deployment, every screen/lifecycle edge case, every provider, every device model, manufacturer background behavior,
+  lock-screen behavior, or all production-device conditions.
 
-## Flyway And Schema
+Prerequisites:
 
-Local H2 profiles disable Flyway and use Hibernate `ddl-auto: update`.
+- `app/src/local/google-services.json` contains an Android client for `com.reals.app.local`.
+- Local backend runs with the intended Firebase-backed local profile and required test state.
+- A non-production release-test keystore is supplied from an ignored path such as `secrets/local-release-test.keystore`,
+  or an ephemeral CI/local-only keystore is generated and discarded.
+- `REALS_RELEASE_STORE_PASSWORD`, `REALS_RELEASE_KEY_ALIAS`, and `REALS_RELEASE_KEY_PASSWORD` are set for that
+  non-production keystore, or the equivalent CI secret values are present for the job.
+- ADB reverse is configured for the backend and MinIO when using the normal local setup.
+- No App Check debug token is required for `localRelease`; local backend requests omit `X-Firebase-AppCheck`.
+- A test account and backend state exist for profile, chats, photos, scheduling, and notifications where applicable.
 
-Local `local-postgres` enables Flyway and uses Hibernate `ddl-auto: validate`.
+Build and install:
 
-Production-like schema changes should be represented with migrations under:
-
-```text
-src/main/resources/db/migration
+```bash
+./gradlew :app:assembleLocalRelease :app:verifyLocalReleaseArtifacts --no-daemon --console=plain \
+  -PrealsReleaseKeystorePath=secrets/local-release-test.keystore
+adb install -r app/build/outputs/apk/local/release/*.apk
 ```
 
-Current migration:
+Checklist:
 
-```text
-V1__init.sql
+1. Install or update the optimized release APK.
+2. Launch without startup crashes.
+3. Confirm Firebase initializes.
+4. Log in.
+5. Log out and log back in.
+6. Confirm authenticated calls obtain and use a Firebase ID token.
+7. Confirm local API calls omit `X-Firebase-AppCheck`.
+8. Complete authenticated `GET /api/me`.
+9. Parse a normal successful backend response.
+10. Parse and present a normal backend error response.
+11. Load Home.
+12. Enter and load a first or second chat when test state permits.
+13. Load messages.
+14. Send a message.
+15. Upload a profile photo.
+16. Load profile photos.
+17. Receive and parse one representative FCM data notification when Firebase test infrastructure permits.
+18. Open the notification/app and recover through Home.
+19. Exercise basic screen transitions.
+20. Confirm Logcat has no `ClassNotFoundException`, `NoSuchMethodException`, missing serializer, missing Retrofit
+    annotation, Firebase component-discovery, or resource-not-found crash.
+
+Capture Logcat while testing:
+
+```bash
+adb logcat -c
+adb logcat > local-release-smoke-logcat.txt
 ```
+
+If an obfuscated stack trace appears, retrace it with the exact mapping from the same APK build:
+
+```bash
+retrace app/build/outputs/mapping/localRelease/mapping.txt obfuscated-stacktrace.txt
+```
+
+## Backend Contract Docs
+
+The Android repo includes backend-shared docs under `docs/commons/`. Refresh those docs from the backend project when API/domain contracts change, then update Android DTOs, mappers, error handling and UI behavior as needed.
