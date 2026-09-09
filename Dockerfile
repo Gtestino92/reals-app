@@ -43,3 +43,11 @@ COPY docs docs
 
 RUN --mount=type=cache,target=/home/gradle/.gradle \
     ./gradlew :app:validateEnvironmentIsolation :app:verifyAppCheckDependencyIsolation :app:assembleLocalDebug --no-daemon --console=plain
+
+# The Android SDK command-line tools bundled in the base image also include
+# lint/sdkmanager dependency jars that are not used by the assembled app but are
+# detected by image scanners. Remove the vulnerable unused jars from the final
+# image so Trivy does not report protobuf or JLine findings from SDK internals.
+RUN rm -rf \
+    /opt/android-sdk-linux/cmdline-tools/latest/lib/external/com/google/protobuf/protobuf-java/3.24.4/protobuf-java-3.24.4.jar \
+    /opt/android-sdk-linux/cmdline-tools/latest/lib/external/lint-psi/kotlin-compiler/kotlin-compiler-mvn.jar
