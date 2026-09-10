@@ -62,6 +62,7 @@ internal fun AccountSection(
 ) {
     var changingPassword by rememberSaveable { mutableStateOf(false) }
     var confirmingDelete by rememberSaveable { mutableStateOf(false) }
+    var confirmingSignOut by rememberSaveable { mutableStateOf(false) }
     var currentPassword by remember { mutableStateOf("") }
     var newPassword by remember { mutableStateOf("") }
     var confirmNewPassword by remember { mutableStateOf("") }
@@ -109,6 +110,37 @@ internal fun AccountSection(
                 TextButton(
                     enabled = !accountDeleteLoading,
                     onClick = { confirmingDelete = false },
+                ) {
+                    Text("Cancelar")
+                }
+            },
+        )
+    }
+
+    if (confirmingSignOut) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!busy) confirmingSignOut = false
+            },
+            title = { Text("Cerrar sesión") },
+            text = { Text("Vas a cerrar tu sesión en este dispositivo.") },
+            confirmButton = {
+                TextButton(
+                    enabled = !busy,
+                    onClick = {
+                        confirmingSignOut = false
+                        onSignOut()
+                    },
+                    modifier = Modifier.testTag(SignOutConfirmButtonTag),
+                ) {
+                    Text("Cerrar sesión")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !busy,
+                    onClick = { confirmingSignOut = false },
+                    modifier = Modifier.testTag(SignOutCancelButtonTag),
                 ) {
                     Text("Cancelar")
                 }
@@ -172,9 +204,6 @@ internal fun AccountSection(
                 onToggle = { onExpandedChange(!expanded) },
             )
             if (expanded) {
-                OutlinedButton(onClick = onSignOut, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                    Text("Cerrar sesión")
-                }
                 OutlinedButton(
                     onClick = onOpenNotifications,
                     enabled = !busy,
@@ -206,6 +235,13 @@ internal fun AccountSection(
                         enabled = !busy,
                         onSupportReals = onSupportReals,
                     )
+                }
+                OutlinedButton(
+                    onClick = { confirmingSignOut = true },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Cerrar sesión")
                 }
                 Text(
                     text = "Eliminar la cuenta programa una eliminación recuperable durante 30 días y cierra la sesión.",
@@ -350,6 +386,8 @@ internal const val AccountSectionHeaderNormalTag = "account_section_header_norma
 internal const val AccountSectionHeaderConstrainedTag = "account_section_header_constrained"
 internal const val AccountSectionHeaderTextTag = "account_section_header_text"
 internal const val AccountSectionToggleTag = "account_section_toggle"
+internal const val SignOutCancelButtonTag = "sign_out_cancel_button"
+internal const val SignOutConfirmButtonTag = "sign_out_confirm_button"
 internal const val AccountSectionSubtitle = "Sesión y otras opciones."
 internal const val SupportRealsTitle = "Apoyar Reals"
 internal const val SupportRealsBody =
@@ -457,9 +495,9 @@ internal const val wrongCurrentPasswordMessage = "La contraseña actual no es co
 
 internal fun expandedAccountActionLabels(canChangePassword: Boolean): List<String> {
     return buildList {
-        add("Cerrar sesión")
         add("Notificaciones")
         if (canChangePassword) add("Cambiar contraseña de Reals")
+        add("Cerrar sesión")
         add("Eliminar cuenta")
     }
 }

@@ -154,6 +154,56 @@ class HomeAccountSectionAccessibilityTest {
         composeRule.onNodeWithText(SupportRealsCta).assertIsDisplayed()
     }
 
+    @Test
+    fun signOutButtonOpensConfirmationWithoutSigningOut() {
+        var signOutCount = 0
+        setAccountSection(
+            width = 327.dp,
+            fontScale = 1f,
+            expanded = true,
+            onSignOut = { signOutCount++ },
+        )
+
+        composeRule.onNodeWithText("Cerrar sesión").performClick()
+
+        composeRule.onNodeWithText("Vas a cerrar tu sesión en este dispositivo.").assertIsDisplayed()
+        assertEquals(0, signOutCount)
+    }
+
+    @Test
+    fun cancellingSignOutConfirmationDoesNotSignOut() {
+        var signOutCount = 0
+        setAccountSection(
+            width = 327.dp,
+            fontScale = 1f,
+            expanded = true,
+            onSignOut = { signOutCount++ },
+        )
+
+        composeRule.onNodeWithText("Cerrar sesión").performClick()
+        composeRule.onNodeWithTag(SignOutCancelButtonTag).performClick()
+
+        composeRule.onAllNodesWithText("Vas a cerrar tu sesión en este dispositivo.").assertCountEquals(0)
+        assertEquals(0, signOutCount)
+    }
+
+    @Test
+    fun confirmingSignOutConfirmationSignsOutOnce() {
+        var signOutCount = 0
+        setAccountSection(
+            width = 327.dp,
+            fontScale = 1f,
+            expanded = true,
+            onSignOut = { signOutCount++ },
+        )
+
+        composeRule.onNodeWithText("Cerrar sesión").performClick()
+        composeRule.onNodeWithTag(SignOutConfirmButtonTag).performClick()
+
+        composeRule.onAllNodesWithText("Vas a cerrar tu sesión en este dispositivo.").assertCountEquals(0)
+        assertEquals(1, signOutCount)
+    }
+
     private fun setHeader(
         width: Dp,
         fontScale: Float,
@@ -186,6 +236,7 @@ class HomeAccountSectionAccessibilityTest {
         expanded: Boolean,
         canChangePassword: Boolean = true,
         showSupportReals: Boolean = false,
+        onSignOut: () -> Unit = {},
         onSupportReals: () -> Unit = {},
     ) {
         composeRule.setContent {
@@ -207,7 +258,7 @@ class HomeAccountSectionAccessibilityTest {
                             showSupportReals = showSupportReals,
                             expanded = expanded,
                             onExpandedChange = {},
-                            onSignOut = {},
+                            onSignOut = onSignOut,
                             onOpenNotifications = {},
                             onChangePassword = { _, _ -> },
                             onDeleteAccount = {},

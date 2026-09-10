@@ -8,7 +8,7 @@ class HomeAccountSectionChangePasswordTest {
     @Test
     fun `expanded account actions include change password when capability is available`() {
         assertEquals(
-            listOf("Cerrar sesión", "Notificaciones", "Cambiar contraseña de Reals", "Eliminar cuenta"),
+            listOf("Notificaciones", "Cambiar contraseña de Reals", "Cerrar sesión", "Eliminar cuenta"),
             expandedAccountActionLabels(canChangePassword = true),
         )
     }
@@ -16,7 +16,7 @@ class HomeAccountSectionChangePasswordTest {
     @Test
     fun `expanded account actions hide change password when capability is unavailable`() {
         assertEquals(
-            listOf("Cerrar sesión", "Notificaciones", "Eliminar cuenta"),
+            listOf("Notificaciones", "Cerrar sesión", "Eliminar cuenta"),
             expandedAccountActionLabels(canChangePassword = false),
         )
     }

@@ -25,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.autofill.contentType
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
@@ -47,7 +49,6 @@ import com.reals.app.R
 import com.reals.app.ui.common.RealsBrandDivider
 import com.reals.app.ui.common.RealsBrandSeal
 import com.reals.app.ui.common.RealsPrimaryButton
-import com.reals.app.ui.common.RealsSecondaryButton
 import com.reals.app.ui.common.realsOutlinedTextFieldColors
 import com.reals.app.ui.theme.RealsRadii
 import com.reals.app.ui.theme.RealsType
@@ -66,6 +67,7 @@ fun LoginScreen(
     onPasswordReset: (email: String) -> Unit,
     onGoogleSignIn: () -> Unit,
 ) {
+    var authMode by rememberSaveable { mutableStateOf(initialAuthMode()) }
     var email by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var rememberCredentials by remember { mutableStateOf(defaultRememberCredentials()) }
@@ -111,9 +113,18 @@ fun LoginScreen(
                     .fillMaxWidth(),
             )
             Text(
-                text = "Ingresá o creá tu cuenta para empezar.",
+                text = authModeHeading(authMode),
                 modifier = Modifier
                     .padding(top = 22.dp)
+                    .fillMaxWidth(),
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+            Text(
+                text = authModeBody(authMode),
+                modifier = Modifier
+                    .padding(top = 8.dp)
                     .fillMaxWidth(),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -136,6 +147,7 @@ fun LoginScreen(
                 colors = realsOutlinedTextFieldColors(),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .testTag(LoginEmailFieldTag)
                     .contentType(loginEmailContentType()),
             )
             OutlinedTextField(
@@ -150,6 +162,7 @@ fun LoginScreen(
                 colors = realsOutlinedTextFieldColors(),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .testTag(LoginPasswordFieldTag)
                     .contentType(loginPasswordContentType()),
             )
             Row(
@@ -182,7 +195,7 @@ fun LoginScreen(
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
-            if (passwordResetMessage != null) {
+            if (authModeShowsPasswordReset(authMode) && passwordResetMessage != null) {
                 Text(
                     text = passwordResetMessage,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -190,34 +203,51 @@ fun LoginScreen(
                 )
             }
             RealsPrimaryButton(
-                text = if (loading) "Ingresando..." else "Ingresar",
-                onClick = { onSignIn(email, password, rememberCredentials) },
-                enabled = !authBusy,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            RealsSecondaryButton(
-                text = "Crear cuenta",
-                onClick = { onSignUp(email, password, rememberCredentials) },
-                enabled = !authBusy,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedButton(
-                onClick = { onPasswordReset(email) },
-                enabled = passwordResetButtonEnabled(
-                    loginLoading = loading,
-                    googleLoading = googleLoading,
-                    passwordResetLoading = passwordResetLoading,
-                    cooldownRemainingSeconds = cooldownRemainingSeconds,
-                ),
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(RealsRadii.Button),
-            ) {
-                Text(
-                    passwordResetButtonText(
-                        loading = passwordResetLoading,
-                        cooldownRemainingSeconds = cooldownRemainingSeconds,
+                text = authPrimaryButtonText(authMode, loading),
+                onClick = {
+                    submitAuthMode(
+                        authMode = authMode,
+                        email = email,
+                        password = password,
+                        rememberCredentials = rememberCredentials,
+                        onSignIn = onSignIn,
+                        onSignUp = onSignUp,
                     )
-                )
+                },
+                enabled = !authBusy,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            TextButton(
+                onClick = {
+                    authMode = switchedAuthMode(
+                        currentMode = authMode,
+                        authBusy = authBusy,
+                    )
+                },
+                enabled = authModeSwitchEnabled(authBusy),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(authModeSwitchActionText(authMode))
+            }
+            if (authModeShowsPasswordReset(authMode)) {
+                OutlinedButton(
+                    onClick = { onPasswordReset(email) },
+                    enabled = passwordResetButtonEnabled(
+                        loginLoading = loading,
+                        googleLoading = googleLoading,
+                        passwordResetLoading = passwordResetLoading,
+                        cooldownRemainingSeconds = cooldownRemainingSeconds,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(RealsRadii.Button),
+                ) {
+                    Text(
+                        passwordResetButtonText(
+                            loading = passwordResetLoading,
+                            cooldownRemainingSeconds = cooldownRemainingSeconds,
+                        )
+                    )
+                }
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -251,6 +281,58 @@ fun LoginScreen(
                 }
             }
         }
+    }
+}
+
+internal enum class AuthMode {
+    SignIn,
+    SignUp,
+}
+
+internal fun initialAuthMode(): AuthMode = AuthMode.SignIn
+
+internal fun authModeHeading(authMode: AuthMode): String = when (authMode) {
+    AuthMode.SignIn -> "Iniciar sesión"
+    AuthMode.SignUp -> "Creá tu cuenta"
+}
+
+internal fun authModeBody(authMode: AuthMode): String = when (authMode) {
+    AuthMode.SignIn -> "Ingresá con tu email y contraseña para continuar."
+    AuthMode.SignUp -> "Registrate con tu email y contraseña para empezar."
+}
+
+internal fun authPrimaryButtonText(authMode: AuthMode, loading: Boolean): String = when (authMode) {
+    AuthMode.SignIn -> if (loading) "Ingresando..." else "Ingresar"
+    AuthMode.SignUp -> if (loading) "Creando cuenta..." else "Crear cuenta"
+}
+
+internal fun authModeSwitchActionText(authMode: AuthMode): String = when (authMode) {
+    AuthMode.SignIn -> "¿No tenés cuenta? Crear cuenta"
+    AuthMode.SignUp -> "¿Ya tenés cuenta? Ingresar"
+}
+
+internal fun authModeShowsPasswordReset(authMode: AuthMode): Boolean =
+    authMode == AuthMode.SignIn
+
+internal fun authModeSwitchEnabled(authBusy: Boolean): Boolean = !authBusy
+
+internal fun switchedAuthMode(currentMode: AuthMode, authBusy: Boolean): AuthMode = when {
+    authBusy -> currentMode
+    currentMode == AuthMode.SignIn -> AuthMode.SignUp
+    else -> AuthMode.SignIn
+}
+
+internal fun submitAuthMode(
+    authMode: AuthMode,
+    email: String,
+    password: String,
+    rememberCredentials: Boolean,
+    onSignIn: (email: String, password: String, rememberCredentials: Boolean) -> Unit,
+    onSignUp: (email: String, password: String, rememberCredentials: Boolean) -> Unit,
+) {
+    when (authMode) {
+        AuthMode.SignIn -> onSignIn(email, password, rememberCredentials)
+        AuthMode.SignUp -> onSignUp(email, password, rememberCredentials)
     }
 }
 
@@ -290,6 +372,9 @@ internal fun loginHeaderVisible(compactForIme: Boolean): Boolean = !compactForIm
 internal const val rememberCredentialsLabel = "Recordar credenciales"
 
 internal fun defaultRememberCredentials(): Boolean = false
+
+internal const val LoginEmailFieldTag = "login_email_field"
+internal const val LoginPasswordFieldTag = "login_password_field"
 
 internal val LoginEmailContentType: ContentType =
     ContentType.Username + ContentType.EmailAddress
