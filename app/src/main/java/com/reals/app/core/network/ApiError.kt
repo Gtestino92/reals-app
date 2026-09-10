@@ -308,7 +308,7 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.ProfileAuthenticityVerificationRequired ->
         "Necesitás verificar la autenticidad del perfil antes de activarlo."
     BackendErrorCode.ProfilePhotosRequired -> "Subí más fotos para poder activar tu perfil."
-    BackendErrorCode.ProfilePersonPhotoRequired -> "Necesitamos al menos una foto clara tuya para activar tu perfil."
+    BackendErrorCode.ProfilePersonPhotoRequired -> "Necesitamos más fotos tuyas para activar tu perfil."
     BackendErrorCode.ProfileFullBodyPhotoRequired -> "Necesitamos una foto de cuerpo completo para activar tu perfil."
     BackendErrorCode.ProfilePhotoLimitReached -> "Ya llegaste al máximo de fotos permitidas."
     BackendErrorCode.InvalidProfileBirthDate -> "Revisá tu fecha de nacimiento."
