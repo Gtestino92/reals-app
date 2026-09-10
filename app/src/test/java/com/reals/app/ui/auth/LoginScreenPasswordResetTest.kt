@@ -1,5 +1,6 @@
 package com.reals.app.ui.auth
 
+import com.reals.app.ui.root.LoginErrorOwner
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -38,6 +39,51 @@ class LoginScreenPasswordResetTest {
         assertEquals(AuthMode.SignIn, switchedAuthMode(AuthMode.SignIn, authBusy = true))
         assertEquals(AuthMode.SignUp, switchedAuthMode(AuthMode.SignUp, authBusy = true))
         assertFalse(authModeSwitchEnabled(authBusy = true))
+    }
+
+    @Test
+    fun `back from sign up returns to sign in only when not busy`() {
+        assertTrue(authModeBackHandlerEnabled(AuthMode.SignUp, authBusy = false))
+        assertFalse(authModeBackHandlerEnabled(AuthMode.SignIn, authBusy = false))
+        assertFalse(authModeBackHandlerEnabled(AuthMode.SignUp, authBusy = true))
+        assertEquals(AuthMode.SignIn, authModeAfterBack(AuthMode.SignUp, authBusy = false))
+        assertEquals(AuthMode.SignUp, authModeAfterBack(AuthMode.SignUp, authBusy = true))
+    }
+
+    @Test
+    fun `auth error visibility follows owner mode`() {
+        assertEquals(
+            "Credenciales inválidas.",
+            visibleAuthError(
+                error = "Credenciales inválidas.",
+                authMode = AuthMode.SignIn,
+                errorOwner = LoginErrorOwner.SignIn,
+            ),
+        )
+        assertEquals(
+            null,
+            visibleAuthError(
+                error = "Credenciales inválidas.",
+                authMode = AuthMode.SignUp,
+                errorOwner = LoginErrorOwner.SignIn,
+            ),
+        )
+        assertEquals(
+            "No pudimos iniciar sesión con Google.",
+            visibleAuthError(
+                error = "No pudimos iniciar sesión con Google.",
+                authMode = AuthMode.SignUp,
+                errorOwner = LoginErrorOwner.Shared,
+            ),
+        )
+        assertEquals(
+            null,
+            visibleAuthError(
+                error = "Tu sesión terminó.",
+                authMode = AuthMode.SignUp,
+                errorOwner = null,
+            ),
+        )
     }
 
     @Test

@@ -1,5 +1,6 @@
 ﻿package com.reals.app.ui.auth
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -50,6 +51,7 @@ import com.reals.app.ui.common.RealsBrandDivider
 import com.reals.app.ui.common.RealsBrandSeal
 import com.reals.app.ui.common.RealsPrimaryButton
 import com.reals.app.ui.common.realsOutlinedTextFieldColors
+import com.reals.app.ui.root.LoginErrorOwner
 import com.reals.app.ui.theme.RealsRadii
 import com.reals.app.ui.theme.RealsType
 import kotlinx.coroutines.delay
@@ -59,6 +61,7 @@ fun LoginScreen(
     loading: Boolean,
     googleLoading: Boolean,
     error: String?,
+    errorOwner: LoginErrorOwner?,
     passwordResetLoading: Boolean,
     passwordResetMessage: String?,
     passwordResetAvailableAtMillis: Long?,
@@ -77,7 +80,16 @@ fun LoginScreen(
         nowMillis = nowMillis,
     )
     val authBusy = loading || googleLoading || passwordResetLoading
+    val visibleError = visibleAuthError(
+        error = error,
+        authMode = authMode,
+        errorOwner = errorOwner,
+    )
     val compactForIme = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+
+    BackHandler(enabled = authModeBackHandlerEnabled(authMode, authBusy)) {
+        authMode = authModeAfterBack(authMode, authBusy)
+    }
 
     LaunchedEffect(passwordResetAvailableAtMillis) {
         while (passwordResetCooldownRemainingSeconds(passwordResetAvailableAtMillis, System.currentTimeMillis()) > 0) {
@@ -188,9 +200,9 @@ fun LoginScreen(
                     color = MaterialTheme.colorScheme.onSurface,
                 )
             }
-            if (error != null) {
+            if (visibleError != null) {
                 Text(
-                    text = error,
+                    text = visibleError,
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -231,7 +243,9 @@ fun LoginScreen(
             }
             if (authModeShowsPasswordReset(authMode)) {
                 OutlinedButton(
-                    onClick = { onPasswordReset(email) },
+                    onClick = {
+                        onPasswordReset(email)
+                    },
                     enabled = passwordResetButtonEnabled(
                         loginLoading = loading,
                         googleLoading = googleLoading,
@@ -263,7 +277,9 @@ fun LoginScreen(
                 HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.outlineVariant)
             }
             OutlinedButton(
-                onClick = onGoogleSignIn,
+                onClick = {
+                    onGoogleSignIn()
+                },
                 enabled = !authBusy,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(RealsRadii.Button),
@@ -315,6 +331,27 @@ internal fun authModeShowsPasswordReset(authMode: AuthMode): Boolean =
     authMode == AuthMode.SignIn
 
 internal fun authModeSwitchEnabled(authBusy: Boolean): Boolean = !authBusy
+
+internal fun visibleAuthError(
+    error: String?,
+    authMode: AuthMode,
+    errorOwner: LoginErrorOwner?,
+): String? = when {
+    error == null -> null
+    errorOwner == LoginErrorOwner.Shared -> error
+    errorOwner == LoginErrorOwner.SignIn && authMode == AuthMode.SignIn -> error
+    errorOwner == LoginErrorOwner.SignUp && authMode == AuthMode.SignUp -> error
+    errorOwner == null && authMode == AuthMode.SignIn -> error
+    else -> null
+}
+
+internal fun authModeBackHandlerEnabled(authMode: AuthMode, authBusy: Boolean): Boolean =
+    authMode == AuthMode.SignUp && !authBusy
+
+internal fun authModeAfterBack(currentMode: AuthMode, authBusy: Boolean): AuthMode = when {
+    authModeBackHandlerEnabled(currentMode, authBusy) -> AuthMode.SignIn
+    else -> currentMode
+}
 
 internal fun switchedAuthMode(currentMode: AuthMode, authBusy: Boolean): AuthMode = when {
     authBusy -> currentMode

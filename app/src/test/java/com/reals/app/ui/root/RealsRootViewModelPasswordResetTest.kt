@@ -293,6 +293,7 @@ class RealsRootViewModelPasswordResetTest {
 
         var state = viewModel.uiState.value as RealsRootUiState.Login
         assertEquals("Email y password son requeridos.", state.error)
+        assertEquals(LoginErrorOwner.SignIn, state.errorOwner)
         assertNull(state.passwordResetMessage)
 
         viewModel.setState(RealsRootUiState.Login(passwordResetMessage = "stale"))
@@ -301,6 +302,7 @@ class RealsRootViewModelPasswordResetTest {
 
         state = viewModel.uiState.value as RealsRootUiState.Login
         assertEquals("Email y password son requeridos.", state.error)
+        assertEquals(LoginErrorOwner.SignUp, state.errorOwner)
         assertNull(state.passwordResetMessage)
     }
 
@@ -1004,6 +1006,22 @@ class RealsRootViewModelPasswordResetTest {
     }
 
     @Test
+    fun `google chooser failure stores shared login error owner`() = runTest(dispatcher) {
+        val authRepository = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
+        val viewModel = viewModel(authRepository)
+        viewModel.setState(RealsRootUiState.Login())
+
+        val attemptId = viewModel.beginGoogleSignIn()
+        viewModel.completeGoogleSignIn(attemptId!!, com.reals.app.ui.auth.GoogleCredentialResult.Failure)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as RealsRootUiState.Login
+        assertEquals("No pudimos iniciar sesión con Google. Intentá nuevamente.", state.error)
+        assertEquals(LoginErrorOwner.Shared, state.errorOwner)
+        assertEquals(emptyList<String>(), authRepository.googleSignInRequests)
+    }
+
+    @Test
     fun `duplicate google start is ignored while busy`() = runTest(dispatcher) {
         val viewModel = viewModel(FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically))
         viewModel.setState(RealsRootUiState.Login())
@@ -1030,6 +1048,7 @@ class RealsRootViewModelPasswordResetTest {
 
         val state = viewModel.uiState.value as RealsRootUiState.Login
         assertEquals("Ese método de inicio de sesión no está habilitado para esta cuenta.", state.error)
+        assertEquals(null, state.errorOwner)
         assertEquals(1, authRepository.signOutCalls)
         assertEquals(listOf("getMe"), api.calls.filter { it == "getMe" || it == "provisionMe" })
     }
