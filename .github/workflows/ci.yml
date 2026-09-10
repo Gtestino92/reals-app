@@ -178,10 +178,10 @@ jobs:
             echo "Incomplete release signing secrets: configure all four REALS_RELEASE_* signing secrets or none."
             exit 1
           fi
-          if [ -f app/src/prod/google-services.json ] && [ -n "${REALS_PROD_BASE_URL:-}" ] && [ "$signing_count" -eq 4 ]; then
+          if [ -f app/src/prod/google-services.json ] && [ "$signing_count" -eq 4 ]; then
             ./gradlew --daemon --console=plain :app:assembleProdRelease
           else
-            echo "Skipping prodRelease build: requires GOOGLE_SERVICES_PROD_JSON_BASE64, REALS_PROD_BASE_URL, and complete production release signing secrets."
+            echo "Skipping prodRelease build: requires GOOGLE_SERVICES_PROD_JSON_BASE64 and complete production release signing secrets."
           fi
 
       - name: Upload local debug APK
