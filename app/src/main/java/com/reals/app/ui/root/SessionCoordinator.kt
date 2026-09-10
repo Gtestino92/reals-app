@@ -105,6 +105,7 @@ internal class SessionCoordinator(
                 googleLoading = false,
                 googleAttemptId = null,
                 error = "Email y password son requeridos.",
+                errorOwner = LoginErrorOwner.SignUp,
                 passwordResetMessage = null,
             )
             return
@@ -115,6 +116,7 @@ internal class SessionCoordinator(
                 googleLoading = false,
                 googleAttemptId = null,
                 error = null,
+                errorOwner = null,
                 passwordResetMessage = null,
             )
             when (val result = authRepository.signUp(cleanEmail, password)) {
@@ -135,6 +137,7 @@ internal class SessionCoordinator(
                         googleLoading = false,
                         googleAttemptId = null,
                         error = result.message,
+                        errorOwner = LoginErrorOwner.SignUp,
                         passwordResetMessage = null,
                     )
             }
@@ -151,6 +154,7 @@ internal class SessionCoordinator(
         if (!isLocallyValidEmail(cleanEmail)) {
             uiState.value = current.copy(
                 error = invalidPasswordResetEmailMessage,
+                errorOwner = LoginErrorOwner.SignIn,
                 passwordResetLoading = false,
                 passwordResetMessage = null,
             )
@@ -160,6 +164,7 @@ internal class SessionCoordinator(
         val attemptId = ++passwordResetAttemptSequence
         uiState.value = current.copy(
             error = null,
+            errorOwner = null,
             passwordResetLoading = true,
             passwordResetAttemptId = attemptId,
             passwordResetMessage = null,
@@ -180,6 +185,7 @@ internal class SessionCoordinator(
                     uiState.value.passwordResetStateFor(attemptId)?.let { latest ->
                         uiState.value = latest.copy(
                             error = invalidPasswordResetEmailMessage,
+                            errorOwner = LoginErrorOwner.SignIn,
                             passwordResetLoading = false,
                             passwordResetAttemptId = null,
                             passwordResetMessage = null,
@@ -299,6 +305,7 @@ internal class SessionCoordinator(
             googleLoading = true,
             googleAttemptId = attemptId,
             error = null,
+            errorOwner = null,
             passwordResetMessage = null,
         )
         return attemptId
@@ -316,12 +323,14 @@ internal class SessionCoordinator(
                 googleLoading = false,
                 googleAttemptId = null,
                 error = "Google Sign-In no está configurado para este entorno.",
+                errorOwner = LoginErrorOwner.Shared,
             )
 
             GoogleCredentialResult.Failure -> uiState.value = current.copy(
                 googleLoading = false,
                 googleAttemptId = null,
                 error = "No pudimos iniciar sesión con Google. Intentá nuevamente.",
+                errorOwner = LoginErrorOwner.Shared,
             )
 
             is GoogleCredentialResult.Success -> signInWithGoogleIdToken(attemptId, result.idToken)
@@ -584,6 +593,7 @@ internal class SessionCoordinator(
                 googleLoading = false,
                 googleAttemptId = null,
                 error = "Email y password son requeridos.",
+                errorOwner = LoginErrorOwner.SignIn,
                 passwordResetMessage = null,
             )
             return
@@ -594,6 +604,7 @@ internal class SessionCoordinator(
                 googleLoading = false,
                 googleAttemptId = null,
                 error = null,
+                errorOwner = null,
                 passwordResetMessage = null,
             )
             when (val result = action(cleanEmail, password)) {
@@ -610,6 +621,7 @@ internal class SessionCoordinator(
                         googleLoading = false,
                         googleAttemptId = null,
                         error = result.message,
+                        errorOwner = LoginErrorOwner.SignIn,
                         passwordResetMessage = null,
                     )
             }
@@ -635,6 +647,7 @@ internal class SessionCoordinator(
                 loading = true,
                 googleLoading = true,
                 error = null,
+                errorOwner = null,
                 passwordResetMessage = null,
             )
             when (val result = authRepository.signInWithGoogleIdToken(idToken)) {
@@ -651,6 +664,7 @@ internal class SessionCoordinator(
                             googleLoading = false,
                             googleAttemptId = null,
                             error = result.message,
+                            errorOwner = LoginErrorOwner.Shared,
                             passwordResetMessage = null,
                         )
                     }
