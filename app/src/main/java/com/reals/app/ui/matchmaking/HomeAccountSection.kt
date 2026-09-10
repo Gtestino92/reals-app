@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
 import com.reals.app.ui.common.ApiErrorFeedbackCard
+import com.reals.app.ui.common.SignOutConfirmationDialog
 import com.reals.app.ui.theme.RealsRadii
 
 @Composable
@@ -118,33 +119,10 @@ internal fun AccountSection(
     }
 
     if (confirmingSignOut) {
-        AlertDialog(
-            onDismissRequest = {
-                if (!busy) confirmingSignOut = false
-            },
-            title = { Text("Cerrar sesión") },
-            text = { Text("Vas a cerrar tu sesión en este dispositivo.") },
-            confirmButton = {
-                TextButton(
-                    enabled = !busy,
-                    onClick = {
-                        confirmingSignOut = false
-                        onSignOut()
-                    },
-                    modifier = Modifier.testTag(SignOutConfirmButtonTag),
-                ) {
-                    Text("Cerrar sesión")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    enabled = !busy,
-                    onClick = { confirmingSignOut = false },
-                    modifier = Modifier.testTag(SignOutCancelButtonTag),
-                ) {
-                    Text("Cancelar")
-                }
-            },
+        SignOutConfirmationDialog(
+            busy = busy,
+            onDismiss = { confirmingSignOut = false },
+            onConfirm = onSignOut,
         )
     }
 
@@ -386,8 +364,6 @@ internal const val AccountSectionHeaderNormalTag = "account_section_header_norma
 internal const val AccountSectionHeaderConstrainedTag = "account_section_header_constrained"
 internal const val AccountSectionHeaderTextTag = "account_section_header_text"
 internal const val AccountSectionToggleTag = "account_section_toggle"
-internal const val SignOutCancelButtonTag = "sign_out_cancel_button"
-internal const val SignOutConfirmButtonTag = "sign_out_confirm_button"
 internal const val AccountSectionSubtitle = "Sesión y otras opciones."
 internal const val SupportRealsTitle = "Apoyar Reals"
 internal const val SupportRealsBody =

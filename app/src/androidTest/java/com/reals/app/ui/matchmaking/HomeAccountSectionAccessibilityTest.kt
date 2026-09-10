@@ -23,6 +23,9 @@ import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.reals.app.ui.common.SignOutCancelButtonTag
+import com.reals.app.ui.common.SignOutConfirmationBody
+import com.reals.app.ui.common.SignOutConfirmButtonTag
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -166,7 +169,7 @@ class HomeAccountSectionAccessibilityTest {
 
         composeRule.onNodeWithText("Cerrar sesión").performClick()
 
-        composeRule.onNodeWithText("Vas a cerrar tu sesión en este dispositivo.").assertIsDisplayed()
+        composeRule.onNodeWithText(SignOutConfirmationBody).assertIsDisplayed()
         assertEquals(0, signOutCount)
     }
 
@@ -183,7 +186,7 @@ class HomeAccountSectionAccessibilityTest {
         composeRule.onNodeWithText("Cerrar sesión").performClick()
         composeRule.onNodeWithTag(SignOutCancelButtonTag).performClick()
 
-        composeRule.onAllNodesWithText("Vas a cerrar tu sesión en este dispositivo.").assertCountEquals(0)
+        composeRule.onAllNodesWithText(SignOutConfirmationBody).assertCountEquals(0)
         assertEquals(0, signOutCount)
     }
 
@@ -200,7 +203,7 @@ class HomeAccountSectionAccessibilityTest {
         composeRule.onNodeWithText("Cerrar sesión").performClick()
         composeRule.onNodeWithTag(SignOutConfirmButtonTag).performClick()
 
-        composeRule.onAllNodesWithText("Vas a cerrar tu sesión en este dispositivo.").assertCountEquals(0)
+        composeRule.onAllNodesWithText(SignOutConfirmationBody).assertCountEquals(0)
         assertEquals(1, signOutCount)
     }
 
