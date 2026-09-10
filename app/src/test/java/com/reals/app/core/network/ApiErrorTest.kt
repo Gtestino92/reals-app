@@ -82,6 +82,21 @@ class ApiErrorTest {
     }
 
     @Test
+    fun `email not verified maps to photo upload message for upload and replacement`() {
+        val error = backendError("EMAIL_NOT_VERIFIED")
+
+        assertEquals(BackendErrorCode.EmailNotVerified, error.backendErrorCode)
+        assertEquals(
+            "Verificá tu email antes de subir fotos de perfil.",
+            error.toUserMessage(ErrorContext.PhotoUpload),
+        )
+        assertEquals(
+            "Verificá tu email antes de subir fotos de perfil.",
+            error.toUserMessage(ErrorContext.PhotoReplace),
+        )
+    }
+
+    @Test
     fun `profile photo upload busy maps to retryable photo message`() {
         val error = backendError("PROFILE_PHOTO_UPLOAD_BUSY")
 

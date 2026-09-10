@@ -287,7 +287,11 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.ProfileAlreadyExists -> "Ya tenés un perfil creado."
     BackendErrorCode.ProfileNotFound -> "No encontramos tu perfil. Actualizá la sesión e intentá nuevamente."
     BackendErrorCode.ProfileNotActivatable -> "Tu perfil necesita completarse antes de activarlo."
-    BackendErrorCode.EmailNotVerified -> "Verificá tu email antes de activar el perfil."
+    BackendErrorCode.EmailNotVerified -> when (context) {
+        ErrorContext.PhotoUpload,
+        ErrorContext.PhotoReplace -> "Verificá tu email antes de subir fotos de perfil."
+        else -> "Verificá tu email antes de activar el perfil."
+    }
     BackendErrorCode.EmailAlreadyLinkedToDifferentFirebaseUser ->
         "Ya existe una cuenta asociada a ese email. Iniciá sesión con el método original."
     BackendErrorCode.AccessDenied -> "No tenés permisos para realizar ésta acción."

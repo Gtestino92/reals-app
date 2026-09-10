@@ -15,7 +15,7 @@ The app has one environment flavor dimension:
 | --- | --- | --- | --- | --- |
 | `local` | `com.reals.app.local` | `Reals Local` | Defaults to `http://127.0.0.1:8080/` for ADB reverse. | Allowed only for local hosts by Network Security Config. |
 | `dev` | `com.reals.app.dev` | `Reals Dev` | Must set `realsDevBaseUrl` or `REALS_DEV_BASE_URL` to a real HTTPS host. | Prohibited. |
-| `prod` | `com.reals.app` | `Reals` | Must set `realsProdBaseUrl` or `REALS_PROD_BASE_URL` to a real HTTPS host. | Prohibited. |
+| `prod` | `com.reals.app` | `Reals` | Defaults to `https://reals-api.duckdns.org/`; override with `realsProdBaseUrl` or `REALS_PROD_BASE_URL`. | Prohibited. |
 
 The Kotlin/Android namespace remains `com.reals.app`. The installable application ID is flavor-specific, so `local`,
 `dev`, and `prod` can coexist on one device with separate app data, Firebase Auth state, FCM registration, and App

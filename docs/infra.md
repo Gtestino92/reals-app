@@ -18,7 +18,7 @@ The app has one flavor dimension, `environment`:
 | --- | --- | --- | --- | --- |
 | `local` | `com.reals.app.local` | `Reals Local` | Defaults to `http://127.0.0.1:8080/`. | Only local hosts allowed. |
 | `dev` | `com.reals.app.dev` | `Reals Dev` | Must be configured to a real HTTPS host. | no |
-| `prod` | `com.reals.app` | `Reals` | Must be configured to a real HTTPS host. | no |
+| `prod` | `com.reals.app` | `Reals` | Defaults to `https://reals-api.duckdns.org/`. | no |
 
 The Android namespace remains `com.reals.app`; do not rename Kotlin packages to match flavor application IDs.
 
@@ -141,10 +141,11 @@ CI injects Firebase config from base64-encoded secrets when present:
 - `GOOGLE_SERVICES_DEV_JSON_BASE64`
 - `GOOGLE_SERVICES_PROD_JSON_BASE64`
 
-Dev/prod build validation also requires:
+Dev build validation also requires:
 
 - `REALS_DEV_BASE_URL`
-- `REALS_PROD_BASE_URL`
+
+Prod builds default to `https://reals-api.duckdns.org/`; set `REALS_PROD_BASE_URL` only when overriding that default.
 
 Release signing remains optional for `assembleProdRelease`; when real signing is required, use the existing
 `REALS_RELEASE_KEYSTORE_BASE64`, `REALS_RELEASE_STORE_PASSWORD`, `REALS_RELEASE_KEY_ALIAS`, and
