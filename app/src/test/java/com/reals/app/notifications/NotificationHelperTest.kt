@@ -65,6 +65,28 @@ class NotificationHelperTest {
     }
 
     @Test
+    fun `matchmaking available copy uses exact backend text`() {
+        assertEquals(
+            "Ya podés buscar de nuevo" to "Cuando quieras, podés volver a buscar a alguien nuevo.",
+            NotificationHelper.matchmakingAvailableNotificationCopy(),
+        )
+    }
+
+    @Test
+    fun `matchmaking available foreground notification uses stable display identity`() {
+        assertEquals("MATCHMAKING_AVAILABLE", PushNotificationContract.TYPE_MATCHMAKING_AVAILABLE)
+        assertEquals(25_000, PushNotificationContract.MATCHMAKING_AVAILABLE_NOTIFICATION_ID)
+        assertEquals(
+            NotificationDisplayIdentity(tag = "matchmaking-availability", id = 0),
+            NotificationHelper.matchmakingAvailableNotificationDisplayIdentity(),
+        )
+        assertEquals(
+            NotificationHelper.matchmakingAvailableNotificationDisplayIdentity(),
+            NotificationHelper.matchmakingAvailableNotificationDisplayIdentity(),
+        )
+    }
+
+    @Test
     fun `visual review reminder contract keeps historical type compatibility`() {
         assertEquals("VISUAL_REVIEW_REMINDER", PushNotificationContract.TYPE_VISUAL_REVIEW_REMINDER)
         assertEquals("VISUAL_REVIEW_AVAILABLE", PushNotificationContract.TYPE_VISUAL_REVIEW_AVAILABLE)
