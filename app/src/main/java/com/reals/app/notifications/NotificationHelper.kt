@@ -15,9 +15,12 @@ import androidx.core.content.ContextCompat
 import com.reals.app.R
 import com.reals.app.notifications.PushNotificationContract.GENERAL_UPDATES_CHANNEL_ID
 import com.reals.app.notifications.PushNotificationContract.MATCH_FOUND_NOTIFICATION_ID_BASE
+import com.reals.app.notifications.PushNotificationContract.MATCHMAKING_AVAILABLE_NOTIFICATION_ID
+import com.reals.app.notifications.PushNotificationContract.MATCHMAKING_AVAILABLE_NOTIFICATION_TAG
 import com.reals.app.notifications.PushNotificationContract.SCHEDULING_AVAILABLE_NOTIFICATION_ID_BASE
 import com.reals.app.notifications.PushNotificationContract.SECOND_CHAT_REMINDER_NOTIFICATION_ID_BASE
 import com.reals.app.notifications.PushNotificationContract.TYPE_MATCH_FOUND
+import com.reals.app.notifications.PushNotificationContract.TYPE_MATCHMAKING_AVAILABLE
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_AVAILABLE
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_CONFIRMED
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_PROPOSALS_RECEIVED
@@ -219,6 +222,38 @@ object NotificationHelper {
     }
 
     @SuppressLint("MissingPermission")
+    fun showMatchmakingAvailable(context: Context) {
+        if (!canPostNotifications(context)) return
+
+        val (title, body) = matchmakingAvailableNotificationCopy()
+        val notification = NotificationCompat.Builder(context, GENERAL_UPDATES_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_name)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(GENERAL_UPDATES_NOTIFICATION_PRIORITY)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setAutoCancel(true)
+            .setContentIntent(matchmakingAvailablePendingIntent(context))
+            .build()
+
+        try {
+            val identity = matchmakingAvailableNotificationDisplayIdentity()
+            NotificationManagerCompat.from(context).notify(
+                identity.tag,
+                identity.id,
+                notification,
+            )
+        } catch (exception: SecurityException) {
+            Log.w(
+                TAG,
+                "Could not show matchmaking available notification because permission was denied.",
+                exception,
+            )
+        }
+    }
+
+    @SuppressLint("MissingPermission")
     fun showMatchFound(
         context: Context,
         matchId: String?,
@@ -293,6 +328,15 @@ object NotificationHelper {
 
     internal fun matchFoundNotificationCopy(): Pair<String, String> =
         "Encontramos un chat" to "Tu nuevo chat ya está disponible."
+
+    internal fun matchmakingAvailableNotificationCopy(): Pair<String, String> =
+        "Ya podés buscar de nuevo" to "Cuando quieras, podés volver a buscar a alguien nuevo."
+
+    internal fun matchmakingAvailableNotificationDisplayIdentity(): NotificationDisplayIdentity =
+        NotificationDisplayIdentity(
+            tag = MATCHMAKING_AVAILABLE_NOTIFICATION_TAG,
+            id = 0,
+        )
 
     internal fun matchFoundNotificationTag(matchId: String?): String? =
         normalizedNotificationTargetId(matchId)
@@ -370,6 +414,16 @@ object NotificationHelper {
         matchId,
         null,
     )
+
+    private fun matchmakingAvailablePendingIntent(context: Context) =
+        NotificationPendingIntents.mainActivity(
+            context,
+            MATCHMAKING_AVAILABLE_NOTIFICATION_ID,
+            TYPE_MATCHMAKING_AVAILABLE,
+            null,
+            null,
+            null,
+        )
 
     internal fun schedulingNotificationCopy(type: String): Pair<String, String> = when (type) {
         TYPE_SCHEDULING_PROPOSALS_RECEIVED -> "Nuevos horarios propuestos" to
