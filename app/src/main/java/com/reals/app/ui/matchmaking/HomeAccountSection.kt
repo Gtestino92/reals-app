@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
 import com.reals.app.ui.common.ApiErrorFeedbackCard
+import com.reals.app.ui.common.SignOutConfirmationDialog
 import com.reals.app.ui.theme.RealsRadii
 
 @Composable
@@ -62,6 +63,7 @@ internal fun AccountSection(
 ) {
     var changingPassword by rememberSaveable { mutableStateOf(false) }
     var confirmingDelete by rememberSaveable { mutableStateOf(false) }
+    var confirmingSignOut by rememberSaveable { mutableStateOf(false) }
     var currentPassword by remember { mutableStateOf("") }
     var newPassword by remember { mutableStateOf("") }
     var confirmNewPassword by remember { mutableStateOf("") }
@@ -113,6 +115,14 @@ internal fun AccountSection(
                     Text("Cancelar")
                 }
             },
+        )
+    }
+
+    if (confirmingSignOut) {
+        SignOutConfirmationDialog(
+            busy = busy,
+            onDismiss = { confirmingSignOut = false },
+            onConfirm = onSignOut,
         )
     }
 
@@ -172,9 +182,6 @@ internal fun AccountSection(
                 onToggle = { onExpandedChange(!expanded) },
             )
             if (expanded) {
-                OutlinedButton(onClick = onSignOut, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                    Text("Cerrar sesión")
-                }
                 OutlinedButton(
                     onClick = onOpenNotifications,
                     enabled = !busy,
@@ -206,6 +213,13 @@ internal fun AccountSection(
                         enabled = !busy,
                         onSupportReals = onSupportReals,
                     )
+                }
+                OutlinedButton(
+                    onClick = { confirmingSignOut = true },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Cerrar sesión")
                 }
                 Text(
                     text = "Eliminar la cuenta programa una eliminación recuperable durante 30 días y cierra la sesión.",
@@ -457,9 +471,9 @@ internal const val wrongCurrentPasswordMessage = "La contraseña actual no es co
 
 internal fun expandedAccountActionLabels(canChangePassword: Boolean): List<String> {
     return buildList {
-        add("Cerrar sesión")
         add("Notificaciones")
         if (canChangePassword) add("Cambiar contraseña de Reals")
+        add("Cerrar sesión")
         add("Eliminar cuenta")
     }
 }

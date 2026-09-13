@@ -51,6 +51,24 @@ class FlavorBuildConfigTest {
     }
 
     @Test
+    fun `prod base url defaults to production backend with override precedence`() {
+        val gradleFile = appFile("build.gradle.kts").readText()
+
+        assertTrue(
+            gradleFile.contains(
+                """val prodBaseUrl = configValue("realsProdBaseUrl", "REALS_PROD_BASE_URL", "https://reals-api.duckdns.org/")""",
+            ),
+        )
+        val gradlePropertyIndex = gradleFile.indexOf("""providers.gradleProperty(propertyName).orNull""")
+        val environmentVariableIndex = gradleFile.indexOf("""?: providers.environmentVariable(envName).orNull""")
+        val defaultValueIndex = gradleFile.indexOf("""?: defaultValue""")
+
+        assertTrue(gradlePropertyIndex >= 0)
+        assertTrue(environmentVariableIndex > gradlePropertyIndex)
+        assertTrue(defaultValueIndex > environmentVariableIndex)
+    }
+
+    @Test
     fun `local firebase email auto verification build flag is flavor scoped`() {
         val gradleFile = appFile("build.gradle.kts").readText()
 

@@ -79,6 +79,7 @@ class SessionCoordinatorLoginAutofillTest {
 
         val state = harness.state.value as RealsRootUiState.Login
         assertEquals("Credenciales inválidas.", state.error)
+        assertEquals(LoginErrorOwner.SignIn, state.errorOwner)
         assertEquals(emptyList<Boolean>(), autofillDecisions)
         assertEquals(0, harness.readySessions.size)
     }

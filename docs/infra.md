@@ -18,7 +18,7 @@ The app has one flavor dimension, `environment`:
 | --- | --- | --- | --- | --- |
 | `local` | `com.reals.app.local` | `Reals Local` | Defaults to `http://127.0.0.1:8080/`. | Only local hosts allowed. |
 | `dev` | `com.reals.app.dev` | `Reals Dev` | Must be configured to a real HTTPS host. | no |
-| `prod` | `com.reals.app` | `Reals` | Must be configured to a real HTTPS host. | no |
+| `prod` | `com.reals.app` | `Reals` | Defaults to `https://reals-api.duckdns.org/`. | no |
 
 The Android namespace remains `com.reals.app`; do not rename Kotlin packages to match flavor application IDs.
 
@@ -141,10 +141,11 @@ CI injects Firebase config from base64-encoded secrets when present:
 - `GOOGLE_SERVICES_DEV_JSON_BASE64`
 - `GOOGLE_SERVICES_PROD_JSON_BASE64`
 
-Dev/prod build validation also requires:
+Dev build validation also requires:
 
 - `REALS_DEV_BASE_URL`
-- `REALS_PROD_BASE_URL`
+
+Prod builds default to `https://reals-api.duckdns.org/`; set `REALS_PROD_BASE_URL` only when overriding that default.
 
 Release signing remains optional for `assembleProdRelease`; when real signing is required, use the existing
 `REALS_RELEASE_KEYSTORE_BASE64`, `REALS_RELEASE_STORE_PASSWORD`, `REALS_RELEASE_KEY_ALIAS`, and
@@ -159,13 +160,14 @@ App Check provider by flavor:
 | `localDebug`, `localRelease` | Disabled | Do not register a debug secret; local backend requests omit `X-Firebase-AppCheck` while Firebase Auth and Messaging remain enabled. |
 | `devDebug` | Debug provider | Register each developer/device debug secret in Firebase Console for the dev Firebase Android app. Never commit the secret. |
 | `devRelease` | Play Integrity | Register the dev Firebase Android app for App Check and add the dev release signing SHA-256. |
-| `prodDebug`, `prodRelease` | Play Integrity | Register the production Firebase Android app for App Check and add the production signing SHA-256. |
+| `prodDebug` | Debug provider | Register each developer/device debug secret in Firebase Console for the production Firebase Android app. Never commit the secret. |
+| `prodRelease` | Play Integrity | Register the production Firebase Android app for App Check and add the production signing SHA-256. |
 
 Deployment checklist:
 
 1. Add the correct flavor-specific `google-services.json` outside source control.
 2. Register the Android app for App Check in the matching Firebase project for enabled environments.
-3. Register SHA-256 signing certificates for `devRelease` and prod.
+3. Register SHA-256 signing certificates for `devRelease` and `prodRelease`.
 4. Validate App Check-enabled Android builds against the backend while backend App Check mode is `MONITOR`.
 5. Distribute the App Check-enabled Android build to the target environment.
 6. Switch backend rollout from `DISABLED` to `MONITOR` to `ENFORCED` only after compatible clients are available.

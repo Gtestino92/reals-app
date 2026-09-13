@@ -127,6 +127,7 @@ fun RealsApp(
             is RealsRootUiState.Login -> LoginScreen(
                 loading = current.loading,
                 error = current.error,
+                errorOwner = current.errorOwner,
                 passwordResetLoading = current.passwordResetLoading,
                 passwordResetMessage = current.passwordResetMessage,
                 passwordResetAvailableAtMillis = current.passwordResetAvailableAtMillis,

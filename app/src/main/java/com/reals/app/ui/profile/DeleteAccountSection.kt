@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
 import com.reals.app.ui.common.ApiErrorFeedbackCard
+import com.reals.app.ui.common.SignOutConfirmationDialog
 
 @Composable
 fun DeleteAccountSection(
@@ -36,6 +37,7 @@ fun DeleteAccountSection(
     onDeleteAccount: () -> Unit,
 ) {
     var confirmingDeleteAccount by rememberSaveable { mutableStateOf(false) }
+    var confirmingSignOut by rememberSaveable { mutableStateOf(false) }
 
     if (confirmingDeleteAccount) {
         AlertDialog(
@@ -65,6 +67,14 @@ fun DeleteAccountSection(
                     Text("Cancelar")
                 }
             },
+        )
+    }
+
+    if (confirmingSignOut) {
+        SignOutConfirmationDialog(
+            busy = busy,
+            onDismiss = { confirmingSignOut = false },
+            onConfirm = onSignOut,
         )
     }
 
@@ -102,7 +112,7 @@ fun DeleteAccountSection(
 
             if (expanded) {
                 Button(
-                    onClick = onSignOut,
+                    onClick = { confirmingSignOut = true },
                     enabled = !busy,
                     modifier = Modifier.fillMaxWidth(),
                 ) {

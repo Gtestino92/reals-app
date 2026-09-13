@@ -2,6 +2,7 @@ package com.reals.app.notifications
 
 import com.reals.app.foreground.ForegroundDestination
 import com.reals.app.notifications.PushNotificationContract.TYPE_MATCH_FOUND
+import com.reals.app.notifications.PushNotificationContract.TYPE_MATCHMAKING_AVAILABLE
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_AVAILABLE
 import com.reals.app.notifications.PushNotificationContract.TYPE_SECOND_CHAT_STARTED
 import org.junit.Assert.assertFalse
@@ -66,6 +67,12 @@ class NotificationPresentationPolicyTest {
             policy.shouldPresent(
                 notification = notification(type = TYPE_SCHEDULING_AVAILABLE),
                 foregroundDestination = ForegroundDestination.SecondChat("connection-1"),
+            ),
+        )
+        assertTrue(
+            policy.shouldPresent(
+                notification = notification(type = TYPE_MATCHMAKING_AVAILABLE),
+                foregroundDestination = ForegroundDestination.Home,
             ),
         )
         assertTrue(

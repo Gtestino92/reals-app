@@ -287,7 +287,11 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.ProfileAlreadyExists -> "Ya tenés un perfil creado."
     BackendErrorCode.ProfileNotFound -> "No encontramos tu perfil. Actualizá la sesión e intentá nuevamente."
     BackendErrorCode.ProfileNotActivatable -> "Tu perfil necesita completarse antes de activarlo."
-    BackendErrorCode.EmailNotVerified -> "Verificá tu email antes de activar el perfil."
+    BackendErrorCode.EmailNotVerified -> when (context) {
+        ErrorContext.PhotoUpload,
+        ErrorContext.PhotoReplace -> "Verificá tu email antes de subir fotos de perfil."
+        else -> "Verificá tu email antes de activar el perfil."
+    }
     BackendErrorCode.EmailAlreadyLinkedToDifferentFirebaseUser ->
         "Ya existe una cuenta asociada a ese email. Iniciá sesión con el método original."
     BackendErrorCode.AccessDenied -> "No tenés permisos para realizar ésta acción."
@@ -304,7 +308,7 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
     BackendErrorCode.ProfileAuthenticityVerificationRequired ->
         "Necesitás verificar la autenticidad del perfil antes de activarlo."
     BackendErrorCode.ProfilePhotosRequired -> "Subí más fotos para poder activar tu perfil."
-    BackendErrorCode.ProfilePersonPhotoRequired -> "Necesitamos al menos una foto clara tuya para activar tu perfil."
+    BackendErrorCode.ProfilePersonPhotoRequired -> "Necesitamos más fotos tuyas para activar tu perfil."
     BackendErrorCode.ProfileFullBodyPhotoRequired -> "Necesitamos una foto de cuerpo completo para activar tu perfil."
     BackendErrorCode.ProfilePhotoLimitReached -> "Ya llegaste al máximo de fotos permitidas."
     BackendErrorCode.InvalidProfileBirthDate -> "Revisá tu fecha de nacimiento."

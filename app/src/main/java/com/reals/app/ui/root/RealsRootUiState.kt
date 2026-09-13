@@ -43,6 +43,7 @@ sealed interface RealsRootUiState {
         val googleLoading: Boolean = false,
         val googleAttemptId: Long? = null,
         val error: String? = null,
+        val errorOwner: LoginErrorOwner? = null,
         val passwordResetLoading: Boolean = false,
         val passwordResetAttemptId: Long? = null,
         val passwordResetMessage: String? = null,
@@ -265,6 +266,12 @@ sealed interface RealsRootUiState {
     ) : RealsRootUiState
 
     data class Failure(val error: ApiError) : RealsRootUiState
+}
+
+enum class LoginErrorOwner {
+    SignIn,
+    SignUp,
+    Shared,
 }
 
 data class SecondChatLifecycleUiState(

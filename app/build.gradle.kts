@@ -119,7 +119,7 @@ val versionNameValue = configValue(
 
 val localBaseUrl = configValue("realsLocalBaseUrl", "REALS_LOCAL_BASE_URL", "http://127.0.0.1:8080/")
 val devBaseUrl = configValue("realsDevBaseUrl", "REALS_DEV_BASE_URL", "https://api-dev.reals.example.com/")
-val prodBaseUrl = configValue("realsProdBaseUrl", "REALS_PROD_BASE_URL", "https://api.reals.example.com/")
+val prodBaseUrl = configValue("realsProdBaseUrl", "REALS_PROD_BASE_URL", "https://reals-api.duckdns.org/")
 val baseApplicationId = "com.reals.app"
 val expectedApplicationIds = mapOf(
     "local" to "$baseApplicationId.local",

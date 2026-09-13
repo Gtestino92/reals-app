@@ -88,7 +88,8 @@ Provider selection is compile-time/flavor-specific:
 - `localDebug` and `localRelease`: App Check disabled.
 - `devDebug`: debug provider.
 - `devRelease`: Play Integrity provider.
-- `prodDebug` and `prodRelease`: Play Integrity provider.
+- `prodDebug`: debug provider.
+- `prodRelease`: Play Integrity provider.
 
 `RealsApiClient` owns the common OkHttp application interceptor for App Check when a provider is present. Enabled
 variants send:

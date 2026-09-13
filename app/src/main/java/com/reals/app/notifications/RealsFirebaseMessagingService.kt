@@ -8,6 +8,7 @@ import com.reals.app.di.AppContainer
 import com.reals.app.foreground.ForegroundDestination
 import com.reals.app.notifications.PushNotificationContract.TYPE_MATCH_FOUND
 import com.reals.app.notifications.PushNotificationContract.TYPE_MATCH_FOUND_INVALIDATED
+import com.reals.app.notifications.PushNotificationContract.TYPE_MATCHMAKING_AVAILABLE
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_AVAILABLE
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_CONFIRMED
 import com.reals.app.notifications.PushNotificationContract.TYPE_SCHEDULING_PROPOSALS_RECEIVED
@@ -68,6 +69,19 @@ class RealsFirebaseMessagingService : FirebaseMessagingService() {
             notification = notification,
             foregroundDestination = foregroundDestination,
         )
+
+        if (notification.type == TYPE_MATCHMAKING_AVAILABLE) {
+            val action = matchmakingAvailableDispatchAction(shouldPresent)
+            if (action.requestHomeRefresh) {
+                appContainer
+                    ?.homeRefreshSignal
+                    ?.request()
+            }
+            if (action.presentNotification) {
+                NotificationHelper.showMatchmakingAvailable(context = this)
+            }
+            return
+        }
 
         if (notification.type != TYPE_MATCH_FOUND && !shouldPresent) {
             return
@@ -130,6 +144,8 @@ class RealsFirebaseMessagingService : FirebaseMessagingService() {
                 matchId = notification.matchId,
                 availableAt = notification.availableAt,
             )
+
+            TYPE_MATCHMAKING_AVAILABLE -> Unit
         }
     }
 
@@ -203,6 +219,20 @@ internal fun isKnownForegroundNotificationType(type: String?): Boolean = when (t
     TYPE_SCHEDULING_PROPOSALS_RECEIVED,
     TYPE_SCHEDULING_CONFIRMED,
     TYPE_SECOND_CHAT_REMINDER,
-    TYPE_SECOND_CHAT_STARTED -> true
+    TYPE_SECOND_CHAT_STARTED,
+    TYPE_MATCHMAKING_AVAILABLE -> true
     else -> false
 }
+
+internal data class MatchmakingAvailableDispatchAction(
+    val requestHomeRefresh: Boolean,
+    val presentNotification: Boolean,
+)
+
+internal fun matchmakingAvailableDispatchAction(
+    shouldPresent: Boolean,
+): MatchmakingAvailableDispatchAction =
+    MatchmakingAvailableDispatchAction(
+        requestHomeRefresh = true,
+        presentNotification = shouldPresent,
+    )
