@@ -84,6 +84,14 @@ class ApiExecutor(private val json: Json) {
             error = parsed?.error,
             message = parsed?.message ?: rawBody ?: response.message().ifBlank { "HTTP ${response.code()}" },
             expiresAt = parsed?.expiresAt,
+            retryAfterSeconds = parseRetryAfterSeconds(response.headers()["Retry-After"]),
         )
     }
+}
+
+// Only delta-seconds are supported by the backend contract. Never guess or clamp invalid values.
+internal fun parseRetryAfterSeconds(value: String?): Long? {
+    val seconds = value?.trim()?.takeIf { it.isNotEmpty() && it.all { char -> char in '0'..'9' } }
+        ?: return null
+    return seconds.toLongOrNull()
 }

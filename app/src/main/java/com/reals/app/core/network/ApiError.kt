@@ -10,6 +10,7 @@ sealed interface ApiError {
         val error: String?,
         val message: String,
         val expiresAt: String? = null,
+        val retryAfterSeconds: Long? = null,
     ) : ApiError
 
     data class Network(val message: String) : ApiError
@@ -43,6 +44,8 @@ enum class PhotoPreparationReason {
 }
 
 enum class BackendErrorCode(val raw: String) {
+    AccountProvisioningLimitExceeded("ACCOUNT_PROVISIONING_LIMIT_EXCEEDED"),
+    RateLimitExceeded("RATE_LIMIT_EXCEEDED"),
     ProfileRequired("PROFILE_REQUIRED"),
     ProfileNotActive("PROFILE_NOT_ACTIVE"),
     ActivePenalty("ACTIVE_PENALTY"),
@@ -232,7 +235,9 @@ enum class AuthFailureReason {
 fun ApiError.toDisplayMessage(): String = toUserMessage()
 
 fun ApiError.toUserMessage(context: ErrorContext = ErrorContext.General): String = when (this) {
-    is ApiError.Backend -> if (
+    is ApiError.Backend -> if (backendErrorCode == BackendErrorCode.AccountProvisioningLimitExceeded) {
+        userMessageForBackendError(backendErrorCode, context) + retryAfterSeconds.approximateWaitMessage()
+    } else if (
         backendErrorCode == BackendErrorCode.DomainConflict &&
         context != ErrorContext.Scheduling &&
         message.isNotBlank()
@@ -277,6 +282,9 @@ fun ApiError.toUserTitle(context: ErrorContext = ErrorContext.General): String =
 }
 
 private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorContext): String = when (code) {
+    BackendErrorCode.AccountProvisioningLimitExceeded ->
+        "Los nuevos registros desde esta conexión están temporalmente limitados. Intentá nuevamente más tarde."
+    BackendErrorCode.RateLimitExceeded -> "Hay demasiadas solicitudes. Intentá nuevamente más tarde."
     BackendErrorCode.ProfileRequired -> "Necesitás crear tu perfil antes de seguir."
     BackendErrorCode.ProfileNotActive -> "Tu perfil está en borrador. Activa tu perfil para poder buscar chat."
     BackendErrorCode.ActivePenalty -> "Por ahora no podés entrar a la búsqueda. Intentá nuevamente más adelante."
@@ -435,4 +443,15 @@ private fun userMessageForBackendError(code: BackendErrorCode, context: ErrorCon
         ErrorContext.ProfileQuestions -> "No pudimos actualizar las preguntas del perfil. Intentá nuevamente."
         else -> "Intentá nuevamente en unos segundos."
     }
+}
+
+private fun Long?.approximateWaitMessage(): String {
+    val seconds = this?.takeIf { it >= 0 } ?: return ""
+    val (amount, unit) = when {
+        seconds < 60 -> seconds to "segundo"
+        seconds < 3600 -> (seconds / 60 + if (seconds % 60 > 0) 1 else 0) to "minuto"
+        seconds < 86400 -> (seconds / 3600 + if (seconds % 3600 > 0) 1 else 0) to "hora"
+        else -> (seconds / 86400 + if (seconds % 86400 > 0) 1 else 0) to "día"
+    }
+    return " Esperá aproximadamente $amount $unit${if (amount == 1L) "" else "s"} antes de reintentar."
 }

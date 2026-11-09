@@ -10,6 +10,21 @@ import org.junit.Test
 
 class AuthRepositoryTest {
     @Test
+    fun `only exact password reset rate limit contract produces feedback`() = runBlocking {
+        for ((status, code, expected) in listOf(
+            Triple(429, "RATE_LIMIT_EXCEEDED", PasswordResetResult.RateLimited),
+            Triple(500, "RATE_LIMIT_EXCEEDED", PasswordResetResult.SilentFailure),
+            Triple(429, "UNKNOWN", PasswordResetResult.SilentFailure),
+            Triple(429, "ACCOUNT_PROVISIONING_LIMIT_EXCEEDED", PasswordResetResult.SilentFailure),
+        )) {
+            val api = FakeRealsApi().apply { passwordResetResponse = backendErrorResponse(status, code, "private") }
+            assertEquals(expected, AuthRepository(api, testApiExecutor()).requestPasswordReset("alex@example.com"))
+            assertNull(api.lastAuthorization)
+            assertEquals(listOf("requestPasswordReset"), api.calls)
+        }
+    }
+
+    @Test
     fun `valid password reset email calls public backend endpoint without bearer token`() = runBlocking {
         val api = FakeRealsApi()
         val repository = AuthRepository(api, testApiExecutor())

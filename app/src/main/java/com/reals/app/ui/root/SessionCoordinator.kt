@@ -181,6 +181,15 @@ internal class SessionCoordinator(
                         )
                     }
 
+                PasswordResetResult.RateLimited ->
+                    uiState.value.passwordResetStateFor(attemptId)?.let { latest ->
+                        uiState.value = latest.copy(
+                            passwordResetLoading = false,
+                            passwordResetAttemptId = null,
+                            passwordResetMessage = "Todavía no podemos procesar otra solicitud de recuperación. Intentá nuevamente más tarde.",
+                        )
+                    }
+
                 PasswordResetResult.InvalidEmailFormat ->
                     uiState.value.passwordResetStateFor(attemptId)?.let { latest ->
                         uiState.value = latest.copy(
