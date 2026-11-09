@@ -117,6 +117,100 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RealsRootViewModelPasswordResetTest {
+    @Test
+    fun `provisioning quota error still permits explicit sign out`() = runTest(dispatcher) {
+        val api = FakeRealsApi().apply {
+            getMeResponse = backendErrorResponse(403, "ACCESS_DENIED", "missing")
+            provisionMeResponse = backendErrorResponse(429, "ACCOUNT_PROVISIONING_LIMIT_EXCEEDED", "limited")
+        }
+        val auth = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
+        val viewModel = viewModel(auth, api)
+        viewModel.refreshSession()
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value is RealsRootUiState.Failure)
+        assertEquals(0, auth.signOutCalls)
+        viewModel.signOut()
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value is RealsRootUiState.Login)
+        assertEquals(1, auth.signOutCalls)
+        assertEquals(listOf("getMe", "provisionMe"), api.calls)
+    }
+
+    @Test
+    fun `late password reset rate limit cannot overwrite newer root state`() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforePasswordResetResponse = { gate.await() }
+            passwordResetResponse = backendErrorResponse(429, "RATE_LIMIT_EXCEEDED", "limited")
+        }
+        val viewModel = viewModel(FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically), api)
+        viewModel.setState(RealsRootUiState.Login())
+        viewModel.requestPasswordReset("alex@example.com")
+        runCurrent()
+        val ready = RealsRootUiState.Ready(session = TestDomain.session())
+        viewModel.setState(ready)
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(ready, viewModel.uiState.value)
+    }
+
+    @Test
+    fun `provisioning quota preserves Firebase and permits manual retry then sign out`() = runTest(dispatcher) {
+        val api = FakeRealsApi().apply {
+            getMeResponse = backendErrorResponse(404, "USER_NOT_FOUND", "missing")
+            provisionMeResponse = backendErrorResponse(429, "ACCOUNT_PROVISIONING_LIMIT_EXCEEDED", "limited")
+        }
+        val auth = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
+        val viewModel = viewModel(auth, api)
+        viewModel.setState(RealsRootUiState.Login())
+        viewModel.signIn("alex@example.com", "password")
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value is RealsRootUiState.Failure)
+        assertEquals(0, auth.signOutCalls)
+        assertEquals(listOf("getMe", "provisionMe"), api.calls)
+
+        viewModel.refreshSession()
+        viewModel.refreshSession()
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value is RealsRootUiState.Failure)
+        assertEquals(listOf("getMe", "provisionMe", "getMe", "provisionMe"), api.calls)
+        assertEquals(0, auth.signOutCalls)
+
+        api.provisionMeResponse = retrofit2.Response.success(TestDtos.user())
+        viewModel.refreshSession()
+        advanceUntilIdle()
+        assertFalse(viewModel.uiState.value is RealsRootUiState.Failure)
+        assertEquals(3, api.calls.count { it == "provisionMe" })
+        assertEquals(0, auth.signOutCalls)
+        viewModel.signOut()
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value is RealsRootUiState.Login)
+        assertEquals(1, auth.signOutCalls)
+    }
+
+    @Test
+    fun `password reset rate limit shows neutral feedback and retains cooldown`() = runTest(dispatcher) {
+        val api = FakeRealsApi().apply {
+            passwordResetResponse = backendErrorResponse(429, "RATE_LIMIT_EXCEEDED", "private email details")
+        }
+        val auth = FakeFirebaseAuthRepository(PasswordResetResult.SentOrHandledGenerically)
+        val viewModel = viewModel(auth, api)
+        viewModel.setState(RealsRootUiState.Login())
+        viewModel.requestPasswordReset("alex@example.com")
+        advanceUntilIdle()
+        val state = viewModel.uiState.value as RealsRootUiState.Login
+        assertEquals("Todavía no podemos procesar otra solicitud de recuperación. Intentá nuevamente más tarde.", state.passwordResetMessage)
+        assertNull(state.error)
+        assertFalse(state.passwordResetLoading)
+        assertNull(state.passwordResetAttemptId)
+        assertNotNull(state.passwordResetAvailableAtMillis)
+        viewModel.requestPasswordReset("other@example.com")
+        advanceUntilIdle()
+        assertEquals(listOf("requestPasswordReset"), api.calls)
+        assertNull(api.lastAuthorization)
+        assertEquals(0, auth.signOutCalls)
+    }
+
     private val dispatcher = StandardTestDispatcher()
 
     @Before
@@ -1479,6 +1573,8 @@ class RealsRootViewModelPasswordResetTest {
         private val canChangePassword: Boolean = true,
         private val currentUserEmail: String? = "alex@example.com",
     ) : FirebaseAuthRepository(ContextWrapper(null)) {
+        override fun isConfigured(): Boolean = true
+        override fun hasSignedInUser(): Boolean = true
         val resetRequests = mutableListOf<String>()
         val signInRequests = mutableListOf<String>()
         val signUpRequests = mutableListOf<String>()

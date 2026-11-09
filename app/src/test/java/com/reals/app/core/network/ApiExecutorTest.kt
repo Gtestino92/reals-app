@@ -15,6 +15,48 @@ import org.junit.Test
 import retrofit2.Response
 
 class ApiExecutorTest {
+    @Test
+    fun `retry after accepts only representable nonnegative integer seconds`() {
+        listOf(null, "", "oops", "-1", "+1", "1.5", "Wed, 21 Oct 2015 07:28:00 GMT", "9223372036854775808").forEach {
+            assertEquals(it, null, parseRetryAfterSeconds(it))
+        }
+        assertEquals(0L, parseRetryAfterSeconds("0"))
+        assertEquals(3600L, parseRetryAfterSeconds(" 3600 "))
+        assertEquals(Long.MAX_VALUE, parseRetryAfterSeconds(Long.MAX_VALUE.toString()))
+    }
+
+    @Test
+    fun `both executor paths retain retry metadata and rate limit codes`() = runBlocking {
+        for (code in listOf("RATE_LIMIT_EXCEEDED", "ACCOUNT_PROVISIONING_LIMIT_EXCEEDED")) {
+            for (unit in listOf(false, true)) {
+                val response = backendErrorResponse<Unit>(429, code, "limited")
+                val raw = response.raw().newBuilder()
+                    .header("Retry-After", "86400").build()
+                val withHeader = Response.error<Unit>(response.errorBody()!!, raw)
+                val result = if (unit) executor.executeUnit { withHeader } else executor.execute { withHeader }
+                val error = (result as ApiResult.Failure).error as ApiError.Backend
+                assertEquals(BackendErrorCode.fromRaw(code), error.backendErrorCode)
+                assertTrue(error.backendErrorCode != BackendErrorCode.Unknown)
+                assertEquals(86400L, error.retryAfterSeconds)
+                assertEquals(429, error.statusCode)
+                assertEquals("limited", error.message)
+            }
+        }
+    }
+
+    @Test
+    fun `provisioning message is safe with or without retry metadata`() {
+        val error = ApiError.Backend(429, "ACCOUNT_PROVISIONING_LIMIT_EXCEEDED", null, "private backend text")
+        assertEquals(
+            "Los nuevos registros desde esta conexión están temporalmente limitados. Intentá nuevamente más tarde.",
+            error.toUserMessage(),
+        )
+        for ((seconds, wait) in listOf(30L to "30 segundos", 61L to "2 minutos", 3600L to "1 hora", 172800L to "2 días")) {
+            assertTrue(error.copy(retryAfterSeconds = seconds).toUserMessage().contains("aproximadamente $wait"))
+        }
+        assertEquals(error.toUserMessage(), error.copy(retryAfterSeconds = -1).toUserMessage())
+    }
+
     private val executor = testApiExecutor()
 
     @Test

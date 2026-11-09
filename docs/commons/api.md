@@ -588,7 +588,7 @@ First-chat guidance is backend-owned for MVP:
 - `POST /api/safety/reports`: create a user safety report and contain the current active interaction/opportunity between the reporter and reported user. Supported contexts are `CHAT`, `VISUAL_PROFILE`, `PERSONAL_MESSAGE` and `PROFILE_PHOTO`. The backend validates that the authenticated reporter and reported user are the two participants in the referenced chat or visual-phase match; `PROFILE_PHOTO` also requires the reported photo to belong to the matched partner. New reports return `201 Created`; duplicate `USER` reports for the same reporter, reported user, context type and context id return `409 Conflict` with `SAFETY_REPORT_ALREADY_EXISTS`. Containment uses `ChatEndReason.SAFETY_REPORT` when a chat is closed. Optional `blockUser: true` additionally creates or reuses a directional `UserBlock` from reporter to reported with `source = SAFETY_REPORT`; omitted or `false` does not create a permanent block.
 - `CHILD_SAFETY_CONCERN` is accepted by direct user reports, chat safety cancellations and admin-created reports. It records a broad concern as a normal `PENDING` report; it does not establish a violation and does not automatically create a penalty, ban or permanent block unless `blockUser: true` is supplied on user-facing report requests.
 - User-facing report creation uses the safety-report-specific rate-limit rule under `security.rate-limit.safety-report-*`.
-- Rate limiting has two single-instance Caffeine stages. Pre-authentication buckets use `pre-auth:{endpoint-group}:ip:{request.remoteAddr}` before Firebase verification with broad dedicated `security.rate-limit.pre-auth-*` quotas; they do not reuse per-user message, photo, provisioning or safety-report quotas. Post-authentication buckets use `post-auth:{endpoint-group}:user:{backend-user-id}`, `post-auth:{endpoint-group}:firebase:{firebase-uid}` or `post-auth:{endpoint-group}:local-dev:{dev-user-id}` after authentication and preserve endpoint-specific user quotas. Production reverse proxies must be configured so the servlet container resolves the real client IP from trusted proxy infrastructure; the application does not trust arbitrary forwarded-IP headers.
+- Rate limiting has two single-instance Caffeine stages. Pre-authentication buckets use `pre-auth:{endpoint-group}:ip:{request.remoteAddr}` before Firebase verification with broad dedicated `security.rate-limit.pre-auth-*` quotas; they do not reuse per-user message, photo, provisioning or safety-report quotas. Exactly `POST /api/auth/password-reset` can opt into `security.rate-limit.password-reset-enabled` (default false), with an independent pre-auth IP policy of 10 tokens refilled every 3600 seconds by default. Hosted activation requires verified trusted client-IP resolution; see `docs/security-mvp.md`. Post-authentication buckets use `post-auth:{endpoint-group}:user:{backend-user-id}`, `post-auth:{endpoint-group}:firebase:{firebase-uid}` or `post-auth:{endpoint-group}:local-dev:{dev-user-id}` after authentication and preserve endpoint-specific user quotas. Production reverse proxies must be configured so the servlet container resolves the real client IP from trusted proxy infrastructure; the application does not trust arbitrary forwarded-IP headers.
 
 ## Admin Safety Reports
 
@@ -812,3 +812,14 @@ Selected stable frontend-facing domain codes:
 ## Manual blocking
 
 `POST /api/matches/{matchId}/block` requires no body and returns block `id`, `source`, and `createdAt`: `201 Created` for a new directional block and `200 OK` for an idempotent replay. Manual blocking creates no report, penalty, or reliability event. A block in either direction excludes the pair and causes positive progression to fail with `409 USER_PAIR_BLOCKED`. Reads, rejection, exit, cancellation, and safety paths remain available. There is no unblock endpoint in the current MVP.
+
+
+### Provisioning quota rejection
+
+`POST /api/me/provision` may return 429 when opt-in persistent network quotas
+reject a new backend account. Body: `code=ACCOUNT_PROVISIONING_LIMIT_EXCEEDED`,
+`error=Too Many Requests`, generic `message`; `Retry-After` is an integer delay
+in seconds covering both rolling windows. Preserve the Firebase identity/session
+and retry provisioning after the delay; never delete the Firebase user or retry
+in a tight loop. Existing accounts/linking do not consume quota. Success body
+and 200/201 semantics remain unchanged. See `../security-mvp.md` for boundaries.
