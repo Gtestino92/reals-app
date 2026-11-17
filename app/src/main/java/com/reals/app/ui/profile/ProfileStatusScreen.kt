@@ -37,6 +37,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
@@ -44,6 +47,7 @@ import com.reals.app.domain.model.CountryReference
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.ProfileSnapshot
+import com.reals.app.domain.model.sameProfileOwner
 import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.UpdateMatchFiltersInput
@@ -54,6 +58,7 @@ import com.reals.app.ui.common.FeedbackTone
 import com.reals.app.ui.common.RealsBrandDivider
 import com.reals.app.ui.theme.RealsRadii
 import com.reals.app.ui.theme.RealsType
+import com.reals.app.ui.root.supportsOwnerProfileContent
 
 @Composable
 fun ProfileStatusScreen(
@@ -109,6 +114,10 @@ fun ProfileStatusScreen(
     onDeleteAccount: () -> Unit,
     onRetryHome: () -> Unit = onRefresh,
     onBackHome: (() -> Unit)? = null,
+    ownerPreview: com.reals.app.ui.root.OwnerProfilePreviewState = com.reals.app.ui.root.OwnerProfilePreviewState(),
+    onOpenOwnerPreview: () -> Unit = {},
+    onCloseOwnerPreview: () -> Unit = {},
+    onResumeOwnerPreview: () -> Unit = {},
 ) {
     val busy = profileUpdateLoading ||
         matchFiltersLoading ||
@@ -124,6 +133,20 @@ fun ProfileStatusScreen(
         profileStatus = (session.profileSnapshot as? ProfileSnapshot.Found)?.profile?.status,
     )
     val scrollState = rememberScrollState()
+    val previewEntryFocus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    var returningFromPreview by remember { mutableStateOf(false) }
+    var restorePreview by rememberSaveable(session.user.id) { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (restorePreview && !ownerPreview.open) onOpenOwnerPreview()
+    }
+    LaunchedEffect(ownerPreview.open) {
+        if (returningFromPreview && !ownerPreview.open && session.supportsOwnerProfileContent()) previewEntryFocus.requestFocus()
+        returningFromPreview = ownerPreview.open
+    }
+    LaunchedEffect(session) {
+        if (ownerPreview.open && !session.sameProfileOwner(ownerPreview.ownerSession)) onCloseOwnerPreview()
+    }
     var accountExpanded by rememberSaveable(session.user.id) { mutableStateOf(false) }
 
     LaunchedEffect(accountExpanded) {
@@ -239,6 +262,15 @@ fun ProfileStatusScreen(
                 onOpenProfileQuestions = onOpenProfileQuestions,
             )
         }
+        val confirmed = (session.profileSnapshot as? ProfileSnapshot.Found)?.profile
+        if (presentationPolicy.showProfileSection && confirmed?.status in listOf(ProfileStatus.Active, ProfileStatus.Draft)) {
+            OutlinedButton(
+                onClick = { restorePreview = true; keyboard?.hide(); onOpenOwnerPreview() },
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth().padding(top = 16.dp).focusRequester(previewEntryFocus),
+            ) { Text("Vista previa de mi perfil") }
+            Text("Así se ven tus datos públicos confirmados. Los cambios sin guardar no se muestran.")
+        }
         if (onBackHome != null) {
             Row(
                 modifier = Modifier.padding(top = 24.dp),
@@ -263,6 +295,9 @@ fun ProfileStatusScreen(
                 onDeleteAccount = onDeleteAccount,
             )
         }
+    }
+    if (ownerPreview.open && session.sameProfileOwner(ownerPreview.ownerSession) && session.supportsOwnerProfileContent()) {
+        OwnerProfilePreviewDialog(ownerPreview, { restorePreview = false; onCloseOwnerPreview() }, onOpenOwnerPreview, onResumeOwnerPreview)
     }
 }
 
@@ -478,6 +513,10 @@ private fun ProfileCard(
                 },
                 onLoadCountries = onLoadCountries,
             )
+            ProfileQuestionsEntryCard(
+                busy = busy,
+                onOpenProfileQuestions = onOpenProfileQuestions,
+            )
             PhotosCard(
                 profile = profile,
                 photosLoading = photosLoading,
@@ -512,10 +551,6 @@ private fun ProfileCard(
                 onActivateProfile = onActivateProfile,
                 onResendEmailVerification = onResendEmailVerification,
                 onCheckEmailVerification = onCheckEmailVerification,
-            )
-            ProfileQuestionsEntryCard(
-                busy = busy,
-                onOpenProfileQuestions = onOpenProfileQuestions,
             )
         }
         if (presentationPolicy.showSearchSection) {
@@ -571,7 +606,7 @@ private fun ProfileQuestionsEntryCard(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            OutlinedButton(
+            Button(
                 onClick = onOpenProfileQuestions,
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),

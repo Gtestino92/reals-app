@@ -35,11 +35,14 @@ data class ProfileQuestionAnswerValidation(
 
 fun validateProfileQuestionAnswer(input: String): ProfileQuestionAnswerValidation {
     val normalized = input.trim()
-    val containsLineBreak = input.contains('\n') || input.contains('\r')
+    val containsLineBreak = input.any { it in "\n\r\u2028\u2029" }
 
     val error = when {
         containsLineBreak ->
             "La respuesta debe escribirse en una sola línea."
+
+        input.any { it.code in 0..31 || it.code in 127..159 || it == '<' || it == '>' } ->
+            "Usá texto simple, sin caracteres de control ni < o >."
 
         normalized.isBlank() ->
             "Escribí una respuesta para guardar."
@@ -66,7 +69,7 @@ fun ProfileQuestionCatalog.overview(answers: List<ProfileQuestionAnswer>): Profi
     return ProfileQuestionOverviewPresentation(
         answeredCount = answers.count { it.questionId in catalogIds },
         totalQuestionCount = questions.size,
-        selectedCount = answers.count { it.current && it.selectedPosition != null },
+        selectedCount = rows(answers).count { it.selectable && it.selectedPosition != null },
     )
 }
 
@@ -77,8 +80,8 @@ fun ProfileQuestionCatalog.rows(answers: List<ProfileQuestionAnswer>): List<Prof
         ProfileQuestionRowPresentation(
             question = question,
             answer = answer,
-            selectedPosition = answer?.selectedPosition?.takeIf { answer.current },
-            selectable = answer?.current == true && answer.answer.isNotBlank(),
+            selectedPosition = answer?.selectedPosition?.takeIf { answer.isCurrentFor(question) },
+            selectable = answer?.isCurrentFor(question) == true && validateProfileQuestionAnswer(answer.answer).valid,
         )
     }
 }
@@ -89,9 +92,9 @@ fun ProfileQuestionCatalog.selectionRows(
     val questionsById = questions.associateBy { it.id }
     return answers
         .asSequence()
-        .filter { it.current && it.answer.isNotBlank() }
+        .filter { it.current && validateProfileQuestionAnswer(it.answer).valid }
         .mapNotNull { answer ->
-            questionsById[answer.questionId]?.let { question ->
+            questionsById[answer.questionId]?.takeIf { answer.isCurrentFor(it) }?.let { question ->
                 ProfileQuestionSelectionRowPresentation(
                     question = question,
                     answer = answer,
@@ -102,6 +105,9 @@ fun ProfileQuestionCatalog.selectionRows(
         .sortedWith(compareBy<ProfileQuestionSelectionRowPresentation> { it.question.displayOrder }.thenBy { it.question.id })
         .toList()
 }
+
+fun ProfileQuestionAnswer.isCurrentFor(question: ProfileQuestion): Boolean =
+    current && questionSemanticVersion == question.semanticVersion
 
 fun selectedProfileQuestionIds(answers: List<ProfileQuestionAnswer>): List<String> =
     answers

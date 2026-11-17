@@ -13,6 +13,8 @@ data class VisualProfile(
     val decisionRequiresPartnerPersonalMessageRead: Boolean,
     val affinityIndicators: List<VisualAffinityIndicator> = emptyList(),
     val profileQuestions: List<PublicProfileQuestion> = emptyList(),
+    val city: String? = null,
+    val countryCode: String? = null,
 )
 
 data class VisualAffinityIndicator(

@@ -25,6 +25,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -36,6 +37,53 @@ import retrofit2.Response
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RealsRootViewModelProfileRoutingTest {
+    @Test fun `backend renewal of same authentication keeps profile surface and question draft`() = runTest(dispatcher) {
+        val api = FakeRealsApi()
+        val auth = object : com.reals.app.data.repository.FirebaseAuthRepository(android.content.ContextWrapper(null)) {
+            var identity = ""
+            override fun isConfigured() = true
+            override fun hasSignedInUser() = true
+            override fun authenticationSessionId() = identity
+            override fun currentUserEmail() = "user@example.com"
+        }
+        val dependencies = rootViewModelTestDependencies(api, authRepositoryOverride = auth)
+        val loaded = dependencies.session.provisionAndLoadProfile.loadProfileFor(TestDomain.session().user)
+            as com.reals.app.core.network.ApiResult.Success
+        auth.identity = loaded.value.authenticationSessionId
+        val vm = RealsRootViewModel(dependencies, autoRefreshSession = false)
+        val questions = ProfileQuestionUiState(open = true, profileId = "profile-1",
+            destination = ProfileQuestionDestination.Questions,
+            catalog = TestDtos.profileQuestionCatalog().toDomain(),
+            selectionDraftQuestionIds = listOf("LIFE_SOUNDTRACK_001"))
+        vm.setState(RealsRootUiState.Ready(loaded.value, editingActiveProfile = true, profileQuestions = questions))
+        advanceUntilIdle()
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        api.beforeGetProfileResponse = { gate.await() }
+        vm.refreshSession()
+        runCurrent()
+        assertTrue(vm.uiState.value is RealsRootUiState.Ready)
+        gate.complete(Unit); advanceUntilIdle()
+        val renewed = vm.uiState.value as RealsRootUiState.Ready
+        assertTrue(renewed.editingActiveProfile)
+        assertEquals(questions, renewed.profileQuestions)
+        assertEquals(auth.identity, renewed.session.authenticationSessionId)
+    }
+    @Test fun `collector preserves compatible renewal and clears new authentication`() = runTest {
+        val vm = viewModel(FakeRealsApi())
+        vm.setState(RealsRootUiState.Ready(session = TestDomain.session(), editingActiveProfile = true))
+        vm.openOwnerProfilePreview()
+        advanceUntilIdle()
+        val original = vm.uiState.value as RealsRootUiState.Ready
+        assertTrue(original.ownerPreview.open)
+        val renewed = original.session.copy(user = original.session.user.copy(email = "renewed@test"))
+        vm.setState(original.copy(session = renewed))
+        advanceUntilIdle()
+        assertTrue((vm.uiState.value as RealsRootUiState.Ready).ownerPreview.open)
+        vm.setState((vm.uiState.value as RealsRootUiState.Ready).copy(session = renewed.copy(authenticationSessionId = "new-login")))
+        advanceUntilIdle()
+        assertFalse((vm.uiState.value as RealsRootUiState.Ready).ownerPreview.open)
+        assertTrue((vm.uiState.value as RealsRootUiState.Ready).profilePhotos.isEmpty())
+    }
     private val dispatcher = StandardTestDispatcher()
 
     @Before

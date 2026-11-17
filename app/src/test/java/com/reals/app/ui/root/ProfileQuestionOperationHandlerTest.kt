@@ -34,6 +34,136 @@ import retrofit2.Response
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProfileQuestionOperationHandlerTest {
+    @Test fun `revoked silent read drops confirmed private snapshot and blocks writes`() = runTest {
+        val api = FakeRealsApi().apply { profileQuestionAnswersResponse = backendErrorResponse(403, "ACCESS_DENIED") }
+        val harness = harness(api, initialState = ready(profileQuestions = loadedState()))
+        harness.handler.onResume(); advanceUntilIdle()
+        assertNull(harness.ready().profileQuestions.catalog)
+        assertTrue(harness.ready().profileQuestions.answers.isEmpty())
+        assertTrue(harness.ready().profileQuestions.uncertain)
+    }
+    @Test fun `late healthy read cannot unlock an uncertain write`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply {
+            beforeGetMyProfileQuestionAnswersResponse = {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { gate.await() }
+                profileQuestionAnswersResponse = Response.success(TestDtos.profileQuestionAnswers())
+            }
+        }
+        val harness = harness(api, initialState = ready(profileQuestions = loadedState()))
+        harness.handler.onResume(); runCurrent()
+        api.profileQuestionAnswersResponse = backendErrorResponse(503, "UNAVAILABLE")
+        harness.handler.saveAnswer("PERFECT_SUNDAY_001", "Nueva"); runCurrent()
+        assertTrue(harness.ready().profileQuestions.uncertain)
+        gate.complete(Unit); advanceUntilIdle()
+        assertTrue(harness.ready().profileQuestions.uncertain)
+        assertFalse(harness.ready().profileQuestions.revalidating)
+    }
+    @Test fun `pending silent read survives renewal but not a real authentication replacement`() = runTest {
+        for (replaceAuth in listOf(false, true)) {
+            val gate = CompletableDeferred<Unit>()
+            val api = FakeRealsApi().apply { beforeGetMyProfileQuestionAnswersResponse = { gate.await() } }
+            val harness = harness(api, initialState = ready(profileQuestions = loadedState()))
+            harness.handler.onResume(); runCurrent()
+            val original = harness.ready().session
+            val renewed = original.copy(authenticationSessionId = if (replaceAuth) "new-login" else original.authenticationSessionId,
+                user = original.user.copy(email = "renewed@test"))
+            harness.state.value = harness.ready().copy(session = renewed)
+            harness.handler.cancelForSessionReplacement(renewed)
+            gate.complete(Unit); advanceUntilIdle()
+            assertFalse(harness.ready().profileQuestions.revalidating)
+            assertEquals(!replaceAuth, harness.ready().profileQuestions.open)
+            assertEquals(replaceAuth, harness.ready().profileQuestions.answers.isEmpty())
+        }
+    }
+    @Test fun `renewal during a write preserves mutation and selection draft`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply { beforeUpsertMyProfileQuestionAnswerResponse = { gate.await() } }
+        val harness = harness(api, initialState = ready(profileQuestions = loadedState()))
+        harness.handler.saveAnswer("PERFECT_SUNDAY_001", "Nueva")
+        runCurrent()
+        val renewed = harness.ready().session.copy(user = harness.ready().session.user.copy(email = "renewed@test"))
+        harness.state.value = harness.ready().copy(session = renewed)
+        harness.handler.cancelForSessionReplacement(renewed)
+        assertTrue(harness.ready().profileQuestions.mutation != null)
+        gate.complete(Unit); advanceUntilIdle()
+        assertNull(harness.ready().profileQuestions.mutation)
+        assertEquals(renewed, harness.ready().session)
+    }
+
+    @Test fun `new authentication of same owner cancels pending write and clears private answers`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply { beforeUpsertMyProfileQuestionAnswerResponse = { gate.await() } }
+        val harness = harness(api, initialState = ready(profileQuestions = loadedState()))
+        harness.handler.saveAnswer("PERFECT_SUNDAY_001", "Nueva"); runCurrent()
+        val replacement = harness.ready().session.copy(authenticationSessionId = "replacement")
+        harness.state.value = harness.ready().copy(session = replacement)
+        harness.handler.cancelForSessionReplacement(replacement)
+        gate.complete(Unit); advanceUntilIdle()
+        assertTrue(harness.ready().profileQuestions.answers.isEmpty())
+        assertNull(harness.ready().profileQuestions.mutation)
+        assertFalse(harness.ready().profileQuestions.open)
+    }
+
+    @Test fun `resume read remains editable and cannot replace a newer write`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val old = TestDtos.profileQuestionAnswers(listOf(TestDtos.profileQuestionAnswer(answer = "Vieja")))
+        val api = FakeRealsApi().apply {
+            beforeGetMyProfileQuestionAnswersResponse = {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { gate.await() }
+                profileQuestionAnswersResponse = Response.success(old)
+            }
+            profileQuestionAnswersResponse = Response.success(TestDtos.profileQuestionAnswers(listOf(TestDtos.profileQuestionAnswer(answer = "Autoritativa"))))
+        }
+        val harness = harness(api, initialState = ready(profileQuestions = loadedState()))
+        harness.handler.onResume(); runCurrent()
+        assertTrue(harness.ready().profileQuestions.revalidating)
+        assertFalse(harness.ready().profileQuestions.refreshing)
+        harness.handler.saveAnswer("PERFECT_SUNDAY_001", "Nueva"); runCurrent()
+        assertEquals("Autoritativa", harness.ready().profileQuestions.answers.single().answer)
+        gate.complete(Unit); advanceUntilIdle()
+        assertEquals("Autoritativa", harness.ready().profileQuestions.answers.single().answer)
+        assertFalse(harness.ready().profileQuestions.revalidating)
+    }
+
+    @Test fun `silent read failure preserves snapshot and requires reconciliation`() = runTest {
+        val api = FakeRealsApi().apply { profileQuestionAnswersResponse = backendErrorResponse(503, "UNAVAILABLE") }
+        val harness = harness(api, initialState = ready(profileQuestions = loadedState()))
+        val answers = harness.ready().profileQuestions.answers
+        harness.handler.onResume(); advanceUntilIdle()
+        assertEquals(answers, harness.ready().profileQuestions.answers)
+        assertTrue(harness.ready().profileQuestions.uncertain)
+        assertFalse(harness.ready().profileQuestions.revalidating)
+    }
+    @Test fun `uncertain mutation blocks duplicate writes until reconciliation`() = runTest {
+        val api = FakeRealsApi().apply {
+            profileQuestionAnswersResponse = backendErrorResponse(503, "UNAVAILABLE", "retry")
+        }
+        val harness = harness(api = api, initialState = ready(profileQuestions = loadedState()))
+        harness.handler.saveAnswer("PERFECT_SUNDAY_001", "Nuevo")
+        advanceUntilIdle()
+        assertTrue(harness.ready().profileQuestions.uncertain)
+        harness.handler.saveAnswer("PERFECT_SUNDAY_001", "Segundo")
+        advanceUntilIdle()
+        assertEquals("Nuevo", api.upsertProfileQuestionAnswerBody?.answer)
+        api.profileQuestionAnswersResponse = Response.success(TestDtos.profileQuestionAnswers())
+        harness.handler.refresh()
+        advanceUntilIdle()
+        assertFalse(harness.ready().profileQuestions.uncertain)
+    }
+
+    @Test fun `answer save preserves independent public selection draft`() = runTest {
+        val draft = listOf("LIFE_SOUNDTRACK_001")
+        val api = FakeRealsApi().apply {
+            profileQuestionAnswersResponse = Response.success(TestDtos.profileQuestionAnswers(listOf(
+                TestDtos.profileQuestionAnswer(), TestDtos.profileQuestionAnswer("LIFE_SOUNDTRACK_001"),
+            )))
+        }
+        val harness = harness(api = api, initialState = ready(profileQuestions = loadedState(selectionDraft = draft)))
+        harness.handler.saveAnswer("PERFECT_SUNDAY_001", "Nueva")
+        advanceUntilIdle()
+        assertEquals(draft, harness.ready().profileQuestions.selectionDraftQuestionIds)
+    }
     @Test
     fun `successful upsert installs authoritative answers`() = runTest {
         val api = FakeRealsApi().apply {

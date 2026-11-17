@@ -139,6 +139,9 @@ data class LegalFeatureDependencies(
 )
 
 data class ProfileFeatureDependencies(
+    val readProfile: suspend () -> ApiResult<com.reals.app.domain.model.ProfileSnapshot> = {
+        ApiResult.Failure(ApiError.Unexpected("Profile reconciliation unavailable"))
+    },
     val createProfile: CreateProfileUseCase,
     val updateProfile: UpdateProfileUseCase,
     val getCountries: GetCountriesUseCase,

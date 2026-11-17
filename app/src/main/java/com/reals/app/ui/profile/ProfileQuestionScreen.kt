@@ -1,53 +1,31 @@
 package com.reals.app.ui.profile
 
-import androidx.compose.foundation.clickable
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ErrorContext
 import com.reals.app.core.security.TextSafety
-import com.reals.app.domain.model.ProfileQuestionCatalog
 import com.reals.app.ui.common.ApiErrorFeedbackCard
-import com.reals.app.ui.common.RealsBrandDivider
-import com.reals.app.ui.common.RealsPrimaryButton
-import com.reals.app.ui.common.RealsSecondaryButton
-import com.reals.app.ui.common.RealsThinDivider
-import com.reals.app.ui.common.realsOutlinedTextFieldColors
-import com.reals.app.ui.theme.RealsRadii
-import com.reals.app.ui.theme.RealsType
-import com.reals.app.ui.root.ProfileQuestionDestination
-import com.reals.app.ui.root.ProfileQuestionMutationKind
-import com.reals.app.ui.root.ProfileQuestionUiState
-import kotlinx.coroutines.delay
-import kotlin.time.Duration.Companion.milliseconds
+import com.reals.app.ui.root.*
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
 @Composable
 fun ProfileQuestionScreen(
@@ -61,538 +39,151 @@ fun ProfileQuestionScreen(
     onSaveSelection: () -> Unit,
     onSaveAnswer: (questionId: String, answer: String) -> Unit,
     onDeleteAnswer: (questionId: String) -> Unit,
+    onResume: () -> Unit = {},
 ) {
-    val catalog = state.catalog
-    when {
-        state.loading && catalog == null -> ProfileQuestionLoading(onBack)
-        catalog == null && state.error != null -> ProfileQuestionInitialFailure(
-            state,
-            onRetry,
-            onBack
-        )
-
-        catalog == null -> ProfileQuestionLoading(onBack)
-        else -> when (val destination = state.destination) {
-            ProfileQuestionDestination.Overview -> ProfileQuestionOverview(
-                state = state,
-                catalog = catalog,
-                onBack = onBack,
-                onRetry = onRetry,
-                onOpenQuestions = onOpenQuestions,
-                onOpenSelection = onOpenSelection,
-            )
-
-            ProfileQuestionDestination.Questions -> ProfileQuestionList(
-                state = state,
-                catalog = catalog,
-                onBack = onBack,
-                onRetry = onRetry,
-                onOpenEditor = onOpenEditor,
-            )
-
-            is ProfileQuestionDestination.Editor -> ProfileQuestionEditor(
-                state = state,
-                catalog = catalog,
-                questionId = destination.questionId,
-                onBack = onBack,
-                onRetry = onRetry,
-                onSaveAnswer = onSaveAnswer,
-                onDeleteAnswer = onDeleteAnswer,
-            )
-
-            ProfileQuestionDestination.Selection -> ProfileQuestionSelectionEditor(
-                state = state,
-                catalog = catalog,
-                onBack = onBack,
-                onRetry = onRetry,
-                onSelectionDraftChange = onSelectionDraftChange,
-                onSaveSelection = onSaveSelection,
-            )
+    var drafts by rememberSaveable(state.profileId) { mutableStateOf(hashMapOf<String, String>()) }
+    var editing by rememberSaveable(state.profileId) { mutableStateOf<String?>(null) }
+    var submittedId by rememberSaveable(state.profileId) { mutableStateOf<String?>(null) }
+    var submittedText by rememberSaveable(state.profileId) { mutableStateOf<String?>(null) }
+    var focusEdit by remember { mutableStateOf<String?>(null) }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val resume by rememberUpdatedState(onResume)
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) resume() }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    val busy = state.loading || state.refreshing || state.mutation != null
+    val locked = busy || state.uncertain
+    val rows = state.catalog?.rows(state.answers).orEmpty()
+    var savedSelection by rememberSaveable(state.profileId) { mutableStateOf<ArrayList<String>?>(null) }
+    val selection = savedSelection ?: state.selectionDraftQuestionIds
+    val changeSelection: (List<String>) -> Unit = { ids ->
+        savedSelection = ArrayList(ids)
+        onSelectionDraftChange(ids)
+    }
+    LaunchedEffect(state.catalog, state.uncertain, state.mutation) {
+        if (state.catalog != null && !locked && state.feedback?.message !in listOf("Selección guardada", "Respuesta eliminada")) {
+            savedSelection?.let { onSelectionDraftChange(it) }
         }
     }
-}
-
-@Composable
-private fun ProfileQuestionOverview(
-    state: ProfileQuestionUiState,
-    catalog: ProfileQuestionCatalog,
-    onBack: () -> Unit,
-    onRetry: () -> Unit,
-    onOpenQuestions: () -> Unit,
-    onOpenSelection: () -> Unit,
-) {
-    val overview = catalog.overview(state.answers)
-    val actionsEnabled = state.mutation == null && !state.loading && !state.refreshing
-    ProfileQuestionLazySurface("Preguntas del perfil", onBack) {
-        item { ProfileQuestionStatus(state, onRetry) }
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("${overview.answeredCount} de ${overview.totalQuestionCount} respondidas")
-                Text("${overview.selectedCount} de 3 elegidas para mostrar")
-                if (overview.totalQuestionCount == 0) {
-                    Text(
-                        text = "No hay preguntas disponibles por ahora.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+    val holder = rememberSaveableStateHolder()
+    val additional = state.destination == ProfileQuestionDestination.Questions
+    val headingFocus = remember { FocusRequester() }
+    var focusHeading by remember { mutableStateOf(false) }
+    val back = { keyboard?.hide(); if (editing != null) editing = null else onBack() }
+    BackHandler { back() }
+    LaunchedEffect(state.feedback) {
+        val feedback = state.feedback ?: return@LaunchedEffect
+        if (feedback.message == "Selección guardada") savedSelection = null
+        val id = feedback.questionId ?: return@LaunchedEffect
+        if (id == submittedId && feedback.message == "Respuesta guardada") {
+            if (drafts[id] == submittedText) drafts = HashMap(drafts - id)
+            if (editing == id) { editing = null; focusEdit = id; keyboard?.hide() }
+            if (additional) focusHeading = true
+            submittedId = null
+        }
+        if (feedback.message == "Respuesta eliminada") {
+            drafts = HashMap(drafts - id)
+            savedSelection = savedSelection?.let { ArrayList(it - id) }
+        }
+    }
+    holder.SaveableStateProvider(if (additional) "additional" else "overview") {
+        val scroll = rememberLazyListState()
+        LaunchedEffect(focusHeading) {
+            if (focusHeading) {
+                scroll.scrollToItem(0)
+                withFrameNanos { }
+                headingFocus.requestFocus()
+                focusHeading = false
             }
         }
-        item {
-            RealsPrimaryButton(
-                text = "Responder o editar preguntas",
-                onClick = onOpenQuestions,
-                enabled = actionsEnabled && overview.totalQuestionCount > 0,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-        item {
-            RealsSecondaryButton(
-                text = "Elegir preguntas públicas",
-                onClick = onOpenSelection,
-                enabled = actionsEnabled && state.answers.any { it.current && it.answer.isNotBlank() },
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-    }
-}
-
-@Composable
-private fun ProfileQuestionList(
-    state: ProfileQuestionUiState,
-    catalog: ProfileQuestionCatalog,
-    onBack: () -> Unit,
-    onRetry: () -> Unit,
-    onOpenEditor: (questionId: String) -> Unit,
-) {
-    val rows = catalog.rows(state.answers)
-    val enabled = state.mutation == null
-    ProfileQuestionLazySurface("Responder preguntas", onBack) {
-        item { ProfileQuestionStatus(state, onRetry) }
-        if (rows.isEmpty()) {
+        LazyColumn(Modifier.fillMaxSize().safeDrawingPadding().imePadding().padding(horizontal = 24.dp),
+            state = scroll, verticalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(vertical = 16.dp)) {
             item {
-                Text(
-                    "No hay preguntas disponibles por ahora.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text(if (additional) "Responder preguntas" else "Preguntas del perfil", style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.focusRequester(headingFocus).focusable())
+                TextButton(onClick = back) { Text("Volver") }
+                if (busy) Text(if (state.catalog == null) "Cargando preguntas…" else "Actualizando preguntas…")
+                state.error?.let { ApiErrorFeedbackCard(it, ErrorContext.ProfileQuestions) }
+                state.mutationError?.let { ApiErrorFeedbackCard(it, ErrorContext.ProfileQuestions) }
+                if (state.error != null || state.uncertain) {
+                    if (state.uncertain) Text("No pudimos confirmar el cambio. Conservamos tu borrador. Consultá antes de volver a guardar.")
+                    OutlinedButton(onClick = onRetry, enabled = !busy) { Text("Reintentar consulta") }
+                }
+                state.feedback?.let { Text(it.message) }
             }
-        } else {
-            items(rows, key = { it.question.id }) { row ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(enabled = enabled) { onOpenEditor(row.question.id) },
-                    shape = RoundedCornerShape(RealsRadii.Row),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Text(TextSafety.safeDisplay(row.question.prompt, maxLength = 180))
-                        row.answer?.let { answer ->
-                            Text(
-                                text = TextSafety.safeDisplay(
-                                    answer.answer,
-                                    maxLength = ProfileQuestionAnswerMaxLength
-                                ),
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                            if (!answer.current) {
-                                Text("Versión anterior", color = MaterialTheme.colorScheme.error)
-                            } else if (row.selectedPosition != null) {
-                                Text("Visible en posición ${row.selectedPosition}")
+            if (state.catalog != null) {
+                if (!additional) item {
+                    Text("${rows.count { it.answer != null }} de ${rows.size} respondidas")
+                    Button(onClick = { keyboard?.hide(); onOpenQuestions() }, enabled = !busy && rows.any { it.answer == null }) { Text("Responder nuevas preguntas") }
+                    Text("Preguntas públicas", style = MaterialTheme.typography.titleLarge)
+                    Text("Elegí hasta tres respuestas para mostrar en tu perfil. Podés cambiar su orden.")
+                    Text("${selection.size} de 3 elegidas para mostrar")
+                }
+                val eligible = rows.filter { it.selectable }.map { it.question.id }.toSet()
+                if (!additional) items(selection.filter { it !in eligible }, key = { "invalid-$it" }) { id ->
+                    Text("Una pregunta de la selección dejó de estar disponible. Quitala o actualizá su respuesta antes de guardar.")
+                    OutlinedButton(onClick = { changeSelection(selection - id) }, enabled = !locked) { Text("Quitar pregunta no disponible") }
+                }
+                val visible = if (additional) rows.filter { it.answer == null } else rows.filter { it.answer != null }
+                    .sortedBy { selection.indexOf(it.question.id).takeIf { index -> index >= 0 } ?: Int.MAX_VALUE }
+                if (visible.isEmpty()) item { Text(if (additional) "No hay preguntas nuevas por responder." else "Respondé alguna pregunta actual para poder mostrarla en tu perfil.") }
+                items(visible, key = { it.question.id }) { row ->
+                    val id = row.question.id
+                    val selectedIndex = selection.indexOf(id)
+                    val text = drafts[id] ?: row.answer?.answer.orEmpty()
+                    val editFocus = remember { FocusRequester() }
+                    val inputFocus = remember { FocusRequester() }
+                    val isEditing = editing == id || additional
+                    LaunchedEffect(isEditing) {
+                        if (isEditing && !additional) inputFocus.requestFocus()
+                        else if (focusEdit == id) { editFocus.requestFocus(); focusEdit = null }
+                    }
+                    Card(Modifier.fillMaxWidth().testTag("profile-question-$id").semantics {
+                        stateDescription = if (row.selectable && selectedIndex >= 0) "Respuesta pública, posición ${selectedIndex + 1}" else "Respuesta no pública"
+                    }, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text(TextSafety.safeDisplay(row.question.prompt, maxLength = 180), style = MaterialTheme.typography.titleMedium)
+                            val current = row.answer?.isCurrentFor(row.question) == true
+                            if (row.answer != null && !current) Text("Versión anterior. Guardá la respuesta para actualizarla.")
+                            if (isEditing) {
+                                val validation = validateProfileQuestionAnswer(text)
+                                OutlinedTextField(text, { drafts = HashMap(drafts + (id to it)) },
+                                    label = { Text("Tu respuesta") }, supportingText = { Text("${validation.characterCount}/160") },
+                                    isError = drafts.containsKey(id) && !validation.valid, enabled = !busy,
+                                    modifier = Modifier.fillMaxWidth().focusRequester(inputFocus))
+                                if (drafts.containsKey(id)) validation.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                                Button(onClick = { submittedId = id; submittedText = text; onSaveAnswer(id, text) },
+                                    enabled = !locked && canSaveProfileQuestionAnswer(text, row.answer?.copy(current = current), false)) { Text("Guardar") }
+                                if (!additional) OutlinedButton(onClick = { drafts = HashMap(drafts - id); editing = null; focusEdit = id; keyboard?.hide() }, enabled = !busy) { Text("Cancelar edición") }
+                            } else {
+                                Text(TextSafety.safeDisplay(row.answer?.answer.orEmpty(), maxLength = 160))
+                                OutlinedButton(onClick = { editing = id }, enabled = !busy, modifier = Modifier.focusRequester(editFocus)) { Text(if (current) "Editar respuesta" else "Actualizar respuesta") }
+                                OutlinedButton(onClick = { onDeleteAnswer(id) }, enabled = !locked) { Text("Eliminar") }
+                                if (row.selectable) {
+                                    OutlinedButton(onClick = { changeSelection(if (selectedIndex >= 0) selection - id else selection + id) }, enabled = !locked && (selectedIndex >= 0 || selection.size < 3)) { Text(if (selectedIndex >= 0) "Quitar" else "Agregar") }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        OutlinedButton(onClick = { changeSelection(selection.move(selectedIndex, selectedIndex - 1)) }, enabled = !locked && selectedIndex > 0) { Text("Subir") }
+                                        OutlinedButton(onClick = { changeSelection(selection.move(selectedIndex, selectedIndex + 1)) }, enabled = !locked && selectedIndex >= 0 && selectedIndex < selection.lastIndex) { Text("Bajar") }
+                                    }
+                                }
                             }
-                        } ?: Text(
-                            "Sin responder",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        TextButton(onClick = { onOpenEditor(row.question.id) }, enabled = enabled) {
-                            Text("Abrir")
+                            if (row.selectable && selectedIndex >= 0) Text("Posición ${selectedIndex + 1}")
                         }
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ProfileQuestionEditor(
-    state: ProfileQuestionUiState,
-    catalog: ProfileQuestionCatalog,
-    questionId: String,
-    onBack: () -> Unit,
-    onRetry: () -> Unit,
-    onSaveAnswer: (questionId: String, answer: String) -> Unit,
-    onDeleteAnswer: (questionId: String) -> Unit,
-) {
-    val question = catalog.questions.firstOrNull { it.id == questionId } ?: return
-    val savedAnswer = state.answers.firstOrNull { it.questionId == questionId }
-    var text by rememberSaveable(questionId, savedAnswer?.updatedAt) {
-        mutableStateOf(savedAnswer?.answer.orEmpty())
-    }
-    val validation = validateProfileQuestionAnswer(text)
-    val mutationActive = state.mutation != null
-    val savingThisQuestion = state.mutation?.questionId == questionId
-    val canSave = canSaveProfileQuestionAnswer(
-        input = text,
-        savedAnswer = savedAnswer,
-        mutationActive = mutationActive,
-    )
-    ProfileQuestionLazySurface("Editar respuesta", onBack) {
-        item {
-            ProfileQuestionStatus(
-                state = state,
-                onRetry = onRetry,
-                showMutationStatus = false,
-                showFeedback = false,
-            )
-        }
-        item {
-            ProfileQuestionEditorCard(
-                prompt = question.prompt,
-                text = text,
-                onTextChange = { value ->
-                    text = value
-                        .substringBefore('\n')
-                        .substringBefore('\r')
-                },
-                validation = validation,
-                canSave = canSave,
-                canDelete = !mutationActive && savedAnswer != null,
-                saving = savingThisQuestion,
-                feedbackMessage = state.feedback
-                    ?.takeIf { it.questionId == questionId && it.destination == state.destination }
-                    ?.message,
-                onSave = { onSaveAnswer(questionId, text) },
-                onDelete = { onDeleteAnswer(questionId) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun ProfileQuestionEditorCard(
-    prompt: String,
-    text: String,
-    onTextChange: (String) -> Unit,
-    validation: ProfileQuestionAnswerValidation,
-    canSave: Boolean,
-    canDelete: Boolean,
-    saving: Boolean,
-    feedbackMessage: String?,
-    onSave: () -> Unit,
-    onDelete: () -> Unit,
-) {
-    var showSaving by remember { mutableStateOf(false) }
-    LaunchedEffect(saving) {
-        if (saving) {
-            delay(ProfileQuestionSavingIndicatorDelayMillis.milliseconds)
-            showSaving = true
-        } else {
-            showSaving = false
-        }
-    }
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                TextSafety.safeDisplay(prompt, maxLength = 180),
-                style = RealsType.SectionTitle,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            RealsThinDivider()
-            OutlinedTextField(
-                value = text,
-                onValueChange = onTextChange,
-                singleLine = true,
-                label = { Text("Tu respuesta") },
-                supportingText = {
-                    Text("${validation.characterCount}/$ProfileQuestionAnswerMaxLength")
-                },
-                isError = validation.error != null,
-                shape = RoundedCornerShape(RealsRadii.Button),
-                colors = realsOutlinedTextFieldColors(),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            validation.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(
-                    onClick = onSave,
-                    enabled = canSave,
-                    shape = RoundedCornerShape(RealsRadii.Button),
-                ) { Text("Guardar") }
-                OutlinedButton(
-                    onClick = onDelete,
-                    enabled = canDelete,
-                    shape = RoundedCornerShape(RealsRadii.Button),
-                ) { Text("Eliminar") }
-            }
-            Column(
-                modifier = Modifier.heightIn(min = 32.dp),
-                verticalArrangement = Arrangement.Center
-            ) {
-                when {
-                    saving && showSaving -> Row(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Text("Guardando...", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-
-                    feedbackMessage != null -> Text(
-                        feedbackMessage,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                if (!additional) item {
+                    OutlinedButton(onClick = { changeSelection(emptyList()) }, enabled = !locked && selection.isNotEmpty()) { Text("Limpiar selección") }
+                    Button(onClick = onSaveSelection, enabled = !locked && selection != selectedProfileQuestionIds(state.answers) && profileQuestionSelectionDraftIsValid(selection, state.catalog.selectionRows(state.answers))) { Text("Guardar selección") }
                 }
             }
         }
     }
 }
 
-@Composable
-private fun ProfileQuestionSelectionEditor(
-    state: ProfileQuestionUiState,
-    catalog: ProfileQuestionCatalog,
-    onBack: () -> Unit,
-    onRetry: () -> Unit,
-    onSelectionDraftChange: (questionIds: List<String>) -> Unit,
-    onSaveSelection: () -> Unit,
-) {
-    val rows = catalog.selectionRows(state.answers)
-    val currentSelection = selectedProfileQuestionIds(state.answers)
-    val draft = state.selectionDraftQuestionIds
-    val validDraft = profileQuestionSelectionDraftIsValid(draft, rows)
-    val canSave = state.mutation == null && validDraft && draft != currentSelection
-    ProfileQuestionLazySurface("Preguntas públicas", onBack) {
-        item { ProfileQuestionStatus(state, onRetry) }
-        item {
-            Text("${draft.size} de 3 elegidas para mostrar")
-        }
-        if (rows.isEmpty()) {
-            item {
-                Text(
-                    text = "Respondé alguna pregunta actual para poder mostrarla en tu perfil.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        } else {
-            items(rows, key = { it.question.id }) { row ->
-                val selectedIndex = draft.indexOf(row.question.id)
-                val selected = selectedIndex >= 0
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(RealsRadii.Row),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(TextSafety.safeDisplay(row.question.prompt, maxLength = 180))
-                        Text(
-                            TextSafety.safeDisplay(
-                                row.answer.answer,
-                                maxLength = ProfileQuestionAnswerMaxLength
-                            )
-                        )
-                        if (selected) Text(
-                            "Posición ${selectedIndex + 1}",
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(
-                                onClick = {
-                                    onSelectionDraftChange(
-                                        if (selected) draft - row.question.id else draft + row.question.id,
-                                    )
-                                },
-                                enabled = state.mutation == null &&
-                                        (selected || draft.size < ProfileQuestionMaxPublicSelections),
-                            ) {
-                                Text(if (selected) "Quitar" else "Agregar")
-                            }
-                            OutlinedButton(
-                                onClick = {
-                                    onSelectionDraftChange(
-                                        draft.move(
-                                            selectedIndex,
-                                            selectedIndex - 1
-                                        )
-                                    )
-                                },
-                                enabled = state.mutation == null && selectedIndex > 0,
-                            ) {
-                                Text("Subir")
-                            }
-                            OutlinedButton(
-                                onClick = {
-                                    onSelectionDraftChange(
-                                        draft.move(
-                                            selectedIndex,
-                                            selectedIndex + 1
-                                        )
-                                    )
-                                },
-                                enabled = state.mutation == null && selected && selectedIndex < draft.lastIndex,
-                            ) {
-                                Text("Bajar")
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        item {
-            RealsSecondaryButton(
-                text = "Limpiar selección",
-                onClick = { onSelectionDraftChange(emptyList()) },
-                enabled = state.mutation == null && draft.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-        item {
-            RealsPrimaryButton(
-                text = "Guardar selección",
-                onClick = onSaveSelection,
-                enabled = canSave,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-    }
+private fun List<String>.move(from: Int, to: Int): List<String> {
+    if (from !in indices || to !in indices) return this
+    return toMutableList().apply { add(to, removeAt(from)) }
 }
-
-@Composable
-private fun ProfileQuestionLazySurface(
-    title: String,
-    onBack: () -> Unit,
-    content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit,
-) {
-    LazyColumn(
-        modifier = Modifier
-            .safeDrawingPadding()
-            .padding(horizontal = 24.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.Top,
-            ) {
-                Text(
-                    text = title,
-                    modifier = Modifier.weight(1f),
-                    style = RealsType.ScreenTitle,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                TextButton(onClick = onBack) { Text("Volver") }
-            }
-            RealsBrandDivider(modifier = Modifier.padding(top = 14.dp))
-        }
-        content()
-    }
-}
-
-@Composable
-private fun ProfileQuestionStatus(
-    state: ProfileQuestionUiState,
-    onRetry: () -> Unit,
-    showMutationStatus: Boolean = true,
-    showFeedback: Boolean = true,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (state.refreshing) Text(
-            "Actualizando...",
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        if (showMutationStatus && state.mutation != null) {
-            Text(
-                text = when (state.mutation.kind) {
-                    ProfileQuestionMutationKind.Selection -> "Guardando selección..."
-                    ProfileQuestionMutationKind.Upsert,
-                    ProfileQuestionMutationKind.Delete -> "Guardando respuesta..."
-                },
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        state.error?.let {
-            ApiErrorFeedbackCard(it, ErrorContext.ProfileQuestions)
-            OutlinedButton(
-                onClick = onRetry,
-                enabled = !state.loading && !state.refreshing && state.mutation == null,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Reintentar")
-            }
-        }
-        state.mutationError?.let { ApiErrorFeedbackCard(it, ErrorContext.ProfileQuestions) }
-        if (showFeedback) {
-            state.feedback
-                ?.takeIf { it.destination == state.destination }
-                ?.let {
-                    Text(it.message, color = MaterialTheme.colorScheme.primary)
-                }
-        }
-    }
-}
-
-@Composable
-private fun ProfileQuestionLoading(onBack: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .safeDrawingPadding()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Text("Preguntas del perfil", style = RealsType.ScreenTitle, color = MaterialTheme.colorScheme.primary)
-        RealsBrandDivider()
-        CircularProgressIndicator(
-            modifier = Modifier.size(18.dp),
-        )
-        Text("Cargando preguntas...", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        OutlinedButton(onClick = onBack) { Text("Volver") }
-    }
-}
-
-@Composable
-private fun ProfileQuestionInitialFailure(
-    state: ProfileQuestionUiState,
-    onRetry: () -> Unit,
-    onBack: () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .safeDrawingPadding()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Text("Preguntas del perfil", style = RealsType.ScreenTitle, color = MaterialTheme.colorScheme.primary)
-        RealsBrandDivider()
-        state.error?.let { ApiErrorFeedbackCard(it, ErrorContext.ProfileQuestions) }
-        Button(
-            onClick = onRetry,
-            enabled = !state.loading,
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("Reintentar") }
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Volver") }
-    }
-}
-
-private fun List<String>.move(fromIndex: Int, toIndex: Int): List<String> {
-    if (fromIndex !in indices || toIndex !in indices) return this
-    val mutable = toMutableList()
-    val item = mutable.removeAt(fromIndex)
-    mutable.add(toIndex, item)
-    return mutable
-}
-
-private const val ProfileQuestionSavingIndicatorDelayMillis = 400L

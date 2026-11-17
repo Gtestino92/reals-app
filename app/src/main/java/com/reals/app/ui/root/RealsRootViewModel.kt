@@ -28,6 +28,7 @@ import com.reals.app.domain.model.LegalDocumentAction
 import com.reals.app.domain.model.NotificationPreferenceGroup
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProvisionedSession
+import com.reals.app.domain.model.sameProfileOwner
 import com.reals.app.domain.model.SearchLocationInput
 import com.reals.app.domain.model.SecondChatCompletionDecision
 import com.reals.app.domain.model.UpdateMatchFiltersInput
@@ -92,6 +93,18 @@ class RealsRootViewModel(
         dependencies = dependencies.profileQuestions,
         scope = viewModelScope,
     )
+    private val ownerPreviewHandler = OwnerProfilePreviewHandler(
+        state = _uiState,
+        scope = viewModelScope,
+        loadProfile = { dependencies.session.provisionAndLoadProfile.loadProfileFor(it) },
+        loadPhotos = { dependencies.profile.getProfilePhotos() },
+        loadCatalog = { dependencies.profileQuestions.getCatalog() },
+        loadAnswers = { dependencies.profileQuestions.getMyAnswers() },
+    )
+    fun openOwnerProfilePreview() = ownerPreviewHandler.open()
+    fun closeOwnerProfilePreview() = ownerPreviewHandler.close()
+    fun resumeOwnerProfilePreview() = ownerPreviewHandler.onResume()
+    fun resumeProfileQuestions() = profileQuestionHandler.onResume()
     private val manualBlockCoordinator = ManualBlockCoordinator(
         dependencies.manualBlock.blockMatchParticipant,
     )
@@ -145,6 +158,14 @@ class RealsRootViewModel(
         observeUserPairBlocked()
         observePendingSecondChatStartedHomeOpenInvalidation()
         observePendingVisualReviewPhotoPrefetchInvalidation()
+        viewModelScope.launch {
+            _uiState.collect { state ->
+                val session = (state as? RealsRootUiState.Ready)?.session
+                ownerPreviewHandler.cancelForSessionReplacement(session)
+                profileQuestionHandler.cancelForSessionReplacement(session)
+                profileHandler.cancelForSessionReplacement(session)
+            }
+        }
         if (autoRefreshSession) {
             refreshSession()
         }
@@ -2226,6 +2247,27 @@ class RealsRootViewModel(
     }
 
     private suspend fun showReadySession(session: ProvisionedSession) {
+        val retained = _uiState.value as? RealsRootUiState.Ready
+        if (retained?.hasOpenProfileSurface() == true && retained.session.sameProfileOwner(session)) {
+            val legal = legalCoordinator.load(session, LegalResumeContext.ExistingState(retained))
+            val latest = _uiState.value as? RealsRootUiState.Ready ?: return
+            if (!latest.session.sameProfileOwner(session)) return
+            val currentProfile = (latest.session.profileSnapshot as? ProfileSnapshot.Found)?.profile
+            val incomingProfile = (session.profileSnapshot as? ProfileSnapshot.Found)?.profile
+            val newer = currentProfile == incomingProfile || runCatching {
+                java.time.Instant.parse(incomingProfile?.updatedAt).isAfter(java.time.Instant.parse(currentProfile?.updatedAt))
+            }.getOrDefault(false)
+            val renewed = latest.copy(session = session.copy(
+                profileSnapshot = if (newer) session.profileSnapshot else latest.session.profileSnapshot,
+            ))
+            when (legal) {
+                is LegalCoordinatorResult.Satisfied -> _uiState.value = renewed
+                is LegalCoordinatorResult.Show -> _uiState.value = legal.state.copy(
+                    resumeContext = LegalResumeContext.ExistingState(renewed),
+                )
+            }
+            return
+        }
         enterLegalRequirements(
             session = session,
             resumeContext = LegalResumeContext.PostSession,
@@ -2520,7 +2562,8 @@ private fun RealsRootUiState.hasLegalActionRequiredError(): Boolean = when (this
             affinityQuestionnaire.error.isLegalActionRequiredError() ||
             affinityQuestionnaire.mutationError.isLegalActionRequiredError() ||
             profileQuestions.error.isLegalActionRequiredError() ||
-            profileQuestions.mutationError.isLegalActionRequiredError()
+            profileQuestions.mutationError.isLegalActionRequiredError() ||
+            ownerPreview.error.isLegalActionRequiredError()
 
     is RealsRootUiState.FirstChat -> error.isLegalActionRequiredError()
     is RealsRootUiState.SecondChat -> error.isLegalActionRequiredError()
@@ -2552,7 +2595,8 @@ internal fun RealsRootUiState.hasTerminalAuthFailure(): Boolean = when (this) {
             affinityQuestionnaire.error.isTerminalAuthFailure() ||
             affinityQuestionnaire.mutationError.isTerminalAuthFailure() ||
             profileQuestions.error.isTerminalAuthFailure() ||
-            profileQuestions.mutationError.isTerminalAuthFailure()
+            profileQuestions.mutationError.isTerminalAuthFailure() ||
+            ownerPreview.error.isTerminalAuthFailure()
 
     is RealsRootUiState.FirstChat ->
         error.isTerminalAuthFailure() || manualBlock.error.isTerminalAuthFailure()
@@ -2612,6 +2656,7 @@ private fun RealsRootUiState.accountBannedError(): ApiError? = when (this) {
         affinityQuestionnaire.mutationError,
         profileQuestions.error,
         profileQuestions.mutationError,
+        ownerPreview.error,
     )
 
     is RealsRootUiState.FirstChat -> firstAccountBannedError(error, manualBlock.error, audioUpload.error)

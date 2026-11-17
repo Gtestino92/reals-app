@@ -137,28 +137,6 @@ fun CreateProfileScreen(
                     optionLabel = { it.genderIdentityLabel() },
                     onValueChange = { gender = it },
                 )
-                GenderPreferenceSelector(
-                    selected = lookingForGenders,
-                    enabled = !busy,
-                    onSelectionChange = { lookingForGenders = it },
-                )
-                EnumDropdown(
-                    label = "Intención",
-                    value = intention,
-                    options = listOf("DATE", "FRIENDSHIP", "CASUAL"),
-                    enabled = !busy,
-                    optionLabel = { it.intentionLabel() },
-                    onValueChange = { intention = it },
-                )
-                OutlinedTextField(
-                    value = city,
-                    onValueChange = { city = it.take(100) },
-                    label = { Text("Ciudad") },
-                    enabled = !busy,
-                    singleLine = true,
-                    isError = CreateProfileField.City in fieldErrors,
-                    modifier = Modifier.fillMaxWidth(),
-                )
                 CountrySelector(
                     countries = countries,
                     selectedCountryCode = selectedCountryCode,
@@ -172,6 +150,15 @@ fun CreateProfileScreen(
                         null
                     },
                 )
+                OutlinedTextField(
+                    value = city,
+                    onValueChange = { city = it.take(100) },
+                    label = { Text("Ciudad") },
+                    enabled = !busy,
+                    singleLine = true,
+                    isError = CreateProfileField.City in fieldErrors,
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 countriesError?.let {
                     ApiErrorFeedbackCard(it, ErrorContext.ProfileCreation)
                     TextButton(
@@ -184,11 +171,24 @@ fun CreateProfileScreen(
                 OutlinedTextField(
                     value = bio,
                     onValueChange = { bio = it.take(1_000) },
-                    label = { Text("Bio opcional") },
+                    label = { Text("Bio (opcional)") },
                     enabled = !busy,
                     isError = CreateProfileField.Bio in fieldErrors,
                     minLines = 3,
                     modifier = Modifier.fillMaxWidth(),
+                )
+                GenderPreferenceSelector(
+                    selected = lookingForGenders,
+                    enabled = !busy,
+                    onSelectionChange = { lookingForGenders = it },
+                )
+                EnumDropdown(
+                    label = "Intención",
+                    value = intention,
+                    options = listOf("DATE", "FRIENDSHIP", "CASUAL"),
+                    enabled = !busy,
+                    optionLabel = { it.intentionLabel() },
+                    onValueChange = { intention = it },
                 )
                 AgeRangePreferenceControl(
                     minAge = preferredMinAge,
