@@ -190,6 +190,8 @@ class FakeRealsApi : RealsApi {
     var beforeRejectConnectionPartnerProposalsResponse: suspend () -> Unit = {}
     var beforeGetPartnerPersonalMessageResponse: suspend () -> Unit = {}
     var beforeGetProfilePhotosResponse: suspend () -> Unit = {}
+    var beforeUpdateProfileResponse: suspend () -> Unit = {}
+    var beforeUpdateFiltersResponse: suspend () -> Unit = {}
     var beforeReorderPhotosResponse: suspend () -> Unit = {}
     var beforeAddPhotoResponse: suspend () -> Unit = {}
     var beforeReplacePhotoResponse: suspend () -> Unit = {}
@@ -405,7 +407,7 @@ class FakeRealsApi : RealsApi {
         authorization: String,
         body: UpdateProfileRequestDto,
     ): Response<ProfileResponseDto> =
-        record("updateMyProfile", authorization) {
+        record("updateMyProfile", authorization, beforeResponse = beforeUpdateProfileResponse) {
             updateProfileBody = body
             profileResponse
         }
@@ -414,7 +416,7 @@ class FakeRealsApi : RealsApi {
         authorization: String,
         body: UpdateMatchFiltersRequestDto,
     ): Response<ProfileResponseDto> =
-        record("updateMyMatchFilters", authorization) {
+        record("updateMyMatchFilters", authorization, beforeResponse = beforeUpdateFiltersResponse) {
             updateFiltersBody = body
             profileResponse
         }

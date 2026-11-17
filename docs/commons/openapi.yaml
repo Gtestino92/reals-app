@@ -3147,6 +3147,8 @@ components:
         - profileId
         - displayName
         - age
+        - city
+        - countryCode
         - photos
         - profileQuestions
         - affinityIndicators
@@ -3159,6 +3161,16 @@ components:
         displayName: { type: string }
         age: { type: integer }
         bio: { type: string, nullable: true }
+        city:
+          type: string
+          description: User-declared profile city, not search location or verified residence.
+        countryCode:
+          type: string
+          description: Declared profile country as an uppercase ISO 3166-1 alpha-2 code.
+          minLength: 2
+          maxLength: 2
+          pattern: '^[A-Z]{2}$'
+          example: AR
         photos:
           type: array
           description: Partner profile photos visible to this external match context. Includes only photos whose moderationStatus is APPROVED; excluded NEEDS_REVIEW or REJECTED photos do not have read URLs generated for this response.

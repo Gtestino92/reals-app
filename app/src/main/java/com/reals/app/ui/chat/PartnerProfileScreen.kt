@@ -81,6 +81,7 @@ fun PartnerProfileScreen(
                     style = RealsType.ScreenTitle,
                     color = MaterialTheme.colorScheme.primary,
                 )
+                profile?.let { VisualProfileLocation(it) }
             }
             TextButton(
                 onClick = onBackHome,

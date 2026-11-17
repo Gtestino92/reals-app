@@ -102,6 +102,7 @@ sealed interface RealsRootUiState {
         val affinityHomeSummary: AffinityHomeSummaryUiState = AffinityHomeSummaryUiState(),
         val affinityQuestionnaire: AffinityQuestionnaireUiState = AffinityQuestionnaireUiState(),
         val profileQuestions: ProfileQuestionUiState = ProfileQuestionUiState(),
+        val ownerPreview: OwnerProfilePreviewState = OwnerProfilePreviewState(),
     ) : RealsRootUiState {
         val creatingProfile: Boolean get() = profileOp.creatingProfile
         val profileCreateError: ApiError? get() = profileOp.profileCreateError
@@ -472,6 +473,7 @@ data class AffinityAnswerMutationUiState(
 )
 
 data class ProfileQuestionUiState(
+    val uncertain: Boolean = false,
     val open: Boolean = false,
     val profileId: String? = null,
     val destination: ProfileQuestionDestination = ProfileQuestionDestination.Overview,
@@ -643,6 +645,7 @@ fun RealsRootUiState.Ready.clearProfileFeedback(): RealsRootUiState.Ready = copy
 
 fun RealsRootUiState.clearLegalActionRequiredForResume(): RealsRootUiState = when (this) {
     is RealsRootUiState.Ready -> copy(
+        ownerPreview = ownerPreview.copy(error = ownerPreview.error.takeUnless { it.isLegalActionRequired() }),
         profileOp = profileOp.copy(
             profileCreateError = profileOp.profileCreateError.takeUnless { it.isLegalActionRequired() },
             countriesError = profileOp.countriesError.takeUnless { it.isLegalActionRequired() },

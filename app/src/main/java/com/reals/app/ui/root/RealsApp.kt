@@ -98,6 +98,13 @@ fun RealsApp(
         }
     }
 
+    val questionSavedState = androidx.compose.runtime.key((state as? RealsRootUiState.Ready)?.session?.user?.id) {
+        androidx.compose.runtime.saveable.rememberSaveableStateHolder()
+    }
+    (state as? RealsRootUiState.Ready)?.let { ready ->
+        ProfileNavigationRestoration(ready, viewModel::openProfileManagement, viewModel::openSearchManagement,
+            viewModel::openOwnerProfilePreview, viewModel::openProfileQuestions, viewModel::openProfileQuestionList)
+    }
     NotificationPermissionGate(enabled = state is RealsRootUiState.Ready)
 
     BackHandler(enabled = state.canHandleSystemBack()) {
@@ -248,20 +255,30 @@ fun RealsApp(
                             onSelectAnswer = viewModel::selectAffinityAnswer,
                             onDeleteAnswer = viewModel::deleteAffinityAnswer,
                         )
-                    } else if (current.profileQuestions.open) {
-                        ProfileQuestionScreen(
-                            state = current.profileQuestions,
-                            onBack = viewModel::navigateBackProfileQuestions,
-                            onRetry = viewModel::refreshProfileQuestions,
-                            onOpenQuestions = viewModel::openProfileQuestionList,
-                            onOpenEditor = viewModel::openProfileQuestionEditor,
-                            onOpenSelection = viewModel::openProfileQuestionSelection,
-                            onSelectionDraftChange = viewModel::updateProfileQuestionSelectionDraft,
-                            onSaveSelection = viewModel::saveProfileQuestionSelection,
-                            onSaveAnswer = viewModel::saveProfileQuestionAnswer,
-                            onDeleteAnswer = viewModel::deleteProfileQuestionAnswer,
-                        )
-                    } else if (current.editingActiveProfile || !homeAvailable) {
+                    } else if (current.editingActiveProfile || !homeAvailable || current.profileQuestions.open) {
+                        if (current.profileQuestions.open && current.profileQuestions.profileId == profile.id) {
+                            questionSavedState.SaveableStateProvider("questions/${current.session.user.id}/${profile.id}") {
+                                androidx.compose.ui.window.Dialog(
+                                    onDismissRequest = viewModel::navigateBackProfileQuestions,
+                                    properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+                                ) {
+                                    androidx.compose.material3.Surface(modifier = androidx.compose.ui.Modifier.fillMaxSize()) {
+                                        ProfileQuestionScreen(
+                                            state = current.profileQuestions,
+                                            onBack = viewModel::navigateBackProfileQuestions,
+                                            onRetry = viewModel::refreshProfileQuestions,
+                                            onOpenQuestions = viewModel::openProfileQuestionList,
+                                            onOpenEditor = viewModel::openProfileQuestionEditor,
+                                            onOpenSelection = viewModel::openProfileQuestionSelection,
+                                            onSelectionDraftChange = viewModel::updateProfileQuestionSelectionDraft,
+                                            onSaveSelection = viewModel::saveProfileQuestionSelection,
+                                            onSaveAnswer = viewModel::saveProfileQuestionAnswer,
+                                            onDeleteAnswer = viewModel::deleteProfileQuestionAnswer,
+                                        )
+                                    }
+                                }
+                            }
+                        }
                         ProfileStatusScreen(
                             session = current.session,
                             profileUpdateLoading = current.updatingProfile,
@@ -309,6 +326,9 @@ fun RealsApp(
                             onResendEmailVerification = viewModel::resendEmailVerification,
                             onCheckEmailVerification = viewModel::checkEmailVerification,
                             onOpenProfileQuestions = viewModel::openProfileQuestions,
+                            ownerPreview = current.ownerPreview,
+                            onOpenOwnerPreview = viewModel::openOwnerProfilePreview,
+                            onCloseOwnerPreview = viewModel::closeOwnerProfilePreview,
                             onRefresh = viewModel::refreshSession,
                             onSignOut = viewModel::signOut,
                             accountDeleteLoading = current.deletingAccount,

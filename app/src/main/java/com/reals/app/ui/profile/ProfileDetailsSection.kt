@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -54,6 +55,7 @@ internal fun ProfileDetailsCard(
     onLoadCountries: () -> Unit,
 ) {
     val bringIntoViewRequester = rememberExpandedSectionRequester(expanded)
+    val editorState = rememberSaveableStateHolder()
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -75,17 +77,20 @@ internal fun ProfileDetailsCard(
                 onClose = onToggleExpanded,
             )
             if (expanded) {
+                editorState.SaveableStateProvider(profile.id) {
                 ProfileEditActions(
                     profile = profile,
                     countries = countries,
                     countriesLoading = countriesLoading,
                     countriesError = countriesError,
                     loading = loading,
+                    busy = busy,
                     error = error,
                     message = message,
                     onUpdateProfile = onUpdateProfile,
                     onLoadCountries = onLoadCountries,
                 )
+                }
             } else {
                 Text(
                     text = TextSafety.safeDisplay(profile.displayName, maxLength = 100),
@@ -114,6 +119,7 @@ internal fun ProfileDetailsCard(
                     Text("Editar perfil")
                 }
             }
+            if (!expanded) message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
         }
     }
 }
@@ -125,6 +131,7 @@ private fun ProfileEditActions(
     countriesLoading: Boolean,
     countriesError: ApiError?,
     loading: Boolean,
+    busy: Boolean,
     error: ApiError?,
     message: String?,
     onUpdateProfile: (UpdateProfileInput) -> Unit,
@@ -138,18 +145,16 @@ private fun ProfileEditActions(
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
-                text = "Campos editables: nombre, bio, ciudad y país.",
+                text = "Campos editables: nombre, país, ciudad y bio opcional.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
-            OutlinedTextField(displayName, { displayName = it.take(100) }, label = { Text("Nombre visible") }, enabled = !loading, singleLine = true, shape = RoundedCornerShape(RealsRadii.Button), colors = realsOutlinedTextFieldColors(), modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(bio, { bio = it.take(1_000) }, label = { Text("Bio") }, enabled = !loading, minLines = 3, shape = RoundedCornerShape(RealsRadii.Button), colors = realsOutlinedTextFieldColors(), modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(city, { city = it.take(100) }, label = { Text("Ciudad") }, enabled = !loading, singleLine = true, shape = RoundedCornerShape(RealsRadii.Button), colors = realsOutlinedTextFieldColors(), modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(displayName, { displayName = it.take(100) }, label = { Text("Nombre visible") }, enabled = !loading && !busy, singleLine = true, shape = RoundedCornerShape(RealsRadii.Button), colors = realsOutlinedTextFieldColors(), modifier = Modifier.fillMaxWidth())
             CountrySelector(
                 countries = countries,
                 selectedCountryCode = selectedCountryCode,
                 loading = countriesLoading,
-                enabled = !loading,
+                enabled = !loading && !busy,
                 onCountrySelected = { selectedCountryCode = it },
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -162,22 +167,29 @@ private fun ProfileEditActions(
                     Text("Reintentar carga de países")
                 }
             }
+            OutlinedTextField(city, { city = it.take(100) }, label = { Text("Ciudad") }, enabled = !loading && !busy, singleLine = true, shape = RoundedCornerShape(RealsRadii.Button), colors = realsOutlinedTextFieldColors(), modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(bio, { bio = it.take(1_000) }, label = { Text("Bio (opcional)") }, enabled = !loading && !busy, minLines = 3, shape = RoundedCornerShape(RealsRadii.Button), colors = realsOutlinedTextFieldColors(), modifier = Modifier.fillMaxWidth())
             localError?.let { ErrorFeedback("Revisá los datos", it) }
             error?.let { ApiErrorFeedbackCard(it, ErrorContext.ProfileUpdate) }
             Button(
                 onClick = {
                     val input = validateUpdateProfileInput(displayName, bio, city, selectedCountryCode)
-                    if (input == null) {
+                    if (input == null || countries.none { it.code == input.countryCode }) {
                         localError = "Revisá nombre, ciudad, país y bio. No uses etiquetas o formato HTML."
                     } else {
                         localError = null
                         onUpdateProfile(input)
                     }
                 },
-                enabled = !loading,
+                enabled = !loading && !busy && profileDetailsHaveChanges(profile,
+                    UpdateProfileInput(displayName, bio, city, selectedCountryCode)),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(if (loading) "Guardando..." else "Guardar cambios")
+            }
+            if (validateUpdateProfileInput(displayName, bio, city, selectedCountryCode)
+                    ?.let { !profileDetailsHaveChanges(profile, it) } == true) {
+                message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
             }
     }
 }

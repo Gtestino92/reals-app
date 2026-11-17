@@ -17,6 +17,20 @@ remaining positions. Answer edits, deletes and selection changes do not activate
 a draft profile, deactivate a profile, move an active profile to draft, affect
 photo authenticity or change matchmaking filters.
 
+Profile management shows answered questions and the ordered public selection
+together. Existing answers are edited inside their question cards; canceling an
+edit discards only that local draft and does not write. Unanswered questions have
+a separate screen. Public selection changes require an explicit save.
+
+Owners of `ACTIVE` and `DRAFT` profiles can open a read-only preview from the end
+of profile management. It shows confirmed public details, approved photos and up
+to three current selected public answers in saved order. Unsaved edits, private
+affinity answers, search preferences and personal match messages are excluded.
+Previewing a draft does not activate it. Returning preserves the owner's forms.
+
+Public profiles display declared city and a Spanish country name below identity
+when available. This is not verified residence, search location or exact distance.
+
 
 Before profile creation, authenticated clients can fetch
 `GET /api/reference/countries` to populate a country selector. The response is a

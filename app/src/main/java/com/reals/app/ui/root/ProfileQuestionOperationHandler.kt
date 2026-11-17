@@ -13,6 +13,8 @@ import com.reals.app.ui.profile.profileQuestionSelectionDraftIsValid
 import com.reals.app.ui.profile.selectedProfileQuestionIds
 import com.reals.app.ui.profile.selectionRows
 import com.reals.app.ui.profile.validateProfileQuestionAnswer
+import com.reals.app.ui.profile.canSaveProfileQuestionAnswer
+import com.reals.app.ui.profile.isCurrentFor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -27,12 +29,27 @@ class ProfileQuestionOperationHandler(
     private var loadRequestId = 0L
     private var mutationRequestId = 0L
     private var mutationJob: Job? = null
+    private var loadJob: Job? = null
     private var activeMutation: ActiveProfileQuestionMutation? = null
+    private var ownerSession: com.reals.app.domain.model.ProvisionedSession? = null
+
+    fun cancelForSessionReplacement(session: com.reals.app.domain.model.ProvisionedSession?) {
+        if (ownerSession != null && ownerSession !== session) {
+            ++loadRequestId
+            loadJob?.cancel()
+            mutationJob?.cancel()
+            activeMutation = null
+            ownerSession = null
+            val ready = uiState.value as? RealsRootUiState.Ready
+            if (ready != null) uiState.value = ready.copy(profileQuestions = ProfileQuestionUiState())
+        }
+    }
 
     fun open() {
         val current = uiState.value as? RealsRootUiState.Ready ?: return
         val profile = (current.session.profileSnapshot as? ProfileSnapshot.Found)?.profile ?: return
         if (profile.status != ProfileStatus.Draft && profile.status != ProfileStatus.Active) return
+        ownerSession = current.session
         if (current.profileQuestions.mutation != null) return
         if (current.profileQuestions.loading || current.profileQuestions.refreshing) return
 
@@ -55,8 +72,8 @@ class ProfileQuestionOperationHandler(
                     loading = retained == null,
                     refreshing = retained != null,
                     mutation = activeMutationForProfile.mutation,
-                    selectionDraftQuestionIds = retained?.answers?.let(::selectedProfileQuestionIds)
-                        .orEmpty(),
+                    selectionDraftQuestionIds = retained?.selectionDraftQuestionIds.orEmpty(),
+                    uncertain = retained?.uncertain ?: false,
                 ),
             )
             return
@@ -72,17 +89,19 @@ class ProfileQuestionOperationHandler(
                 answers = retained?.answers.orEmpty(),
                 loading = retained == null,
                 refreshing = retained != null,
-                selectionDraftQuestionIds = retained?.answers?.let(::selectedProfileQuestionIds)
-                    .orEmpty(),
+                selectionDraftQuestionIds = retained?.selectionDraftQuestionIds.orEmpty(),
+                uncertain = retained?.uncertain ?: false,
             ),
         )
         uiState.value = opening
-        scope.launch {
+        loadJob?.cancel()
+        loadJob = scope.launch {
             installLoadResult(
                 requestId = requestId,
                 profileId = profile.id,
                 userId = opening.session.user.id,
                 result = loadSnapshot(),
+                session = opening.session,
             )
         }
     }
@@ -90,6 +109,8 @@ class ProfileQuestionOperationHandler(
     fun close() {
         val current = uiState.value as? RealsRootUiState.Ready ?: return
         if (!current.profileQuestions.open) return
+        ++loadRequestId
+        loadJob?.cancel()
         uiState.value = current.copy(
             profileQuestions = current.profileQuestions.copy(
                 open = false,
@@ -100,7 +121,6 @@ class ProfileQuestionOperationHandler(
                 error = null,
                 mutationError = null,
                 feedback = null,
-                selectionDraftQuestionIds = selectedProfileQuestionIds(current.profileQuestions.answers),
             ),
         )
     }
@@ -120,8 +140,9 @@ class ProfileQuestionOperationHandler(
                 feedback = null,
             ),
         )
-        scope.launch {
-            installLoadResult(requestId, profileId, current.session.user.id, loadSnapshot())
+        loadJob?.cancel()
+        loadJob = scope.launch {
+            installLoadResult(requestId, profileId, current.session.user.id, loadSnapshot(), current.session)
         }
     }
 
@@ -150,10 +171,9 @@ class ProfileQuestionOperationHandler(
         val current = uiState.value as? RealsRootUiState.Ready ?: return
         val state = current.profileQuestions
         val catalog = state.catalog ?: return
-        if (!state.open || state.destination != ProfileQuestionDestination.Selection || state.mutation != null) return
+        if (!state.open || state.mutation != null || state.uncertain) return
         val normalized = questionIds.map { it.trim() }.filter { it.isNotBlank() }.distinct()
-        val rows = catalog.selectionRows(state.answers)
-        if (!profileQuestionSelectionDraftIsValid(normalized, rows)) return
+        if (normalized.size > ProfileQuestionMaxPublicSelections) return
         uiState.value = current.copy(
             profileQuestions = state.copy(
                 selectionDraftQuestionIds = normalized,
@@ -180,6 +200,9 @@ class ProfileQuestionOperationHandler(
         val state = current.profileQuestions
         val catalog = state.catalog ?: return
         if (!state.canStartMutation() || catalog.questions.none { it.id == questionId }) return
+        val question = catalog.questions.first { it.id == questionId }
+        val saved = state.answers.firstOrNull { it.questionId == questionId }
+        if (!canSaveProfileQuestionAnswer(answer, saved?.copy(current = saved.isCurrentFor(question)), false)) return
         val validation = validateProfileQuestionAnswer(answer)
         if (!validation.valid) return
         startMutation(
@@ -210,7 +233,7 @@ class ProfileQuestionOperationHandler(
         val current = uiState.value as? RealsRootUiState.Ready ?: return
         val state = current.profileQuestions
         val catalog = state.catalog ?: return
-        if (!state.canStartMutation() || state.destination != ProfileQuestionDestination.Selection) return
+        if (!state.canStartMutation()) return
         val currentSelection = selectedProfileQuestionIds(state.answers)
         val draft = state.selectionDraftQuestionIds
         if (draft == currentSelection || draft.size > ProfileQuestionMaxPublicSelections) return
@@ -258,6 +281,7 @@ class ProfileQuestionOperationHandler(
                 mutation = mutation,
                 originDestination = originDestination,
                 result = call(),
+                session = current.session,
             )
             clearActiveMutationIfCurrent(mutation.requestId)
         }
@@ -283,11 +307,12 @@ class ProfileQuestionOperationHandler(
         profileId: String,
         userId: String,
         result: ProfileQuestionLoadResult,
+        session: com.reals.app.domain.model.ProvisionedSession,
     ) {
         val latest = uiState.value as? RealsRootUiState.Ready ?: return
         val state = latest.profileQuestions
         if (
-            requestId != loadRequestId ||
+            requestId != loadRequestId || latest.session !== session ||
             !state.open ||
             state.profileId != profileId ||
             latest.session.user.id != userId ||
@@ -299,6 +324,7 @@ class ProfileQuestionOperationHandler(
             is ProfileQuestionLoadResult.Success -> latest.copy(
                 profileQuestions = state.copy(
                     catalog = result.catalog,
+                    uncertain = false,
                     answers = result.answers,
                     destination = result.catalog.reconciledDestination(state.destination),
                     loading = false,
@@ -306,12 +332,14 @@ class ProfileQuestionOperationHandler(
                     error = null,
                     mutationError = null,
                     feedback = null,
-                    selectionDraftQuestionIds = selectedProfileQuestionIds(result.answers),
+                    selectionDraftQuestionIds = if (state.selectionDraftQuestionIds == selectedProfileQuestionIds(state.answers))
+                        selectedProfileQuestionIds(result.answers) else state.selectionDraftQuestionIds,
                 ),
             )
 
             is ProfileQuestionLoadResult.Failure -> latest.copy(
                 profileQuestions = state.copy(
+                    uncertain = true,
                     loading = false,
                     refreshing = false,
                     error = result.error,
@@ -326,11 +354,12 @@ class ProfileQuestionOperationHandler(
         mutation: ProfileQuestionMutationUiState,
         originDestination: ProfileQuestionDestination,
         result: ApiResult<List<ProfileQuestionAnswer>>,
+        session: com.reals.app.domain.model.ProvisionedSession,
     ) {
         val latest = uiState.value as? RealsRootUiState.Ready ?: return
         val state = latest.profileQuestions
         if (
-            state.profileId != profileId ||
+            state.profileId != profileId || latest.session !== session ||
             latest.session.user.id != userId ||
             (latest.session.profileSnapshot as? ProfileSnapshot.Found)?.profile?.id != profileId
         ) {
@@ -348,6 +377,7 @@ class ProfileQuestionOperationHandler(
                 latest.copy(
                     profileQuestions = state.copy(
                         answers = result.value,
+                        uncertain = false,
                         destination =
                             if (completedSelectionAtOrigin) {
                                 ProfileQuestionDestination.Overview
@@ -372,8 +402,11 @@ class ProfileQuestionOperationHandler(
                             else ->
                                 null
                         },
-                        selectionDraftQuestionIds =
-                            selectedProfileQuestionIds(result.value),
+                        selectionDraftQuestionIds = if (mutation.kind == ProfileQuestionMutationKind.Selection ||
+                            state.selectionDraftQuestionIds == selectedProfileQuestionIds(state.answers))
+                            selectedProfileQuestionIds(result.value) else state.selectionDraftQuestionIds.filter { id ->
+                                result.value.any { it.questionId == id }
+                            },
                     ),
                 )
             }
@@ -388,6 +421,7 @@ class ProfileQuestionOperationHandler(
                         loading = false,
                         refreshing = false,
                         mutation = null,
+                        uncertain = result.error !is com.reals.app.core.network.ApiError.Backend || result.error.statusCode !in 400..499,
                         mutationError = when {
                             mustRemainObservable -> result.error
                             localResultStillRelevant -> result.error
@@ -408,7 +442,7 @@ class ProfileQuestionOperationHandler(
         val state = latest.profileQuestions
         if (!state.open) return
         val retainedMutationError = state.mutationError
-            ?.takeIf { it.isLegalActionRequired() || it.isTerminalAuthFailure() }
+            ?.takeIf { state.uncertain || it.isLegalActionRequired() || it.isTerminalAuthFailure() }
         uiState.value = latest.copy(
             profileQuestions = state.copy(
                 destination = destination,
@@ -429,7 +463,7 @@ class ProfileQuestionOperationHandler(
 }
 
 private fun ProfileQuestionUiState.canStartMutation(): Boolean =
-    open && mutation == null && !loading && !refreshing
+    open && mutation == null && !loading && !refreshing && !uncertain
 
 private fun ProfileQuestionCatalog.reconciledDestination(
     destination: ProfileQuestionDestination,

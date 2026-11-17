@@ -39,6 +39,47 @@ import retrofit2.Response
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProfileOperationHandlerCountriesTest {
+    @Test fun `personal save preserves photo and preference feedback and concurrent countries`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply { beforeUpdateProfileResponse = { gate.await() } }
+        val initial = ready(ProfileManagementState(matchFiltersMessage = "Preferencias guardadas"))
+            .copy(photos = PhotoManagementUiState(photoActionMessage = "Foto guardada"))
+        val harness = harness(api, initial)
+        harness.handler.updateProfile(com.reals.app.domain.model.UpdateProfileInput("Ana", null, "Rosario", "AR"))
+        runCurrent()
+        assertTrue(harness.ready().updatingProfile)
+        assertEquals("Foto guardada", harness.ready().photoActionMessage)
+        assertEquals("Preferencias guardadas", harness.ready().matchFiltersMessage)
+        harness.handler.loadCountriesIfNeeded()
+        runCurrent()
+        gate.complete(Unit); advanceUntilIdle()
+        assertTrue(harness.ready().countriesLoaded)
+        assertEquals("Foto guardada", harness.ready().photoActionMessage)
+        assertEquals("Preferencias guardadas", harness.ready().matchFiltersMessage)
+        assertEquals("Perfil actualizado.", harness.ready().profileUpdateMessage)
+    }
+
+    @Test fun `old personal response cannot replace a new session`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply { beforeUpdateProfileResponse = { gate.await() } }
+        val harness = harness(api)
+        harness.handler.updateProfile(com.reals.app.domain.model.UpdateProfileInput("Ana", null, "Rosario", "AR"))
+        runCurrent()
+        val replacement = ready().copy(session = TestDomain.session().copy(user = TestDomain.session().user.copy(id = "other")))
+        harness.state.value = replacement
+        gate.complete(Unit); advanceUntilIdle()
+        assertEquals(replacement, harness.state.value)
+    }
+
+    @Test fun `preference save preserves personal and photo feedback`() = runTest {
+        val harness = harness(initialState = ready(ProfileManagementState(profileUpdateMessage = "Datos guardados"))
+            .copy(photos = PhotoManagementUiState(photoActionMessage = "Foto guardada")))
+        harness.handler.updateMatchFilters(com.reals.app.domain.model.UpdateMatchFiltersInput("DATE", setOf("MALE"), 20, 40, 50))
+        advanceUntilIdle()
+        assertEquals("Datos guardados", harness.ready().profileUpdateMessage)
+        assertEquals("Foto guardada", harness.ready().photoActionMessage)
+        assertEquals("Filtros actualizados.", harness.ready().matchFiltersMessage)
+    }
     @Test
     fun `successful country loading stores returned domain list`() = runTest {
         val harness = harness()

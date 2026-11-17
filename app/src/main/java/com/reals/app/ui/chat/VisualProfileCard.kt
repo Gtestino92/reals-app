@@ -288,6 +288,14 @@ private fun VisualProfileIdentity(profile: VisualProfile) {
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        VisualProfileLocation(profile)
+    }
+}
+
+@Composable
+internal fun VisualProfileLocation(profile: VisualProfile) {
+    publicProfileLocation(profile.city, profile.countryCode)?.let {
+        Text(text = it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

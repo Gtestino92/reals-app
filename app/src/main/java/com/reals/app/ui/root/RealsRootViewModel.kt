@@ -92,6 +92,16 @@ class RealsRootViewModel(
         dependencies = dependencies.profileQuestions,
         scope = viewModelScope,
     )
+    private val ownerPreviewHandler = OwnerProfilePreviewHandler(
+        state = _uiState,
+        scope = viewModelScope,
+        loadProfile = { dependencies.session.provisionAndLoadProfile.loadProfileFor(it) },
+        loadPhotos = { dependencies.profile.getProfilePhotos() },
+        loadCatalog = { dependencies.profileQuestions.getCatalog() },
+        loadAnswers = { dependencies.profileQuestions.getMyAnswers() },
+    )
+    fun openOwnerProfilePreview() = ownerPreviewHandler.open()
+    fun closeOwnerProfilePreview() = ownerPreviewHandler.close()
     private val manualBlockCoordinator = ManualBlockCoordinator(
         dependencies.manualBlock.blockMatchParticipant,
     )
@@ -145,6 +155,13 @@ class RealsRootViewModel(
         observeUserPairBlocked()
         observePendingSecondChatStartedHomeOpenInvalidation()
         observePendingVisualReviewPhotoPrefetchInvalidation()
+        viewModelScope.launch {
+            _uiState.collect { state ->
+                val session = (state as? RealsRootUiState.Ready)?.session
+                ownerPreviewHandler.cancelForSessionReplacement(session)
+                profileQuestionHandler.cancelForSessionReplacement(session)
+            }
+        }
         if (autoRefreshSession) {
             refreshSession()
         }
@@ -2520,7 +2537,8 @@ private fun RealsRootUiState.hasLegalActionRequiredError(): Boolean = when (this
             affinityQuestionnaire.error.isLegalActionRequiredError() ||
             affinityQuestionnaire.mutationError.isLegalActionRequiredError() ||
             profileQuestions.error.isLegalActionRequiredError() ||
-            profileQuestions.mutationError.isLegalActionRequiredError()
+            profileQuestions.mutationError.isLegalActionRequiredError() ||
+            ownerPreview.error.isLegalActionRequiredError()
 
     is RealsRootUiState.FirstChat -> error.isLegalActionRequiredError()
     is RealsRootUiState.SecondChat -> error.isLegalActionRequiredError()
@@ -2552,7 +2570,8 @@ internal fun RealsRootUiState.hasTerminalAuthFailure(): Boolean = when (this) {
             affinityQuestionnaire.error.isTerminalAuthFailure() ||
             affinityQuestionnaire.mutationError.isTerminalAuthFailure() ||
             profileQuestions.error.isTerminalAuthFailure() ||
-            profileQuestions.mutationError.isTerminalAuthFailure()
+            profileQuestions.mutationError.isTerminalAuthFailure() ||
+            ownerPreview.error.isTerminalAuthFailure()
 
     is RealsRootUiState.FirstChat ->
         error.isTerminalAuthFailure() || manualBlock.error.isTerminalAuthFailure()
@@ -2612,6 +2631,7 @@ private fun RealsRootUiState.accountBannedError(): ApiError? = when (this) {
         affinityQuestionnaire.mutationError,
         profileQuestions.error,
         profileQuestions.mutationError,
+        ownerPreview.error,
     )
 
     is RealsRootUiState.FirstChat -> firstAccountBannedError(error, manualBlock.error, audioUpload.error)

@@ -23,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -52,6 +53,7 @@ internal fun MatchPreferencesCard(
     onUpdateMatchFilters: (UpdateMatchFiltersInput) -> Unit,
 ) {
     val bringIntoViewRequester = rememberExpandedSectionRequester(expanded)
+    val editorState = rememberSaveableStateHolder()
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -73,13 +75,16 @@ internal fun MatchPreferencesCard(
                 onClose = onToggleExpanded,
             )
             if (expanded) {
+                editorState.SaveableStateProvider(profile.id) {
                 MatchPreferencesEditor(
                     profile = profile,
                     loading = loading,
+                    busy = busy,
                     error = error,
                     message = message,
                     onUpdateMatchFilters = onUpdateMatchFilters,
                 )
+                }
             } else {
                 Text(profile.intention.intentionLabel(), style = MaterialTheme.typography.titleMedium)
                 Text(
@@ -100,6 +105,7 @@ internal fun MatchPreferencesCard(
                     Text("Editar preferencias")
                 }
             }
+            if (!expanded) message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
         }
     }
 }
@@ -108,6 +114,7 @@ internal fun MatchPreferencesCard(
 private fun MatchPreferencesEditor(
     profile: Profile,
     loading: Boolean,
+    busy: Boolean,
     error: ApiError?,
     message: String?,
     onUpdateMatchFilters: (UpdateMatchFiltersInput) -> Unit,
@@ -144,14 +151,14 @@ private fun MatchPreferencesEditor(
         PreferenceGroup(title = "Qué buscás") {
             IntentionChips(
                 selected = intention,
-                enabled = !loading,
+                enabled = !loading && !busy,
                 onSelectionChange = { intention = it },
             )
         }
         PreferenceGroup(title = "A quién querés conocer") {
             GenderPreferenceChips(
                 selected = lookingForGenders,
-                enabled = !loading,
+                enabled = !loading && !busy,
                 onSelectionChange = { lookingForGenders = it },
             )
         }
@@ -159,7 +166,7 @@ private fun MatchPreferencesEditor(
             AgeRangePreferenceControl(
                 minAge = minAge,
                 maxAge = maxAge,
-                enabled = !loading,
+                enabled = !loading && !busy,
                 onAgeRangeChange = { nextMin, nextMax ->
                     minAge = nextMin
                     maxAge = nextMax
@@ -174,7 +181,7 @@ private fun MatchPreferencesEditor(
         PreferenceGroup(title = "Distancia máxima") {
             DistancePreferenceControl(
                 distanceKm = distance,
-                enabled = !loading,
+                enabled = !loading && !busy,
                 onDistanceChange = { distance = it },
                 modifier = Modifier.fillMaxWidth(),
                 error = if (MatchFiltersField.Distance in fieldErrors) {
@@ -205,10 +212,15 @@ private fun MatchPreferencesEditor(
                         onUpdateMatchFilters(validation.input)
                     }
                 },
-                enabled = !loading,
+                enabled = !loading && !busy && profileFiltersHaveChanges(profile,
+                    UpdateMatchFiltersInput(intention, lookingForGenders, minAge, maxAge, distance)),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(if (loading) "Guardando preferencias..." else "Guardar preferencias")
+            }
+            if (validateMatchFiltersInputDetailed(intention, lookingForGenders, minAge, maxAge, distance)
+                    .input?.let { !profileFiltersHaveChanges(profile, it) } == true) {
+                message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
             }
         }
     }

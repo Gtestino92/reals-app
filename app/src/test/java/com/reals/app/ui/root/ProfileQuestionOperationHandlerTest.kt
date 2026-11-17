@@ -34,6 +34,35 @@ import retrofit2.Response
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProfileQuestionOperationHandlerTest {
+    @Test fun `uncertain mutation blocks duplicate writes until reconciliation`() = runTest {
+        val api = FakeRealsApi().apply {
+            profileQuestionAnswersResponse = backendErrorResponse(503, "UNAVAILABLE", "retry")
+        }
+        val harness = harness(api = api, initialState = ready(profileQuestions = loadedState()))
+        harness.handler.saveAnswer("PERFECT_SUNDAY_001", "Nuevo")
+        advanceUntilIdle()
+        assertTrue(harness.ready().profileQuestions.uncertain)
+        harness.handler.saveAnswer("PERFECT_SUNDAY_001", "Segundo")
+        advanceUntilIdle()
+        assertEquals("Nuevo", api.upsertProfileQuestionAnswerBody?.answer)
+        api.profileQuestionAnswersResponse = Response.success(TestDtos.profileQuestionAnswers())
+        harness.handler.refresh()
+        advanceUntilIdle()
+        assertFalse(harness.ready().profileQuestions.uncertain)
+    }
+
+    @Test fun `answer save preserves independent public selection draft`() = runTest {
+        val draft = listOf("LIFE_SOUNDTRACK_001")
+        val api = FakeRealsApi().apply {
+            profileQuestionAnswersResponse = Response.success(TestDtos.profileQuestionAnswers(listOf(
+                TestDtos.profileQuestionAnswer(), TestDtos.profileQuestionAnswer("LIFE_SOUNDTRACK_001"),
+            )))
+        }
+        val harness = harness(api = api, initialState = ready(profileQuestions = loadedState(selectionDraft = draft)))
+        harness.handler.saveAnswer("PERFECT_SUNDAY_001", "Nueva")
+        advanceUntilIdle()
+        assertEquals(draft, harness.ready().profileQuestions.selectionDraftQuestionIds)
+    }
     @Test
     fun `successful upsert installs authoritative answers`() = runTest {
         val api = FakeRealsApi().apply {

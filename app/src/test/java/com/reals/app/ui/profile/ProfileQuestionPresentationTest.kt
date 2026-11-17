@@ -8,6 +8,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ProfileQuestionPresentationTest {
+    @Test fun `semantic mismatch is never publicly selectable`() {
+        val catalog = TestDtos.profileQuestionCatalog().toDomain()
+        val answer = TestDtos.profileQuestionAnswer(selectedPosition = 1).toDomain().copy(questionSemanticVersion = 999)
+        assertFalse(catalog.rows(listOf(answer)).first { it.question.id == answer.questionId }.selectable)
+        assertTrue(catalog.selectionRows(listOf(answer)).isEmpty())
+    }
+
+    @Test fun `rejects controls markup and unicode line separators`() {
+        listOf("a\tb", "a<b", "a>b", "a\u2028b", "a\u2029b", "a\u0085b").forEach {
+            assertFalse(it, validateProfileQuestionAnswer(it).valid)
+        }
+    }
     @Test
     fun `overview counts answered and selected answers`() {
         val catalog = TestDtos.profileQuestionCatalog().toDomain()
