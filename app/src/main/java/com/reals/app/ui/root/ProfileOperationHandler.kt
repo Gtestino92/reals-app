@@ -25,6 +25,8 @@ import com.reals.app.ui.profile.NoOpProfilePhotoPrefetcher
 import com.reals.app.ui.profile.ProfilePhotoPrefetcher
 import com.reals.app.ui.profile.movePhotoLocally
 import com.reals.app.ui.profile.photosWithPendingOrder
+import com.reals.app.domain.model.sameProfileOwner
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -57,27 +59,51 @@ class ProfileOperationHandler(
      * The handler already reads from the flow directly so this is optional – kept as a
      * hook for any future synchronisation needs.
      */
+    private var ownerSession: ProvisionedSession? = null
+    private var profileWriteJob: Job? = null
+    private var profileReadJob: Job? = null
+
+    fun cancelForSessionReplacement(session: ProvisionedSession?) {
+        if (ownerSession != null && !ownerSession!!.sameProfileOwner(session)) {
+            profileWriteJob?.cancel()
+            profileReadJob?.cancel()
+            ownerSession = null
+            val ready = uiState.value as? RealsRootUiState.Ready ?: return
+            uiState.value = ready.copy(profileOp = ProfileManagementState(), photos = PhotoManagementUiState())
+        }
+    }
+
     fun onReadyStateUpdated() = Unit
 
     // ── Profile CRUD ──
 
     fun createProfile(input: CreateProfileInput) {
         val current = requireReady() ?: return
-        scope.launch {
-            val pending = current.copy(
-                profileOp = current.profileOp.copy(
+        if (profileWriteJob?.isActive == true || current.creatingProfile) return
+        profileWriteJob = scope.launch {
+            val starting = requireReady() ?: return@launch
+            if (!starting.session.sameProfileOwner(current.session)) return@launch
+            val pending = starting.copy(
+                profileOp = starting.profileOp.copy(
                     creatingProfile = true,
                     profileCreateError = null,
                 ),
             )
             uiState.value = pending
-            when (val result = dependencies.createProfile(input)) {
+            val result = dependencies.createProfile(input)
+            val latest = readyForResponse(current, result is ApiResult.Success) ?: return@launch
+            if (result is ApiResult.Success && result.value.userId != current.session.user.id) {
+                uiState.value = latest.copy(profileOp = latest.profileOp.copy(creatingProfile = false,
+                    profileCreateError = ApiError.Unexpected("Invalid profile owner")))
+                return@launch
+            }
+            when (result) {
                 is ApiResult.Success -> {
-                    uiState.value = pending.copy(
-                        session = pending.session.copy(
+                    uiState.value = latest.copy(
+                        session = latest.session.copy(
                             profileSnapshot = ProfileSnapshot.Found(result.value),
                         ),
-                        profileOp = pending.profileOp.copy(
+                        profileOp = latest.profileOp.copy(
                             creatingProfile = false,
                             profileCreateError = null,
                         ),
@@ -85,8 +111,8 @@ class ProfileOperationHandler(
                 }
 
                 is ApiResult.Failure -> {
-                    uiState.value = pending.copy(
-                        profileOp = pending.profileOp.copy(
+                    uiState.value = latest.copy(
+                        profileOp = latest.profileOp.copy(
                             creatingProfile = false,
                             profileCreateError = result.error,
                         ),
@@ -98,15 +124,14 @@ class ProfileOperationHandler(
 
     fun updateProfile(input: UpdateProfileInput) {
         val current = requireReady() ?: return
-        if (current.updatingProfile || current.updatingMatchFilters || current.addingPhoto || current.reorderingPhotos || current.activatingProfile) return
+        if (profileWriteJob?.isActive == true || current.updatingProfile || current.updatingMatchFilters || current.addingPhoto || current.reorderingPhotos || current.activatingProfile) return
         val owner = (current.session.profileSnapshot as? ProfileSnapshot.Found)?.profile ?: return
         val cleared = current.copy(profileOp = current.profileOp.copy(profileUpdateError = null, profileUpdateMessage = null))
         val pending = cleared.copy(profileOp = cleared.profileOp.copy(updatingProfile = true))
         uiState.value = pending
-        scope.launch {
+        profileWriteJob = scope.launch {
             val result = dependencies.updateProfile(input)
-            val latest = requireReady() ?: return@launch
-            if (latest.session !== current.session) return@launch
+            val latest = readyForResponse(current, result is ApiResult.Success) ?: return@launch
             if (result is ApiResult.Success && (result.value.id != owner.id || result.value.userId != owner.userId)) {
                 uiState.value = latest.copy(profileOp = latest.profileOp.copy(updatingProfile = false,
                     profileUpdateError = ApiError.Unexpected("Invalid profile response")))
@@ -143,6 +168,7 @@ class ProfileOperationHandler(
 
         scope.launch {
             val latest = requireReady() ?: return@launch
+            if (!latest.session.sameProfileOwner(current.session)) return@launch
             if (latest.countriesLoaded || latest.countriesLoading) return@launch
 
             val pending = latest.copy(
@@ -156,6 +182,7 @@ class ProfileOperationHandler(
             when (val result = dependencies.getCountries()) {
                 is ApiResult.Success -> {
                     val displayed = requireReady() ?: return@launch
+                    if (!displayed.session.sameProfileOwner(current.session)) return@launch
                     uiState.value = displayed.copy(
                         profileOp = displayed.profileOp.copy(
                             countriesLoading = false,
@@ -168,6 +195,7 @@ class ProfileOperationHandler(
 
                 is ApiResult.Failure -> {
                     val displayed = requireReady() ?: return@launch
+                    if (!displayed.session.sameProfileOwner(current.session)) return@launch
                     uiState.value = displayed.copy(
                         profileOp = displayed.profileOp.copy(
                             countriesLoading = false,
@@ -182,17 +210,16 @@ class ProfileOperationHandler(
 
     fun updateMatchFilters(input: UpdateMatchFiltersInput) {
         val current = requireReady() ?: return
-        if (current.updatingProfile || current.updatingMatchFilters || current.addingPhoto || current.reorderingPhotos || current.activatingProfile) return
+        if (profileWriteJob?.isActive == true || current.updatingProfile || current.updatingMatchFilters || current.addingPhoto || current.reorderingPhotos || current.activatingProfile) return
         val owner = (current.session.profileSnapshot as? ProfileSnapshot.Found)?.profile ?: return
         val cleared = current.copy(profileOp = current.profileOp.copy(matchFiltersError = null, matchFiltersMessage = null))
         val pending = cleared.copy(
                 profileOp = cleared.profileOp.copy(updatingMatchFilters = true),
             )
         uiState.value = pending
-        scope.launch {
+        profileWriteJob = scope.launch {
             val result = dependencies.updateMatchFilters(input)
-            val latest = requireReady() ?: return@launch
-            if (latest.session !== current.session) return@launch
+            val latest = readyForResponse(current, result is ApiResult.Success) ?: return@launch
             if (result is ApiResult.Success && (result.value.id != owner.id || result.value.userId != owner.userId)) {
                 uiState.value = latest.copy(profileOp = latest.profileOp.copy(updatingMatchFilters = false,
                     matchFiltersError = ApiError.Unexpected("Invalid profile response")))
@@ -228,7 +255,7 @@ class ProfileOperationHandler(
     fun loadProfilePhotos(prefetchAfterSuccess: Boolean = false) {
         val current = requireReady() ?: return
         val profile = (current.session.profileSnapshot as? ProfileSnapshot.Found)?.profile ?: return
-        if (current.isEmailVerificationActionBusy()) return
+        if (profileWriteJob?.isActive == true || current.isEmailVerificationActionBusy()) return
         val requestedProfileId = profile.id
         val cleared = current.copy(photos = current.photos.copy(
             profilePhotosError = null, photoActionError = null, photoActionMessage = null,
@@ -236,11 +263,10 @@ class ProfileOperationHandler(
         ))
         val pending = cleared.copy(photos = cleared.photos.copy(loadingPhotos = true))
         uiState.value = pending
-        scope.launch {
+        profileReadJob = scope.launch {
             when (val result = getProfilePhotosUseCase()) {
                 is ApiResult.Success -> {
-                    val latest = requireReady() ?: return@launch
-                    if (latest.session !== current.session) return@launch
+                    val latest = readyForResponse(current, true) ?: return@launch
                     val latestProfile = (latest.session.profileSnapshot as? ProfileSnapshot.Found)?.profile
                         ?: return@launch
                     if (latestProfile.id != requestedProfileId) return@launch
@@ -262,8 +288,7 @@ class ProfileOperationHandler(
                 }
 
                 is ApiResult.Failure -> {
-                    val latest = requireReady() ?: return@launch
-                    if (latest.session !== current.session) return@launch
+                    val latest = readyForResponse(current, false) ?: return@launch
                     val latestProfile = (latest.session.profileSnapshot as? ProfileSnapshot.Found)?.profile
                         ?: return@launch
                     if (latestProfile.id != requestedProfileId) return@launch
@@ -287,7 +312,7 @@ class ProfileOperationHandler(
         targetPosition: Int,
     ) {
         val current = requireReady() ?: return
-        if (current.isEmailVerificationActionBusy()) return
+        if (profileWriteJob?.isActive == true || current.isEmailVerificationActionBusy()) return
 
         val previousPhotos = current.profilePhotos.sortedBy { it.position }
         val newPlacements = movePhotoLocally(
@@ -315,11 +340,10 @@ class ProfileOperationHandler(
             ),
         )
 
-        scope.launch {
+        profileWriteJob = scope.launch {
             when (val result = dependencies.reorderProfilePhotos(newPlacements)) {
                 is ApiResult.Success -> {
-                    val latest = requireReady() ?: return@launch
-                    if (latest.session !== current.session) return@launch
+                    val latest = readyForResponse(current, true) ?: return@launch
                     uiState.value = latest.copy(
                         photos = latest.photos.copy(
                             profilePhotos = result.value.sortedBy { it.position },
@@ -331,11 +355,10 @@ class ProfileOperationHandler(
                 }
 
                 is ApiResult.Failure -> {
-                    val latest = requireReady() ?: return@launch
-                    if (latest.session !== current.session) return@launch
+                    val latest = readyForResponse(current, !result.error.disallowsProfileSnapshot()) ?: return@launch
                     uiState.value = latest.copy(
                         photos = latest.photos.copy(
-                            profilePhotos = previousPhotos,
+                            profilePhotos = if (latest.profilePhotos == optimisticPhotos) previousPhotos else latest.profilePhotos,
                             reorderingPhotos = false,
                             photoReorderError = result.error,
                             photoReorderMessage = null,
@@ -348,7 +371,7 @@ class ProfileOperationHandler(
 
     fun addProfilePhotoFile(position: Int, fileUri: Uri?) {
         val current = requireReady() ?: return
-        if (current.isEmailVerificationActionBusy()) return
+        if (profileWriteJob?.isActive == true || current.isEmailVerificationActionBusy()) return
         if (fileUri == null) return
         val cleared = current.copy(photos = current.photos.copy(
             profilePhotosError = null, photoActionError = null, photoActionMessage = null,
@@ -356,10 +379,9 @@ class ProfileOperationHandler(
         ))
         val pending = cleared.copy(photos = cleared.photos.copy(addingPhoto = true))
         uiState.value = pending
-        scope.launch {
+        profileWriteJob = scope.launch {
             val result = dependencies.addProfilePhotoFile(fileUri, position)
-            val latest = requireReady() ?: return@launch
-            if (latest.session !== current.session) return@launch
+            val latest = readyForResponse(current, result is ApiResult.Success) ?: return@launch
             when (result) {
                 is ApiResult.Success -> completePhotoAdded(
                     previous = latest,
@@ -376,7 +398,7 @@ class ProfileOperationHandler(
 
     fun replaceProfilePhotoFile(photoId: String, position: Int, fileUri: Uri?) {
         val current = requireReady() ?: return
-        if (current.isEmailVerificationActionBusy()) return
+        if (profileWriteJob?.isActive == true || current.isEmailVerificationActionBusy()) return
         if (fileUri == null) return
         val cleared = current.copy(photos = current.photos.copy(
             profilePhotosError = null, photoActionError = null, photoActionMessage = null,
@@ -384,10 +406,9 @@ class ProfileOperationHandler(
         ))
         val pending = cleared.copy(photos = cleared.photos.copy(addingPhoto = true))
         uiState.value = pending
-        scope.launch {
+        profileWriteJob = scope.launch {
             val result = dependencies.replaceProfilePhotoFile(photoId, fileUri)
-            val latest = requireReady() ?: return@launch
-            if (latest.session !== current.session) return@launch
+            val latest = readyForResponse(current, result is ApiResult.Success) ?: return@launch
             when (result) {
                 is ApiResult.Success -> completePhotoReplaced(
                     previous = latest,
@@ -404,17 +425,22 @@ class ProfileOperationHandler(
 
     fun deleteProfilePhoto(photoId: String, position: Int) {
         val current = requireReady() ?: return
-        if (current.isEmailVerificationActionBusy()) return
+        if (profileWriteJob?.isActive == true || current.isEmailVerificationActionBusy()) return
         val cleared = current.copy(photos = current.photos.copy(
             profilePhotosError = null, photoActionError = null, photoActionMessage = null,
             photoReorderError = null, photoReorderMessage = null,
         ))
         val pending = cleared.copy(photos = cleared.photos.copy(addingPhoto = true))
         uiState.value = pending
-        scope.launch {
+        profileWriteJob = scope.launch {
             val result = dependencies.deleteProfilePhoto(photoId)
-            val latest = requireReady() ?: return@launch
-            if (latest.session !== current.session) return@launch
+            val latest = readyForResponse(current, result is ApiResult.Success) ?: return@launch
+            if (result is ApiResult.Success && (result.value.userId != current.session.user.id ||
+                    result.value.id != (current.session.profileSnapshot as? ProfileSnapshot.Found)?.profile?.id)) {
+                uiState.value = latest.copy(photos = latest.photos.copy(addingPhoto = false,
+                    photoActionError = ApiError.Unexpected("Invalid profile owner")))
+                return@launch
+            }
             when (result) {
                 is ApiResult.Success -> completePhotoDeleted(
                     previous = latest,
@@ -436,14 +462,16 @@ class ProfileOperationHandler(
 
     fun activateProfile() {
         val current = requireReady() ?: return
-        if (current.isEmailVerificationActionBusy()) return
+        if (profileWriteJob?.isActive == true || current.isEmailVerificationActionBusy()) return
 
         if (current.emailVerificationRequired && !current.emailVerificationLocallyVerified) {
             return
         }
 
-        scope.launch {
-            val cleared = current.copy(profileOp = current.profileOp.copy(
+        profileWriteJob = scope.launch {
+            val starting = requireReady() ?: return@launch
+            if (!starting.session.sameProfileOwner(current.session)) return@launch
+            val cleared = starting.copy(profileOp = starting.profileOp.copy(
                 profileActivationError = null, emailVerificationMessage = null, emailVerificationError = null,
             ))
             val pending = cleared.copy(
@@ -455,10 +483,11 @@ class ProfileOperationHandler(
 
             val verificationResult = authRepository.reloadAndRefreshEmailVerification()
 
+            val verificationReady = readyForResponse(current, false) ?: return@launch
             val verifiedPending = when (verificationResult) {
                 EmailVerificationCheckResult.Verified -> {
-                    pending.copy(
-                        profileOp = pending.profileOp.copy(
+                    verificationReady.copy(
+                        profileOp = verificationReady.profileOp.copy(
                             emailVerificationRequired = false,
                             emailVerificationLocallyVerified = true,
                             emailVerificationMessage = null,
@@ -469,8 +498,8 @@ class ProfileOperationHandler(
                 }
 
                 EmailVerificationCheckResult.NotVerified -> {
-                    uiState.value = pending.copy(
-                        profileOp = pending.profileOp.copy(
+                    uiState.value = verificationReady.copy(
+                        profileOp = verificationReady.profileOp.copy(
                             activatingProfile = false,
                             profileActivationError = null,
                             emailVerificationRequired = true,
@@ -490,8 +519,8 @@ class ProfileOperationHandler(
                 }
 
                 EmailVerificationCheckResult.Failure -> {
-                    uiState.value = pending.copy(
-                        profileOp = pending.profileOp.copy(
+                    uiState.value = verificationReady.copy(
+                        profileOp = verificationReady.profileOp.copy(
                             activatingProfile = false,
                             emailVerificationMessage = null,
                             emailVerificationError = "No pudimos comprobar la verificación. Intentá nuevamente.",
@@ -503,9 +532,17 @@ class ProfileOperationHandler(
 
             uiState.value = verifiedPending
 
-            when (val result = dependencies.activateProfile()) {
+            val result = dependencies.activateProfile()
+            val latest = readyForResponse(current, result is ApiResult.Success) ?: return@launch
+            if (result is ApiResult.Success && (result.value.profile.userId != current.session.user.id ||
+                    result.value.profile.id != (current.session.profileSnapshot as? ProfileSnapshot.Found)?.profile?.id)) {
+                uiState.value = latest.copy(profileOp = latest.profileOp.copy(activatingProfile = false,
+                    profileActivationError = ApiError.Unexpected("Invalid profile owner")))
+                return@launch
+            }
+            when (result) {
                 is ApiResult.Success -> {
-                    val updatedSession = verifiedPending.session.copy(
+                    val updatedSession = latest.session.copy(
                         profileSnapshot = ProfileSnapshot.Found(result.value.profile),
                     )
 
@@ -518,13 +555,13 @@ class ProfileOperationHandler(
                 is ApiResult.Failure -> {
                     val emailNotVerified = result.error.isEmailNotVerified()
 
-                    uiState.value = verifiedPending.copy(
-                        profileOp = verifiedPending.profileOp.copy(
+                    uiState.value = latest.copy(
+                        profileOp = latest.profileOp.copy(
                             activatingProfile = false,
                             profileActivationError = result.error,
                             emailVerificationRequired = emailNotVerified,
                             emailVerificationLocallyVerified =
-                                if (emailNotVerified) false else verifiedPending.emailVerificationLocallyVerified,
+                                if (emailNotVerified) false else latest.emailVerificationLocallyVerified,
                             emailVerificationMessage = null,
                             emailVerificationError = null,
                         ),
@@ -538,7 +575,7 @@ class ProfileOperationHandler(
 
     fun resendEmailVerification() {
         val current = requireReady() ?: return
-        if (current.isEmailVerificationActionBusy()) return
+        if (profileWriteJob?.isActive == true || current.isEmailVerificationActionBusy()) return
         val now = System.currentTimeMillis()
         if (current.resendEmailVerificationAvailableAtMillis.isInFuture(now)) {
             uiState.value = current.copy(
@@ -550,9 +587,11 @@ class ProfileOperationHandler(
             return
         }
 
-        scope.launch {
-            val pending = current.copy(
-                profileOp = current.profileOp.copy(
+        profileWriteJob = scope.launch {
+            val starting = requireReady() ?: return@launch
+            if (!starting.session.sameProfileOwner(current.session)) return@launch
+            val pending = starting.copy(
+                profileOp = starting.profileOp.copy(
                     sendingEmailVerification = true,
                     emailVerificationMessage = null,
                     emailVerificationError = null,
@@ -560,6 +599,7 @@ class ProfileOperationHandler(
             )
             uiState.value = pending
             val result = authRepository.sendEmailVerificationEmail()
+            val latest = readyForResponse(current, false) ?: return@launch
             if (result == EmailVerificationSendResult.NotSignedIn) {
                 onTerminalAuthFailure()
                 return@launch
@@ -582,17 +622,17 @@ class ProfileOperationHandler(
                     error = "No pudimos enviar el correo de verificación. Intentá nuevamente.",
                 )
             }
-            uiState.value = pending.copy(
-                profileOp = pending.profileOp.copy(
+            uiState.value = latest.copy(
+                profileOp = latest.profileOp.copy(
                     sendingEmailVerification = false,
                     emailVerificationMessage = feedback.message,
                     emailVerificationError = feedback.error,
                     emailVerificationRequired = feedback.emailVerificationRequired
-                        ?: pending.emailVerificationRequired,
+                        ?: latest.emailVerificationRequired,
                     emailVerificationLocallyVerified = feedback.emailVerificationLocallyVerified
-                        ?: pending.emailVerificationLocallyVerified,
+                        ?: latest.emailVerificationLocallyVerified,
                     resendEmailVerificationAvailableAtMillis = feedback.resendAvailableAtMillis
-                        ?: pending.resendEmailVerificationAvailableAtMillis,
+                        ?: latest.resendEmailVerificationAvailableAtMillis,
                 ),
             )
         }
@@ -600,13 +640,15 @@ class ProfileOperationHandler(
 
     fun checkEmailVerification() {
         val current = requireReady() ?: return
-        if (current.isEmailVerificationActionBusy()) return
+        if (profileWriteJob?.isActive == true || current.isEmailVerificationActionBusy()) return
         val now = System.currentTimeMillis()
         if (current.checkEmailVerificationAvailableAtMillis.isInFuture(now)) return
 
-        scope.launch {
-            val pending = current.copy(
-                profileOp = current.profileOp.copy(
+        profileWriteJob = scope.launch {
+            val starting = requireReady() ?: return@launch
+            if (!starting.session.sameProfileOwner(current.session)) return@launch
+            val pending = starting.copy(
+                profileOp = starting.profileOp.copy(
                     checkingEmailVerification = true,
                     emailVerificationMessage = null,
                     emailVerificationError = null,
@@ -614,6 +656,7 @@ class ProfileOperationHandler(
             )
             uiState.value = pending
             val result = localFirebaseEmailVerificationCoordinator.checkOrVerifyForUserAction()
+            val latest = readyForResponse(current, false) ?: return@launch
             if (result == EmailVerificationCheckResult.NotSignedIn) {
                 onTerminalAuthFailure()
                 return@launch
@@ -639,27 +682,68 @@ class ProfileOperationHandler(
                     error = "No pudimos comprobar la verificación. Intentá nuevamente.",
                 )
             }
-            uiState.value = pending.copy(
-                profileOp = pending.profileOp.copy(
+            uiState.value = latest.copy(
+                profileOp = latest.profileOp.copy(
                     checkingEmailVerification = false,
                     emailVerificationMessage = feedback.message,
                     emailVerificationError = feedback.error,
                     profileActivationError = if (
                         feedback.emailVerificationLocallyVerified == true
-                    ) null else pending.profileOp.profileActivationError,
+                    ) null else latest.profileOp.profileActivationError,
                     emailVerificationRequired = feedback.emailVerificationRequired
-                        ?: pending.emailVerificationRequired,
+                        ?: latest.emailVerificationRequired,
                     emailVerificationLocallyVerified = feedback.emailVerificationLocallyVerified
-                        ?: pending.emailVerificationLocallyVerified,
+                        ?: latest.emailVerificationLocallyVerified,
                     checkEmailVerificationAvailableAtMillis = feedback.checkAvailableAtMillis
-                        ?: pending.checkEmailVerificationAvailableAtMillis,
+                        ?: latest.checkEmailVerificationAvailableAtMillis,
                 ),
             )
         }
     }
 
     private fun requireReady(): RealsRootUiState.Ready? =
-        uiState.value as? RealsRootUiState.Ready
+        (uiState.value as? RealsRootUiState.Ready)?.also { if (ownerSession == null) ownerSession = it.session }
+
+    private suspend fun readyForResponse(original: RealsRootUiState.Ready, success: Boolean): RealsRootUiState.Ready? {
+        val latest = requireReady() ?: return null
+        if (!latest.session.sameProfileOwner(original.session)) return null
+        if (!success || latest.session.profileSnapshot == original.session.profileSnapshot) return latest
+        // The write may have completed, but its response predates a newer confirmed snapshot.
+        // Keep the pending guard until this authorized reconciliation completes.
+        val captured = latest.session
+        val profile = dependencies.readProfile()
+        val photos: ApiResult<List<ProfilePhoto>> =
+            if (profile is ApiResult.Failure && profile.error.disallowsProfileSnapshot()) profile else getProfilePhotosUseCase()
+        val current = requireReady() ?: return null
+        if (!current.session.sameProfileOwner(captured)) return null
+        val confirmed = (profile as? ApiResult.Success)?.value as? ProfileSnapshot.Found
+        val valid = confirmed?.profile?.let { it.id == (captured.profileSnapshot as? ProfileSnapshot.Found)?.profile?.id && it.userId == captured.user.id } == true
+        val error = (profile as? ApiResult.Failure)?.error ?: (photos as? ApiResult.Failure)?.error
+            ?: if (!valid) ApiError.Unexpected("Invalid reconciliation response") else null
+        val existing = (current.session.profileSnapshot as? ProfileSnapshot.Found)?.profile
+        val notOlder = confirmed?.profile?.let { returned -> existing == returned || runCatching {
+            java.time.Instant.parse(returned.updatedAt).isAfter(java.time.Instant.parse(existing?.updatedAt))
+        }.getOrDefault(false) } == true
+        val install = valid && notOlder && error == null && current.session.profileSnapshot == captured.profileSnapshot
+        uiState.value = current.copy(
+            session = if (install) current.session.copy(profileSnapshot = confirmed!!) else current.session,
+            profileOp = current.profileOp.copy(
+                updatingProfile = false, updatingMatchFilters = false, activatingProfile = false, creatingProfile = false,
+                profileCreateError = if (current.creatingProfile) error else current.profileCreateError,
+                profileActivationError = if (current.activatingProfile) error else current.profileActivationError,
+                profileUpdateError = if (current.updatingProfile) error else current.profileUpdateError,
+                matchFiltersError = if (current.updatingMatchFilters) error else current.matchFiltersError,
+            ),
+            photos = current.photos.copy(
+                addingPhoto = false, reorderingPhotos = false, loadingPhotos = false,
+                profilePhotos = if (install) (photos as ApiResult.Success).value.sortedBy { it.position } else current.profilePhotos,
+                profilePhotosError = if (current.loadingPhotos) error else current.profilePhotosError,
+                photoActionError = if (current.addingPhoto) error else current.photoActionError,
+                photoReorderError = if (current.reorderingPhotos) error else current.photoReorderError,
+            ),
+        )
+        return null
+    }
 
     private fun completePhotoAdded(
         previous: RealsRootUiState.Ready,

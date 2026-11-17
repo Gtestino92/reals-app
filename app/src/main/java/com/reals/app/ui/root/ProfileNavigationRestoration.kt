@@ -16,7 +16,7 @@ internal fun ProfileNavigationRestoration(
     openAdditionalQuestions: () -> Unit,
 ) {
     val profile = (state.session.profileSnapshot as? ProfileSnapshot.Found)?.profile ?: return
-    key(state.session.user.id, profile.id) {
+    key(state.session.authenticationSessionId, state.session.user.id, profile.id) {
         var savedRoute by rememberSaveable { mutableStateOf<String?>(null) }
         var firstReady by remember { mutableStateOf(true) }
         LaunchedEffect(state) {

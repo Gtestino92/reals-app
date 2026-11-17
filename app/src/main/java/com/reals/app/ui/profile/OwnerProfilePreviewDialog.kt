@@ -20,12 +20,13 @@ import com.reals.app.ui.chat.VisualProfileCard
 import com.reals.app.ui.root.OwnerProfilePreviewState
 
 @Composable
-internal fun OwnerProfilePreviewDialog(state: OwnerProfilePreviewState, onClose: () -> Unit, onRefresh: () -> Unit) {
+internal fun OwnerProfilePreviewDialog(state: OwnerProfilePreviewState, onClose: () -> Unit, onRefresh: () -> Unit, onResume: () -> Unit = {}) {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val heading = remember { FocusRequester() }
+    val resume by rememberUpdatedState(onResume)
     DisposableEffect(lifecycle) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) onRefresh()
+            if (event == Lifecycle.Event.ON_RESUME) resume()
         }
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }

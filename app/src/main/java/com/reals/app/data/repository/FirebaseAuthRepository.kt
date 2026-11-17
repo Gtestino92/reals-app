@@ -45,6 +45,13 @@ sealed interface ChangePasswordResult {
 }
 
 open class FirebaseAuthRepository(private val context: Context) {
+    private val authenticationIdentity = AuthenticationSessionIdentity()
+
+    /** Token refresh/reload does not change this identity; a new login does. */
+    open fun authenticationSessionId(): String {
+        val user = authOrNull()?.currentUser
+        return authenticationIdentity.current(user?.uid)
+    }
     open fun isConfigured(): Boolean = FirebaseApp.getApps(context).isNotEmpty()
 
     open fun hasSignedInUser(): Boolean = authOrNull()?.currentUser != null
@@ -66,7 +73,7 @@ open class FirebaseAuthRepository(private val context: Context) {
         return runCatching {
             auth.signInWithEmailAndPassword(email.trim(), password).await()
         }.fold(
-            onSuccess = { AuthOperationResult.Success },
+            onSuccess = { authenticationIdentity.replace(); AuthOperationResult.Success },
             onFailure = { AuthOperationResult.Failure(it.toSignInMessage()) },
         )
     }
@@ -77,7 +84,7 @@ open class FirebaseAuthRepository(private val context: Context) {
         return runCatching {
             auth.createUserWithEmailAndPassword(email.trim(), password).await()
         }.fold(
-            onSuccess = { AuthOperationResult.Success },
+            onSuccess = { authenticationIdentity.replace(); AuthOperationResult.Success },
             onFailure = { AuthOperationResult.Failure(it.toSignUpMessage()) },
         )
     }
@@ -90,7 +97,7 @@ open class FirebaseAuthRepository(private val context: Context) {
             val credential = GoogleAuthProvider.getCredential(idToken, null)
             auth.signInWithCredential(credential).await()
         }.fold(
-            onSuccess = { AuthOperationResult.Success },
+            onSuccess = { authenticationIdentity.replace(); AuthOperationResult.Success },
             onFailure = { AuthOperationResult.Failure(it.toGoogleSignInMessage()) },
         )
     }
@@ -154,6 +161,7 @@ open class FirebaseAuthRepository(private val context: Context) {
     }
 
     open fun signOut() {
+        authenticationIdentity.replace()
         authOrNull()?.signOut()
     }
 
@@ -265,4 +273,11 @@ internal fun changePasswordUpdateResultForFirebaseErrorCode(errorCode: String?):
         "ERROR_INVALID_USER_TOKEN" -> ChangePasswordResult.NotSignedIn
         else -> ChangePasswordResult.Failure
     }
+}
+
+/** Authentication boundaries rotate; token/profile refreshes do not. No token is retained. */
+internal class AuthenticationSessionIdentity {
+    private var epoch = java.util.UUID.randomUUID().toString()
+    @Synchronized fun current(uid: String?): String = "$epoch/$uid"
+    @Synchronized fun replace() { epoch = java.util.UUID.randomUUID().toString() }
 }

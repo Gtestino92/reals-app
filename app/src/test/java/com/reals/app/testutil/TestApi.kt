@@ -191,6 +191,7 @@ class FakeRealsApi : RealsApi {
     var beforeGetPartnerPersonalMessageResponse: suspend () -> Unit = {}
     var beforeGetProfilePhotosResponse: suspend () -> Unit = {}
     var beforeUpdateProfileResponse: suspend () -> Unit = {}
+    var beforeGetProfileResponse: suspend () -> Unit = {}
     var beforeUpdateFiltersResponse: suspend () -> Unit = {}
     var beforeReorderPhotosResponse: suspend () -> Unit = {}
     var beforeAddPhotoResponse: suspend () -> Unit = {}
@@ -389,7 +390,7 @@ class FakeRealsApi : RealsApi {
         }
 
     override suspend fun getMyProfile(authorization: String): Response<ProfileResponseDto> =
-        record("getMyProfile", authorization) { profileResponse }
+        record("getMyProfile", authorization, beforeResponse = beforeGetProfileResponse) { profileResponse }
 
     override suspend fun getCountries(authorization: String): Response<List<CountryReferenceResponseDto>> =
         record("getCountries", authorization) { countriesResponse }

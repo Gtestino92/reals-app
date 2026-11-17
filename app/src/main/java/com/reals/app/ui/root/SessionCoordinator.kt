@@ -522,7 +522,10 @@ internal class SessionCoordinator(
         onFailure: suspend (ApiError) -> Unit,
         clearAssociationConflict: Boolean,
     ) {
-        if (showLoadingState) {
+        val retained = uiState.value as? RealsRootUiState.Ready
+        val renewingProfile = retained?.hasOpenProfileSurface() == true &&
+            retained.session.authenticationSessionId == authRepository.authenticationSessionId()
+        if (showLoadingState && !renewingProfile) {
             uiState.value = RealsRootUiState.LoadingSession(authRepository.currentUserEmail())
         }
         when (val userResult = getMeUseCase()) {

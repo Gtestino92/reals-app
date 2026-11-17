@@ -47,6 +47,7 @@ import com.reals.app.domain.model.CountryReference
 import com.reals.app.domain.model.Profile
 import com.reals.app.domain.model.ProfilePhoto
 import com.reals.app.domain.model.ProfileSnapshot
+import com.reals.app.domain.model.sameProfileOwner
 import com.reals.app.domain.model.ProfileStatus
 import com.reals.app.domain.model.ProvisionedSession
 import com.reals.app.domain.model.UpdateMatchFiltersInput
@@ -57,6 +58,7 @@ import com.reals.app.ui.common.FeedbackTone
 import com.reals.app.ui.common.RealsBrandDivider
 import com.reals.app.ui.theme.RealsRadii
 import com.reals.app.ui.theme.RealsType
+import com.reals.app.ui.root.supportsOwnerProfileContent
 
 @Composable
 fun ProfileStatusScreen(
@@ -115,6 +117,7 @@ fun ProfileStatusScreen(
     ownerPreview: com.reals.app.ui.root.OwnerProfilePreviewState = com.reals.app.ui.root.OwnerProfilePreviewState(),
     onOpenOwnerPreview: () -> Unit = {},
     onCloseOwnerPreview: () -> Unit = {},
+    onResumeOwnerPreview: () -> Unit = {},
 ) {
     val busy = profileUpdateLoading ||
         matchFiltersLoading ||
@@ -138,11 +141,11 @@ fun ProfileStatusScreen(
         if (restorePreview && !ownerPreview.open) onOpenOwnerPreview()
     }
     LaunchedEffect(ownerPreview.open) {
-        if (returningFromPreview && !ownerPreview.open) previewEntryFocus.requestFocus()
+        if (returningFromPreview && !ownerPreview.open && session.supportsOwnerProfileContent()) previewEntryFocus.requestFocus()
         returningFromPreview = ownerPreview.open
     }
     LaunchedEffect(session) {
-        if (ownerPreview.open && ownerPreview.ownerSession !== session) onOpenOwnerPreview()
+        if (ownerPreview.open && !session.sameProfileOwner(ownerPreview.ownerSession)) onCloseOwnerPreview()
     }
     var accountExpanded by rememberSaveable(session.user.id) { mutableStateOf(false) }
 
@@ -293,8 +296,8 @@ fun ProfileStatusScreen(
             )
         }
     }
-    if (ownerPreview.open && ownerPreview.ownerSession === session) {
-        OwnerProfilePreviewDialog(ownerPreview, { restorePreview = false; onCloseOwnerPreview() }, onOpenOwnerPreview)
+    if (ownerPreview.open && session.sameProfileOwner(ownerPreview.ownerSession) && session.supportsOwnerProfileContent()) {
+        OwnerProfilePreviewDialog(ownerPreview, { restorePreview = false; onCloseOwnerPreview() }, onOpenOwnerPreview, onResumeOwnerPreview)
     }
 }
 

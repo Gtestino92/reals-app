@@ -28,6 +28,7 @@ import com.reals.app.domain.model.LegalDocumentAction
 import com.reals.app.domain.model.NotificationPreferenceGroup
 import com.reals.app.domain.model.ProfileSnapshot
 import com.reals.app.domain.model.ProvisionedSession
+import com.reals.app.domain.model.sameProfileOwner
 import com.reals.app.domain.model.SearchLocationInput
 import com.reals.app.domain.model.SecondChatCompletionDecision
 import com.reals.app.domain.model.UpdateMatchFiltersInput
@@ -102,6 +103,8 @@ class RealsRootViewModel(
     )
     fun openOwnerProfilePreview() = ownerPreviewHandler.open()
     fun closeOwnerProfilePreview() = ownerPreviewHandler.close()
+    fun resumeOwnerProfilePreview() = ownerPreviewHandler.onResume()
+    fun resumeProfileQuestions() = profileQuestionHandler.onResume()
     private val manualBlockCoordinator = ManualBlockCoordinator(
         dependencies.manualBlock.blockMatchParticipant,
     )
@@ -160,6 +163,7 @@ class RealsRootViewModel(
                 val session = (state as? RealsRootUiState.Ready)?.session
                 ownerPreviewHandler.cancelForSessionReplacement(session)
                 profileQuestionHandler.cancelForSessionReplacement(session)
+                profileHandler.cancelForSessionReplacement(session)
             }
         }
         if (autoRefreshSession) {
@@ -2243,6 +2247,27 @@ class RealsRootViewModel(
     }
 
     private suspend fun showReadySession(session: ProvisionedSession) {
+        val retained = _uiState.value as? RealsRootUiState.Ready
+        if (retained?.hasOpenProfileSurface() == true && retained.session.sameProfileOwner(session)) {
+            val legal = legalCoordinator.load(session, LegalResumeContext.ExistingState(retained))
+            val latest = _uiState.value as? RealsRootUiState.Ready ?: return
+            if (!latest.session.sameProfileOwner(session)) return
+            val currentProfile = (latest.session.profileSnapshot as? ProfileSnapshot.Found)?.profile
+            val incomingProfile = (session.profileSnapshot as? ProfileSnapshot.Found)?.profile
+            val newer = currentProfile == incomingProfile || runCatching {
+                java.time.Instant.parse(incomingProfile?.updatedAt).isAfter(java.time.Instant.parse(currentProfile?.updatedAt))
+            }.getOrDefault(false)
+            val renewed = latest.copy(session = session.copy(
+                profileSnapshot = if (newer) session.profileSnapshot else latest.session.profileSnapshot,
+            ))
+            when (legal) {
+                is LegalCoordinatorResult.Satisfied -> _uiState.value = renewed
+                is LegalCoordinatorResult.Show -> _uiState.value = legal.state.copy(
+                    resumeContext = LegalResumeContext.ExistingState(renewed),
+                )
+            }
+            return
+        }
         enterLegalRequirements(
             session = session,
             resumeContext = LegalResumeContext.PostSession,

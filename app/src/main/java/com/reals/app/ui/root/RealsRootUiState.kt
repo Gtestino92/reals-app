@@ -473,6 +473,7 @@ data class AffinityAnswerMutationUiState(
 )
 
 data class ProfileQuestionUiState(
+    val revalidating: Boolean = false,
     val uncertain: Boolean = false,
     val open: Boolean = false,
     val profileId: String? = null,

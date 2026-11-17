@@ -144,6 +144,7 @@ class AppContainer(context: Context) {
     val provisionAndLoadProfileUseCase = ProvisionAndLoadProfileUseCase(
         meRepository = meRepository,
         profileRepository = profileRepository,
+        authenticationSessionId = authRepository::authenticationSessionId,
     )
     val createProfileUseCase = CreateProfileUseCase(profileRepository)
     val updateProfileUseCase = UpdateProfileUseCase(profileRepository)
@@ -255,6 +256,7 @@ class AppContainer(context: Context) {
             recordAction = recordLegalDocumentActionUseCase,
         ),
         profile = ProfileFeatureDependencies(
+            readProfile = profileRepository::getMyProfileSnapshot,
             createProfile = createProfileUseCase,
             updateProfile = updateProfileUseCase,
             getCountries = getCountriesUseCase,

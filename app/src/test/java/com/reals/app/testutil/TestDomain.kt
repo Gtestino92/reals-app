@@ -6,6 +6,7 @@ import com.reals.app.domain.model.ProvisionedSession
 
 object TestDomain {
     fun session(passwordManagementAllowed: Boolean = true): ProvisionedSession = ProvisionedSession(
+        authenticationSessionId = "test-auth-session",
         user = TestDtos.user().copy(passwordManagementAllowed = passwordManagementAllowed).toDomain(),
         profileSnapshot = ProfileSnapshot.Found(TestDtos.profile().toDomain()),
     )

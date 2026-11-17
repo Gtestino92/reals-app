@@ -98,7 +98,7 @@ fun RealsApp(
         }
     }
 
-    val questionSavedState = androidx.compose.runtime.key((state as? RealsRootUiState.Ready)?.session?.user?.id) {
+    val questionSavedState = androidx.compose.runtime.key((state as? RealsRootUiState.Ready)?.session?.authenticationSessionId) {
         androidx.compose.runtime.saveable.rememberSaveableStateHolder()
     }
     (state as? RealsRootUiState.Ready)?.let { ready ->
@@ -267,6 +267,7 @@ fun RealsApp(
                                             state = current.profileQuestions,
                                             onBack = viewModel::navigateBackProfileQuestions,
                                             onRetry = viewModel::refreshProfileQuestions,
+                                            onResume = viewModel::resumeProfileQuestions,
                                             onOpenQuestions = viewModel::openProfileQuestionList,
                                             onOpenEditor = viewModel::openProfileQuestionEditor,
                                             onOpenSelection = viewModel::openProfileQuestionSelection,
@@ -279,6 +280,7 @@ fun RealsApp(
                                 }
                             }
                         }
+                        androidx.compose.runtime.key(current.session.authenticationSessionId) {
                         ProfileStatusScreen(
                             session = current.session,
                             profileUpdateLoading = current.updatingProfile,
@@ -329,6 +331,7 @@ fun RealsApp(
                             ownerPreview = current.ownerPreview,
                             onOpenOwnerPreview = viewModel::openOwnerProfilePreview,
                             onCloseOwnerPreview = viewModel::closeOwnerProfilePreview,
+                            onResumeOwnerPreview = viewModel::resumeOwnerProfilePreview,
                             onRefresh = viewModel::refreshSession,
                             onSignOut = viewModel::signOut,
                             accountDeleteLoading = current.deletingAccount,
@@ -347,6 +350,7 @@ fun RealsApp(
                                 null
                             },
                         )
+                        }
                     } else {
                         MatchmakingHomeScreen(
                             profile = profile,

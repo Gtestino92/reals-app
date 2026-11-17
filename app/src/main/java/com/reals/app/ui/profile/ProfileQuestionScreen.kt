@@ -39,6 +39,7 @@ fun ProfileQuestionScreen(
     onSaveSelection: () -> Unit,
     onSaveAnswer: (questionId: String, answer: String) -> Unit,
     onDeleteAnswer: (questionId: String) -> Unit,
+    onResume: () -> Unit = {},
 ) {
     var drafts by rememberSaveable(state.profileId) { mutableStateOf(hashMapOf<String, String>()) }
     var editing by rememberSaveable(state.profileId) { mutableStateOf<String?>(null) }
@@ -47,9 +48,9 @@ fun ProfileQuestionScreen(
     var focusEdit by remember { mutableStateOf<String?>(null) }
     val keyboard = LocalSoftwareKeyboardController.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val retry by rememberUpdatedState(onRetry)
+    val resume by rememberUpdatedState(onResume)
     DisposableEffect(lifecycle) {
-        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) retry() }
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) resume() }
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
