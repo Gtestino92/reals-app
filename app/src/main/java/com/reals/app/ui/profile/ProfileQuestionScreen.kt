@@ -1,7 +1,6 @@
 package com.reals.app.ui.profile
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -18,6 +17,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,6 +25,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -37,7 +38,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
@@ -45,6 +45,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
@@ -52,6 +53,8 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -63,10 +66,12 @@ import com.reals.app.ui.common.RealsEditorialSurface
 import com.reals.app.ui.common.RealsPrimaryButton
 import com.reals.app.ui.common.RealsSecondaryButton
 import com.reals.app.ui.common.RealsThinDivider
+import com.reals.app.ui.common.realsEditorialBackground
 import com.reals.app.ui.common.realsOutlinedTextFieldColors
 import com.reals.app.ui.root.ProfileQuestionDestination
 import com.reals.app.ui.root.ProfileQuestionMutationKind
 import com.reals.app.ui.root.ProfileQuestionUiState
+import com.reals.app.ui.theme.LocalRealsDarkTheme
 import com.reals.app.ui.theme.RealsRadii
 import com.reals.app.ui.theme.RealsType
 import kotlinx.coroutines.delay
@@ -87,6 +92,21 @@ fun ProfileQuestionScreen(
     onDeleteAnswer: (questionId: String) -> Unit,
     onResume: () -> Unit = {},
 ) {
+    val dialogWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
+    val darkTheme = LocalRealsDarkTheme.current
+    if (dialogWindow != null) {
+        DisposableEffect(dialogWindow, darkTheme) {
+            val insets = WindowCompat.getInsetsController(dialogWindow, dialogWindow.decorView)
+            val lightStatusBars = insets.isAppearanceLightStatusBars
+            val lightNavigationBars = insets.isAppearanceLightNavigationBars
+            insets.isAppearanceLightStatusBars = !darkTheme
+            insets.isAppearanceLightNavigationBars = !darkTheme
+            onDispose {
+                insets.isAppearanceLightStatusBars = lightStatusBars
+                insets.isAppearanceLightNavigationBars = lightNavigationBars
+            }
+        }
+    }
     var drafts by rememberSaveable(state.profileId) { mutableStateOf(hashMapOf<String, String>()) }
     var editing by rememberSaveable(state.profileId) { mutableStateOf<String?>(null) }
     var submittedId by rememberSaveable(state.profileId) { mutableStateOf<String?>(null) }
@@ -133,8 +153,13 @@ fun ProfileQuestionScreen(
     }
     val holder = rememberSaveableStateHolder()
     val additional = state.destination == ProfileQuestionDestination.Questions
-    val headingFocus = remember { FocusRequester() }
-    var focusHeading by remember { mutableStateOf(false) }
+    val savedAdditional = state.feedback?.takeIf {
+        additional && it.destination == ProfileQuestionDestination.Questions &&
+            it.message == "Respuesta guardada" &&
+            rows.any { row -> row.answer != null && row.question.id == it.questionId }
+    }
+    val selectionFeedback = state.feedback?.takeIf { !additional && it.message == "Selección guardada" }
+    val generalFeedback = state.feedback?.takeUnless { it == savedAdditional || it == selectionFeedback }
     val back: () -> Unit = {
         keyboard?.hide()
         val id = editing
@@ -153,7 +178,7 @@ fun ProfileQuestionScreen(
         if (id == submittedId && feedback.message == "Respuesta guardada") {
             if (drafts[id] == submittedText) drafts = HashMap(drafts - id)
             if (editing == id) { editing = null; focusEdit = id; keyboard?.hide() }
-            if (additional) focusHeading = true
+            if (additional) keyboard?.hide()
             submittedId = null
         }
         if (feedback.message == "Respuesta eliminada") {
@@ -163,159 +188,196 @@ fun ProfileQuestionScreen(
     }
     holder.SaveableStateProvider(if (additional) "additional" else "overview") {
         val scroll = rememberLazyListState()
-        LaunchedEffect(focusHeading) {
-            if (focusHeading) {
-                scroll.scrollToItem(0)
-                withFrameNanos { }
-                headingFocus.requestFocus()
-                focusHeading = false
+        fun LazyListScope.questionCards(visible: List<ProfileQuestionRowPresentation>) {
+            items(visible, key = { "question-${it.question.id}" }) { row ->
+                val id = row.question.id
+                if (id == savedAdditional?.questionId) {
+                    // Keep the saved row's key so the list retains its scroll anchor.
+                    RealsEditorialSurface(Modifier.fillMaxWidth().testTag("profile-question-saved-$id")) {
+                        ProfileQuestionFeedbackText(savedAdditional.message, Modifier.padding(14.dp))
+                    }
+                    return@items
+                }
+                val selectedIndex = selection.indexOf(id)
+                val text = drafts[id] ?: row.answer?.answer.orEmpty()
+                val editFocus = remember { FocusRequester() }
+                val inputFocus = remember { FocusRequester() }
+                val isEditing = editing == id || additional
+                LaunchedEffect(isEditing) {
+                    if (isEditing && !additional) inputFocus.requestFocus()
+                }
+                if (!isEditing && !busy && focusEdit == id) {
+                    LaunchedEffect(Unit) {
+                        editFocus.requestFocus()
+                        focusEdit = null
+                    }
+                }
+                val current = row.answer?.isCurrentFor(row.question) == true
+                val confirmedPosition = row.selectedPosition.takeIf { row.selectable }
+                val draftPosition = (selectedIndex + 1).takeIf { row.selectable && selectedIndex >= 0 }
+                ProfileQuestionCard(row, current, confirmedPosition, draftPosition, isEditing) {
+                    if (isEditing) {
+                        ProfileQuestionInlineEditor(
+                            text = text,
+                            touched = drafts.containsKey(id),
+                            enabled = !busy,
+                            canSave = !locked && canSaveProfileQuestionAnswer(
+                                text, row.answer?.copy(current = current), false,
+                            ),
+                            inputFocus = inputFocus,
+                            onChange = { drafts = HashMap(drafts + (id to it)) },
+                            onSave = {
+                                submittedId = id
+                                submittedText = text
+                                onSaveAnswer(id, text)
+                            },
+                            onCancel = if (additional) null else ({
+                                drafts = HashMap(drafts - id)
+                                back()
+                            }),
+                        )
+                    } else {
+                        RealsThinDivider()
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                            ProfileQuestionTextAction(
+                                text = if (current) "Editar respuesta" else "Actualizar respuesta",
+                                onClick = { editing = id },
+                                enabled = !busy,
+                                modifier = Modifier
+                                    .focusRequester(editFocus)
+                                    .focusProperties { canFocus = !busy },
+                            )
+                            if (row.selectable) {
+                                ProfileQuestionTextAction(
+                                    text = if (selectedIndex >= 0) "Quitar" else "Agregar",
+                                    onClick = { changeSelection(if (selectedIndex >= 0) selection - id else selection + id) },
+                                    enabled = !locked && (selectedIndex >= 0 || selection.size < ProfileQuestionMaxPublicSelections),
+                                )
+                                if (selectedIndex >= 0) {
+                                    ProfileQuestionTextAction("Subir", { changeSelection(selection.move(selectedIndex, selectedIndex - 1)) }, !locked && selectedIndex > 0)
+                                    ProfileQuestionTextAction("Bajar", { changeSelection(selection.move(selectedIndex, selectedIndex + 1)) }, !locked && selectedIndex < selection.lastIndex)
+                                }
+                            }
+                            ProfileQuestionTextAction("Eliminar", { onDeleteAnswer(id) }, !locked, subdued = true)
+                        }
+                    }
+                }
             }
         }
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
+                .realsEditorialBackground()
                 .safeDrawingPadding()
                 .imePadding()
                 .padding(horizontal = 24.dp)
                 .testTag("profile-question-list"),
             state = scroll,
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-            contentPadding = PaddingValues(vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp),
         ) {
             item(key = "header") {
                 ProfileQuestionHeader(
                     title = if (additional) "Responder preguntas" else "Preguntas del perfil",
                     onBack = back,
-                    titleModifier = Modifier.focusRequester(headingFocus).focusable(),
                 )
             }
             if (showProgress || state.error != null || state.mutationError != null ||
-                state.uncertain || state.feedback != null
+                state.uncertain || generalFeedback != null
             ) {
                 item(key = "status") {
-                    ProfileQuestionStatus(state, progressLabel.takeIf { showProgress }, busy, onRetry)
+                    ProfileQuestionStatus(
+                        state, progressLabel.takeIf { showProgress }, generalFeedback?.message, busy, onRetry,
+                    )
                 }
             }
-            if (state.catalog != null) {
-                if (!additional) item(key = "summary") {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = "${rows.count { it.answer != null }} de ${rows.size} respondidas",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                        RealsPrimaryButton(
-                            text = "Responder nuevas preguntas",
-                            onClick = { keyboard?.hide(); onOpenQuestions() },
-                            enabled = !busy && rows.any { it.answer == null },
-                            modifier = Modifier.fillMaxWidth(),
+            val catalog = state.catalog ?: return@LazyColumn
+            if (additional) {
+                questionCards(rows.filter { it.answer == null || it.question.id == savedAdditional?.questionId })
+                if (rows.none { it.answer == null }) {
+                    item(key = "empty") {
+                        ProfileQuestionDescription(
+                            if (rows.isEmpty()) "No hay preguntas disponibles por ahora." else "No hay preguntas nuevas por responder.",
                         )
                     }
                 }
-                if (!additional) item(key = "public-selection") {
-                    val changed = selection != selectedProfileQuestionIds(state.answers)
-                    ProfileQuestionPublicSelection(
-                        confirmedCount = rows.count { it.selectable && it.selectedPosition != null },
-                        draftCount = selection.size.takeIf { changed },
-                        canClear = !locked && selection.isNotEmpty(),
-                        canSave = !locked && changed && profileQuestionSelectionDraftIsValid(
-                            selection, state.catalog.selectionRows(state.answers),
-                        ),
-                        onClear = { changeSelection(emptyList()) },
-                        onSave = onSaveSelection,
-                    )
-                }
-                val eligible = rows.filter { it.selectable }.map { it.question.id }.toSet()
-                if (!additional) items(selection.filter { it !in eligible }, key = { "invalid-$it" }) { id ->
-                    RealsEditorialSurface(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                "Una pregunta dejó de estar disponible. Quitala o actualizá su respuesta antes de guardar.",
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            ProfileQuestionTextAction("Quitar pregunta no disponible", { changeSelection(selection - id) }, !locked)
-                        }
-                    }
-                }
-                val visible = if (additional) rows.filter { it.answer == null } else rows.filter { it.answer != null }
-                    .sortedBy { selection.indexOf(it.question.id).takeIf { index -> index >= 0 } ?: Int.MAX_VALUE }
-                if (visible.isEmpty()) item(key = "empty") {
+            } else {
+                val answered = rows.filter { it.answer != null }
+                val eligible = answered.filter { it.selectable }.associateBy { it.question.id }
+                val confirmedSelection = selectedProfileQuestionIds(state.answers)
+                // Pending removals stay with the public answers until the server confirms them.
+                val publicIds = (selection + confirmedSelection).distinct()
+                val publicRows = publicIds.mapNotNull(eligible::get)
+                val publicRowIds = publicRows.map { it.question.id }.toSet()
+                val otherAnswers = answered.filter { it.question.id !in publicRowIds }
+                val changed = selection != confirmedSelection
+
+                item(key = "summary") {
                     Text(
-                        text = when {
-                            rows.isEmpty() -> "No hay preguntas disponibles por ahora."
-                            additional -> "No hay preguntas nuevas por responder."
-                            else -> "Todavía no respondiste ninguna pregunta."
-                        },
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = "${answered.size} de ${rows.size} respondidas",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
                     )
                 }
-                items(visible, key = { "question-${it.question.id}" }) { row ->
-                    val id = row.question.id
-                    val selectedIndex = selection.indexOf(id)
-                    val text = drafts[id] ?: row.answer?.answer.orEmpty()
-                    val editFocus = remember { FocusRequester() }
-                    val inputFocus = remember { FocusRequester() }
-                    val isEditing = editing == id || additional
-                    LaunchedEffect(isEditing) {
-                        if (isEditing && !additional) inputFocus.requestFocus()
-                    }
-                    if (!isEditing && !busy && focusEdit == id) {
-                        LaunchedEffect(Unit) {
-                            editFocus.requestFocus()
-                            focusEdit = null
-                        }
-                    }
-                    val current = row.answer?.isCurrentFor(row.question) == true
-                    val confirmedPosition = row.selectedPosition.takeIf { row.selectable }
-                    val draftPosition = (selectedIndex + 1).takeIf { row.selectable && selectedIndex >= 0 }
-                    ProfileQuestionCard(row, current, confirmedPosition, draftPosition, isEditing) {
-                        if (isEditing) {
-                            ProfileQuestionInlineEditor(
-                                text = text,
-                                touched = drafts.containsKey(id),
-                                enabled = !busy,
-                                canSave = !locked && canSaveProfileQuestionAnswer(
-                                    text, row.answer?.copy(current = current), false,
-                                ),
-                                inputFocus = inputFocus,
-                                onChange = { drafts = HashMap(drafts + (id to it)) },
-                                onSave = {
-                                    submittedId = id
-                                    submittedText = text
-                                    onSaveAnswer(id, text)
-                                },
-                                onCancel = if (additional) null else ({
-                                    drafts = HashMap(drafts - id)
-                                    back()
-                                }),
-                            )
-                        } else {
-                            RealsThinDivider()
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                                ProfileQuestionTextAction(
-                                    text = if (current) "Editar respuesta" else "Actualizar respuesta",
-                                    onClick = { editing = id },
-                                    enabled = !busy,
-                                    modifier = Modifier
-                                        .focusRequester(editFocus)
-                                        .focusProperties { canFocus = !busy },
+                if (rows.isNotEmpty()) {
+                    item(key = "public-heading") {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ProfileQuestionSectionTitle("Preguntas públicas")
+                            val publicCount = confirmedSelection.count { it in eligible }
+                            ProfileQuestionDescription("$publicCount de $ProfileQuestionMaxPublicSelections en tu perfil")
+                            if (changed) {
+                                ProfileQuestionDescription(
+                                    "${selection.size} de $ProfileQuestionMaxPublicSelections elegidas · Cambios sin guardar",
                                 )
-                                if (row.selectable) {
-                                    ProfileQuestionTextAction(
-                                        text = if (selectedIndex >= 0) "Quitar" else "Agregar",
-                                        onClick = { changeSelection(if (selectedIndex >= 0) selection - id else selection + id) },
-                                        enabled = !locked && (selectedIndex >= 0 || selection.size < ProfileQuestionMaxPublicSelections),
-                                    )
-                                    if (selectedIndex >= 0) {
-                                        ProfileQuestionTextAction("Subir", { changeSelection(selection.move(selectedIndex, selectedIndex - 1)) }, !locked && selectedIndex > 0)
-                                        ProfileQuestionTextAction("Bajar", { changeSelection(selection.move(selectedIndex, selectedIndex + 1)) }, !locked && selectedIndex < selection.lastIndex)
-                                    }
-                                }
-                                ProfileQuestionTextAction("Eliminar", { onDeleteAnswer(id) }, !locked, subdued = true)
+                            }
+                            if (publicRows.isEmpty() && selection.isEmpty()) {
+                                ProfileQuestionDescription("Agregá respuestas para mostrarlas en tu perfil.")
                             }
                         }
                     }
+                    questionCards(publicRows)
+                    items(selection.filter { it !in eligible }, key = { "invalid-$it" }) { id ->
+                        RealsEditorialSurface(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                ProfileQuestionDescription(
+                                    "Una pregunta dejó de estar disponible. Quitala o actualizá su respuesta antes de guardar.",
+                                )
+                                ProfileQuestionTextAction(
+                                    "Quitar pregunta no disponible", { changeSelection(selection - id) }, !locked,
+                                )
+                            }
+                        }
+                    }
+                    item(key = "public-actions") {
+                        ProfileQuestionPublicActions(
+                            feedback = selectionFeedback?.message,
+                            canClear = !locked && selection.isNotEmpty(),
+                            canSave = !locked && changed && profileQuestionSelectionDraftIsValid(
+                                selection, catalog.selectionRows(state.answers),
+                            ),
+                            onClear = { changeSelection(emptyList()) },
+                            onSave = onSaveSelection,
+                        )
+                    }
+                }
+                if (otherAnswers.isNotEmpty()) {
+                    item(key = "other-heading") { ProfileQuestionSectionTitle("Otras respuestas") }
+                    questionCards(otherAnswers)
+                }
+                if (answered.isEmpty()) {
+                    item(key = "empty") {
+                        ProfileQuestionDescription(
+                            if (rows.isEmpty()) "No hay preguntas disponibles por ahora." else "Todavía no respondiste ninguna pregunta.",
+                        )
+                    }
+                }
+                item(key = "open-questions") {
+                    RealsPrimaryButton(
+                        text = "Responder nuevas preguntas",
+                        onClick = { keyboard?.hide(); onOpenQuestions() },
+                        enabled = !busy && rows.any { it.answer == null },
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    )
                 }
             }
         }
@@ -331,7 +393,6 @@ private fun List<String>.move(from: Int, to: Int): List<String> {
 private fun ProfileQuestionHeader(
     title: String,
     onBack: () -> Unit,
-    titleModifier: Modifier,
 ) {
     Column(Modifier.testTag("profile-question-header")) {
         BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -341,7 +402,7 @@ private fun ProfileQuestionHeader(
                     text = title,
                     style = RealsType.ScreenTitle,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = modifier.then(titleModifier).semantics { heading() },
+                    modifier = modifier.focusable().semantics { heading() },
                 )
             }
             if (compact) {
@@ -368,6 +429,7 @@ private fun ProfileQuestionHeader(
 private fun ProfileQuestionStatus(
     state: ProfileQuestionUiState,
     progressLabel: String?,
+    feedback: String?,
     busy: Boolean,
     onRetry: () -> Unit,
 ) {
@@ -403,54 +465,60 @@ private fun ProfileQuestionStatus(
         if (state.error != null || state.uncertain) {
             RealsSecondaryButton(text = "Reintentar consulta", onClick = onRetry, enabled = !busy)
         }
-        state.feedback?.let {
-            Text(
-                text = it.message,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-            )
-        }
+        feedback?.let { ProfileQuestionFeedbackText(it) }
     }
 }
 
 @Composable
-private fun ProfileQuestionPublicSelection(
-    confirmedCount: Int,
-    draftCount: Int?,
+private fun ProfileQuestionPublicActions(
+    feedback: String?,
     canClear: Boolean,
     canSave: Boolean,
     onClear: () -> Unit,
     onSave: () -> Unit,
 ) {
-    RealsEditorialSurface(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(
-                text = "Preguntas públicas",
-                style = RealsType.SectionTitle,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.semantics { heading() },
-            )
-            Text(
-                text = "$confirmedCount de $ProfileQuestionMaxPublicSelections en tu perfil",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (draftCount != null) {
-                Text(
-                    text = "$draftCount de $ProfileQuestionMaxPublicSelections elegidas · Cambios sin guardar",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                RealsPrimaryButton(text = "Guardar selección", onClick = onSave, enabled = canSave)
-                ProfileQuestionTextAction("Limpiar selección", onClear, canClear)
-            }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        feedback?.let { ProfileQuestionFeedbackText(it) }
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            RealsPrimaryButton(text = "Guardar selección", onClick = onSave, enabled = canSave)
+            ProfileQuestionTextAction("Limpiar selección", onClear, canClear)
         }
     }
+}
+
+@Composable
+private fun ProfileQuestionSectionTitle(title: String) {
+    Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        RealsThinDivider()
+        Text(
+            text = title,
+            style = RealsType.SectionTitle,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.semantics { heading() },
+        )
+    }
+}
+
+@Composable
+private fun ProfileQuestionDescription(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+@Composable
+private fun ProfileQuestionFeedbackText(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = modifier.semantics { liveRegion = LiveRegionMode.Polite },
+    )
 }
 
 @Composable
@@ -497,11 +565,16 @@ private fun ProfileQuestionCard(
                 )
             }
             visibility?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Surface(
+                    shape = RoundedCornerShape(RealsRadii.Row),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                ) {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
+                }
             }
             content()
         }
