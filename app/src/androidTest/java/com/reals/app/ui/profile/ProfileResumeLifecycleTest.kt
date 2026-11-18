@@ -46,7 +46,7 @@ class ProfileResumeLifecycleTest {
             owner.registry.currentState = Lifecycle.State.RESUMED
         }
         compose.onNodeWithText("Tu respuesta").assertTextContains("Borrador independiente").assertIsFocused()
-        compose.onNodeWithText("Posición 1").assertExists()
+        compose.onNodeWithText("Pública · Posición 1").assertExists()
         compose.onNodeWithText("Guardar", substring = false).assertIsEnabled()
         compose.onNodeWithText("Actualizando preguntas…").assertDoesNotExist()
         compose.runOnIdle { assertEquals(2, resumes); assertEquals(0, retries) }

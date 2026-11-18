@@ -53,11 +53,10 @@ class ProfileQuestionOperationHandler(
         val profile = (current.session.profileSnapshot as? ProfileSnapshot.Found)?.profile ?: return
         if (profile.status != ProfileStatus.Draft && profile.status != ProfileStatus.Active) return
         ownerSession = current.session
-        if (current.profileQuestions.mutation != null) return
-        if (current.profileQuestions.loading || current.profileQuestions.refreshing) return
+        val state = current.profileQuestions
+        if (state.mutation != null || state.loading || state.refreshing || (state.open && state.revalidating)) return
 
-        val retained = current.profileQuestions
-            .takeIf { it.profileId == profile.id && it.catalog != null }
+        val retained = state.takeIf { it.profileId == profile.id && it.catalog != null }
         val activeMutationForProfile = activeMutation
             ?.takeIf {
                 mutationJob?.isActive == true &&
@@ -91,7 +90,8 @@ class ProfileQuestionOperationHandler(
                 catalog = retained?.catalog,
                 answers = retained?.answers.orEmpty(),
                 loading = retained == null,
-                refreshing = retained != null,
+                refreshing = retained?.uncertain == true,
+                revalidating = retained?.uncertain == false,
                 selectionDraftQuestionIds = retained?.selectionDraftQuestionIds.orEmpty(),
                 uncertain = retained?.uncertain ?: false,
             ),

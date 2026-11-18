@@ -126,6 +126,53 @@ class ProfileQuestionOperationHandlerTest {
         assertFalse(harness.ready().profileQuestions.revalidating)
     }
 
+    @Test fun `compatible reopen retains answers and draft without blocking or duplicating the read`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply { beforeGetMyProfileQuestionAnswersResponse = { gate.await() } }
+        val retained = loadedState(selectionDraft = listOf("LIFE_SOUNDTRACK_001"))
+        val harness = harness(api, initialState = ready(profileQuestions = retained))
+        harness.handler.close()
+        harness.handler.open()
+        runCurrent()
+        harness.handler.open()
+        harness.handler.onResume()
+        runCurrent()
+
+        val opening = harness.ready().profileQuestions
+        assertTrue(opening.open)
+        assertTrue(opening.revalidating)
+        assertFalse(opening.loading)
+        assertFalse(opening.refreshing)
+        assertEquals(retained.catalog, opening.catalog)
+        assertEquals(retained.answers, opening.answers)
+        assertEquals(retained.selectionDraftQuestionIds, opening.selectionDraftQuestionIds)
+        assertEquals(1, api.calls.count { it == "getMyProfileQuestionAnswers" })
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertFalse(harness.ready().profileQuestions.revalidating)
+        assertEquals(retained.selectionDraftQuestionIds, harness.ready().profileQuestions.selectionDraftQuestionIds)
+    }
+
+    @Test fun `reopen after an uncertain write blocks writes until the authorized read succeeds`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val api = FakeRealsApi().apply { beforeGetMyProfileQuestionAnswersResponse = { gate.await() } }
+        val harness = harness(api, initialState = ready(profileQuestions = loadedState().copy(uncertain = true)))
+        harness.handler.close()
+        harness.handler.open()
+        runCurrent()
+        assertTrue(harness.ready().profileQuestions.refreshing)
+        assertFalse(harness.ready().profileQuestions.revalidating)
+        assertTrue(harness.ready().profileQuestions.uncertain)
+        harness.handler.saveAnswer("PERFECT_SUNDAY_001", "Pendiente")
+        assertNull(api.upsertProfileQuestionAnswerBody)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertFalse(harness.ready().profileQuestions.refreshing)
+        assertFalse(harness.ready().profileQuestions.uncertain)
+    }
+
     @Test fun `silent read failure preserves snapshot and requires reconciliation`() = runTest {
         val api = FakeRealsApi().apply { profileQuestionAnswersResponse = backendErrorResponse(503, "UNAVAILABLE") }
         val harness = harness(api, initialState = ready(profileQuestions = loadedState()))

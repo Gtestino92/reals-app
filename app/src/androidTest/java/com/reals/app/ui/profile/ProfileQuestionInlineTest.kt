@@ -24,7 +24,7 @@ class ProfileQuestionInlineTest {
         compose.setContent { MaterialTheme { ProfileQuestionScreen(state(), {}, {}, {}, {}, {}, {}, {}, { _, _ -> writes++ }, {}) } }
         compose.onNodeWithText("Editar respuesta").performScrollTo().performClick()
         compose.onNodeWithText("Tu respuesta").performTextReplacement("Borrador")
-        compose.onNodeWithText("Posición 1").performScrollTo().assertExists()
+        compose.onNodeWithText("Pública · Posición 1").performScrollTo().assertExists()
         compose.onNodeWithText("Eliminar").assertDoesNotExist()
         compose.onNodeWithText("Quitar", substring = false).assertDoesNotExist()
         compose.onNodeWithText("Cancelar edición").performScrollTo().performClick()
@@ -58,6 +58,7 @@ class ProfileQuestionInlineTest {
         compose.onNodeWithText("Guardar", substring = false).performScrollTo().performClick()
         compose.onNodeWithText("Servidor").assertExists()
         compose.onNodeWithText("Cancelar edición").assertDoesNotExist()
+        compose.onNodeWithText("Editar respuesta").assertIsFocused()
     }
 
     @Test fun additionalQuestionsExcludeAnsweredCards() {
