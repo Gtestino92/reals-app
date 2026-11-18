@@ -134,8 +134,9 @@ class ProfileQuestionScreenTest {
         })
 
         compose.onNodeWithText("Actualizando preguntas…").assertDoesNotExist()
-        assertItemOrder("summary", "public-heading", "question-a", "question-b", "public-actions",
-            "other-heading", "question-c", "question-d", "open-questions")
+        compose.onNodeWithText("Responder nuevas preguntas").assertIsDisplayed().assertIsEnabled()
+        assertItemOrder("summary", "open-questions", "public-heading", "question-a", "question-b", "public-actions",
+            "other-heading", "question-c", "question-d")
         scrollTo("Guardar selección").assertIsNotEnabled()
         cardAction("a", "Subir").assertIsNotEnabled()
         cardAction("a", "Bajar").assertIsEnabled().performClick()

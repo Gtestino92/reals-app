@@ -38,8 +38,11 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
@@ -56,6 +59,8 @@ import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.common.FeedbackCard
 import com.reals.app.ui.common.FeedbackTone
 import com.reals.app.ui.common.RealsBrandDivider
+import com.reals.app.ui.common.RealsEditorialSurface
+import com.reals.app.ui.common.RealsSecondaryButton
 import com.reals.app.ui.theme.RealsRadii
 import com.reals.app.ui.theme.RealsType
 import com.reals.app.ui.root.supportsOwnerProfileContent
@@ -264,12 +269,32 @@ fun ProfileStatusScreen(
         }
         val confirmed = (session.profileSnapshot as? ProfileSnapshot.Found)?.profile
         if (presentationPolicy.showProfileSection && confirmed?.status in listOf(ProfileStatus.Active, ProfileStatus.Draft)) {
-            OutlinedButton(
-                onClick = { restorePreview = true; keyboard?.hide(); onOpenOwnerPreview() },
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth().padding(top = 16.dp).focusRequester(previewEntryFocus),
-            ) { Text("Vista previa de mi perfil") }
-            Text("Así se ven tus datos públicos confirmados. Los cambios sin guardar no se muestran.")
+            RealsEditorialSurface(Modifier.padding(top = 24.dp).fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = "Tu perfil público",
+                        style = RealsType.SectionTitle,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.semantics { heading() },
+                    )
+                    Text(
+                        text = "Mirá cómo se ven los datos públicos que guardaste.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    RealsSecondaryButton(
+                        text = "Vista previa de mi perfil",
+                        onClick = { restorePreview = true; keyboard?.hide(); onOpenOwnerPreview() },
+                        enabled = !busy,
+                        modifier = Modifier.fillMaxWidth()
+                            .focusRequester(previewEntryFocus)
+                            .focusProperties { canFocus = !busy },
+                    )
+                }
+            }
         }
         if (onBackHome != null) {
             Row(

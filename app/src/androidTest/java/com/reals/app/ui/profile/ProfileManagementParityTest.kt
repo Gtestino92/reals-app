@@ -3,6 +3,7 @@ package com.reals.app.ui.profile
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -57,6 +58,8 @@ class ProfileManagementParityTest {
                 profile = VisualProfile("p", "Ana", 28, "Bio", emptyList(), null, false, false, false, false, city = "Buenos Aires", countryCode = "AR")) },
             close = { preview.value = OwnerProfilePreviewState() }) } }
         compose.onNodeWithText("Nombre visible").performScrollTo().performTextReplacement("Borrador privado")
+        compose.onNodeWithText("Tu perfil público").performScrollTo()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Heading, Unit))
         compose.onNodeWithText("Vista previa de mi perfil").performScrollTo().performClick()
         compose.onNodeWithText("Buenos Aires, Argentina").assertExists()
         compose.onNodeWithText("Volver", substring = false).performClick()

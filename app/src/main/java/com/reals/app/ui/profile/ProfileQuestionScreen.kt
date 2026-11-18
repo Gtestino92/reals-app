@@ -319,6 +319,14 @@ fun ProfileQuestionScreen(
                         color = MaterialTheme.colorScheme.primary,
                     )
                 }
+                item(key = "open-questions") {
+                    RealsPrimaryButton(
+                        text = "Responder nuevas preguntas",
+                        onClick = { keyboard?.hide(); onOpenQuestions() },
+                        enabled = !busy && rows.any { it.answer == null },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 if (rows.isNotEmpty()) {
                     item(key = "public-heading") {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -370,14 +378,6 @@ fun ProfileQuestionScreen(
                             if (rows.isEmpty()) "No hay preguntas disponibles por ahora." else "Todavía no respondiste ninguna pregunta.",
                         )
                     }
-                }
-                item(key = "open-questions") {
-                    RealsPrimaryButton(
-                        text = "Responder nuevas preguntas",
-                        onClick = { keyboard?.hide(); onOpenQuestions() },
-                        enabled = !busy && rows.any { it.answer == null },
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    )
                 }
             }
         }
