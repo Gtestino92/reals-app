@@ -9,6 +9,7 @@ import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.ChatMessageReactionType
 import com.reals.app.domain.model.ChatReplyTarget
+import com.reals.app.domain.model.CounterpartAudioAccess
 import com.reals.app.domain.model.FirstChatGuidance
 import com.reals.app.domain.model.SecondChatCompletionDecision
 import com.reals.app.domain.model.SecondChatStatus
@@ -84,8 +85,11 @@ class DismissSecondChatForConnectionUseCase(
 class GetChatMessagesUseCase(
     private val chatRepository: ChatRepository,
 ) {
-    suspend operator fun invoke(chatId: String, afterMessageId: String? = null): ApiResult<List<ChatMessage>> =
-        chatRepository.getMessages(chatId, afterMessageId)
+    suspend operator fun invoke(
+        chatId: String,
+        afterMessageId: String? = null,
+        onAccess: (CounterpartAudioAccess) -> Unit,
+    ): ApiResult<List<ChatMessage>> = chatRepository.getMessages(chatId, afterMessageId, onAccess)
 }
 
 class SendChatMessageUseCase(

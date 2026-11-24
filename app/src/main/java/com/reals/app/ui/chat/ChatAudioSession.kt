@@ -9,6 +9,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,6 +25,7 @@ import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.ChatMessagePresentation
 import com.reals.app.ui.root.ChatAudioDraftUiState
 import com.reals.app.ui.root.ChatAudioUploadUiState
+import com.reals.app.ui.root.ChatHistoryOwner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -36,6 +38,7 @@ internal enum class ChatAudioStopDisposition {
 
 internal data class ChatAudioSessionInputs(
     val chatId: String?,
+    val historyOwner: ChatHistoryOwner?,
     val audioPolicy: ChatAudioPolicy?,
     val canChat: Boolean,
     val canSendMessages: Boolean,
@@ -49,6 +52,7 @@ internal data class ChatAudioSessionInputs(
 )
 
 internal data class ChatAudioSessionExternalCallbacks(
+    val resolveRemoteAudio: (String) -> ChatMessage?,
     val onTextDraftChange: (String) -> Unit,
     val onSendText: (String) -> Boolean,
     val onClearTextDraft: () -> Unit,
@@ -64,14 +68,16 @@ internal data class ChatAudioSessionExternalCallbacks(
 internal fun rememberChatAudioSessionState(
     inputs: ChatAudioSessionInputs,
     callbacks: ChatAudioSessionExternalCallbacks,
+    createPlaybackController: () -> ChatAudioPlaybackController = { ChatAudioPlaybackController() },
 ): ChatAudioSessionState {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
-    val sessionState = remember(inputs.chatId) {
+    val sessionState = remember(inputs.chatId, inputs.historyOwner) {
         ChatAudioSessionState(
             applicationContext = context.applicationContext,
             coroutineScope = coroutineScope,
+            playbackController = createPlaybackController(),
         )
     }
     val recordPermissionLauncher = rememberLauncherForActivityResult(
@@ -88,13 +94,18 @@ internal fun rememberChatAudioSessionState(
         },
     )
 
-    DisposableEffect(inputs.chatId) {
+    SideEffect { sessionState.reconcilePlayback() }
+
+    DisposableEffect(sessionState) {
+        // A stopped activity can own a paused player while Compose frames are suspended.
+        val removeListener = inputs.historyOwner?.observeWithdrawal(sessionState::reconcilePlayback)
         onDispose {
+            removeListener?.invoke()
             sessionState.disposeForChat()
         }
     }
 
-    DisposableEffect(lifecycleOwner, inputs.chatId) {
+    DisposableEffect(lifecycleOwner, sessionState) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
                 sessionState.onStoppedInBackground()
@@ -271,15 +282,24 @@ internal class ChatAudioSessionState internal constructor(
         )
     }
 
+    internal fun reconcilePlayback() = playbackController.reconcileRemoteAccess()
+
     internal fun playRemoteMessage(message: ChatMessage) {
-        val audio = (message.presentation as? ChatMessagePresentation.Audio)?.audio ?: return
+        val id = message.id
+        val generation = message.historyGeneration
+        val current = callbacks?.resolveRemoteAudio?.invoke(id) ?: return
+        if (current.historyGeneration != generation) return
+        val audio = (current.presentation as? ChatMessagePresentation.Audio)?.audio ?: return
         val url = audio.url ?: return
         playbackController.playRemote(
             messageId = message.id,
             url = url,
             durationMillis = audio.durationMillis ?: 0L,
             scope = coroutineScope,
-            refreshUrl = { currentCallbacks.onRefreshAudioUrl(message.id) },
+            isAuthorized = {
+                callbacks?.resolveRemoteAudio?.invoke(id)?.let { it.historyGeneration == generation } == true
+            },
+            refreshUrl = { currentCallbacks.onRefreshAudioUrl(id) },
         )
     }
 
@@ -307,6 +327,7 @@ internal class ChatAudioSessionState internal constructor(
     }
 
     internal fun disposeForChat() {
+        callbacks = null
         recorderController.invalidateAndReleaseAsync(deleteOutput = true)
         playbackController.release()
         localAudioInfo = null

@@ -25,17 +25,31 @@ import kotlinx.coroutines.coroutineScope
 
 internal class FirstChatCoordinator(
     private val dependencies: FirstChatFeatureDependencies,
+    private val onHistoryChanged: (ChatHistoryOwner) -> Unit = {},
+    private val onMediaConflict: (ChatHistoryOwner) -> Unit = {},
 ) {
     private val silentMessagePollingCursor = SilentChatMessagePollingCursor()
+
+    private suspend fun <T> ApiResult<T>.observePairConflict(owner: ChatHistoryOwner) =
+        owner.observeResult(this, onHistoryChanged)
+
+    private suspend fun readHistory(
+        current: RealsRootUiState.FirstChat,
+        chatId: String,
+        afterMessageId: String? = null,
+    ) = current.historyOwner.read(
+        dependencies.getChatMessages, onHistoryChanged, onMediaConflict, current.session.user.id, chatId, afterMessageId,
+    )
 
     suspend fun load(
         session: ProvisionedSession,
         matchId: String,
         chatId: String?,
+        historyOwner: ChatHistoryOwner = ChatHistoryOwner(),
     ): FirstChatLoadResult {
         val (matchResult, chatResult) = coroutineScope {
-            val matchDeferred = async { dependencies.getMatch(matchId) }
-            val chatDeferred = async { dependencies.getFirstChatForMatch(matchId) }
+            val matchDeferred = async { dependencies.getMatch(matchId).observePairConflict(historyOwner) }
+            val chatDeferred = async { dependencies.getFirstChatForMatch(matchId).observePairConflict(historyOwner) }
             matchDeferred.await() to chatDeferred.await()
         }
 
@@ -43,6 +57,7 @@ internal class FirstChatCoordinator(
             return FirstChatLoadResult.Show(
                 RealsRootUiState.FirstChat(
                     session = session,
+                    historyOwner = historyOwner,
                     matchId = matchId,
                     chatId = chatId,
                     loading = false,
@@ -65,6 +80,7 @@ internal class FirstChatCoordinator(
             return FirstChatLoadResult.Show(
                 RealsRootUiState.FirstChat(
                     session = session,
+                    historyOwner = historyOwner,
                     matchId = matchId,
                     chatId = chatId,
                     match = match,
@@ -89,14 +105,15 @@ internal class FirstChatCoordinator(
         }
 
         val (messagesResult, exitsResult) = coroutineScope {
-            val messagesDeferred = async { dependencies.getChatMessages(chat.id) }
-            val exitsDeferred = async { dependencies.getChatExitRequests(chat.id) }
+            val messagesDeferred = async { historyOwner.read(dependencies.getChatMessages, onHistoryChanged, onMediaConflict, session.user.id, chat.id) }
+            val exitsDeferred = async { dependencies.getChatExitRequests(chat.id).observePairConflict(historyOwner) }
             messagesDeferred.await() to exitsDeferred.await()
         }
 
         return FirstChatLoadResult.Show(
             RealsRootUiState.FirstChat(
                 session = session,
+                historyOwner = historyOwner,
                 matchId = matchId,
                 chatId = chat.id,
                 match = match,
@@ -109,7 +126,7 @@ internal class FirstChatCoordinator(
                 dismissedUnansweredPeriodReference =
                     dependencies.unansweredSuggestionDismissalStore.dismissedPeriod(session.user.id, chat.id),
                 loading = false,
-                error = (messagesResult as? ApiResult.Failure)?.error
+                error = (messagesResult as? ApiResult.Failure)?.error?.takeUnless { it.isBlockedMediaConflict() }
                     ?: (exitsResult as? ApiResult.Failure)?.error,
             )
         )
@@ -126,7 +143,7 @@ internal class FirstChatCoordinator(
             error = if (silent) current.error else null,
             message = if (silent) current.message else null,
         )
-        val chatResult = dependencies.getFirstChatForMatch(current.matchId)
+        val chatResult = dependencies.getFirstChatForMatch(current.matchId).observePairConflict(current.historyOwner)
         if (chatResult is ApiResult.Failure) {
             val terminalStatus = chatResult.error.firstChatTerminalStatus()
             if (terminalStatus != null) {
@@ -136,14 +153,14 @@ internal class FirstChatCoordinator(
                 )
             }
         }
-        val matchResult = dependencies.getMatch(current.matchId)
+        val matchResult = dependencies.getMatch(current.matchId).observePairConflict(current.historyOwner)
         val messageCursor = if (silent && useReactionReconciliationAlternation) {
             silentMessagePollingCursor.nextCursor(chat.id, pending.messages)
         } else {
             pending.messages.lastMessageCursor()
         }
-        val messagesResult = dependencies.getChatMessages(chat.id, messageCursor)
-        val exitsResult = dependencies.getChatExitRequests(chat.id)
+        val messagesResult = readHistory(current, chat.id, messageCursor)
+        val exitsResult = dependencies.getChatExitRequests(chat.id).observePairConflict(current.historyOwner)
         val updatedMatch = (matchResult as? ApiResult.Success)?.value ?: pending.match
         val updatedState = (chatResult as? ApiResult.Success)
             ?.let { pending.withInstalledFirstChatSnapshot(it.value) }
@@ -192,29 +209,10 @@ internal class FirstChatCoordinator(
                 } else {
                     (chatResult as? ApiResult.Failure)?.error
                         ?: (matchResult as? ApiResult.Failure)?.error
-                        ?: (messagesResult as? ApiResult.Failure)?.error
+                        ?: (messagesResult as? ApiResult.Failure)?.error?.takeUnless { it.isBlockedMediaConflict() }
                         ?: (exitsResult as? ApiResult.Failure)?.error
                 },
             )
-        )
-    }
-
-    suspend fun refreshMessagesForAudioPlayback(
-        current: RealsRootUiState.FirstChat,
-    ): RealsRootUiState.FirstChat {
-        val chat = current.chat ?: return current
-        val messagesResult = dependencies.getChatMessages(chat.id, afterMessageId = null)
-        val chatResult = dependencies.getFirstChatForMatch(current.matchId)
-        val updated = (chatResult as? ApiResult.Success)
-            ?.let { current.withInstalledFirstChatSnapshot(it.value) }
-            ?: current
-        return updated.copy(
-            messages = (messagesResult as? ApiResult.Success)?.value
-                ?.let { updated.messages.appendUnique(it) }
-                ?: updated.messages,
-            error = (messagesResult as? ApiResult.Failure)?.error
-                ?: (chatResult as? ApiResult.Failure)?.error
-                ?: current.error,
         )
     }
 
@@ -229,7 +227,7 @@ internal class FirstChatCoordinator(
         current: RealsRootUiState.FirstChat,
     ): ApiResult<List<ChatMessage>> {
         val chat = current.chat ?: return ApiResult.Success(emptyList())
-        return dependencies.getChatMessages(chat.id, current.messages.reactionReconciliationCursor())
+        return readHistory(current, chat.id, current.messages.reactionReconciliationCursor())
     }
 
     suspend fun sendMessage(
@@ -242,7 +240,7 @@ internal class FirstChatCoordinator(
         val chat = current.chat ?: return FirstChatSendResult.Show(current)
         val cursorBeforeSend = current.messages.lastMessageCursor()
         val sendStarted = FirstChatSendTiming.markNow()
-        return when (val result = dependencies.sendChatMessage(chat.id, cleanContent, localId, replyTo)) {
+        return when (val result = dependencies.sendChatMessage(chat.id, cleanContent, localId, replyTo).observePairConflict(current.historyOwner)) {
             is ApiResult.Success -> {
                 val postCompleted = FirstChatSendTiming.markNow()
                 FirstChatSendTiming.logStage(
@@ -260,7 +258,7 @@ internal class FirstChatCoordinator(
                 val (messagesResult, chatResult) = coroutineScope {
                     val messagesDeferred = async {
                         val messagesStarted = FirstChatSendTiming.markNow()
-                        dependencies.getChatMessages(chat.id, cursorBeforeSend).also {
+                        readHistory(current, chat.id, cursorBeforeSend).also {
                             FirstChatSendTiming.logStage(
                                 stage = "post_send_messages_refresh",
                                 duration = messagesStarted.elapsedNow(),
@@ -269,7 +267,7 @@ internal class FirstChatCoordinator(
                     }
                     val chatDeferred = async {
                         val snapshotStarted = FirstChatSendTiming.markNow()
-                        dependencies.getFirstChatForMatch(current.matchId).also {
+                        dependencies.getFirstChatForMatch(current.matchId).observePairConflict(current.historyOwner).also {
                             FirstChatSendTiming.logStage(
                                 stage = "post_send_first_chat_snapshot_refresh",
                                 duration = snapshotStarted.elapsedNow(),
@@ -296,7 +294,7 @@ internal class FirstChatCoordinator(
                         .appendUnique(listOf(sentMessage)),
                     optimisticMessages = current.optimisticMessages.filterNot { it.localId == localId },
                     sending = false,
-                    error = (messagesResult as? ApiResult.Failure)?.error
+                    error = (messagesResult as? ApiResult.Failure)?.error?.takeUnless { it.isBlockedMediaConflict() }
                         ?: (chatResult as? ApiResult.Failure)?.error,
                 ))
             }
@@ -342,12 +340,12 @@ internal class FirstChatCoordinator(
             file,
             clientMessageId,
             replyTo,
-        )) {
+        ).observePairConflict(current.historyOwner)) {
             is ApiResult.Success -> {
                 val sentMessage = result.value
                 val messagesWithSent = current.messages.appendUnique(listOf(sentMessage))
-                val messagesResult = dependencies.getChatMessages(chat.id, cursorBeforeSend)
-                val chatResult = dependencies.getFirstChatForMatch(current.matchId)
+                val messagesResult = readHistory(current, chat.id, cursorBeforeSend)
+                val chatResult = dependencies.getFirstChatForMatch(current.matchId).observePairConflict(current.historyOwner)
                 val updated = (chatResult as? ApiResult.Success)
                     ?.let { current.withInstalledFirstChatSnapshot(it.value) }
                     ?: current
@@ -359,7 +357,7 @@ internal class FirstChatCoordinator(
                         ),
                         optimisticMessages = current.optimisticMessages.withoutOptimisticMessage(clientMessageId),
                         audioUpload = ChatAudioUploadUiState(completedClientMessageId = clientMessageId),
-                        error = (messagesResult as? ApiResult.Failure)?.error
+                        error = (messagesResult as? ApiResult.Failure)?.error?.takeUnless { it.isBlockedMediaConflict() }
                             ?: (chatResult as? ApiResult.Failure)?.error,
                     )
                 )
@@ -455,7 +453,7 @@ internal class FirstChatCoordinator(
         error: ApiError,
     ): RealsRootUiState.FirstChat {
         if (!error.isAudioPolicyConflict()) return current
-        return (dependencies.getFirstChatForMatch(current.matchId) as? ApiResult.Success)
+        return (dependencies.getFirstChatForMatch(current.matchId).observePairConflict(current.historyOwner) as? ApiResult.Success)
             ?.let { current.withInstalledFirstChatSnapshot(it.value) }
             ?: current
     }
@@ -472,8 +470,8 @@ internal class FirstChatCoordinator(
             return null
         }
 
-        val chatResult = dependencies.getFirstChatForMatch(current.matchId)
-        val exitsResult = dependencies.getChatExitRequests(chatId)
+        val chatResult = dependencies.getFirstChatForMatch(current.matchId).observePairConflict(current.historyOwner)
+        val exitsResult = dependencies.getChatExitRequests(chatId).observePairConflict(current.historyOwner)
         val updated = (chatResult as? ApiResult.Success)
             ?.let { current.withInstalledFirstChatSnapshot(it.value) }
             ?: current
@@ -536,8 +534,8 @@ internal class FirstChatCoordinator(
             return null
         }
 
-        val chatResult = dependencies.getFirstChatForMatch(current.matchId)
-        val exitsResult = dependencies.getChatExitRequests(chatId)
+        val chatResult = dependencies.getFirstChatForMatch(current.matchId).observePairConflict(current.historyOwner)
+        val exitsResult = dependencies.getChatExitRequests(chatId).observePairConflict(current.historyOwner)
         val updated = (chatResult as? ApiResult.Success)
             ?.let { current.withInstalledFirstChatSnapshot(it.value) }
             ?: current
@@ -583,7 +581,7 @@ internal class FirstChatCoordinator(
         )
         onPending(pending)
 
-        return when (val result = dependencies.submitChatDecision(current.matchId, decision)) {
+        return when (val result = dependencies.submitChatDecision(current.matchId, decision).observePairConflict(current.historyOwner)) {
             is ApiResult.Success -> {
                 when (val state = result.value.state) {
                     MatchState.ChatActive -> {
@@ -688,7 +686,7 @@ internal class FirstChatCoordinator(
         )
         onPending(pending)
 
-        return when (val result = dependencies.requestNextFirstChatGuidanceQuestion(chat.id)) {
+        return when (val result = dependencies.requestNextFirstChatGuidanceQuestion(chat.id).observePairConflict(current.historyOwner)) {
             is ApiResult.Success -> FirstChatActionResult.Show(
                 pending.copy(
                     chat = chat.copy(guidance = result.value),
@@ -778,7 +776,12 @@ internal class FirstChatCoordinator(
                 reason,
                 cleanDetails,
                 blockUser,
-            )
+            ).also { result ->
+                if (blockUser && result is ApiResult.Success) {
+                    current.historyOwner.restrict()
+                    onHistoryChanged(current.historyOwner)
+                }
+            }
         }
     }
 
@@ -842,7 +845,7 @@ internal class FirstChatCoordinator(
         )
         onPending(pending)
 
-        return when (val result = action(chat.id)) {
+        return when (val result = action(chat.id).observePairConflict(current.historyOwner)) {
             is ApiResult.Success -> {
                 val outcome = result.value as? ChatExitOutcome
                 if (outcome != null && outcome.chat.status != ChatStatus.Active) {
@@ -860,8 +863,8 @@ internal class FirstChatCoordinator(
                     )
                 }
 
-                val chatResult = dependencies.getFirstChatForMatch(current.matchId)
-                val exitsResult = dependencies.getChatExitRequests(chat.id)
+                val chatResult = dependencies.getFirstChatForMatch(current.matchId).observePairConflict(current.historyOwner)
+                val exitsResult = dependencies.getChatExitRequests(chat.id).observePairConflict(current.historyOwner)
                 val updated = (chatResult as? ApiResult.Success)
                     ?.let { pending.withInstalledFirstChatSnapshot(it.value) }
                     ?: pending
@@ -902,7 +905,7 @@ internal class FirstChatCoordinator(
         current: RealsRootUiState.FirstChat,
     ): RealsRootUiState.FirstChat? {
         if (!error.isFirstChatDecisionOnlyConflict()) return null
-        val chatResult = dependencies.getFirstChatForMatch(current.matchId)
+        val chatResult = dependencies.getFirstChatForMatch(current.matchId).observePairConflict(current.historyOwner)
         return (chatResult as? ApiResult.Success)
             ?.let { current.withInstalledFirstChatSnapshot(it.value).copy(error = null, message = null) }
             ?: current.copy(error = (chatResult as? ApiResult.Failure)?.error ?: error, message = null)
@@ -934,9 +937,9 @@ internal class FirstChatCoordinator(
 
     suspend fun loadFullMessagesForAudioPlayback(
         current: RealsRootUiState.FirstChat,
-    ): ApiResult<List<com.reals.app.domain.model.ChatMessage>> {
-        val chat = current.chat ?: return ApiResult.Success(current.messages)
-        return dependencies.getChatMessages(chat.id, afterMessageId = null)
+    ): ApiResult<List<ChatMessage>> {
+        val chat = current.chat ?: return ApiResult.Success(emptyList())
+        return readHistory(current, chat.id, afterMessageId = null)
     }
 }
 

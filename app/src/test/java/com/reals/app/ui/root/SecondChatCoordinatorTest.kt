@@ -307,7 +307,7 @@ class SecondChatCoordinatorTest {
 
     private fun secondChatDependencies(api: FakeRealsApi): SecondChatFeatureDependencies {
         val tokenProvider = FakeAuthTokenProvider()
-        val chatRepository = ChatRepository(api, testJson, tokenProvider, testApiExecutor())
+        val chatRepository = ChatRepository(api, testJson, tokenProvider, testApiExecutor(), kotlinx.coroutines.Dispatchers.Unconfined)
         return SecondChatFeatureDependencies(
             getStatus = GetSecondChatStatusUseCase(chatRepository),
             join = JoinSecondChatUseCase(chatRepository),

@@ -57,9 +57,9 @@ import com.reals.app.data.dto.UserResponseDto
 import com.reals.app.data.dto.UserBlockResponseDto
 import com.reals.app.data.dto.VisualDecisionRequestDto
 import com.reals.app.data.dto.VisualProfileResponseDto
-import kotlinx.serialization.json.JsonElement
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
+import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
@@ -72,6 +72,7 @@ import retrofit2.http.POST
 import retrofit2.http.Part
 import retrofit2.http.PUT
 import retrofit2.http.Query
+import retrofit2.http.Streaming
 
 interface RealsApi {
     @GET("api/ping")
@@ -385,6 +386,7 @@ interface RealsApi {
         @Body body: PutMessageReactionRequestDto,
     ): Response<ChatMessageResponseDto>
 
+    @Streaming
     @GET("api/chats/{chatId}/messages")
     suspend fun getChatMessages(
         @Header("Authorization") authorization: String,
@@ -392,7 +394,7 @@ interface RealsApi {
         @Query("after") afterMessageId: String? = null,
         @Query("afterMessageId") afterMessageIdAlias: String? = null,
         @Query("limit") limit: Int? = null,
-    ): Response<JsonElement>
+    ): Response<ResponseBody>
 
     @POST("api/chats/{chatId}/guidance/next-request")
     suspend fun requestNextFirstChatGuidanceQuestion(

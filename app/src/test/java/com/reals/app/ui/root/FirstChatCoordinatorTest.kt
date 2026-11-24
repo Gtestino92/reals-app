@@ -1725,7 +1725,7 @@ class FirstChatCoordinatorTest {
     ): FirstChatFeatureDependencies {
         val tokenProvider = FakeAuthTokenProvider()
         val matchRepository = MatchRepository(api, { 0L }, tokenProvider, testApiExecutor())
-        val chatRepository = ChatRepository(api, testJson, tokenProvider, testApiExecutor())
+        val chatRepository = ChatRepository(api, testJson, tokenProvider, testApiExecutor(), kotlinx.coroutines.Dispatchers.Unconfined)
         return FirstChatFeatureDependencies(
             getMatch = GetMatchUseCase(matchRepository),
             getFirstChatForMatch = GetFirstChatForMatchUseCase(matchRepository),

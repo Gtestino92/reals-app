@@ -404,6 +404,9 @@ fun RealsApp(
                 match = current.match,
                 chat = current.chat,
                 messages = current.messages,
+                historyOwner = current.historyOwner,
+                counterpartAudioAccess = current.counterpartAudioAccess,
+                resolveRemoteAudio = { viewModel.remoteAudio(current.historyOwner, it) },
                 optimisticMessages = current.optimisticMessages,
                 pendingReactionMessageIds = current.reaction.pendingMessageIds,
                 exitRequests = current.exitRequests,
@@ -432,7 +435,10 @@ fun RealsApp(
                 onAudioDraftReady = viewModel::setFirstChatAudioDraft,
                 onAudioDraftReadyAndSend = viewModel::setAndSendFirstChatAudioDraft,
                 onDeleteAudioDraft = viewModel::deleteFirstChatAudioDraft,
-                onRefreshAudioUrl = viewModel::refreshFirstChatAudioUrl,
+                onRefreshAudioUrl = { id ->
+                    if (viewModel.remoteAudio(current.historyOwner, id) == null) null
+                    else viewModel.refreshFirstChatAudioUrl(id)
+                },
                 onRetryOptimisticMessage = viewModel::retryFirstChatMessage,
                 onReactToMessage = viewModel::reactToFirstChatMessage,
                 onApprove = { viewModel.submitFirstChatDecision(ChatContinueDecision.Approved) },
@@ -457,6 +463,9 @@ fun RealsApp(
                 match = null,
                 chat = current.chat,
                 messages = current.messages,
+                historyOwner = current.historyOwner,
+                counterpartAudioAccess = current.counterpartAudioAccess,
+                resolveRemoteAudio = { viewModel.remoteAudio(current.historyOwner, it) },
                 optimisticMessages = current.optimisticMessages,
                 pendingReactionMessageIds = current.reaction.pendingMessageIds,
                 exitRequests = current.exitRequests,
@@ -493,7 +502,10 @@ fun RealsApp(
                 onAudioDraftReady = viewModel::setSecondChatAudioDraft,
                 onAudioDraftReadyAndSend = viewModel::setAndSendSecondChatAudioDraft,
                 onDeleteAudioDraft = viewModel::deleteSecondChatAudioDraft,
-                onRefreshAudioUrl = viewModel::refreshSecondChatAudioUrl,
+                onRefreshAudioUrl = { id ->
+                    if (viewModel.remoteAudio(current.historyOwner, id) == null) null
+                    else viewModel.refreshSecondChatAudioUrl(id)
+                },
                 onRetryOptimisticMessage = viewModel::retrySecondChatMessage,
                 onReactToMessage = viewModel::reactToSecondChatMessage,
                 onApprove = {},

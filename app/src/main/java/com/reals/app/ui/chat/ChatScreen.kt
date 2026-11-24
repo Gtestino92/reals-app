@@ -13,10 +13,12 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -24,6 +26,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ErrorContext
 import com.reals.app.core.security.TextSafety
@@ -35,9 +40,11 @@ import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatMessage
+import com.reals.app.domain.model.ChatMessageType
 import com.reals.app.domain.model.ChatReplyDraft
 import com.reals.app.domain.model.ChatStatus
 import com.reals.app.domain.model.ChatType
+import com.reals.app.domain.model.CounterpartAudioAccess
 import com.reals.app.domain.model.FirstChatGuidance
 import com.reals.app.domain.model.Match
 import com.reals.app.domain.model.MatchState
@@ -46,12 +53,13 @@ import com.reals.app.domain.model.isFirstChatDecisionOnlyForCurrentUser
 import com.reals.app.ui.common.ApiErrorFeedbackCard
 import com.reals.app.ui.root.ChatAudioDraftUiState
 import com.reals.app.ui.root.ChatAudioUploadUiState
+import com.reals.app.ui.root.ChatHistoryOwner
 import com.reals.app.ui.root.OptimisticOutgoingMessage
 import com.reals.app.ui.root.SecondChatLifecycleUiState
 import com.reals.app.ui.root.canReturnHomeAfterPartnerEntryCutoff
+import com.reals.app.ui.root.remainingReadOnlyMillis
 import com.reals.app.ui.root.resolutionPresentation
 import com.reals.app.ui.root.timingPresentation
-import java.time.Instant
 import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -99,6 +107,9 @@ fun ChatScreen(
     chat: Chat?,
     messages: List<ChatMessage>,
     optimisticMessages: List<OptimisticOutgoingMessage>,
+    historyOwner: ChatHistoryOwner? = null,
+    counterpartAudioAccess: CounterpartAudioAccess = CounterpartAudioAccess.UNKNOWN,
+    resolveRemoteAudio: (String) -> ChatMessage? = { id -> messages.find { it.id == id && !it.withdrawn } },
     pendingReactionMessageIds: Set<String> = emptySet(),
     exitRequests: List<ChatExitRequest>,
     serverClockSnapshot: ServerClockSnapshot? = null,
@@ -158,6 +169,12 @@ fun ChatScreen(
     var replyDraft by rememberSaveable(chat?.id, saver = ChatReplyDraftMutableStateSaver) {
         mutableStateOf<ChatReplyDraft?>(null)
     }
+    LaunchedEffect(replyDraft, counterpartAudioAccess, currentUserId) {
+        val target = replyDraft as? ChatReplyDraft.Message
+        if (counterpartAudioAccess == CounterpartAudioAccess.RESTRICTED &&
+            target?.messageType == ChatMessageType.Audio && target.senderId != currentUserId
+        ) replyDraft = null
+    }
     var safetyReportForm by rememberSaveable(chat?.id, stateSaver = ChatSafetyReportFormStateSaver) {
         mutableStateOf(ChatSafetyReportFormState.initial())
     }
@@ -189,7 +206,7 @@ fun ChatScreen(
     val secondChatReadOnlyFuture = chat?.chatType == ChatType.SecondChat &&
         secondChatTerminalReadable &&
         readOnlyUntilInstant != null &&
-        Instant.ofEpochMilli(nowMillis).isBefore(readOnlyUntilInstant)
+        (secondChatLifecycle?.remainingReadOnlyMillis(nowMillis) ?: (readOnlyUntilInstant.toEpochMilli() - nowMillis)) > 0
     val secondChatUnavailable = chat?.chatType == ChatType.SecondChat &&
         (
             chat.status in listOf(
@@ -226,6 +243,7 @@ fun ChatScreen(
     val audioSession = rememberChatAudioSessionState(
         inputs = ChatAudioSessionInputs(
             chatId = chat?.id,
+            historyOwner = historyOwner,
             audioPolicy = audioPolicy,
             canChat = canChat,
             canSendMessages = canSendMessages,
@@ -238,6 +256,7 @@ fun ChatScreen(
             draft = audioDraft,
         ),
         callbacks = ChatAudioSessionExternalCallbacks(
+            resolveRemoteAudio = { id -> resolveRemoteAudio(id).takeIf { canChat || secondChatReadOnlyFuture } },
             onTextDraftChange = { value: String ->
                 draft = value
             },
@@ -390,7 +409,25 @@ fun ChatScreen(
         return
     }
 
-    val pollChat = chatPollingEnabled(firstChatPolicy.pollingEnabled && !audioInteractionBusy)
+    val pollChat = chatPollingEnabled((firstChatPolicy.pollingEnabled || secondChatReadOnlyFuture) && !audioInteractionBusy)
+    val latestRefresh by rememberUpdatedState(onRefresh)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, historyOwner, pollChat) {
+        // LifecycleRegistry replays ON_RESUME on registration. Only act on a real return.
+        var leftForeground = !lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE -> leftForeground = true
+                Lifecycle.Event.ON_RESUME -> {
+                    if (leftForeground && pollChat) latestRefresh()
+                    leftForeground = false
+                }
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     LaunchedEffect(chat?.id, pollChat) {
         while (pollChat) {
             delay(2000.milliseconds)
@@ -398,10 +435,12 @@ fun ChatScreen(
         }
     }
 
-    LaunchedEffect(chat?.id, firstChatLifecycle?.deadline) {
+    LaunchedEffect(chat?.id, firstChatLifecycle?.deadline, chat?.status, readOnlyUntilInstant, secondChatLifecycle?.statusReceivedAtMillis) {
         while (
             firstChatLifecycleUiState(chat)?.expired == false ||
-            secondChatLifecycle?.timingPresentation(nowMillis)?.genuinelyActive == true
+            secondChatLifecycle?.timingPresentation(nowMillis)?.genuinelyActive == true ||
+            (secondChatTerminalReadable && readOnlyUntilInstant != null &&
+                (secondChatLifecycle?.remainingReadOnlyMillis(nowMillis) ?: (readOnlyUntilInstant.toEpochMilli() - nowMillis)) > 0)
         ) {
             delay(1_000.milliseconds)
             nowMillis = System.currentTimeMillis()

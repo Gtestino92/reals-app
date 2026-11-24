@@ -262,6 +262,7 @@ class FakeRealsApi : RealsApi {
     )
     var chatAudioMessageResponse: Response<ChatMessageResponseDto> =
         Response.success(TestDtos.audioChatMessage())
+    var chatHistoryHeaders = okhttp3.Headers.Builder().add("X-Reals-Counterpart-Audio-Access", "ALLOWED").build()
     var chatMessagesResponse: Response<JsonElement> = Response.success(TestDtos.chatMessagesArrayPayload())
     var firstChatGuidanceResponse: Response<FirstChatGuidanceResponseDto> =
         Response.success(TestDtos.firstChatGuidance())
@@ -709,12 +710,17 @@ class FakeRealsApi : RealsApi {
         afterMessageId: String?,
         afterMessageIdAlias: String?,
         limit: Int?,
-    ): Response<JsonElement> =
+    ): Response<okhttp3.ResponseBody> =
         record("getChatMessages", authorization, chatId, beforeResponse = beforeGetChatMessagesResponse) {
             lastChatMessagesLimit = limit
             lastChatMessagesAfter = afterMessageId
             lastChatMessagesAfterAlias = afterMessageIdAlias
-            chatMessagesResponse
+            val response = chatMessagesResponse
+            if (response.isSuccessful) {
+                Response.success(response.body().toString().toResponseBody(), chatHistoryHeaders)
+            } else {
+                Response.error(checkNotNull(response.errorBody()), response.raw())
+            }
         }
 
     override suspend fun requestNextFirstChatGuidanceQuestion(

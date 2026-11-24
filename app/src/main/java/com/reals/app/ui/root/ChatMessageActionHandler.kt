@@ -4,8 +4,10 @@ import com.reals.app.core.network.ApiError
 import com.reals.app.core.security.TextSafety
 import com.reals.app.domain.model.ChatAudioUnavailableReason
 import com.reals.app.domain.model.ChatExitRequestStatus
+import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.ChatMessageReactionType
 import com.reals.app.domain.model.ChatMessageReply
+import com.reals.app.domain.model.ChatMessageType
 import com.reals.app.domain.model.ChatReplyDraft
 import com.reals.app.domain.model.ChatReplyTarget
 import com.reals.app.domain.model.toOptimisticReply
@@ -33,6 +35,7 @@ internal object ChatMessageActionHandler {
         if (chat.isFirstChatDecisionOnly()) {
             return ChatMessageSendPreparation.Ignored
         }
+        if (replyDraft.targetsUnavailableAudio(current.messages, current.session.user.id)) return ChatMessageSendPreparation.Ignored
         return prepareSend(
             content = content,
             replyDraft = replyDraft,
@@ -82,6 +85,9 @@ internal object ChatMessageActionHandler {
             it.filePath == filePath && it.clientMessageId == clientMessageId
         }
 
+        if (matchingDraft?.sendPayloadLocked != true && replyDraft.targetsUnavailableAudio(current.messages, current.session.user.id)) {
+            return ChatAudioSendPreparation.Ignored
+        }
         val lockedReplyTo = if (matchingDraft?.sendPayloadLocked == true) {
             matchingDraft.sendReplyTo
         } else {
@@ -142,6 +148,7 @@ internal object ChatMessageActionHandler {
             return ChatMessageSendPreparation.Ignored
         }
         val chat = current.chat ?: return ChatMessageSendPreparation.Ignored
+        if (replyDraft.targetsUnavailableAudio(current.messages, current.session.user.id)) return ChatMessageSendPreparation.Ignored
         return prepareSend(
             content = content,
             replyDraft = replyDraft,
@@ -188,6 +195,9 @@ internal object ChatMessageActionHandler {
             it.filePath == filePath && it.clientMessageId == clientMessageId
         }
 
+        if (matchingDraft?.sendPayloadLocked != true && replyDraft.targetsUnavailableAudio(current.messages, current.session.user.id)) {
+            return ChatAudioSendPreparation.Ignored
+        }
         val lockedReplyTo = if (matchingDraft?.sendPayloadLocked == true) {
             matchingDraft.sendReplyTo
         } else {
@@ -444,7 +454,7 @@ internal object ChatMessageActionHandler {
     private fun messageCanReceiveReaction(
         messageId: String,
         currentUserId: String,
-        messages: List<com.reals.app.domain.model.ChatMessage>,
+        messages: List<ChatMessage>,
         pendingMessageIds: Set<String>,
     ): Boolean {
         if (messageId in pendingMessageIds) return false
@@ -503,3 +513,8 @@ internal fun ChatReactionUiState.withPendingReaction(messageId: String): ChatRea
 
 internal fun ChatReactionUiState.withoutPendingReaction(messageId: String): ChatReactionUiState =
     copy(pendingMessageIds = pendingMessageIds - messageId)
+
+private fun ChatReplyDraft?.targetsUnavailableAudio(messages: List<ChatMessage>, userId: String): Boolean =
+    this is ChatReplyDraft.Message && (messages.any { it.id == targetId && it.withdrawn } ||
+        (messageType == ChatMessageType.Audio && senderId != userId &&
+            messages.none { it.id == targetId && it.audio?.isUsable == true }))
