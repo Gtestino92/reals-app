@@ -47,7 +47,7 @@ internal fun reactableIncomingMessageIds(
         .subList(boundaryIndex + 1, latestIncomingIndex + 1)
         .asSequence()
         .filter { it.senderId != currentUserId }
-        .filter { it.reactionType == null }
+        .filter { !it.withdrawn && it.reactionType == null }
         .filter { it.presentation is ChatMessagePresentation.Text || it.presentation is ChatMessagePresentation.Audio }
         .mapTo(LinkedHashSet()) { it.id }
 }
@@ -62,6 +62,14 @@ internal fun List<ChatMessage>.appendUnique(newMessages: List<ChatMessage>): Lis
     }
     return mergedById.values.sortedWith(chatMessageOrder)
 }
+
+internal fun List<ChatMessage>.withConfirmedReaction(id: String, response: ChatMessage): List<ChatMessage> =
+    map { row ->
+        if (!row.withdrawn && row.id == id && response.id == id && row.senderId == response.senderId &&
+            row.chatSessionId == response.chatSessionId && row.messageType == response.messageType
+        ) row.copy(reactionType = response.reactionType ?: row.reactionType)
+        else row
+    }
 
 private fun ChatMessage.mergeWithIncoming(incoming: ChatMessage): ChatMessage =
     incoming.copy(

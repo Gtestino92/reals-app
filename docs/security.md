@@ -64,6 +64,22 @@ The `local` flavor permits cleartext only for local Android development hosts ne
 reverse workflow. The `dev` and `prod` flavors prohibit cleartext traffic and reject localhost, loopback,
 emulator-only, and placeholder backend URLs at build time.
 
+## Participant chat audio
+
+Deploy the history-header backend before the Android client. Every successful participant history GET, including an empty incremental page, carries `Cache-Control: no-store` and one `X-Reals-Counterpart-Audio-Access` value. The authenticated Android API client has no configured OkHttp response cache. The history endpoint streams the raw body so Android can apply the header before reading JSON. It uses the ordinary Firebase, App Check and invalid-token refresh path.
+
+| Input or transition | First Chat and Second Chat behavior |
+| --- | --- |
+| One exact `ALLOWED` value | Fresh history rows can provide counterpart audio while the chat is readable. A bounded or empty page can omit an already authorized message. URL renewal requires the target in the response. |
+| Missing, duplicate, combined or unrecognized value | Access becomes UNKNOWN. Remove previous counterpart sources. Recovery requires a subsequent authorized read and a fresh source for each message. |
+| One exact `RESTRICTED` value or an owned HTTP 409 `USER_PAIR_BLOCKED` | Retire counterpart audio immediately. The decision survives decoding errors, delayed coordinator results, mutations and later ALLOWED headers for this chat entry. Existing lifecycle rules govern navigation, text and the participant's own audio. |
+| Withdrawal during playback or composition | The access owner signals the playback session even when Compose frames are suspended. The session releases the affected player, invalidates its generation, cancels renewal and rejects obsolete callbacks. Confirmed quotes and locked send payloads survive. A newly composed reply cannot target withdrawn audio. |
+| Session or chat replacement | Each entry owns a separate history generation. History decisions and playable sources stay in memory. |
+
+Withdrawn rows keep the server ID, chat ID, sender, type and time needed for ordering, cursor advancement and sender boundaries. The message list excludes them from bubbles and actions. A HEART response can confirm reaction metadata on its original target. History reads supply media capabilities.
+
+Focused JVM tests exercise Retrofit headers, malformed bodies, history and mutation races, and renewal in both chats. A Pixel 8 API 36 emulator instrumentation test exercised the Compose session with a recording player adapter and verified release during preparation, playback and pause. Physical-device playback and hosted two-participant validation remain outstanding. A previously issued signed URL can remain usable outside the app until it expires.
+
 ## Release Obfuscation
 
 Release builds use R8 code shrinking, optimization, obfuscation, and resource shrinking. This is defense in depth and a

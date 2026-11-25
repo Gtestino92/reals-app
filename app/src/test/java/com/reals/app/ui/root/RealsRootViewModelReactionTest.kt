@@ -8,43 +8,20 @@ import com.reals.app.testutil.FakeRealsApi
 import com.reals.app.testutil.TestDomain
 import com.reals.app.testutil.TestDtos
 import com.reals.app.testutil.backendErrorResponse
-import com.reals.app.testutil.testJson
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.encodeToJsonElement
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.Before
 import org.junit.Test
 import retrofit2.Response
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class RealsRootViewModelReactionTest {
-    private val dispatcher = StandardTestDispatcher()
-
-    @Before
-    fun setUp() {
-        Dispatchers.setMain(dispatcher)
-    }
-
-    @After
-    fun tearDown() {
-        Dispatchers.resetMain()
-    }
-
+class RealsRootViewModelReactionTest : ChatHistoryViewModelFixture() {
     @Test
     fun `first chat valid tap marks pending immediately without global loading`() = runTest(dispatcher) {
         val release = CompletableDeferred<Unit>()
@@ -98,7 +75,7 @@ class RealsRootViewModelReactionTest {
                     releaseFirst.await()
                 }
             }
-            chatMessageReactionResponse = Response.success(TestDtos.chatMessage("b", reactionType = "HEART"))
+            chatMessageReactionResponse = Response.success(TestDtos.chatMessage("b", reactionType = "HEART", senderId = "other"))
         }
         val viewModel = viewModel(api)
         viewModel.setState(firstChatState(messages = listOf(
@@ -110,7 +87,7 @@ class RealsRootViewModelReactionTest {
         firstStarted.await()
         assertTrue(viewModel.reactToFirstChatMessage("b"))
         advanceUntilIdle()
-        api.chatMessageReactionResponse = Response.success(TestDtos.chatMessage("a", reactionType = "HEART"))
+        api.chatMessageReactionResponse = Response.success(TestDtos.chatMessage("a", reactionType = "HEART", senderId = "other"))
         releaseFirst.complete(Unit)
         advanceUntilIdle()
 
@@ -142,7 +119,7 @@ class RealsRootViewModelReactionTest {
     @Test
     fun `canonical success merges heart and clears only that pending id`() = runTest(dispatcher) {
         val api = FakeRealsApi().apply {
-            chatMessageReactionResponse = Response.success(TestDtos.chatMessage("a", reactionType = "HEART"))
+            chatMessageReactionResponse = Response.success(TestDtos.chatMessage("a", reactionType = "HEART", senderId = "other"))
         }
         val viewModel = viewModel(api)
         viewModel.setState(firstChatState(messages = listOf(
@@ -186,7 +163,7 @@ class RealsRootViewModelReactionTest {
         assertEquals(setOf("a"), afterFailure.reaction.pendingMessageIds)
         assertEquals(null, afterFailure.messages.single { it.id == "b" }.reactionType)
 
-        api.chatMessageReactionResponse = Response.success(TestDtos.chatMessage("a", reactionType = "HEART"))
+        api.chatMessageReactionResponse = Response.success(TestDtos.chatMessage("a", reactionType = "HEART", senderId = "other"))
         releaseFirst.complete(Unit)
         advanceUntilIdle()
 
@@ -271,7 +248,7 @@ class RealsRootViewModelReactionTest {
     fun `reaction not available preserves unrelated chat feedback`() = runTest(dispatcher) {
         val api = FakeRealsApi().apply {
             chatMessageReactionResponse = backendErrorResponse(409, "CHAT_MESSAGE_REACTION_NOT_AVAILABLE")
-            chatMessagesResponse = chatMessagesPayload(listOf(TestDtos.chatMessage("incoming")))
+            chatMessagesResponse = chatMessagesPayload(listOf(TestDtos.chatMessage("incoming", senderId = "other")))
         }
         val viewModel = viewModel(api)
         val existingError = ApiError.Unexpected("previous error")
@@ -312,7 +289,7 @@ class RealsRootViewModelReactionTest {
         val api = FakeRealsApi().apply {
             chatMessageReactionResponse = backendErrorResponse(409, "CHAT_MESSAGE_REACTION_NOT_AVAILABLE")
             chatMessagesResponse = chatMessagesPayload(listOf(
-                TestDtos.chatMessage("incoming", reactionType = "HEART"),
+                TestDtos.chatMessage("incoming", reactionType = "HEART", senderId = "other"),
             ))
         }
         val viewModel = viewModel(api)
@@ -332,7 +309,7 @@ class RealsRootViewModelReactionTest {
         val release = CompletableDeferred<Unit>()
         val api = FakeRealsApi().apply {
             beforePutChatMessageReactionResponse = { release.await() }
-            chatMessagesResponse = chatMessagesPayload(listOf(TestDtos.chatMessage("incoming")))
+            chatMessagesResponse = chatMessagesPayload(listOf(TestDtos.chatMessage("incoming", senderId = "other")))
         }
         val viewModel = viewModel(api)
         viewModel.setState(firstChatState(messages = listOf(message("incoming", senderId = "other"))))
@@ -353,8 +330,8 @@ class RealsRootViewModelReactionTest {
     @Test
     fun `stale poll null after reaction success cannot erase heart`() = runTest(dispatcher) {
         val api = FakeRealsApi().apply {
-            chatMessageReactionResponse = Response.success(TestDtos.chatMessage("incoming", reactionType = "HEART"))
-            chatMessagesResponse = chatMessagesPayload(listOf(TestDtos.chatMessage("incoming")))
+            chatMessageReactionResponse = Response.success(TestDtos.chatMessage("incoming", reactionType = "HEART", senderId = "other"))
+            chatMessagesResponse = chatMessagesPayload(listOf(TestDtos.chatMessage("incoming", senderId = "other")))
         }
         val viewModel = viewModel(api)
         viewModel.setState(firstChatState(messages = listOf(message("incoming", senderId = "other"))))
@@ -377,8 +354,8 @@ class RealsRootViewModelReactionTest {
                 pollStarted.complete(Unit)
                 releasePoll.await()
             }
-            chatMessagesResponse = chatMessagesPayload(listOf(TestDtos.chatMessage("incoming")))
-            chatMessageReactionResponse = Response.success(TestDtos.chatMessage("incoming", reactionType = "HEART"))
+            chatMessagesResponse = chatMessagesPayload(listOf(TestDtos.chatMessage("incoming", senderId = "other")))
+            chatMessageReactionResponse = Response.success(TestDtos.chatMessage("incoming", reactionType = "HEART", senderId = "other"))
         }
         val viewModel = viewModel(api)
         viewModel.setState(firstChatState(messages = listOf(message("incoming", senderId = "other"))))
@@ -404,7 +381,7 @@ class RealsRootViewModelReactionTest {
         val api = FakeRealsApi().apply {
             beforePutChatMessageReactionResponse = { release.await() }
             chatMessageReactionResponse = backendErrorResponse(500, "SERVER_ERROR")
-            chatMessagesResponse = chatMessagesPayload(listOf(TestDtos.chatMessage("incoming", reactionType = "HEART")))
+            chatMessagesResponse = chatMessagesPayload(listOf(TestDtos.chatMessage("incoming", reactionType = "HEART", senderId = "other")))
         }
         val viewModel = viewModel(api)
         viewModel.setState(firstChatState(messages = listOf(message("incoming", senderId = "other"))))
@@ -426,7 +403,7 @@ class RealsRootViewModelReactionTest {
         val release = CompletableDeferred<Unit>()
         val api = FakeRealsApi().apply {
             beforePutChatMessageReactionResponse = { release.await() }
-            chatMessageReactionResponse = Response.success(TestDtos.chatMessage("incoming", reactionType = "HEART"))
+            chatMessageReactionResponse = Response.success(TestDtos.chatMessage("incoming", reactionType = "HEART", senderId = "other"))
         }
         val viewModel = viewModel(api)
         viewModel.setState(firstChatState(messages = listOf(message("incoming", senderId = "other"))))
@@ -445,7 +422,7 @@ class RealsRootViewModelReactionTest {
         val release = CompletableDeferred<Unit>()
         val api = FakeRealsApi().apply {
             beforePutChatMessageReactionResponse = { release.await() }
-            chatMessageReactionResponse = Response.success(TestDtos.chatMessage("incoming", reactionType = "HEART"))
+            chatMessageReactionResponse = Response.success(TestDtos.chatMessage("incoming", reactionType = "HEART", senderId = "other"))
         }
         val viewModel = viewModel(api)
         viewModel.setState(firstChatState(messages = listOf(message("incoming", senderId = "other"))))
@@ -474,8 +451,8 @@ class RealsRootViewModelReactionTest {
                 refreshStarted.complete(Unit)
                 releaseRefresh.await()
             }
-            chatMessagesResponse = chatMessagesPayload(listOf(TestDtos.chatMessage("incoming")))
-            chatMessageReactionResponse = Response.success(TestDtos.chatMessage("incoming", reactionType = "HEART"))
+            chatMessagesResponse = chatMessagesPayload(listOf(TestDtos.chatMessage("incoming", senderId = "other")))
+            chatMessageReactionResponse = Response.success(TestDtos.chatMessage("incoming", reactionType = "HEART", senderId = "other"))
         }
         val viewModel = viewModel(api)
         viewModel.setState(firstChatState(messages = listOf(message("incoming", senderId = "other"))))
@@ -511,7 +488,7 @@ class RealsRootViewModelReactionTest {
         val release = CompletableDeferred<Unit>()
         val api = FakeRealsApi().apply {
             beforePutChatMessageReactionResponse = { release.await() }
-            chatMessagesResponse = chatMessagesPayload(listOf(TestDtos.chatMessage("incoming")))
+            chatMessagesResponse = chatMessagesPayload(listOf(TestDtos.chatMessage("incoming", senderId = "other")))
         }
         val viewModel = viewModel(api)
         viewModel.setState(secondChatState(messages = listOf(message("incoming", senderId = "other"))))
@@ -551,7 +528,7 @@ class RealsRootViewModelReactionTest {
         val release = CompletableDeferred<Unit>()
         val api = FakeRealsApi().apply {
             beforePutChatMessageReactionResponse = { release.await() }
-            chatMessageReactionResponse = Response.success(TestDtos.chatMessage("incoming", reactionType = "HEART"))
+            chatMessageReactionResponse = Response.success(TestDtos.chatMessage("incoming", reactionType = "HEART", senderId = "other"))
         }
         val viewModel = viewModel(api)
         viewModel.setState(secondChatState(messages = listOf(message("incoming", senderId = "other"))))
@@ -574,8 +551,8 @@ class RealsRootViewModelReactionTest {
     @Test
     fun `second chat stale refresh cannot erase successful heart`() = runTest(dispatcher) {
         val api = FakeRealsApi().apply {
-            chatMessageReactionResponse = Response.success(TestDtos.chatMessage("incoming", reactionType = "HEART"))
-            chatMessagesResponse = chatMessagesPayload(listOf(TestDtos.chatMessage("incoming")))
+            chatMessageReactionResponse = Response.success(TestDtos.chatMessage("incoming", reactionType = "HEART", senderId = "other"))
+            chatMessagesResponse = chatMessagesPayload(listOf(TestDtos.chatMessage("incoming", senderId = "other")))
         }
         val viewModel = viewModel(api)
         viewModel.setState(secondChatState(messages = listOf(message("incoming", senderId = "other"))))
@@ -615,78 +592,6 @@ class RealsRootViewModelReactionTest {
         assertTrue(viewModel.reactToFirstChatMessage("c"))
     }
 
-    private fun viewModel(api: FakeRealsApi): RealsRootViewModel =
-        RealsRootViewModel(rootViewModelTestDependencies(api), autoRefreshSession = false)
-
-    private fun RealsRootViewModel.setState(state: RealsRootUiState) {
-        val field = RealsRootViewModel::class.java.getDeclaredField("_uiState")
-        field.isAccessible = true
-        @Suppress("UNCHECKED_CAST")
-        val stateFlow = field.get(this) as MutableStateFlow<RealsRootUiState>
-        stateFlow.value = state
-    }
-
-    private fun firstChatState(
-        messages: List<ChatMessage>,
-        matchId: String = "match-1",
-        chatId: String = "chat-1",
-        error: ApiError? = null,
-        message: String? = null,
-    ): RealsRootUiState.FirstChat =
-        RealsRootUiState.FirstChat(
-            session = TestDomain.session(),
-            matchId = matchId,
-            chatId = chatId,
-            match = TestDtos.match("CHAT_ACTIVE").toDomain(),
-            chat = TestDtos.chat(status = "ACTIVE").copy(
-                id = chatId,
-                matchId = matchId,
-                expiresAt = "2099-06-20T21:00:00Z",
-                inactivityExpiresAt = "2099-06-18T21:05:00Z",
-            ).toDomain(),
-            messages = messages,
-            error = error,
-            message = message,
-        )
-
-    private fun secondChatState(
-        messages: List<ChatMessage>,
-        connectionId: String = "connection-1",
-        chatId: String = "chat-1",
-        lifecycle: SecondChatLifecycleUiState = SecondChatLifecycleUiState(
-            status = activeSecondChatStatus().toDomain(),
-            statusReceivedAtMillis = System.currentTimeMillis(),
-        ),
-    ): RealsRootUiState.SecondChat =
-        RealsRootUiState.SecondChat(
-            session = TestDomain.session(),
-            connectionId = connectionId,
-            matchId = "match-1",
-            partnerName = "Alex",
-            chatId = chatId,
-            chat = TestDtos.chat(status = "ACTIVE").copy(
-                id = chatId,
-                connectionId = connectionId,
-                chatType = "SECOND_CHAT",
-            ).toDomain(),
-            messages = messages,
-            lifecycle = lifecycle,
-        )
-
-    private fun activeSecondChatStatus(
-        myAttendanceStatus: String = "ON_TIME",
-    ): com.reals.app.data.dto.SecondChatAttendanceResponseDto =
-        TestDtos.secondChatStatus(
-            myAttendanceStatus = myAttendanceStatus,
-            scheduledAt = "2099-06-18T21:00:00Z",
-            entryClosesAt = "2099-06-18T21:20:00Z",
-            absoluteExpiresAt = "2099-06-18T23:00:00Z",
-            serverTime = "2099-06-18T21:00:00Z",
-            mutualCompletionEligibleAt = "2099-06-18T21:10:00Z",
-            inactivityClaimableAt = "2099-06-18T21:05:00Z",
-            inactivityClosesAt = "2099-06-18T21:10:00Z",
-        )
-
     private fun message(
         id: String,
         sentAt: String = "2026-06-18T21:00:00Z",
@@ -698,7 +603,4 @@ class RealsRootViewModelReactionTest {
         content = "hola",
         sentAt = sentAt,
     )
-
-    private fun chatMessagesPayload(messages: List<com.reals.app.data.dto.ChatMessageResponseDto>): Response<JsonElement> =
-        Response.success(testJson.encodeToJsonElement(messages))
 }

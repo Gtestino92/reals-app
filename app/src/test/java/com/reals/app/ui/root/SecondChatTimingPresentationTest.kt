@@ -1324,7 +1324,7 @@ class SecondChatTimingPresentationTest {
                     receivedAtMillis = System.currentTimeMillis(),
                     readOnlyUntil = "2026-06-18T22:00:00Z",
                 ),
-            )
+            ).copy(historyOwner = (viewModel.uiState.value as RealsRootUiState.SecondChat).historyOwner)
         )
         advanceUntilIdle()
 

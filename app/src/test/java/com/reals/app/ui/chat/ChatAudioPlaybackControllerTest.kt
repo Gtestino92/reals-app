@@ -4,6 +4,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -65,6 +66,26 @@ class ChatAudioPlaybackControllerTest {
 
         assertFalse(playerA.started)
         assertEquals(ChatAudioPlaybackPhase.Idle, controller.state.phase)
+    }
+
+    @Test
+    fun `withdrawal during renewal prevents late replacement and leaves local preview alone`() = runTest {
+        val factory = FakePlayerFactory()
+        val controller = ChatAudioPlaybackController(factory)
+        val refresh = CompletableDeferred<String?>()
+        var authorized = true
+        controller.playRemote("a", "https://example.test/a", 1000, this, { authorized }) { refresh.await() }
+        factory.players.single().error()
+        yield()
+        authorized = false
+        controller.reconcileRemoteAccess()
+        refresh.complete("https://example.test/b")
+        advanceUntilIdle()
+        assertEquals(null, controller.state.key)
+        assertEquals(1, factory.players.size)
+        controller.playLocal("draft", "/tmp/synthetic", 1000, this)
+        controller.reconcileRemoteAccess()
+        assertFalse(factory.players.last().released)
     }
 
     @Test

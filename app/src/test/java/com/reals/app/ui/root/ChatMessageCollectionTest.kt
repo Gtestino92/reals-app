@@ -372,6 +372,21 @@ class ChatMessageCollectionTest {
         assertFalse("d" in reactable)
     }
 
+    @Test
+    fun `withdrawn latest incoming run preserves both cursors and excludes an older HEART target`() {
+        val time = "2026-06-18T21:00:00Z"
+        val owner = ChatHistoryOwner()
+        owner.restrict()
+        val rows = listOf(
+            message("a", time, "other"), message("b", time, "me"),
+            owner.protect(audioMessage("c", "https://example.test/audio", time).copy(senderId = "other"), "me"),
+        )
+        assertTrue(rows.last().withdrawn)
+        assertEquals("c", rows.lastMessageCursor())
+        assertEquals("a", rows.reactionReconciliationCursor())
+        assertTrue(reactableIncomingMessageIds(rows, "me").isEmpty())
+    }
+
     private fun message(
         id: String,
         sentAt: String,

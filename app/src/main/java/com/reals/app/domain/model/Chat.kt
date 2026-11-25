@@ -80,6 +80,8 @@ data class ChatPartner(
     val displayName: String,
 )
 
+enum class CounterpartAudioAccess { UNKNOWN, ALLOWED, RESTRICTED }
+
 data class ChatMessage(
     val id: String,
     val chatSessionId: String,
@@ -91,6 +93,8 @@ data class ChatMessage(
     val replyTo: ChatMessageReply? = null,
     val reactionType: ChatMessageReactionType? = null,
     val sentAt: String,
+    val historyGeneration: Long? = null,
+    val withdrawn: Boolean = false,
 ) {
     val presentation: ChatMessagePresentation
         get() = when (messageType) {

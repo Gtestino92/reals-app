@@ -1,7 +1,6 @@
 package com.reals.app.data.repository
 
 import com.reals.app.core.network.ApiExecutor
-import com.reals.app.core.network.ApiError
 import com.reals.app.core.network.ApiResult
 import com.reals.app.core.network.map
 import com.reals.app.data.api.AuthTokenProvider
@@ -17,6 +16,7 @@ import com.reals.app.data.dto.SendMessageReplyToRequestDto
 import com.reals.app.data.mapper.toDomain
 import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatReplyTarget
+import com.reals.app.domain.model.CounterpartAudioAccess
 import com.reals.app.domain.model.SecondChatCompletionDecision
 import com.reals.app.domain.model.ChatExitOutcome
 import com.reals.app.domain.model.ChatExitReason
@@ -26,8 +26,11 @@ import com.reals.app.domain.model.ChatMessageReactionType
 import com.reals.app.domain.model.FirstChatGuidance
 import com.reals.app.domain.model.SecondChatStatus
 import java.io.File
-import kotlinx.coroutines.CancellationException
-import kotlinx.serialization.SerializationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -36,12 +39,15 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import kotlinx.serialization.SerializationException
+import retrofit2.Response
 
 class ChatRepository(
     private val api: RealsApi,
     private val json: Json,
     tokenProvider: AuthTokenProvider,
     apiExecutor: ApiExecutor,
+    private val historyDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : AuthenticatedRepository(tokenProvider, apiExecutor) {
     private companion object {
         const val CHAT_MESSAGES_PAGE_LIMIT = 500
@@ -93,17 +99,38 @@ class ChatRepository(
         authorizedCall { authorization -> api.dismissSecondChatForConnection(authorization, connectionId) }
             .map { it.dismissed }
 
-    suspend fun getMessages(chatId: String, afterMessageId: String? = null): ApiResult<List<ChatMessage>> =
-        authorizedCall { authorization ->
-            api.getChatMessages(
-                authorization = authorization,
-                chatId = chatId,
-                afterMessageId = afterMessageId,
-                afterMessageIdAlias = afterMessageId,
-                limit = CHAT_MESSAGES_PAGE_LIMIT,
-            )
+    suspend fun getMessages(
+        chatId: String,
+        afterMessageId: String? = null,
+        onAccess: (CounterpartAudioAccess) -> Unit,
+    ): ApiResult<List<ChatMessage>> = authorizedCall { authorization ->
+        val response = api.getChatMessages(
+            authorization, chatId, afterMessageId, afterMessageId, CHAT_MESSAGES_PAGE_LIMIT,
+        )
+        if (!response.isSuccessful) {
+            Response.error(checkNotNull(response.errorBody()), response.raw())
+        } else {
+            response.body().use { body ->
+                currentCoroutineContext().ensureActive()
+                val decision = when (response.headers().values("X-Reals-Counterpart-Audio-Access").singleOrNull()) {
+                    "ALLOWED" -> CounterpartAudioAccess.ALLOWED
+                    "RESTRICTED" -> CounterpartAudioAccess.RESTRICTED
+                    else -> CounterpartAudioAccess.UNKNOWN
+                }
+                onAccess(decision)
+                val messages = withContext(historyDispatcher) {
+                    val payload = checkNotNull(body).string()
+                    try {
+                        json.parseToJsonElement(payload).toMessageDtos().map { it.toDomain() }
+                    } catch (_: IllegalArgumentException) {
+                        // Serialization exceptions may include excerpts containing a signed URL.
+                        throw SerializationException("Respuesta de mensajes inválida.")
+                    }
+                }
+                Response.success(messages)
+            }
         }
-            .mapChatMessages { payload -> payload.toMessageDtos().map { it.toDomain() } }
+    }
 
     suspend fun sendMessage(
         chatId: String,
@@ -257,19 +284,3 @@ private fun ChatReplyTarget.toRequestDto(): SendMessageReplyToRequestDto =
 
 private fun String.ensureM4aExtension(): String =
     if (endsWith(".m4a", ignoreCase = true)) this else "$this.m4a"
-
-private inline fun <R> ApiResult<JsonElement>.mapChatMessages(
-    transform: (JsonElement) -> R,
-): ApiResult<R> = when (this) {
-    is ApiResult.Success -> try {
-        ApiResult.Success(transform(value))
-    } catch (exception: CancellationException) {
-        throw exception
-    } catch (exception: SerializationException) {
-        ApiResult.Failure(ApiError.Unexpected(exception.message ?: "No se pudo parsear la respuesta de mensajes."))
-    } catch (exception: IllegalArgumentException) {
-        ApiResult.Failure(ApiError.Unexpected(exception.message ?: "No se pudo convertir la respuesta de mensajes."))
-    }
-
-    is ApiResult.Failure -> this
-}

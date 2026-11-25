@@ -1066,7 +1066,7 @@ internal fun rootViewModelTestDependencies(
         val profileRepository = ProfileRepository(context, api, tokenProvider, apiExecutor)
         val matchmakingRepository = MatchmakingRepository(api, tokenProvider, apiExecutor)
         val matchRepository = MatchRepository(api, { 0L }, tokenProvider, apiExecutor)
-        val chatRepository = ChatRepository(api, testJson, tokenProvider, apiExecutor)
+        val chatRepository = ChatRepository(api, testJson, tokenProvider, apiExecutor, kotlinx.coroutines.Dispatchers.Unconfined)
         val schedulingRepository = SchedulingRepository(api, tokenProvider, apiExecutor)
         val legalRepository = LegalRepository(api, tokenProvider, apiExecutor)
         val affinityQuestionRepository =

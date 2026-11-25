@@ -13,6 +13,7 @@ import com.reals.app.core.network.isLegalActionRequired
 import com.reals.app.core.network.isTerminalAuthFailure
 import com.reals.app.core.network.isUserPairBlocked
 import com.reals.app.core.time.ServerClockSnapshot
+import com.reals.app.core.time.backendInstantOrNull
 import com.reals.app.di.AppContainer
 import com.reals.app.di.RealsRootDependencies
 import com.reals.app.domain.model.ChatContinueDecision
@@ -22,6 +23,7 @@ import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.ChatReplyDraft
 import com.reals.app.domain.model.ChatStatus
+import com.reals.app.domain.model.CounterpartAudioAccess
 import com.reals.app.domain.model.CreateProfileInput
 import com.reals.app.domain.model.FirstChatGuidance
 import com.reals.app.domain.model.LegalDocumentAction
@@ -47,6 +49,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
@@ -75,8 +78,10 @@ class RealsRootViewModel(
         getProfilePhotos = getProfilePhotosUseCase,
         getHome = dependencies.home.getHome,
     )
-    private val firstChatCoordinator = FirstChatCoordinator(dependencies.firstChat)
-    private val secondChatCoordinator = SecondChatCoordinator(dependencies.secondChat)
+    private val firstChatCoordinator = FirstChatCoordinator(dependencies.firstChat, ::onHistoryChanged, ::reconcileMediaConflict)
+    private val secondChatCoordinator = SecondChatCoordinator(
+        dependencies.secondChat, onHistoryChanged = ::onHistoryChanged, onMediaConflict = ::reconcileMediaConflict,
+    )
     private val visualApprovalCoordinator = VisualApprovalCoordinator(dependencies.visualApproval)
     private val partnerProfileCoordinator = PartnerProfileCoordinator(
         dependencies.visualApproval.getVisualProfile,
@@ -159,7 +164,12 @@ class RealsRootViewModel(
         observePendingSecondChatStartedHomeOpenInvalidation()
         observePendingVisualReviewPhotoPrefetchInvalidation()
         viewModelScope.launch {
+            var previousHistoryOwner: ChatHistoryOwner? = null
             _uiState.collect { state ->
+                val owner = state.chatHistoryOwner
+                if (previousHistoryOwner !== owner) previousHistoryOwner?.recheckPlayback()
+                owner?.recheckPlayback()
+                previousHistoryOwner = owner
                 val session = (state as? RealsRootUiState.Ready)?.session
                 ownerPreviewHandler.cancelForSessionReplacement(session)
                 profileQuestionHandler.cancelForSessionReplacement(session)
@@ -169,6 +179,46 @@ class RealsRootViewModel(
         if (autoRefreshSession) {
             refreshSession()
         }
+    }
+
+    private fun onHistoryChanged(owner: ChatHistoryOwner) {
+        val current = _uiState.value
+        if (current.chatHistoryOwner === owner) installChatResult(current)
+    }
+
+    // A media conflict may arrive during initial loading or a mutation. Publish
+    // withdrawal synchronously, then use normal lifecycle reconciliation once
+    // the current operation has finished. Never replay the mutation.
+    private fun reconcileMediaConflict(owner: ChatHistoryOwner) {
+        if (_uiState.value.chatHistoryOwner !== owner || owner.lifecycleRefreshScheduled) return
+        owner.lifecycleRefreshScheduled = true
+        viewModelScope.launch {
+            kotlinx.coroutines.yield()
+            when (_uiState.value) {
+                is RealsRootUiState.FirstChat -> silentFirstChatRefreshJob?.join()
+                is RealsRootUiState.SecondChat -> silentSecondChatRefreshJob?.join()
+                else -> return@launch
+            }
+            val state = uiState.first { it.chatHistoryOwner !== owner || it.canRefreshChatHistory() }
+            if (state.chatHistoryOwner !== owner) return@launch
+            when (state) {
+                is RealsRootUiState.FirstChat -> if (state.chat != null) refreshFirstChat(silent = true)
+                is RealsRootUiState.SecondChat -> if (state.chat != null) refreshSecondChat(silent = true)
+                else -> Unit
+            }
+        }
+    }
+
+    private fun installChatResult(result: RealsRootUiState) {
+        val owner = result.chatHistoryOwner
+        if (owner != null && _uiState.value.chatHistoryOwner !== owner) return
+        val error = when (result) {
+            is RealsRootUiState.FirstChat -> listOfNotNull(result.error, result.manualBlock.error, result.audioUpload.error).firstOrNull { it.isBlockedMediaConflict() }
+            is RealsRootUiState.SecondChat -> listOfNotNull(result.error, result.manualBlock.error, result.audioUpload.error).firstOrNull { it.isBlockedMediaConflict() }
+            else -> null
+        }
+        if (error != null) owner?.restrict()
+        _uiState.value = result.protectChatHistory(_uiState.value)
     }
 
     fun refreshSession() = sessionCoordinator.refreshSession()
@@ -197,6 +247,11 @@ class RealsRootViewModel(
     fun signOut() {
         pendingSecondChatStartedHomeOpen = false
         homeCoordinator.cancelPendingVisualReviewPhotoPrefetch()
+        val state = _uiState.value
+        val legalResume = (state as? RealsRootUiState.LegalRequirements)?.resumeContext as? LegalResumeContext.ExistingState
+        if (state.chatHistoryOwner != null || legalResume?.state?.chatHistoryOwner != null) {
+            _uiState.value = RealsRootUiState.Checking
+        }
         sessionCoordinator.signOut()
     }
 
@@ -249,7 +304,7 @@ class RealsRootViewModel(
                     if (pendingSecondChatStartedHomeOpen) {
                         loadHomeForPendingSecondChatStartedOpen(current.session)
                     } else {
-                        _uiState.value = resume.state.clearLegalActionRequiredForResume()
+                        restoreLegalResumeState(resume)
                     }
                 }
             }
@@ -570,16 +625,20 @@ class RealsRootViewModel(
         if (cleanMatchId.isBlank()) return
         homeCoordinator.cancelPendingVisualReviewPhotoPrefetch()
 
+        val owner = ChatHistoryOwner()
         viewModelScope.launch {
             _uiState.value = RealsRootUiState.FirstChat(
                 session = session,
                 matchId = cleanMatchId,
                 chatId = chatId,
                 loading = true,
+                historyOwner = owner,
             )
 
-            when (val result = firstChatCoordinator.load(session, cleanMatchId, chatId)) {
-                is FirstChatLoadResult.Show -> _uiState.value = result.state
+            val result = firstChatCoordinator.load(session, cleanMatchId, chatId, owner)
+            if (_uiState.value.chatHistoryOwner !== owner) return@launch
+            when (result) {
+                is FirstChatLoadResult.Show -> installChatResult(result.state)
                 is FirstChatLoadResult.RouteHome -> {
                     homeCoordinator.hideFirstChatLocally(cleanMatchId)
                     homeCoordinator.returnHome(
@@ -626,6 +685,7 @@ class RealsRootViewModel(
         homeCoordinator.cancelPendingVisualReviewPhotoPrefetch()
         pendingSecondChatLocalExpiryKey = null
         completedSecondChatLocalExpiryKey = null
+        val owner = ChatHistoryOwner()
         viewModelScope.launch {
             _uiState.value = RealsRootUiState.SecondChat(
                 session = session,
@@ -633,28 +693,23 @@ class RealsRootViewModel(
                 matchId = cleanMatchId,
                 partnerName = partnerName,
                 loading = true,
+                historyOwner = owner,
             )
-            applySecondChatLoadResult(
-                secondChatCoordinator.load(
-                    session = session,
-                    connectionId = cleanConnectionId,
-                    matchId = cleanMatchId,
-                    partnerName = partnerName,
-                    joinIfAllowed = joinIfAllowed,
-                )
+            val result = secondChatCoordinator.load(
+                session = session,
+                connectionId = cleanConnectionId,
+                matchId = cleanMatchId,
+                partnerName = partnerName,
+                joinIfAllowed = joinIfAllowed,
+                historyOwner = owner,
             )
+            if (_uiState.value.chatHistoryOwner === owner) applySecondChatLoadResult(result)
         }
     }
 
     fun refreshSecondChat(silent: Boolean = false) {
         val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
-        if (
-            current.refreshing ||
-            current.sending ||
-            current.audioUpload.uploading ||
-            current.actionLoading ||
-            current.manualBlock.loading
-        ) return
+        if (!current.canRefreshChatHistory()) return
         if (silent && silentSecondChatRefreshJob?.isActive == true) return
         if (current.chat == null) return openSecondChat(
             connectionId = current.connectionId,
@@ -664,11 +719,11 @@ class RealsRootViewModel(
 
         val job = viewModelScope.launch {
             if (!silent) {
-                _uiState.value = current.copy(
+                installChatResult(current.copy(
                     refreshing = true,
                     error = null,
                     message = null,
-                )
+                ))
             }
             val result = secondChatCoordinator.refresh(
                 current = current,
@@ -676,6 +731,7 @@ class RealsRootViewModel(
                 useReactionReconciliationAlternation = silent,
             )
             val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return@launch
+            if (latest.historyOwner !== current.historyOwner) return@launch
             if (latest.audioUpload != current.audioUpload) return@launch
             if (latest.audioDraft != current.audioDraft) return@launch
             if (silent && (
@@ -708,7 +764,7 @@ class RealsRootViewModel(
                     )
                     val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return@launch
                     if (latest.matches(instanceKey)) {
-                        _uiState.value = result.reconcileAsyncSecondChatResult(latest) ?: return@launch
+                        installChatResult(result.reconcileAsyncSecondChatResult(latest) ?: return@launch)
                     }
                 }
                 true
@@ -754,13 +810,13 @@ class RealsRootViewModel(
                             latestDraft.clientMessageId == preparation.clientMessageId &&
                             latestDraft.filePath == preparation.file.absolutePath
                     if (canInstall) {
-                        _uiState.value = result.reconcileAsyncSecondChatResult(latest) ?: return@launch
+                        installChatResult(result.reconcileAsyncSecondChatResult(latest) ?: return@launch)
                         deleteCompletedSecondChatDraftIfMatching(
                             chatId = preparation.chatId,
                             clientMessageId = preparation.clientMessageId,
                             filePath = preparation.file.absolutePath,
                         )
-                    } else {
+                    } else if (latestDraft?.filePath != preparation.file.absolutePath) {
                         runCatching { preparation.file.delete() }
                     }
                 }
@@ -809,6 +865,21 @@ class RealsRootViewModel(
         )
     }
 
+    internal fun remoteAudio(owner: ChatHistoryOwner, messageId: String): ChatMessage? {
+        val current = _uiState.value
+        if (current.chatHistoryOwner !== owner) return null
+        val message = when (current) {
+            is RealsRootUiState.FirstChat -> if (current.canPlayHistory()) {
+                current.messages.find { it.id == messageId }?.let { owner.protect(it, current.session.user.id) }
+            } else null
+            is RealsRootUiState.SecondChat -> if (current.canPlayHistory()) {
+                current.messages.find { it.id == messageId }?.let { owner.protect(it, current.session.user.id) }
+            } else null
+            else -> null
+        }
+        return message?.takeIf { !it.withdrawn && it.audio?.isUsable == true }
+    }
+
     suspend fun refreshSecondChatAudioUrl(messageId: String): String? {
         val current = _uiState.value as? RealsRootUiState.SecondChat ?: return null
         val instanceKey = current.expiryKey()
@@ -819,9 +890,13 @@ class RealsRootViewModel(
             is ApiResult.Success -> messagesResult.value
             is ApiResult.Failure -> return null
         }
+        if (!latest.canPlayHistory()) return null
         val merged = latest.messages.appendUnique(incoming)
-        _uiState.value = latest.copy(messages = merged)
-        return merged.firstOrNull { it.id == messageId }?.audio?.url
+        installChatResult(latest.copy(messages = merged))
+        val renewed = incoming.firstOrNull { it.id == messageId } ?: return null
+        return remoteAudio(latest.historyOwner, messageId)
+            ?.takeIf { it.senderId == renewed.senderId && it.audio == renewed.audio }
+            ?.audio?.url
     }
 
     fun retrySecondChatMessage(localId: String) {
@@ -845,7 +920,7 @@ class RealsRootViewModel(
             )
             val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return@launch
             if (latest.matches(instanceKey)) {
-                _uiState.value = result.reconcileAsyncSecondChatResult(latest) ?: return@launch
+                installChatResult(result.reconcileAsyncSecondChatResult(latest) ?: return@launch)
             }
         }
     }
@@ -865,10 +940,10 @@ class RealsRootViewModel(
                     val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return@launch
                     if (!latest.matches(instanceKey)) return@launch
                     when (result) {
-                        is ApiResult.Success -> _uiState.value = latest.copy(
-                            messages = latest.messages.appendUnique(listOf(result.value)),
+                        is ApiResult.Success -> installChatResult(latest.copy(
+                            messages = latest.messages.withConfirmedReaction(preparation.messageId, result.value),
                             reaction = latest.reaction.withoutPendingReaction(preparation.messageId),
-                        )
+                        ))
                         is ApiResult.Failure -> applySecondChatReactionFailure(
                             latest = latest,
                             messageId = preparation.messageId,
@@ -890,12 +965,13 @@ class RealsRootViewModel(
         _uiState.value = current
         viewModelScope.launch {
             applySecondChatActionResult(
+                current.historyOwner,
                 secondChatCoordinator.safetyCancel(
                     current = current,
                     reason = reason,
                     details = details,
                     blockUser = blockUser,
-                    onPending = { _uiState.value = it },
+                    onPending = ::installChatResult,
                 )
             )
         }
@@ -950,11 +1026,12 @@ class RealsRootViewModel(
     fun createSecondChatNoShowClaim() {
         val current = _uiState.value as? RealsRootUiState.SecondChat ?: return
         viewModelScope.launch {
-            applySecondChatLoadResult(
+            applySecondChatLoadResultIfCurrent(
                 secondChatCoordinator.createNoShowClaim(
                     current = current,
-                    onPending = { _uiState.value = it },
-                )
+                    onPending = ::installChatResult,
+                ),
+                current.expiryKey(),
             )
         }
     }
@@ -1376,11 +1453,18 @@ class RealsRootViewModel(
                 )
             ) {
                 ManualBlockResult.Ignore -> Unit
-                is ManualBlockResult.Show -> _uiState.value = result.state
-                is ManualBlockResult.ReturnHome -> homeCoordinator.returnHome(
-                    session = result.session,
-                    message = "Bloqueaste a ésta persona. Cerramos la interacción y no volverán a ser emparejados.",
-                )
+                is ManualBlockResult.Show -> installChatResult(result.state)
+                is ManualBlockResult.ReturnHome -> {
+                    if (current.chatHistoryOwner !== _uiState.value.chatHistoryOwner) return@launch
+                    current.chatHistoryOwner?.let { owner ->
+                        owner.restrict()
+                        onHistoryChanged(owner)
+                    }
+                    homeCoordinator.returnHome(
+                        session = result.session,
+                        message = "Bloqueaste a ésta persona. Cerramos la interacción y no volverán a ser emparejados.",
+                    )
+                }
             }
         }
     }
@@ -1391,20 +1475,17 @@ class RealsRootViewModel(
 
     fun refreshFirstChat(silent: Boolean = false) {
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
-        if (
-            current.refreshing || current.sending || current.actionLoading ||
-            current.audioUpload.uploading || current.guidanceActionLoading || current.manualBlock.loading
-        ) return
+        if (!current.canRefreshChatHistory()) return
         if (silent && silentFirstChatRefreshJob?.isActive == true) return
         if (current.chat == null) return openFirstChat(current.matchId, current.chatId)
 
         val job = viewModelScope.launch {
             if (!silent) {
-                _uiState.value = current.copy(
+                installChatResult(current.copy(
                     refreshing = true,
                     error = null,
                     message = null,
-                )
+                ))
             }
             val result = firstChatCoordinator.refresh(
                 current = current,
@@ -1412,6 +1493,7 @@ class RealsRootViewModel(
                 useReactionReconciliationAlternation = silent,
             )
             val latest = _uiState.value as? RealsRootUiState.FirstChat ?: return@launch
+            if (latest.historyOwner !== current.historyOwner) return@launch
             if (latest.audioUpload != current.audioUpload) return@launch
             if (latest.audioDraft != current.audioDraft) return@launch
             if (silent && (
@@ -1430,7 +1512,7 @@ class RealsRootViewModel(
                     } else {
                         result.state.reconcileAsyncFirstChatResult(latest)
                     } ?: return@launch
-                    _uiState.value = reconciled
+                    installChatResult(reconciled)
                 }
                 is FirstChatRefreshResult.Reopen -> openFirstChat(result.matchId, result.chatId)
                 is FirstChatRefreshResult.Closed -> {
@@ -1487,6 +1569,7 @@ class RealsRootViewModel(
                 val preSendMessageIds = preparation.pendingState.messages.mapTo(HashSet()) { it.id }
                 viewModelScope.launch {
                     applyFirstChatSendResult(
+                        owner = current.historyOwner,
                         result = firstChatCoordinator.sendMessage(
                             preparation.pendingState,
                             preparation.cleanContent,
@@ -1494,6 +1577,7 @@ class RealsRootViewModel(
                             preparation.replyTo,
                             onPostAcknowledged = { sentMessage ->
                                 applyFirstChatPostAcknowledgement(
+                                    owner = current.historyOwner,
                                     sentMessage = sentMessage,
                                     localId = preparation.localId,
                                     expectedSessionUserId = expectedSessionUserId,
@@ -1546,7 +1630,7 @@ class RealsRootViewModel(
                     val latest = _uiState.value as? RealsRootUiState.FirstChat
                     val latestDraft = latest?.audioDraft
                     val canInstall =
-                        latest != null &&
+                        latest != null && latest.historyOwner === current.historyOwner &&
                         latest.matchId == matchId &&
                         latest.chatId == chatId &&
                         latest.audioUpload.uploading &&
@@ -1555,6 +1639,7 @@ class RealsRootViewModel(
                         latestDraft.filePath == preparation.file.absolutePath
                     if (canInstall) {
                         applyFirstChatSendResult(
+                            owner = current.historyOwner,
                             result = result,
                             preSendMessageIds = preSendMessageIds,
                         )
@@ -1563,7 +1648,7 @@ class RealsRootViewModel(
                             clientMessageId = preparation.clientMessageId,
                             filePath = preparation.file.absolutePath,
                         )
-                    } else {
+                    } else if (latestDraft?.filePath != preparation.file.absolutePath) {
                         runCatching { preparation.file.delete() }
                     }
                 }
@@ -1624,14 +1709,18 @@ class RealsRootViewModel(
         val chatId = current.chatId
         val messagesResult = firstChatCoordinator.loadFullMessagesForAudioPlayback(current)
         val newest = _uiState.value as? RealsRootUiState.FirstChat ?: return null
-        if (newest.matchId != matchId || newest.chatId != chatId) return null
+        if (newest.historyOwner !== current.historyOwner || newest.matchId != matchId || newest.chatId != chatId) return null
         val incoming = when (messagesResult) {
             is ApiResult.Success -> messagesResult.value
             is ApiResult.Failure -> return null
         }
+        if (!newest.canPlayHistory()) return null
         val merged = newest.messages.appendUnique(incoming)
-        _uiState.value = newest.copy(messages = merged)
-        return merged.firstOrNull { it.id == messageId }?.audio?.url
+        installChatResult(newest.copy(messages = merged))
+        val renewed = incoming.firstOrNull { it.id == messageId } ?: return null
+        return remoteAudio(newest.historyOwner, messageId)
+            ?.takeIf { it.senderId == renewed.senderId && it.audio == renewed.audio }
+            ?.audio?.url
     }
 
     fun retryFirstChatMessage(localId: String) {
@@ -1651,6 +1740,7 @@ class RealsRootViewModel(
         val preSendMessageIds = retrying.messages.mapTo(HashSet()) { it.id }
         viewModelScope.launch {
             applyFirstChatSendResult(
+                owner = current.historyOwner,
                 result = firstChatCoordinator.sendMessage(
                     retrying,
                     failedMessage.content,
@@ -1658,6 +1748,7 @@ class RealsRootViewModel(
                     failedMessage.replyTo?.toReplyTargetOrNull(),
                     onPostAcknowledged = { sentMessage ->
                         applyFirstChatPostAcknowledgement(
+                            owner = current.historyOwner,
                             sentMessage = sentMessage,
                             localId = failedMessage.localId,
                             expectedSessionUserId = expectedSessionUserId,
@@ -1686,14 +1777,14 @@ class RealsRootViewModel(
                         reactionType = preparation.reactionType,
                     )
                     val latest = _uiState.value as? RealsRootUiState.FirstChat ?: return@launch
-                    if (!latest.sameFirstChatInstance(expectedSessionUserId, expectedMatchId, expectedChatId)) {
+                    if (latest.historyOwner !== current.historyOwner || !latest.sameFirstChatInstance(expectedSessionUserId, expectedMatchId, expectedChatId)) {
                         return@launch
                     }
                     when (result) {
-                        is ApiResult.Success -> _uiState.value = latest.copy(
-                            messages = latest.messages.appendUnique(listOf(result.value)),
+                        is ApiResult.Success -> installChatResult(latest.copy(
+                            messages = latest.messages.withConfirmedReaction(preparation.messageId, result.value),
                             reaction = latest.reaction.withoutPendingReaction(preparation.messageId),
-                        )
+                        ))
                         is ApiResult.Failure -> applyFirstChatReactionFailure(
                             latest = latest,
                             messageId = preparation.messageId,
@@ -1751,6 +1842,7 @@ class RealsRootViewModel(
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
         viewModelScope.launch {
             applyFirstChatActionResult(
+                current.historyOwner,
                 firstChatCoordinator.submitDecision(
                     current = current,
                     decision = decision,
@@ -1791,6 +1883,7 @@ class RealsRootViewModel(
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
         viewModelScope.launch {
             applyFirstChatActionResult(
+                current.historyOwner,
                 firstChatCoordinator.requestMutualExit(
                     current = current,
                     onPending = { setFirstChatMutationPending(current, it) },
@@ -1803,6 +1896,7 @@ class RealsRootViewModel(
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
         viewModelScope.launch {
             applyFirstChatActionResult(
+                current.historyOwner,
                 firstChatCoordinator.cancelUnilaterally(
                     current = current,
                     onPending = { setFirstChatMutationPending(current, it) },
@@ -1817,6 +1911,7 @@ class RealsRootViewModel(
         _uiState.value = current
         viewModelScope.launch {
             applyFirstChatActionResult(
+                current.historyOwner,
                 firstChatCoordinator.safetyCancel(
                     current = current,
                     reason = reason,
@@ -1832,6 +1927,7 @@ class RealsRootViewModel(
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
         viewModelScope.launch {
             applyFirstChatActionResult(
+                current.historyOwner,
                 firstChatCoordinator.acceptExitRequest(
                     current = current,
                     exitRequestId = exitRequestId,
@@ -1845,6 +1941,7 @@ class RealsRootViewModel(
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
         viewModelScope.launch {
             applyFirstChatActionResult(
+                current.historyOwner,
                 firstChatCoordinator.rejectExitRequest(
                     current = current,
                     exitRequestId = exitRequestId,
@@ -1858,6 +1955,7 @@ class RealsRootViewModel(
         val current = _uiState.value as? RealsRootUiState.FirstChat ?: return
         viewModelScope.launch {
             applyFirstChatActionResult(
+                current.historyOwner,
                 firstChatCoordinator.timeoutExitRequest(
                     current = current,
                     exitRequestId = exitRequestId,
@@ -2037,14 +2135,15 @@ class RealsRootViewModel(
         }
     }
 
-    private suspend fun applyFirstChatActionResult(result: FirstChatActionResult) {
+    private suspend fun applyFirstChatActionResult(owner: ChatHistoryOwner, result: FirstChatActionResult) {
+        if (_uiState.value.chatHistoryOwner !== owner) return
         when (result) {
             FirstChatActionResult.Ignore -> Unit
             is FirstChatActionResult.Show -> {
                 val latest = _uiState.value as? RealsRootUiState.FirstChat
-                _uiState.value = latest?.let {
+                installChatResult(latest?.let {
                     result.state.reconcileAsyncFirstChatResult(it) ?: return
-                } ?: result.state
+                } ?: return)
             }
             is FirstChatActionResult.ReturnHome -> {
                 (_uiState.value as? RealsRootUiState.FirstChat)?.audioDraft?.deleteFile()
@@ -2080,7 +2179,7 @@ class RealsRootViewModel(
         pending: RealsRootUiState.FirstChat,
     ) {
         cancelSilentRefreshFor(current)
-        _uiState.value = pending
+        installChatResult(pending)
     }
 
     private suspend fun applyFirstChatGuidanceActionResult(
@@ -2088,12 +2187,12 @@ class RealsRootViewModel(
         original: RealsRootUiState.FirstChat,
     ) {
         if (result !is FirstChatActionResult.Show) {
-            applyFirstChatActionResult(result)
+            applyFirstChatActionResult(original.historyOwner, result)
             return
         }
 
         val latest = _uiState.value as? RealsRootUiState.FirstChat
-        if (latest == null || latest.matchId != original.matchId || latest.chatId != original.chatId) return
+        if (latest == null || latest.historyOwner !== original.historyOwner || latest.matchId != original.matchId || latest.chatId != original.chatId) return
 
         val returnedGuidance = result.state.chat?.guidance.takeIf { result.state.error == null }
         _uiState.value = latest.copy(
@@ -2107,13 +2206,15 @@ class RealsRootViewModel(
     }
 
     private suspend fun applyFirstChatSendResult(
+        owner: ChatHistoryOwner,
         result: FirstChatSendResult,
         preSendMessageIds: Set<String> = emptySet(),
     ) {
+        if (_uiState.value.chatHistoryOwner !== owner) return
         when (result) {
             is FirstChatSendResult.Show -> {
                 val latest = _uiState.value as? RealsRootUiState.FirstChat
-                _uiState.value = latest?.let {
+                installChatResult(latest?.let {
                     val reconciled = result.state.reconcileAsyncFirstChatResult(it) ?: return
                     reconciled.copy(
                         messages = it.messages.appendUnique(
@@ -2123,7 +2224,7 @@ class RealsRootViewModel(
                             }
                         )
                     )
-                } ?: result.state
+                } ?: return)
             }
             is FirstChatSendResult.ReturnHome -> {
                 (_uiState.value as? RealsRootUiState.FirstChat)?.audioDraft?.deleteFile()
@@ -2137,6 +2238,7 @@ class RealsRootViewModel(
     }
 
     private fun applyFirstChatPostAcknowledgement(
+        owner: ChatHistoryOwner,
         sentMessage: ChatMessage,
         localId: String,
         expectedSessionUserId: String,
@@ -2144,11 +2246,11 @@ class RealsRootViewModel(
         expectedChatId: String?,
     ) {
         val latest = _uiState.value as? RealsRootUiState.FirstChat ?: return
-        if (!latest.sameFirstChatInstance(expectedSessionUserId, expectedMatchId, expectedChatId)) return
-        _uiState.value = latest.copy(
+        if (latest.historyOwner !== owner || !latest.sameFirstChatInstance(expectedSessionUserId, expectedMatchId, expectedChatId)) return
+        installChatResult(latest.copy(
             messages = latest.messages.appendUnique(listOf(sentMessage)),
             optimisticMessages = latest.optimisticMessages.withoutOptimisticMessage(localId),
-        )
+        ))
     }
 
     private suspend fun applyFirstChatReactionFailure(
@@ -2159,25 +2261,28 @@ class RealsRootViewModel(
         expectedMatchId: String,
         expectedChatId: String?,
     ) {
+        if (error.isBlockedMediaConflict()) latest.historyOwner.restrict()
         val rolledBack = latest.copy(
             reaction = latest.reaction.withoutPendingReaction(messageId),
-            error = if (error.isStructuralInteractionError()) error else latest.error,
+            error = if (error.isStructuralInteractionError() && !error.isBlockedMediaConflict()) error else latest.error,
         )
-        _uiState.value = rolledBack
+        installChatResult(rolledBack)
+        if (error.isBlockedMediaConflict()) reconcileMediaConflict(latest.historyOwner)
         if ((error as? ApiError.Backend)?.backendErrorCode != BackendErrorCode.ChatMessageReactionNotAvailable) return
 
         val messagesResult = firstChatCoordinator.reconcileMessagesForReactions(rolledBack)
         val newest = _uiState.value as? RealsRootUiState.FirstChat ?: return
-        if (!newest.sameFirstChatInstance(expectedSessionUserId, expectedMatchId, expectedChatId)) return
+        if (newest.historyOwner !== latest.historyOwner || !newest.sameFirstChatInstance(expectedSessionUserId, expectedMatchId, expectedChatId)) return
         if (messagesResult is ApiResult.Success) {
-            _uiState.value = newest.copy(messages = newest.messages.appendUnique(messagesResult.value))
+            installChatResult(newest.copy(messages = newest.messages.appendUnique(messagesResult.value)))
         }
     }
 
-    private suspend fun applySecondChatActionResult(result: SecondChatActionResult) {
+    private suspend fun applySecondChatActionResult(owner: ChatHistoryOwner, result: SecondChatActionResult) {
+        if (_uiState.value.chatHistoryOwner !== owner) return
         when (result) {
             SecondChatActionResult.Ignore -> Unit
-            is SecondChatActionResult.Show -> _uiState.value = result.state
+            is SecondChatActionResult.Show -> installChatResult(result.state)
             is SecondChatActionResult.ReturnHome -> {
                 (_uiState.value as? RealsRootUiState.SecondChat)?.audioDraft?.deleteFile()
                 homeCoordinator.returnHome(
@@ -2194,18 +2299,20 @@ class RealsRootViewModel(
         error: ApiError,
         instanceKey: SecondChatExpiryKey,
     ) {
+        if (error.isBlockedMediaConflict()) latest.historyOwner.restrict()
         val rolledBack = latest.copy(
             reaction = latest.reaction.withoutPendingReaction(messageId),
-            error = if (error.isStructuralInteractionError()) error else latest.error,
+            error = if (error.isStructuralInteractionError() && !error.isBlockedMediaConflict()) error else latest.error,
         )
-        _uiState.value = rolledBack
+        installChatResult(rolledBack)
+        if (error.isBlockedMediaConflict()) reconcileMediaConflict(latest.historyOwner)
         if ((error as? ApiError.Backend)?.backendErrorCode != BackendErrorCode.ChatMessageReactionNotAvailable) return
 
         val messagesResult = secondChatCoordinator.reconcileMessagesForReactions(rolledBack)
         val newest = _uiState.value as? RealsRootUiState.SecondChat ?: return
         if (!newest.matches(instanceKey)) return
         if (messagesResult is ApiResult.Success) {
-            _uiState.value = newest.copy(messages = newest.messages.appendUnique(messagesResult.value))
+            installChatResult(newest.copy(messages = newest.messages.appendUnique(messagesResult.value)))
         }
     }
 
@@ -2213,9 +2320,9 @@ class RealsRootViewModel(
         when (result) {
             is SecondChatLoadResult.Show -> {
                 val latest = _uiState.value as? RealsRootUiState.SecondChat
-                _uiState.value = latest?.let {
+                installChatResult(latest?.let {
                     result.state.reconcileAsyncSecondChatResult(it) ?: return
-                } ?: result.state
+                } ?: return)
             }
             is SecondChatLoadResult.ReturnHome -> {
                 (_uiState.value as? RealsRootUiState.SecondChat)?.audioDraft?.deleteFile()
@@ -2242,7 +2349,7 @@ class RealsRootViewModel(
     ) {
         val latest = _uiState.value as? RealsRootUiState.SecondChat ?: return
         if (latest.matches(instanceKey)) {
-            _uiState.value = pending
+            installChatResult(pending)
         }
     }
 
@@ -2332,9 +2439,34 @@ class RealsRootViewModel(
         )
     }
 
+    private fun restoreLegalResumeState(resume: LegalResumeContext.ExistingState) {
+        val state = resume.state.clearLegalActionRequiredForResume()
+        val owner = state.chatHistoryOwner
+        if (owner == null) {
+            _uiState.value = state
+            return
+        }
+        val legal = _uiState.value as? RealsRootUiState.LegalRequirements ?: return
+        if (legal.resumeContext !== resume) return
+        val next = ChatHistoryOwner()
+        if (owner.access == CounterpartAudioAccess.RESTRICTED) next.restrict() else next.withholdUntilFreshHistory()
+        val resumed = when (state) {
+            is RealsRootUiState.FirstChat -> state.copy(historyOwner = next)
+            is RealsRootUiState.SecondChat -> state.copy(historyOwner = next)
+            else -> return
+        }
+        _uiState.value = resumed.protectChatHistory()
+    }
+
     private suspend fun applyLegalCoordinatorResult(result: LegalCoordinatorResult) {
         when (result) {
-            is LegalCoordinatorResult.Show -> _uiState.value = result.state
+            is LegalCoordinatorResult.Show -> {
+                val resume = result.state.resumeContext
+                if (resume is LegalResumeContext.ExistingState && resume.state.chatHistoryOwner != null &&
+                    (_uiState.value as? RealsRootUiState.LegalRequirements)?.resumeContext !== resume
+                ) return
+                _uiState.value = result.state
+            }
             is LegalCoordinatorResult.Satisfied -> when (val resume = result.resumeContext) {
                 LegalResumeContext.PostSession -> continueReadySession(result.session)
                 LegalResumeContext.PostReactivation -> {
@@ -2349,7 +2481,7 @@ class RealsRootViewModel(
                     if (pendingSecondChatStartedHomeOpen) {
                         loadHomeForPendingSecondChatStartedOpen(result.session)
                     } else {
-                        _uiState.value = resume.state.clearLegalActionRequiredForResume()
+                        restoreLegalResumeState(resume)
                     }
                 }
             }
@@ -2364,9 +2496,14 @@ class RealsRootViewModel(
                 if (!current.hasLegalActionRequiredError()) return@collect
                 val session = current.sessionForLegalResume() ?: return@collect
                 legalRerouteJob = launch {
+                    if (current.chatHistoryOwner !== _uiState.value.chatHistoryOwner) return@launch
+                    val retained = _uiState.value
+                    retained.chatHistoryOwner?.withholdUntilFreshHistory()
                     enterLegalRequirements(
                         session = session,
-                        resumeContext = LegalResumeContext.ExistingState(current),
+                        resumeContext = LegalResumeContext.ExistingState(
+                            if (current.chatHistoryOwner == null) current else retained.protectChatHistory()
+                        ),
                     )
                 }
             }
@@ -2432,6 +2569,7 @@ class RealsRootViewModel(
                 val session = current.blockedPairSession() ?: return@collect
                 cancelSilentRefreshFor(current)
                 pairBlockedRerouteJob = launch {
+                    if (current.chatHistoryOwner !== _uiState.value.chatHistoryOwner) return@launch
                     homeCoordinator.returnHome(
                         session = session,
                         message = "Esta interacción ya no está disponible. Actualizamos tu Home.",
@@ -2731,10 +2869,18 @@ private fun ApiError?.isUserPairBlockedError(): Boolean =
 private fun ApiError.isStructuralInteractionError(): Boolean =
     isTerminalAuthFailure() || isLegalActionRequired() || isUserPairBlocked()
 
+private fun RealsRootUiState.canRefreshChatHistory(): Boolean = when (this) {
+    is RealsRootUiState.FirstChat -> !loading && !refreshing && !sending && !audioUpload.uploading &&
+        !actionLoading && !guidanceActionLoading && !manualBlock.loading
+    is RealsRootUiState.SecondChat -> !loading && !refreshing && !sending && !audioUpload.uploading &&
+        !actionLoading && !manualBlock.loading
+    else -> false
+}
+
 private fun RealsRootUiState.FirstChat.reconcileAsyncFirstChatResult(
     displayed: RealsRootUiState.FirstChat,
 ): RealsRootUiState.FirstChat? {
-    if (!sameFirstChatInstance(displayed)) return null
+    if (historyOwner !== displayed.historyOwner || !sameFirstChatInstance(displayed)) return null
 
     val atomicPair = freshestAtomicChatServerClockPair(displayed)
     val reconciledChat = atomicPair.chat
@@ -2762,9 +2908,19 @@ private fun RealsRootUiState.FirstChat.reconcileSilentFirstChatRefreshResult(
 private fun RealsRootUiState.SecondChat.reconcileAsyncSecondChatResult(
     displayed: RealsRootUiState.SecondChat,
 ): RealsRootUiState.SecondChat? {
-    if (!sameSecondChatInstance(displayed)) return null
+    if (historyOwner !== displayed.historyOwner || !sameSecondChatInstance(displayed)) return null
+    val displayedTime = backendInstantOrNull(displayed.lifecycle.status?.serverTime)
+    val resultTime = backendInstantOrNull(lifecycle.status?.serverTime)
+    val useDisplayedStatus = displayedTime != null && (resultTime == null || displayedTime > resultTime ||
+        (displayedTime == resultTime && displayed.chat == null && displayed.lifecycle.status != null))
+    val readableChat = if (useDisplayedStatus) displayed.chat else chat
     return copy(
-        messages = displayed.messages.appendUnique(messages),
+        chat = readableChat,
+        lifecycle = if (useDisplayedStatus) lifecycle.copy(
+            status = displayed.lifecycle.status,
+            statusReceivedAtMillis = displayed.lifecycle.statusReceivedAtMillis,
+        ) else lifecycle,
+        messages = if (readableChat == null) emptyList() else displayed.messages.appendUnique(messages),
         reaction = displayed.reaction,
     )
 }
@@ -2899,18 +3055,20 @@ class RealsRootViewModelFactory(
 }
 
 private data class SecondChatExpiryKey(
+    val owner: ChatHistoryOwner,
     val connectionId: String,
     val chatId: String?,
 )
 
 private fun RealsRootUiState.SecondChat.expiryKey(): SecondChatExpiryKey =
     SecondChatExpiryKey(
+        owner = historyOwner,
         connectionId = connectionId,
         chatId = chatId ?: lifecycle.status?.chatId,
     )
 
 private fun RealsRootUiState.SecondChat.matches(key: SecondChatExpiryKey): Boolean =
-    connectionId == key.connectionId &&
+    historyOwner === key.owner && connectionId == key.connectionId &&
         (key.chatId == null || expiryKey().chatId == key.chatId)
 
 private fun RealsRootUiState.SecondChat.hasTerminalSecondChatStatus(): Boolean =

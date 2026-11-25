@@ -23,8 +23,21 @@ import java.io.File
 internal class SecondChatCoordinator(
     private val dependencies: SecondChatFeatureDependencies,
     private val nowMillis: () -> Long = { System.currentTimeMillis() },
+    private val onHistoryChanged: (ChatHistoryOwner) -> Unit = {},
+    private val onMediaConflict: (ChatHistoryOwner) -> Unit = {},
 ) {
     private val silentMessagePollingCursor = SilentChatMessagePollingCursor()
+
+    private suspend fun <T> ApiResult<T>.observePairConflict(owner: ChatHistoryOwner) =
+        owner.observeResult(this, onHistoryChanged)
+
+    private suspend fun readHistory(
+        current: RealsRootUiState.SecondChat,
+        chatId: String,
+        afterMessageId: String? = null,
+    ) = current.historyOwner.read(
+        dependencies.getChatMessages, onHistoryChanged, onMediaConflict, current.session.user.id, chatId, afterMessageId,
+    )
 
     suspend fun load(
         session: ProvisionedSession,
@@ -32,15 +45,17 @@ internal class SecondChatCoordinator(
         matchId: String,
         partnerName: String?,
         joinIfAllowed: Boolean = true,
+        historyOwner: ChatHistoryOwner = ChatHistoryOwner(),
     ): SecondChatLoadResult {
         val initial = RealsRootUiState.SecondChat(
             session = session,
+            historyOwner = historyOwner,
             connectionId = connectionId,
             matchId = matchId,
             partnerName = partnerName,
             loading = true,
         )
-        return when (val statusResult = dependencies.getStatus(connectionId)) {
+        return when (val statusResult = dependencies.getStatus(connectionId).observePairConflict(historyOwner)) {
             is ApiResult.Failure -> SecondChatLoadResult.Show(
                 initial.copy(
                     loading = false,
@@ -66,7 +81,7 @@ internal class SecondChatCoordinator(
             error = if (silent) current.error else null,
             message = if (silent) current.message else null,
         )
-        return when (val statusResult = dependencies.getStatus(current.connectionId)) {
+        return when (val statusResult = dependencies.getStatus(current.connectionId).observePairConflict(current.historyOwner)) {
             is ApiResult.Failure -> SecondChatLoadResult.Show(
                 pending.copy(
                     refreshing = false,
@@ -83,33 +98,11 @@ internal class SecondChatCoordinator(
         }
     }
 
-    suspend fun refreshMessagesForAudioPlayback(
-        current: RealsRootUiState.SecondChat,
-    ): RealsRootUiState.SecondChat {
-        val chat = current.chat ?: return current
-        val statusResult = dependencies.getStatus(current.connectionId)
-        val statusSnapshot = (statusResult as? ApiResult.Success)?.value?.receivedNow()
-        val messagesResult = dependencies.getChatMessages(chat.id, afterMessageId = null)
-        val chatResult = dependencies.getChat(chat.id)
-        return current.copy(
-            lifecycle = statusSnapshot?.let(current.lifecycle::withStatusSnapshot)
-                ?: current.lifecycle,
-            chat = (chatResult as? ApiResult.Success)?.value ?: current.chat,
-            messages = (messagesResult as? ApiResult.Success)?.value
-                ?.let { current.messages.appendUnique(it) }
-                ?: current.messages,
-            error = (statusResult as? ApiResult.Failure)?.error
-                ?: (messagesResult as? ApiResult.Failure)?.error
-                ?: (chatResult as? ApiResult.Failure)?.error
-                ?: current.error,
-        )
-    }
-
     suspend fun loadFullMessagesForAudioPlayback(
         current: RealsRootUiState.SecondChat,
     ): ApiResult<List<ChatMessage>> {
-        val chat = current.chat ?: return ApiResult.Success(current.messages)
-        return dependencies.getChatMessages(chat.id, afterMessageId = null)
+        val chat = current.chat ?: return ApiResult.Success(emptyList())
+        return readHistory(current, chat.id, afterMessageId = null)
     }
 
     suspend fun putMessageReaction(
@@ -123,7 +116,7 @@ internal class SecondChatCoordinator(
         current: RealsRootUiState.SecondChat,
     ): ApiResult<List<ChatMessage>> {
         val chat = current.chat ?: return ApiResult.Success(emptyList())
-        return dependencies.getChatMessages(chat.id, current.messages.reactionReconciliationCursor())
+        return readHistory(current, chat.id, current.messages.reactionReconciliationCursor())
     }
 
     suspend fun createNoShowClaim(
@@ -142,7 +135,7 @@ internal class SecondChatCoordinator(
             message = null,
         )
         onPending(pending)
-        return when (val result = dependencies.createNoShowClaim(current.connectionId)) {
+        return when (val result = dependencies.createNoShowClaim(current.connectionId).observePairConflict(current.historyOwner)) {
             is ApiResult.Success -> openFromStatus(
                 current = pending.copy(
                     lifecycle = pending.lifecycle.copy(claimingNoShow = false),
@@ -181,7 +174,7 @@ internal class SecondChatCoordinator(
         }
         val pending = current.pendingSecondChatAction("Enviando solicitud...")
         onPending(pending)
-        return when (val result = dependencies.createCompletionRequest(current.connectionId)) {
+        return when (val result = dependencies.createCompletionRequest(current.connectionId).observePairConflict(current.historyOwner)) {
             is ApiResult.Success -> openFromStatus(
                 current = pending.withoutSecondChatActionLoading(),
                 statusSnapshot = result.value.receivedNow(),
@@ -224,7 +217,7 @@ internal class SecondChatCoordinator(
             current.connectionId,
             requestId,
             decision,
-        )) {
+        ).observePairConflict(current.historyOwner)) {
             is ApiResult.Success -> openFromStatus(
                 current = pending.withoutSecondChatActionLoading(),
                 statusSnapshot = result.value.receivedNow(),
@@ -248,7 +241,7 @@ internal class SecondChatCoordinator(
         }
         val pending = current.pendingSecondChatAction("Enviando reclamo...")
         onPending(pending)
-        return when (val result = dependencies.createInactivityClaim(current.connectionId)) {
+        return when (val result = dependencies.createInactivityClaim(current.connectionId).observePairConflict(current.historyOwner)) {
             is ApiResult.Success -> openFromStatus(
                 current = pending.withoutSecondChatActionLoading(),
                 statusSnapshot = result.value.receivedNow(),
@@ -268,12 +261,12 @@ internal class SecondChatCoordinator(
         val chat = current.chat ?: return current
         val cursorBeforeSend = current.messages.lastMessageCursor()
 
-        return when (val result = dependencies.sendChatMessage(chat.id, cleanContent, localId, replyTo)) {
+        return when (val result = dependencies.sendChatMessage(chat.id, cleanContent, localId, replyTo).observePairConflict(current.historyOwner)) {
             is ApiResult.Success -> {
-                val statusResult = dependencies.getStatus(current.connectionId)
+                val statusResult = dependencies.getStatus(current.connectionId).observePairConflict(current.historyOwner)
                 val statusSnapshot = (statusResult as? ApiResult.Success)?.value?.receivedNow()
-                val messagesResult = dependencies.getChatMessages(chat.id, cursorBeforeSend)
-                val chatResult = dependencies.getChat(chat.id)
+                val messagesResult = readHistory(current, chat.id, cursorBeforeSend)
+                val chatResult = dependencies.getChat(chat.id).observePairConflict(current.historyOwner)
                 current.copy(
                     lifecycle = statusSnapshot?.let(current.lifecycle::withStatusSnapshot)
                         ?: current.lifecycle,
@@ -284,7 +277,7 @@ internal class SecondChatCoordinator(
                     optimisticMessages = current.optimisticMessages.filterNot { it.localId == localId },
                     sending = false,
                     error = (statusResult as? ApiResult.Failure)?.error
-                        ?: (messagesResult as? ApiResult.Failure)?.error
+                        ?: (messagesResult as? ApiResult.Failure)?.error?.takeUnless { it.isBlockedMediaConflict() }
                         ?: (chatResult as? ApiResult.Failure)?.error,
                 )
             }
@@ -322,12 +315,12 @@ internal class SecondChatCoordinator(
             file,
             clientMessageId,
             replyTo,
-        )) {
+        ).observePairConflict(current.historyOwner)) {
             is ApiResult.Success -> {
-                val statusResult = dependencies.getStatus(current.connectionId)
+                val statusResult = dependencies.getStatus(current.connectionId).observePairConflict(current.historyOwner)
                 val statusSnapshot = (statusResult as? ApiResult.Success)?.value?.receivedNow()
-                val messagesResult = dependencies.getChatMessages(chat.id, cursorBeforeSend)
-                val chatResult = dependencies.getChat(chat.id)
+                val messagesResult = readHistory(current, chat.id, cursorBeforeSend)
+                val chatResult = dependencies.getChat(chat.id).observePairConflict(current.historyOwner)
                 current.copy(
                     lifecycle = statusSnapshot?.let(current.lifecycle::withStatusSnapshot)
                         ?: current.lifecycle,
@@ -338,7 +331,7 @@ internal class SecondChatCoordinator(
                     optimisticMessages = current.optimisticMessages.withoutOptimisticMessage(clientMessageId),
                     audioUpload = ChatAudioUploadUiState(completedClientMessageId = clientMessageId),
                     error = (statusResult as? ApiResult.Failure)?.error
-                        ?: (messagesResult as? ApiResult.Failure)?.error
+                        ?: (messagesResult as? ApiResult.Failure)?.error?.takeUnless { it.isBlockedMediaConflict() }
                         ?: (chatResult as? ApiResult.Failure)?.error,
                 )
             }
@@ -401,11 +394,17 @@ internal class SecondChatCoordinator(
             reason,
             cleanDetails,
             blockUser,
-        )) {
-            is ApiResult.Success -> SecondChatActionResult.ReturnHome(
-                session = current.session,
-                message = safetyReportSuccessMessage(blockUser),
-            )
+        ).observePairConflict(current.historyOwner)) {
+            is ApiResult.Success -> {
+                if (blockUser) {
+                    current.historyOwner.restrict()
+                    onHistoryChanged(current.historyOwner)
+                }
+                SecondChatActionResult.ReturnHome(
+                    session = current.session,
+                    message = safetyReportSuccessMessage(blockUser),
+                )
+            }
 
             is ApiResult.Failure -> SecondChatActionResult.Show(
                 pending.copy(
@@ -430,7 +429,7 @@ internal class SecondChatCoordinator(
                 lifecycle = current.lifecycle.withStatusSnapshot(statusSnapshot).copy(joining = true),
                 loading = loading,
             )
-            when (val join = dependencies.join(current.connectionId)) {
+            when (val join = dependencies.join(current.connectionId).observePairConflict(current.historyOwner)) {
                 is ApiResult.Success -> join.value.receivedNow()
                 is ApiResult.Failure -> return SecondChatLoadResult.Show(
                     joining.copy(
@@ -505,7 +504,7 @@ internal class SecondChatCoordinator(
         chatId: String,
         useReactionReconciliationAlternation: Boolean = false,
     ): SecondChatLoadResult {
-        val chatResult = dependencies.getChat(chatId)
+        val chatResult = dependencies.getChat(chatId).observePairConflict(current.historyOwner)
         val cursor = when {
             current.chat?.id != chatId -> {
                 silentMessagePollingCursor.reset(chatId)
@@ -514,7 +513,7 @@ internal class SecondChatCoordinator(
             useReactionReconciliationAlternation -> silentMessagePollingCursor.nextCursor(chatId, current.messages)
             else -> current.messages.lastMessageCursor()
         }
-        val messagesResult = dependencies.getChatMessages(chatId, cursor)
+        val messagesResult = readHistory(current, chatId, cursor)
         return SecondChatLoadResult.Show(
             current.copy(
                 chat = (chatResult as? ApiResult.Success)?.value ?: current.chat,
@@ -524,7 +523,7 @@ internal class SecondChatCoordinator(
                 loading = false,
                 refreshing = false,
                 error = (chatResult as? ApiResult.Failure)?.error
-                    ?: (messagesResult as? ApiResult.Failure)?.error
+                    ?: (messagesResult as? ApiResult.Failure)?.error?.takeUnless { it.isBlockedMediaConflict() }
                     ?: current.error,
             )
         )

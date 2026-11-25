@@ -100,7 +100,7 @@ class FirstChatAsyncResultReconciliationTest {
         assertFalse(finalState.actionLoading)
         assertApprovalParticipationRequired(finalState.error)
         assertEquals(null, finalState.message)
-        assertTrue(api.calls.contains("getMatch"))
+        assertFalse(api.calls.contains("getMatch"))
     }
 
     @Test
@@ -161,7 +161,7 @@ class FirstChatAsyncResultReconciliationTest {
         assertFalse(finalState.actionLoading)
         assertApprovalParticipationRequired(finalState.error)
         assertEquals(null, finalState.message)
-        assertTrue(api.calls.contains("getMatch"))
+        assertFalse(api.calls.contains("getMatch"))
     }
 
     @Test
@@ -328,7 +328,11 @@ class FirstChatAsyncResultReconciliationTest {
             }
         }
         val viewModel = viewModel(api)
-        viewModel.setState(firstChatState(serverTime = S1, lastMessageAt = S1).copy(messages = listOf(oldAudio)))
+        val displayed = firstChatState(serverTime = S1, lastMessageAt = S1)
+        viewModel.setState(displayed.copy(
+            chat = displayed.chat?.copy(expiresAt = "2099-01-01T00:00:00Z", inactivityExpiresAt = null),
+            messages = listOf(oldAudio),
+        ))
 
         assertTrue(viewModel.sendFirstChatMessage("hola"))
         runCurrent()
@@ -457,7 +461,10 @@ class FirstChatAsyncResultReconciliationTest {
         runCurrent()
         refreshStarted.await()
 
-        viewModel.setState(firstChatState(serverTime = S3, lastMessageAt = S3).copy(refreshing = true))
+        viewModel.setState(firstChatState(serverTime = S3, lastMessageAt = S3).copy(
+            historyOwner = (viewModel.uiState.value as RealsRootUiState.FirstChat).historyOwner,
+            refreshing = true,
+        ))
 
         gate.complete(Unit)
         advanceUntilIdle()
@@ -489,6 +496,7 @@ class FirstChatAsyncResultReconciliationTest {
 
         val period = "own:own-1"
         viewModel.setState(firstChatState(serverTime = S1, lastMessageAt = S1).copy(
+            historyOwner = (viewModel.uiState.value as RealsRootUiState.FirstChat).historyOwner,
             refreshing = true,
             dismissedUnansweredPeriodReference = period,
         ))

@@ -215,6 +215,10 @@ Acceptance criteria:
 
 ## 8. Production media UX
 
+Participant audio access handling and emulator evidence are recorded in [security.md](security.md#participant-chat-audio). Remaining validation includes physical-device playback, background/resume and two authenticated participants against a deployed backend.
+
+Android requests up to 500 messages per history read. Initial snapshots are bounded and the client does not drain incremental `hasMore` pages in one refresh. Subsequent polls advance the message cursor. Retired counterpart rows still participate in cursor and sender-run calculations. Read-only Second Chat playback depends on the backend status, its receipt time and the remaining history window.
+
 Future work:
 - Better loading states for photos.
 - Better broken-image fallback.

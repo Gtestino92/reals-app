@@ -80,6 +80,12 @@ internal class ChatAudioPlaybackController(
     var state by mutableStateOf(ChatAudioPlaybackUiState())
         private set
 
+    private var remoteAuthorization: (() -> Boolean)? = null
+
+    fun reconcileRemoteAccess() {
+        if (remoteAuthorization?.invoke() == false) release()
+    }
+
     private var mediaPlayer: ChatAudioPlayer? = null
     private var retainedPositionMillis: Int = 0
     private var activeGeneration: Long = 0L
@@ -91,6 +97,7 @@ internal class ChatAudioPlaybackController(
         durationMillis: Long,
         scope: CoroutineScope,
     ) {
+        remoteAuthorization = null
         play(
             key = key,
             source = filePath,
@@ -105,8 +112,11 @@ internal class ChatAudioPlaybackController(
         url: String,
         durationMillis: Long,
         scope: CoroutineScope,
+        isAuthorized: () -> Boolean = { true },
         refreshUrl: suspend () -> String?,
     ) {
+        if (!isAuthorized()) return
+        remoteAuthorization = isAuthorized
         play(
             key = messageId,
             source = url,
@@ -227,6 +237,10 @@ internal class ChatAudioPlaybackController(
                     safeReleaseObsolete(callbackPlayer)
                     return@setOnPreparedListener
                 }
+                if (remoteAuthorization?.invoke() == false) {
+                    release()
+                    return@setOnPreparedListener
+                }
                 runCatching {
                     callbackPlayer.start()
                     if (owns(generation, callbackPlayer, key)) {
@@ -304,6 +318,10 @@ internal class ChatAudioPlaybackController(
             safeReleaseObsolete(player)
             return
         }
+        if (remoteAuthorization?.invoke() == false) {
+            release()
+            return
+        }
         debugPlayback(
             key = key,
             phase = state.phase,
@@ -321,8 +339,16 @@ internal class ChatAudioPlaybackController(
         }
         refreshJob?.cancel()
         refreshJob = scope.launch {
+            if (remoteAuthorization?.invoke() == false) {
+                release()
+                return@launch
+            }
             val refreshed = runCatching { refreshSource() }.getOrNull()
             if (!owns(generation, player = null, expectedKey = key)) return@launch
+            if (remoteAuthorization?.invoke() == false) {
+                release()
+                return@launch
+            }
             val changed = !refreshed.isNullOrBlank() && refreshed != source
             debugPlayback(
                 key = key,
@@ -357,6 +383,7 @@ internal class ChatAudioPlaybackController(
     }
 
     private fun invalidateAndRelease(resetState: Boolean) {
+        remoteAuthorization = null
         activeGeneration += 1
         refreshJob?.cancel()
         refreshJob = null

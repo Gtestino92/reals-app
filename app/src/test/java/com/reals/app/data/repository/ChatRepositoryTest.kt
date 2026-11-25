@@ -9,6 +9,7 @@ import com.reals.app.core.network.ErrorContext
 import com.reals.app.core.network.backendErrorCode
 import com.reals.app.core.network.isAccountDeleted
 import com.reals.app.core.network.toUserMessage
+import com.reals.app.data.api.RealsApiClient
 import com.reals.app.domain.model.ChatExitReason
 import com.reals.app.domain.model.ChatExitRequestStatus
 import com.reals.app.domain.model.ChatMessageReactionType
@@ -23,6 +24,8 @@ import com.reals.app.testutil.successValue
 import com.reals.app.testutil.testApiExecutor
 import com.reals.app.testutil.testJson
 import kotlinx.coroutines.runBlocking
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
 import okio.Buffer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -37,6 +40,39 @@ class ChatRepositoryTest {
     private val api = FakeRealsApi()
     private val tokenProvider = FakeAuthTokenProvider()
     private val repository = ChatRepository(api, testJson, tokenProvider, testApiExecutor())
+
+    @Test
+    fun `real history responses deliver strict headers before malformed JSON`() = runBlocking {
+        val server = MockWebServer()
+        try {
+            val realApi = RealsApiClient.create(server.url("/").toString(), testJson, null)
+            val repository = ChatRepository(realApi, testJson, tokenProvider, testApiExecutor())
+            for ((values, expected) in listOf(
+                emptyList<String>() to "UNKNOWN", listOf("allowed") to "UNKNOWN",
+                listOf("ALLOWED", "ALLOWED") to "UNKNOWN", listOf("ALLOWED", "RESTRICTED") to "UNKNOWN",
+                listOf("RESTRICTED, ALLOWED") to "UNKNOWN", listOf("ALLOWED") to "ALLOWED",
+                listOf("RESTRICTED") to "RESTRICTED",
+            )) {
+                val response = MockResponse().setBody("{").addHeader("Cache-Control", "no-store")
+                values.forEach { response.addHeader("X-Reals-Counterpart-Audio-Access", it) }
+                server.enqueue(response)
+                val decisions = mutableListOf<String>()
+                assertTrue(repository.getMessages("chat-1") { decisions += it.name }.failureError() is ApiError.Unexpected)
+                assertEquals(listOf(expected), decisions)
+                assertEquals("Bearer test-token", server.takeRequest().getHeader("Authorization"))
+            }
+            server.enqueue(MockResponse().setResponseCode(401)
+                .setBody("""{"code":"INVALID_TOKEN","error":"Unauthorized"}"""))
+            server.enqueue(MockResponse().addHeader("X-Reals-Counterpart-Audio-Access", "RESTRICTED")
+                .setBody("[]"))
+            val decisions = mutableListOf<String>()
+            assertTrue(repository.getMessages("chat-1") { decisions += it.name }.successValue().isEmpty())
+            assertEquals(listOf("RESTRICTED"), decisions)
+            assertEquals(listOf(false, true), tokenProvider.calls.takeLast(2))
+        } finally {
+            server.shutdown()
+        }
+    }
 
     @Test
     fun `getChat maps api success and sends authorization header`() = runBlocking {
@@ -56,7 +92,7 @@ class ChatRepositoryTest {
             )
         )
 
-        val messages = repository.getMessages("chat-1").successValue()
+        val messages = repository.getMessages("chat-1") {}.successValue()
 
         assertEquals(listOf("message-1", "message-2"), messages.map { it.id })
         assertEquals(500, api.lastChatMessagesLimit)
@@ -68,7 +104,7 @@ class ChatRepositoryTest {
             TestDtos.chatMessagesPagedPayload(listOf(TestDtos.chatMessage("message-3")))
         )
 
-        val messages = repository.getMessages("chat-1", afterMessageId = "message-2").successValue()
+        val messages = repository.getMessages("chat-1", afterMessageId = "message-2") {}.successValue()
 
         assertEquals(listOf("message-3"), messages.map { it.id })
         assertEquals(500, api.lastChatMessagesLimit)
@@ -82,7 +118,7 @@ class ChatRepositoryTest {
             )
         )
 
-        val messages = repository.getMessages("chat-1").successValue()
+        val messages = repository.getMessages("chat-1") {}.successValue()
 
         assertEquals(listOf("message-1", "message-2"), messages.map { it.id })
         assertEquals(null, messages[1].content)
@@ -97,7 +133,7 @@ class ChatRepositoryTest {
             )
         )
 
-        val messages = repository.getMessages("chat-1").successValue()
+        val messages = repository.getMessages("chat-1") {}.successValue()
 
         assertEquals(listOf("message-1", "message-2"), messages.map { it.id })
         assertEquals("audio/mp4", messages[1].audio?.contentType)
@@ -107,7 +143,7 @@ class ChatRepositoryTest {
     fun `structurally invalid messages array returns failure`() = runBlocking {
         api.chatMessagesResponse = Response.success(testJson.parseToJsonElement("""[{"id":4}]"""))
 
-        val error = repository.getMessages("chat-1").failureError()
+        val error = repository.getMessages("chat-1") {}.failureError()
 
         assertTrue(error is ApiError.Unexpected)
     }
@@ -116,7 +152,7 @@ class ChatRepositoryTest {
     fun `structurally invalid paged response returns failure`() = runBlocking {
         api.chatMessagesResponse = Response.success(testJson.parseToJsonElement("""{"messages":4}"""))
 
-        val error = repository.getMessages("chat-1").failureError()
+        val error = repository.getMessages("chat-1") {}.failureError()
 
         assertTrue(error is ApiError.Unexpected)
     }

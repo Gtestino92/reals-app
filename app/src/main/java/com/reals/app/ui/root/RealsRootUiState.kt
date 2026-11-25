@@ -12,6 +12,7 @@ import com.reals.app.domain.model.Chat
 import com.reals.app.domain.model.ChatExitRequest
 import com.reals.app.domain.model.ChatMessage
 import com.reals.app.domain.model.ChatMessageReply
+import com.reals.app.domain.model.CounterpartAudioAccess
 import com.reals.app.domain.model.CountryReference
 import com.reals.app.domain.model.HomeState
 import com.reals.app.domain.model.LegalDocumentAction
@@ -157,6 +158,8 @@ sealed interface RealsRootUiState {
         val chatId: String? = null,
         val match: Match? = null,
         val chat: Chat? = null,
+        val historyOwner: ChatHistoryOwner = ChatHistoryOwner(),
+        val counterpartAudioAccess: CounterpartAudioAccess = historyOwner.access,
         val messages: List<ChatMessage> = emptyList(),
         val optimisticMessages: List<OptimisticOutgoingMessage> = emptyList(),
         val exitRequests: List<ChatExitRequest> = emptyList(),
@@ -183,6 +186,8 @@ sealed interface RealsRootUiState {
         val partnerName: String? = null,
         val chatId: String? = null,
         val chat: Chat? = null,
+        val historyOwner: ChatHistoryOwner = ChatHistoryOwner(),
+        val counterpartAudioAccess: CounterpartAudioAccess = historyOwner.access,
         val messages: List<ChatMessage> = emptyList(),
         val optimisticMessages: List<OptimisticOutgoingMessage> = emptyList(),
         val exitRequests: List<ChatExitRequest> = emptyList(),

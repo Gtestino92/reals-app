@@ -722,9 +722,10 @@ internal fun MessageList(
     onPlayAudio: (ChatMessage) -> Unit,
     onPauseAudio: () -> Unit,
 ) {
-    val sortedMessages = messages.sortedWith(compareBy<ChatMessage> { it.sentAt }.thenBy { it.id })
+    val orderedHistory = messages.sortedWith(compareBy<ChatMessage> { it.sentAt }.thenBy { it.id })
+    val sortedMessages = orderedHistory.filterNot { it.withdrawn }
     val reactableMessageIds = if (reactionAddingEnabled) {
-        reactableIncomingMessageIds(sortedMessages, currentUserId)
+        reactableIncomingMessageIds(orderedHistory, currentUserId)
     } else {
         emptySet()
     }
