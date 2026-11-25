@@ -459,6 +459,46 @@ Implemented hardening:
 
 ---
 
+### Private media cache and account isolation
+
+**Status:** Deferred until Android production readiness.
+
+**Priority:** Required before public Android beta or production release. Not a blocker for the current Web-first MVP.
+
+Current implementation:
+- Coil uses stable photo cache keys that ignore changing presigned URL query parameters, improving cache reuse across URL renewals.
+- Memory and disk cache keys are not explicitly scoped to the authenticated viewer or authentication session.
+- Own-profile and partner-profile image prefetching use the shared image loader.
+- The backend now stores new and replacement private media with `Cache-Control: no-store`.
+- Participant audio access reconciliation and playback withdrawal after blocking have already been implemented.
+
+Risk:
+- Previously authorized private images may remain in application-managed caches after logout, account replacement, blocking, suspension or loss of visual-content access.
+- Cross-account disclosure through Coil remains a potential risk; no actual disclosure has been demonstrated.
+- HTTP `no-store` does not guarantee eviction from independently managed application caches.
+
+Future work:
+- Audit Coil memory and disk cache behavior, including its handling of HTTP cache directives.
+- Scope private media cache entries to the authenticated viewer and relevant authorization lifetime.
+- Prevent retired image requests and prefetch jobs from repopulating caches after session invalidation.
+- Retire inaccessible media on authoritative access denial.
+- Define safe eviction of legacy cache entries.
+- Review temporary photo crop files and audio recording files as part of local media persistence.
+- Preserve stable image identity across authorized same-session URL renewals, thumbnail decoding and bounded prefetching where compatible with privacy requirements.
+
+Acceptance criteria:
+- Two synthetic accounts using the same device cannot retrieve each other's previously cached private media without current authorization.
+- Logout, account replacement, suspension, account deletion and blocking retire affected private media appropriately.
+- Late asynchronous requests cannot restore retired content.
+- Previously authorized media cannot be rendered from cache after an authoritative access denial.
+- Ordinary authorized image reuse does not introduce unnecessary downloads or backend requests.
+- Physical-device tests verify memory and disk cache isolation across session transitions.
+
+Limitations:
+- Client cache isolation does not revoke previously issued presigned URLs or prevent recipients from retaining downloaded content.
+- Existing-object R2 metadata remediation and hosted storage verification remain separate backend/infrastructure tasks.
+
+
 ## 18. Future product experiments
 
 Deferred:
